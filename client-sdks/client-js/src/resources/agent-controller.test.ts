@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { agentControllerMessageText } from './agent-controller';
+import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
@@ -190,6 +190,17 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
+  it('requests session state for a specific thread', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
+
+    await client.getAgentController('code').session('user-1', '/repo').state({ threadId: 't/1' });
+
+    const [url] = lastCall();
+    expect(url).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1&sessionScope=%2Frepo',
+    );
+  });
+
   it('switches mode and model', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').switchMode('plan');
@@ -239,6 +250,13 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/thread');
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
+  });
+
+  it('lists active runs controller-wide', async () => {
+    mockJson({ runs: [{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }] });
+    const runs = await client.getAgentController('code').listActiveRuns();
+    expect(runs).toEqual([{ runId: 'run-1', resourceId: 'user-1', threadId: 't-1' }]);
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/active-runs');
   });
 
   it('hydrates message timestamps returned by listMessages without mutating the source payload', async () => {
@@ -297,7 +315,9 @@ describe('AgentController Resource', () => {
       .getAgentController('code')
       .session('user-1')
       .subscribe({
-        onEvent: e => received.push(e as KnownAgentControllerEvent),
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
       });
 
     // Allow the async pump to drain the (already-closed) stream.
@@ -312,6 +332,38 @@ describe('AgentController Resource', () => {
       expect(event.message.createdAt).toBeInstanceOf(Date);
       expect(event.message.createdAt.toISOString()).toBe(createdAt);
       expect(agentControllerMessageText(event.message)).toBe('hi');
+    }
+  });
+
+  it('hydrates thread timestamps from SSE events', async () => {
+    const createdAt = '2026-01-01T00:00:00.000Z';
+    const updatedAt = '2026-01-02T03:04:05.000Z';
+    const threadCreated = {
+      type: 'thread_created',
+      thread: { id: 't1', resourceId: 'user-1', title: 'New thread', createdAt, updatedAt },
+    };
+    mockSse([`data: ${JSON.stringify(threadCreated)}\n\n`]);
+
+    const received: KnownAgentControllerEvent[] = [];
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => {
+          if (isKnownAgentControllerEvent(e)) received.push(e);
+        },
+      });
+
+    // Allow the async pump to drain the (already-closed) stream.
+    await new Promise(r => setTimeout(r, 10));
+    sub.unsubscribe();
+
+    expect(received.map(e => e.type)).toEqual(['thread_created']);
+    for (const event of received) {
+      if (event.type !== 'thread_created') continue;
+      expect(event.thread.createdAt).toBeInstanceOf(Date);
+      expect(event.thread.createdAt.toISOString()).toBe(createdAt);
+      expect(event.thread.updatedAt.toISOString()).toBe(updatedAt);
     }
   });
 

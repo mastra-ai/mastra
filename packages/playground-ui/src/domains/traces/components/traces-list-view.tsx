@@ -9,17 +9,8 @@ import {
 import type { TraceColumnPreferences, TraceUsageSummary } from '../trace-list-columns';
 import { formatSpanDuration, getInputPreview } from '../utils/span-utils';
 import { formatCompact, formatCost } from '@/domains/metrics/components/metrics-utils';
-import { DataList, DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
+import { DataList, DataListSkeleton, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
-
-/** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
- *  can pass the full attributes record from @mastra/core/storage without mapping. */
-export type TraceAttributes = {
-  status?: string | null;
-  agentId?: string | null;
-  workflowId?: string | null;
-  [key: string]: unknown;
-};
 
 export type TracesListViewTrace = {
   traceId: string;
@@ -32,7 +23,8 @@ export type TracesListViewTrace = {
   entityId?: string | null;
   entityName?: string | null;
   status?: string | null;
-  attributes?: TraceAttributes | null;
+  /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
+  inputPreview?: string | null;
   input?: unknown;
   metadata?: Record<string, unknown> | null;
   startedAt?: Date | string | null;
@@ -101,6 +93,12 @@ export function TracesListView({
     overscan: OVERSCAN,
   });
 
+  const { getRowProps } = useDataListKeyboard({
+    count: traces.length,
+    containerRef: scrollRef,
+    onNavigate: index => virtualizer.scrollToIndex(index),
+  });
+
   // Reset scroll to top whenever a fresh query resolves (filter / date range change).
   // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
   // effect doesn't fire during pagination.
@@ -120,7 +118,7 @@ export function TracesListView({
   }, [isLoading]);
 
   if (isLoading) {
-    return <DataListSkeleton columns={columns} />;
+    return <DataListSkeleton columns={columns} fit="container" />;
   }
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -130,10 +128,9 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={columns} variant="striped" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>Date</TracesDataList.TopCell>
-        <TracesDataList.TopCell>Time</TracesDataList.TopCell>
+        <TracesDataList.TopCell>Created</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'entity') && <TracesDataList.TopCell>Entity</TracesDataList.TopCell>}
@@ -173,8 +170,7 @@ export function TracesListView({
             const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
             const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
-            const entityName =
-              trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+            const entityName = trace.entityName || trace.entityId;
             const usage = usageByTraceId?.get(trace.traceId);
 
             return (
@@ -182,24 +178,24 @@ export function TracesListView({
                 key={rowKey}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
+                {...getRowProps(vi.index)}
                 onClick={() => onTraceClick(trace)}
                 featured={isFeatured}
                 className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
-                <TracesDataList.DateCell timestamp={displayDate} />
-                <TracesDataList.TimeCell timestamp={displayDate} />
+                <TracesDataList.CreatedCell timestamp={displayDate} />
                 <TracesDataList.NameCell
                   name={trace.name}
                   parentSpanId={trace.parentSpanId}
                   showLevelTooltip={isBranchesMode}
                 />
                 {hasTraceColumn(columnPreferences, 'input') && (
-                  <TracesDataList.InputCell input={getInputPreview(trace.input)} />
+                  <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
                 {hasTraceColumn(columnPreferences, 'entity') && (
                   <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
                 )}
-                <TracesDataList.StatusCell status={trace.status ?? trace.attributes?.status} />
+                <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell>{formatSpanDuration(trace.startedAt, trace.endedAt)}</DataList.NumberCell>
                 )}
@@ -220,7 +216,11 @@ export function TracesListView({
                 )}
                 {columnPreferences.metadataKeys.map(key => {
                   const value = formatTraceMetadataValue(trace.metadata, key);
-                  return <DataList.MonoCell key={key}>{value}</DataList.MonoCell>;
+                  return (
+                    <DataList.TextCell font="mono" key={key}>
+                      {value}
+                    </DataList.TextCell>
+                  );
                 })}
               </TracesDataList.RowButton>
             );

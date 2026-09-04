@@ -9,6 +9,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
 import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { InMemoryTaskStore } from '../a2a/store';
@@ -18,9 +19,12 @@ import {
   getAgentCardByIdHandler,
   getAgentExecutionHandler,
   handleTaskGet,
+  handleTaskList,
   handleMessageSend,
   handleMessageStream,
   handleTaskCancel,
+  handleTaskResubscribe,
+  resolveA2AProtocolVersion,
 } from './a2a';
 
 class MockAgent extends Agent {
@@ -86,7 +90,20 @@ function createStreamResult({
     ...(object ? [{ type: 'object-result', object }] : []),
   ];
 
+  // Mirrors MastraModelOutput: `suspendPayload`/`resumeSchema` resolve with the
+  // first suspension chunk's payload when the run suspends.
+  const suspensionEvent = fullStreamEvents.find(
+    (event): event is { type: string; payload?: { resumeSchema?: unknown } } =>
+      typeof event === 'object' &&
+      event !== null &&
+      'type' in event &&
+      ((event as { type: string }).type === 'tool-call-suspended' ||
+        (event as { type: string }).type === 'tool-call-approval'),
+  );
+
   return {
+    suspendPayload: Promise.resolve(suspensionEvent?.payload),
+    resumeSchema: Promise.resolve(suspensionEvent?.payload?.resumeSchema),
     textStream: (async function* () {
       for (const chunk of chunks) {
         yield chunk;
@@ -117,7 +134,34 @@ function createDeferred<T>() {
   return { promise, reject, resolve };
 }
 
+async function seedTask(
+  taskStore: InMemoryTaskStore,
+  taskId: string,
+  contextId = crypto.randomUUID(),
+  state: Task['status']['state'] = 'submitted',
+) {
+  await taskStore.save({
+    agentId: 'test-agent',
+    data: {
+      id: taskId,
+      contextId,
+      status: { state, timestamp: new Date().toISOString() },
+      artifacts: [],
+      history: [],
+      kind: 'task',
+    },
+  });
+}
+
 describe('A2A Handler', () => {
+  it('creates a JSON-RPC success response for request ID zero', () => {
+    expect(createSuccessResponse(0, { ok: true })).toEqual({
+      jsonrpc: '2.0',
+      id: 0,
+      result: { ok: true },
+    });
+  });
+
   describe('getAgentCardByIdHandler', () => {
     let mockMastra: Mastra;
 
@@ -384,6 +428,61 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('rejects a message that references an unknown task', async () => {
+      const taskId = 'unknown-task-id';
+      const mockAgent = { generate: vi.fn() } as unknown as Agent;
+
+      await expect(
+        handleMessageSend({
+          requestId: 'unknown-task-request',
+          params: {
+            message: {
+              messageId: 'unknown-task-message',
+              taskId,
+              kind: 'message',
+              role: 'user',
+              parts: [{ kind: 'text', text: 'Continue' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+        }),
+      ).rejects.toThrow(MastraA2AError.taskNotFound(taskId));
+      expect(mockAgent.generate).not.toHaveBeenCalled();
+    });
+
+    it.each(['completed', 'failed', 'canceled', 'rejected'] as const)(
+      'does not restart a task in the %s terminal state',
+      async state => {
+        const taskId = `terminal-${state}`;
+        await seedTask(mockTaskStore, taskId, 'terminal-context', state);
+        const mockAgent = { generate: vi.fn() } as unknown as Agent;
+
+        await expect(
+          handleMessageSend({
+            requestId: `terminal-${state}-request`,
+            params: {
+              message: {
+                messageId: `terminal-${state}-message`,
+                taskId,
+                kind: 'message',
+                role: 'user',
+                parts: [{ kind: 'text', text: 'Restart' }],
+              },
+            },
+            taskStore: mockTaskStore,
+            agent: mockAgent,
+            agentId: 'test-agent',
+            requestContext: new RequestContext(),
+          }),
+        ).rejects.toMatchObject({ code: -32600 });
+        expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe(state);
+        expect(mockAgent.generate).not.toHaveBeenCalled();
+      },
+    );
+
     it('should return a working task before non-blocking execution completes', async () => {
       const taskId = 'non-blocking-task-id';
       const contextId = 'non-blocking-context-id';
@@ -403,6 +502,7 @@ describe('A2A Handler', () => {
         configuration: { blocking: false },
       };
       const requestContext = new RequestContext();
+      await seedTask(mockTaskStore, taskId, contextId);
 
       const responsePromise = handleMessageSend({
         requestId: 'non-blocking-request-id',
@@ -461,6 +561,7 @@ describe('A2A Handler', () => {
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
+      await seedTask(mockTaskStore, taskId);
 
       const firstResponse = await handleMessageSend({
         requestId: 'first-non-blocking-request-id',
@@ -517,6 +618,7 @@ describe('A2A Handler', () => {
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
+      await seedTask(mockTaskStore, taskId);
 
       const response = await handleMessageSend({
         requestId: 'failed-background-request-id',
@@ -558,6 +660,7 @@ describe('A2A Handler', () => {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
       const save = vi.spyOn(mockTaskStore, 'save');
+      await seedTask(mockTaskStore, taskId);
 
       await handleMessageSend({
         requestId: 'canceled-background-request-id',
@@ -1399,6 +1502,7 @@ describe('A2A Handler', () => {
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockReturnValue is not available on the Agent class
       mockAgent.generate.mockReturnValue(generation.promise);
+      await seedTask(mockTaskStore, taskId);
 
       const result = await handleMessageSend({
         requestId,
@@ -1488,6 +1592,7 @@ describe('A2A Handler', () => {
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+      await seedTask(mockTaskStore, taskId);
 
       const result = await handleMessageSend({
         requestId,
@@ -1536,6 +1641,7 @@ describe('A2A Handler', () => {
       const mockAgent = mockMastra.getAgentById(agentId);
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
       mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+      await seedTask(mockTaskStore, taskId);
 
       const result = await handleMessageSend({
         requestId,
@@ -1586,6 +1692,30 @@ describe('A2A Handler', () => {
 
     afterEach(() => {
       vi.useRealTimers();
+    });
+
+    it('rejects a stream message that references an unknown task', async () => {
+      const taskId = 'unknown-stream-task';
+      const mockAgent = { stream: vi.fn() } as unknown as Agent;
+      const stream = handleMessageStream({
+        requestId: 'unknown-stream-request',
+        params: {
+          message: {
+            messageId: 'unknown-stream-message',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Continue' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      await expect(stream.next()).rejects.toThrow(MastraA2AError.taskNotFound(taskId));
+      expect(mockAgent.stream).not.toHaveBeenCalled();
     });
 
     it('should yield working state and then completed result', async () => {
@@ -1757,6 +1887,164 @@ describe('A2A Handler', () => {
       expect(done.done).toBe(true);
     });
 
+    it('passes request abortSignal to agent stream execution', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return createStreamResult({ chunks: ['Hello'] });
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      const first = await gen.next();
+      requestAbortController.abort('client disconnected');
+      const canceled = await gen.next();
+
+      expect(streamAbortSignal?.aborted).toBe(true);
+      expect(streamAbortSignal?.reason).toBe('client disconnected');
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
+    });
+
+    it('does not mark request-driven abort errors as failed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        throw options.abortSignal?.reason;
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      const first = await gen.next();
+      requestAbortController.abort(new DOMException('Client disconnected.', 'AbortError'));
+      const canceled = await gen.next();
+
+      expect(canceled.value).toMatchObject({
+        result: {
+          final: true,
+          status: { state: 'canceled' },
+        },
+      });
+      expect(await mockTaskStore.load({ agentId, taskId: (first.value?.result as { id: string }).id })).toMatchObject({
+        status: { state: 'canceled' },
+      });
+    });
+
+    it('aborts the active stream and does not let late chunks overwrite a canceled task', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'cancel-stream-task';
+      const continueStream = createDeferred<void>();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, taskId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      await seedTask(mockTaskStore, taskId);
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return {
+          ...createStreamResult({ chunks: [], text: 'First second' }),
+          fullStream: (async function* () {
+            yield { type: 'text-delta', textDelta: 'First ' };
+            await continueStream.promise;
+            yield { type: 'text-delta', textDelta: 'second' };
+          })(),
+        };
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+      });
+
+      await gen.next();
+      const nextStreamEvent = gen.next();
+      await vi.waitFor(() => {
+        expect(streamAbortSignal).toBeDefined();
+      });
+
+      const cancelResult = await handleTaskCancel({
+        requestId: 'cancel-request-id',
+        taskStore: mockTaskStore,
+        agentId,
+        taskId,
+      });
+
+      expect(cancelResult.result?.status.state).toBe('canceled');
+      expect(streamAbortSignal?.aborted).toBe(true);
+
+      continueStream.resolve();
+      const canceledUpdate = await nextStreamEvent;
+      expect(canceledUpdate.value).toMatchObject({
+        id: requestId,
+        jsonrpc: '2.0',
+        result: {
+          final: true,
+          kind: 'status-update',
+          status: {
+            state: 'canceled',
+          },
+          taskId,
+        },
+      });
+
+      const savedTask = await mockTaskStore.load({ agentId, taskId });
+      expect(savedTask?.status.state).toBe('canceled');
+      await gen.return(undefined);
+    });
+
     it('should stream structured output as a data artifact part', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
@@ -1898,6 +2186,703 @@ describe('A2A Handler', () => {
             parts: [{ kind: 'text', text: 'user!' }],
           },
         },
+      });
+    });
+  });
+
+  describe('HITL (input-required)', () => {
+    let mockTaskStore: InMemoryTaskStore;
+    const agentId = 'test-agent';
+
+    beforeEach(() => {
+      mockTaskStore = new InMemoryTaskStore();
+    });
+
+    function createSuspendedTask({
+      taskId,
+      contextId,
+      suspendedRunId,
+      suspendedToolCallId,
+      suspendedRequiresApproval,
+      state = 'input-required',
+    }: {
+      taskId: string;
+      contextId: string;
+      suspendedRunId: string;
+      suspendedToolCallId?: string;
+      suspendedRequiresApproval?: boolean;
+      state?: 'input-required' | 'auth-required';
+    }): Task {
+      return {
+        id: taskId,
+        contextId,
+        status: {
+          state,
+          timestamp: new Date().toISOString(),
+        },
+        artifacts: [],
+        history: [],
+        metadata: {
+          suspendedRunId,
+          ...(suspendedToolCallId ? { suspendedToolCallId } : {}),
+          ...(suspendedRequiresApproval ? { suspendedRequiresApproval } : {}),
+        },
+        kind: 'task',
+      };
+    }
+
+    it('should mark the task input-required when agent.generate suspends', async () => {
+      const mockAgent = {
+        generate: vi.fn().mockResolvedValue({
+          text: 'Working on it',
+          finishReason: 'suspended',
+          suspendPayload: {
+            toolCallId: 'tc-1',
+            toolName: 'clarify',
+            suspendPayload: { message: 'Which city do you mean?' },
+          },
+          resumeSchema: '{"type":"object"}',
+          runId: 'run-suspended-1',
+        }),
+      } as unknown as Agent;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'hitl-message-1',
+          kind: 'message',
+          role: 'user',
+          taskId: 'task-hitl-1',
+          contextId: 'ctx-hitl-1',
+          parts: [{ kind: 'text', text: 'Book a flight' }],
+        },
+      };
+      await seedTask(mockTaskStore, 'task-hitl-1', 'ctx-hitl-1');
+
+      const result: any = await handleMessageSend({
+        requestId: 'hitl-request-1',
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      const task = result.result;
+      expect(task.status.state).toBe('input-required');
+      expect(task.metadata.suspendedRunId).toBe('run-suspended-1');
+      expect(task.status.message).toMatchObject({
+        role: 'agent',
+        kind: 'message',
+        taskId: 'task-hitl-1',
+        contextId: 'ctx-hitl-1',
+        parts: [
+          { kind: 'text', text: 'Which city do you mean?' },
+          {
+            kind: 'data',
+            data: {
+              suspendPayload: {
+                toolCallId: 'tc-1',
+                toolName: 'clarify',
+                suspendPayload: { message: 'Which city do you mean?' },
+              },
+              resumeSchema: '{"type":"object"}',
+            },
+          },
+        ],
+      });
+
+      const saved = await mockTaskStore.load({ agentId, taskId: 'task-hitl-1' });
+      expect(saved?.status.state).toBe('input-required');
+    });
+
+    it('should resume the suspended run when a message arrives for an input-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-2',
+          contextId: 'ctx-hitl-2',
+          suspendedRunId: 'run-suspended-2',
+        }),
+      });
+
+      const generate = vi.fn();
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Flight booked!', finishReason: 'stop' });
+      const mockAgent = { generate, resumeGenerate } as unknown as Agent;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'hitl-message-2',
+          kind: 'message',
+          role: 'user',
+          taskId: 'task-hitl-2',
+          contextId: 'ctx-hitl-2',
+          parts: [{ kind: 'text', text: '{"approved":true}' }],
+        },
+      };
+
+      const result: any = await handleMessageSend({
+        requestId: 'hitl-request-2',
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(generate).not.toHaveBeenCalled();
+      expect(resumeGenerate).toHaveBeenCalledTimes(1);
+      expect(resumeGenerate).toHaveBeenCalledWith(
+        { approved: true },
+        expect.objectContaining({ runId: 'run-suspended-2' }),
+      );
+
+      const task = result.result;
+      expect(task.status.state).toBe('completed');
+      expect(task.metadata.suspendedRunId).toBeUndefined();
+    });
+
+    it('resumes a suspended run when credentials arrive for an auth-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-auth-required',
+          contextId: 'ctx-auth-required',
+          suspendedRunId: 'run-auth-required',
+          state: 'auth-required',
+        }),
+      });
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Authenticated', finishReason: 'stop' });
+      const mockAgent = { generate: vi.fn(), resumeGenerate } as unknown as Agent;
+
+      const result = await handleMessageSend({
+        requestId: 'auth-required-request',
+        params: {
+          message: {
+            messageId: 'auth-required-message',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-auth-required',
+            parts: [{ kind: 'data', data: { token: 'credential' } }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(resumeGenerate).toHaveBeenCalledWith(
+        { token: 'credential' },
+        expect.objectContaining({ runId: 'run-auth-required' }),
+      );
+      expect(result.result?.status.state).toBe('completed');
+    });
+
+    it('should pass raw text as resume data when the follow-up message is not JSON', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-3',
+          contextId: 'ctx-hitl-3',
+          suspendedRunId: 'run-suspended-3',
+        }),
+      });
+
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Done', finishReason: 'stop' });
+      const mockAgent = { generate: vi.fn(), resumeGenerate } as unknown as Agent;
+
+      await handleMessageSend({
+        requestId: 'hitl-request-3',
+        params: {
+          message: {
+            messageId: 'hitl-message-3',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-hitl-3',
+            parts: [{ kind: 'text', text: 'Paris, France' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(resumeGenerate).toHaveBeenCalledWith(
+        'Paris, France',
+        expect.objectContaining({ runId: 'run-suspended-3' }),
+      );
+    });
+
+    it('should prefer a structured data part as resume data', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-4',
+          contextId: 'ctx-hitl-4',
+          suspendedRunId: 'run-suspended-4',
+        }),
+      });
+
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Done', finishReason: 'stop' });
+      const mockAgent = { generate: vi.fn(), resumeGenerate } as unknown as Agent;
+
+      await handleMessageSend({
+        requestId: 'hitl-request-4',
+        params: {
+          message: {
+            messageId: 'hitl-message-4',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-hitl-4',
+            parts: [{ kind: 'data', data: { approved: false, reason: 'too expensive' } }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(resumeGenerate).toHaveBeenCalledWith(
+        { approved: false, reason: 'too expensive' },
+        expect.objectContaining({ runId: 'run-suspended-4' }),
+      );
+    });
+
+    it('should yield a final input-required status update when the agent suspends mid-stream', async () => {
+      const mockAgent = {
+        stream: vi.fn().mockResolvedValue(
+          createStreamResult({
+            chunks: [],
+            streamEvents: [
+              { type: 'text-delta', payload: { text: 'Checking flights...' } },
+              {
+                type: 'tool-call-suspended',
+                payload: {
+                  toolCallId: 'tc-stream-1',
+                  toolName: 'clarify',
+                  args: {},
+                  suspendPayload: { message: 'Economy or business class?' },
+                  resumeSchema: '{"type":"object"}',
+                },
+              },
+            ],
+          }),
+        ),
+      } as unknown as Agent;
+      await seedTask(mockTaskStore, 'task-hitl-stream-1', 'ctx-hitl-stream-1');
+
+      const gen = handleMessageStream({
+        requestId: 'hitl-stream-1',
+        params: {
+          message: {
+            messageId: 'hitl-stream-message-1',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-hitl-stream-1',
+            contextId: 'ctx-hitl-stream-1',
+            parts: [{ kind: 'text', text: 'Book a flight' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      const events: any[] = [];
+      for await (const event of gen) {
+        events.push(event);
+      }
+
+      const finalEvent = events.at(-1);
+      expect(finalEvent.result).toMatchObject({
+        kind: 'status-update',
+        taskId: 'task-hitl-stream-1',
+        final: true,
+        status: {
+          state: 'input-required',
+          message: {
+            role: 'agent',
+            parts: [
+              { kind: 'text', text: 'Economy or business class?' },
+              {
+                kind: 'data',
+                data: {
+                  suspendPayload: {
+                    toolCallId: 'tc-stream-1',
+                    toolName: 'clarify',
+                    args: {},
+                    suspendPayload: { message: 'Economy or business class?' },
+                    resumeSchema: '{"type":"object"}',
+                  },
+                  resumeSchema: '{"type":"object"}',
+                },
+              },
+            ],
+          },
+        },
+      });
+
+      // Partial streamed text is preserved as an artifact.
+      const artifactEvents = events.filter(event => event.result?.kind === 'artifact-update');
+      expect(artifactEvents.at(-1)?.result.artifact.parts).toEqual([{ kind: 'text', text: 'Checking flights...' }]);
+
+      const saved = await mockTaskStore.load({ agentId, taskId: 'task-hitl-stream-1' });
+      expect(saved?.status.state).toBe('input-required');
+      expect(saved?.metadata?.suspendedRunId).toBe('task-hitl-stream-1');
+    });
+
+    it('should resume the suspended run when a message/stream arrives for an input-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-stream-2',
+          contextId: 'ctx-hitl-stream-2',
+          suspendedRunId: 'run-suspended-stream-2',
+        }),
+      });
+
+      const stream = vi.fn();
+      const resumeStream = vi.fn().mockResolvedValue(
+        createStreamResult({
+          chunks: ['Flight booked!'],
+        }),
+      );
+      const mockAgent = { stream, resumeStream } as unknown as Agent;
+
+      const gen = handleMessageStream({
+        requestId: 'hitl-stream-2',
+        params: {
+          message: {
+            messageId: 'hitl-stream-message-2',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-hitl-stream-2',
+            contextId: 'ctx-hitl-stream-2',
+            parts: [{ kind: 'text', text: '{"seatClass":"economy"}' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      const events: any[] = [];
+      for await (const event of gen) {
+        events.push(event);
+      }
+
+      expect(stream).not.toHaveBeenCalled();
+      expect(resumeStream).toHaveBeenCalledTimes(1);
+      expect(resumeStream).toHaveBeenCalledWith(
+        { seatClass: 'economy' },
+        expect.objectContaining({ runId: 'run-suspended-stream-2' }),
+      );
+
+      const finalEvent = events.at(-1);
+      expect(finalEvent.result).toMatchObject({
+        kind: 'status-update',
+        final: true,
+        status: { state: 'completed' },
+      });
+
+      const saved = await mockTaskStore.load({ agentId, taskId: 'task-hitl-stream-2' });
+      expect(saved?.status.state).toBe('completed');
+      expect(saved?.metadata?.suspendedRunId).toBeUndefined();
+    });
+
+    it('should record toolCallId and approval flag when the suspension is a tool approval', async () => {
+      const mockAgent = {
+        // Approval suspensions carry no nested `suspendPayload` (ToolCallApprovalPayload).
+        generate: vi.fn().mockResolvedValue({
+          text: '',
+          finishReason: 'suspended',
+          suspendPayload: {
+            toolCallId: 'tc-approval-1',
+            toolName: 'bookFlight',
+            args: { city: 'Paris' },
+            resumeSchema: '{"type":"object"}',
+          },
+          resumeSchema: '{"type":"object"}',
+          runId: 'run-approval-1',
+        }),
+      } as unknown as Agent;
+      await seedTask(mockTaskStore, 'task-hitl-approval-1', 'ctx-hitl-approval-1');
+
+      const result: any = await handleMessageSend({
+        requestId: 'hitl-approval-1',
+        params: {
+          message: {
+            messageId: 'hitl-approval-message-1',
+            kind: 'message',
+            role: 'user',
+            taskId: 'task-hitl-approval-1',
+            contextId: 'ctx-hitl-approval-1',
+            parts: [{ kind: 'text', text: 'Book a flight' }],
+          },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result.status.state).toBe('input-required');
+      expect(result.result.metadata).toMatchObject({
+        suspendedRunId: 'run-approval-1',
+        suspendedToolCallId: 'tc-approval-1',
+        suspendedRequiresApproval: true,
+      });
+    });
+
+    it.each([
+      ['yes', { approved: true }],
+      ['Approved!', { approved: true }],
+      ['no', { approved: false }],
+      ['Declined', { approved: false }],
+    ])(
+      'should coerce the plain-text approval reply %j to %j and pass the suspended toolCallId',
+      async (replyText, expectedResumeData) => {
+        const taskId = `task-hitl-approval-reply-${replyText}`;
+        await mockTaskStore.save({
+          agentId,
+          data: createSuspendedTask({
+            taskId,
+            contextId: 'ctx-hitl-approval-reply',
+            suspendedRunId: 'run-approval-reply',
+            suspendedToolCallId: 'tc-approval-reply',
+            suspendedRequiresApproval: true,
+          }),
+        });
+
+        const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Done', finishReason: 'stop' });
+        const mockAgent = { generate: vi.fn(), resumeGenerate } as unknown as Agent;
+
+        await handleMessageSend({
+          requestId: 'hitl-approval-reply',
+          params: {
+            message: {
+              messageId: `hitl-approval-reply-message-${replyText}`,
+              kind: 'message',
+              role: 'user',
+              taskId,
+              parts: [{ kind: 'text', text: replyText }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        });
+
+        expect(resumeGenerate).toHaveBeenCalledWith(
+          expectedResumeData,
+          expect.objectContaining({ runId: 'run-approval-reply', toolCallId: 'tc-approval-reply' }),
+        );
+      },
+    );
+
+    it('should clear approval metadata when a resumed run suspends for free-form input', async () => {
+      const generate = vi.fn().mockResolvedValue({
+        text: '',
+        finishReason: 'suspended',
+        suspendPayload: {
+          toolCallId: 'tc-round-1',
+          toolName: 'bookFlight',
+          args: { city: 'Paris' },
+          resumeSchema: '{"type":"object"}',
+        },
+        resumeSchema: '{"type":"object"}',
+        runId: 'run-round-1',
+      });
+      const resumeGenerate = vi
+        .fn()
+        .mockResolvedValueOnce({
+          text: '',
+          finishReason: 'suspended',
+          suspendPayload: {
+            toolCallId: 'tc-round-2',
+            toolName: 'clarify',
+            suspendPayload: { message: 'Is tomorrow acceptable?' },
+          },
+          runId: 'run-round-1',
+        })
+        .mockResolvedValueOnce({ text: 'Flight booked!', finishReason: 'stop' });
+      const mockAgent = { generate, resumeGenerate } as unknown as Agent;
+
+      const sendMessage = (messageId: string, text: string) =>
+        handleMessageSend({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId: 'task-hitl-rounds',
+              contextId: 'ctx-hitl-rounds',
+              parts: [{ kind: 'text', text }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        });
+
+      await seedTask(mockTaskStore, 'task-hitl-rounds', 'ctx-hitl-rounds');
+      const first: any = await sendMessage('round-message-1', 'Book a flight');
+      expect(first.result.status.state).toBe('input-required');
+      expect(first.result.metadata.suspendedToolCallId).toBe('tc-round-1');
+      expect(first.result.metadata.suspendedRequiresApproval).toBe(true);
+
+      const second: any = await sendMessage('round-message-2', 'yes');
+      expect(second.result.status.state).toBe('input-required');
+      expect(second.result.status.message.parts[0]).toEqual({ kind: 'text', text: 'Is tomorrow acceptable?' });
+      expect(second.result.metadata.suspendedToolCallId).toBe('tc-round-2');
+      expect(second.result.metadata.suspendedRequiresApproval).toBeUndefined();
+
+      const third: any = await sendMessage('round-message-3', 'yes');
+      expect(third.result.status.state).toBe('completed');
+      expect(third.result.metadata.suspendedRunId).toBeUndefined();
+      expect(third.result.metadata.suspendedToolCallId).toBeUndefined();
+
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(resumeGenerate).toHaveBeenCalledTimes(2);
+      expect(resumeGenerate).toHaveBeenNthCalledWith(
+        1,
+        { approved: true },
+        expect.objectContaining({ runId: 'run-round-1', toolCallId: 'tc-round-1' }),
+      );
+      expect(resumeGenerate).toHaveBeenNthCalledWith(
+        2,
+        'yes',
+        expect.objectContaining({ runId: 'run-round-1', toolCallId: 'tc-round-2' }),
+      );
+    });
+
+    it('should resume only once when concurrent follow-up messages arrive for the same input-required task', async () => {
+      await mockTaskStore.save({
+        agentId,
+        data: createSuspendedTask({
+          taskId: 'task-hitl-race',
+          contextId: 'ctx-hitl-race',
+          suspendedRunId: 'run-race',
+        }),
+      });
+
+      const resumeGenerate = vi.fn().mockResolvedValue({ text: 'Done', finishReason: 'stop' });
+      const generate = vi.fn().mockResolvedValue({ text: 'Fresh run', finishReason: 'stop' });
+      const mockAgent = { generate, resumeGenerate } as unknown as Agent;
+
+      const sendFollowUp = (messageId: string) =>
+        handleMessageSend({
+          requestId: messageId,
+          params: {
+            message: {
+              messageId,
+              kind: 'message',
+              role: 'user',
+              taskId: 'task-hitl-race',
+              parts: [{ kind: 'text', text: '{"approved":true}' }],
+            },
+          },
+          taskStore: mockTaskStore,
+          agent: mockAgent,
+          agentId,
+          requestContext: new RequestContext(),
+        });
+
+      const results = await Promise.all([sendFollowUp('race-message-1'), sendFollowUp('race-message-2')]);
+
+      expect(resumeGenerate).toHaveBeenCalledTimes(1);
+      expect(generate).not.toHaveBeenCalled();
+      expect(results.map(result => result.result?.status.state)).toEqual(['completed', 'completed']);
+
+      const task = await mockTaskStore.load({ agentId, taskId: 'task-hitl-race' });
+      expect(task?.status.state).toBe('completed');
+      expect(task?.history).toHaveLength(1);
+      expect(['race-message-1', 'race-message-2']).toContain(task?.history?.[0]?.messageId);
+    });
+  });
+
+  describe('handleTaskResubscribe with interrupted tasks', () => {
+    const agentId = 'test-agent';
+
+    it.each(['input-required', 'auth-required'] as const)(
+      'should end the stream immediately when the task is already %s',
+      async state => {
+        const taskStore = new InMemoryTaskStore();
+        await taskStore.save({
+          agentId,
+          data: {
+            id: 'task-resub-input',
+            contextId: 'ctx-resub-input',
+            status: { state, timestamp: new Date().toISOString() },
+            artifacts: [],
+            history: [],
+            metadata: { suspendedRunId: 'run-resub' },
+            kind: 'task',
+          },
+        });
+
+        const events: any[] = [];
+        for await (const event of handleTaskResubscribe({
+          requestId: 'resub-input-1',
+          taskStore,
+          agentId,
+          taskId: 'task-resub-input',
+        })) {
+          events.push(event);
+        }
+
+        expect(events).toHaveLength(1);
+        expect(events[0].result.status.state).toBe(state);
+      },
+    );
+
+    it('should emit a final status update and end when a working task transitions to input-required', async () => {
+      const taskStore = new InMemoryTaskStore();
+      const workingTask: Task = {
+        id: 'task-resub-transition',
+        contextId: 'ctx-resub-transition',
+        status: { state: 'working', timestamp: new Date().toISOString() },
+        artifacts: [],
+        history: [],
+        metadata: {},
+        kind: 'task',
+      };
+      await taskStore.save({ agentId, data: workingTask });
+
+      const events: any[] = [];
+      const consume = (async () => {
+        for await (const event of handleTaskResubscribe({
+          requestId: 'resub-transition-1',
+          taskStore,
+          agentId,
+          taskId: 'task-resub-transition',
+        })) {
+          events.push(event);
+        }
+      })();
+
+      await taskStore.save({
+        agentId,
+        data: {
+          ...workingTask,
+          status: { state: 'input-required', timestamp: new Date().toISOString() },
+        },
+      });
+
+      await consume;
+
+      const finalEvent = events.at(-1);
+      expect(finalEvent.result).toMatchObject({
+        kind: 'status-update',
+        final: true,
+        status: { state: 'input-required' },
       });
     });
   });
@@ -2075,42 +3060,54 @@ describe('A2A Handler', () => {
 
       await mockTaskStore.save({ agentId, data: task });
 
-      const result = await handleTaskCancel({
-        requestId,
-        taskStore: mockTaskStore,
-        agentId,
-        taskId,
-      });
+      await expect(
+        handleTaskCancel({
+          requestId,
+          taskStore: mockTaskStore,
+          agentId,
+          taskId,
+        }),
+      ).rejects.toThrow(MastraA2AError.taskNotCancelable(taskId));
 
       // Verify task remained in completed state
       const updatedData = await mockTaskStore.load({ agentId, taskId });
       expect(updatedData?.status.state).toBe('completed');
-      expect(result).toEqual({
-        id: 'test-request-id',
-        jsonrpc: '2.0',
-        result: {
-          artifacts: [],
-          id: expect.any(String),
-          contextId: expect.any(String),
-          metadata: undefined,
-          status: {
-            message: {
-              messageId: expect.any(String),
-              parts: [
-                {
-                  text: 'Done!',
-                  kind: 'text',
-                },
-              ],
-              role: 'agent',
-              kind: 'message',
-            },
-            state: 'completed',
-            timestamp: '2025-05-08T11:47:38.458Z',
-          },
-          kind: 'task',
-        },
+    });
+
+    it('should preserve a concurrent terminal update instead of overwriting it with cancellation', async () => {
+      const requestId = 'test-request-id';
+      const taskId = 'test-task-id';
+      const agentId = 'test-agent';
+      const task: Task = {
+        id: taskId,
+        contextId: 'test-session-id',
+        status: { state: 'working' },
+        artifacts: [],
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId, data: task });
+
+      const originalSave = mockTaskStore.save.bind(mockTaskStore);
+      let injectConflict = true;
+      vi.spyOn(mockTaskStore, 'save').mockImplementation(async input => {
+        if (injectConflict && input.expectedVersion === 1) {
+          injectConflict = false;
+          await originalSave({
+            agentId,
+            data: { ...task, status: { state: 'completed' } },
+            expectedVersion: 1,
+          });
+        }
+        return originalSave(input);
       });
+
+      await expect(handleTaskCancel({ requestId, taskStore: mockTaskStore, agentId, taskId })).rejects.toThrow(
+        MastraA2AError.taskNotCancelable(taskId),
+      );
+
+      expect((await mockTaskStore.load({ agentId, taskId }))?.status.state).toBe('completed');
+      expect(mockTaskStore.activeCancellations.has(taskId)).toBe(false);
     });
 
     it('should throw error when canceling non-existent task', async () => {
@@ -2782,6 +3779,29 @@ describe('A2A Handler', () => {
     });
   });
 
+  describe('A2A protocol version negotiation', () => {
+    it.each([
+      [undefined, '0.3'],
+      ['', '0.3'],
+      ['0.3', '0.3'],
+      ['1.0', '1.0'],
+    ] as const)('resolves %s to protocol version %s', (header, expected) => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: header === undefined ? undefined : { 'A2A-Version': header },
+      });
+
+      expect(resolveA2AProtocolVersion(request)).toBe(expected);
+    });
+
+    it('rejects unsupported protocol versions', () => {
+      const request = new Request('http://localhost/api/a2a/test-agent', {
+        headers: { 'A2A-Version': '2.0' },
+      });
+
+      expect(() => resolveA2AProtocolVersion(request)).toThrow('Version not supported: 2.0');
+    });
+  });
+
   describe('AGENT_EXECUTION_ROUTE', () => {
     let mockMastra: Mastra;
     let mockTaskStore: InMemoryTaskStore;
@@ -2825,6 +3845,103 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('accepts and returns A2A v1 message shapes', async () => {
+      const mockAgent = mockMastra.getAgentById('test-agent');
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Hello from v1' });
+
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '1.0' },
+        }),
+        id: 2,
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: 'v1-message',
+            role: 'ROLE_USER',
+            parts: [{ text: 'Hello' }],
+          },
+          configuration: { returnImmediately: false },
+        },
+      });
+
+      expect(await response.json()).toMatchObject({
+        jsonrpc: '2.0',
+        id: 2,
+        result: {
+          task: {
+            status: { state: 'TASK_STATE_COMPLETED' },
+            artifacts: [{ parts: [{ text: 'Hello from v1' }] }],
+          },
+        },
+      });
+    });
+
+    it('lists tasks using the A2A v1 pagination response', async () => {
+      const task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        kind: 'task' as const,
+        status: { state: 'completed' as const, timestamp: '2026-08-06T12:00:00.000Z' },
+      };
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      expect(
+        handleTaskList({
+          requestId: 3,
+          taskStore: mockTaskStore,
+          agentId: 'test-agent',
+          params: { contextId: 'context-1', pageSize: 10 },
+        }),
+      ).toEqual({
+        jsonrpc: '2.0',
+        id: 3,
+        result: {
+          tasks: [
+            expect.objectContaining({
+              id: 'task-1',
+              status: expect.objectContaining({ state: 'TASK_STATE_COMPLETED' }),
+            }),
+          ],
+          nextPageToken: '',
+          pageSize: 10,
+          totalSize: 1,
+        },
+      });
+    });
+
+    it('returns a protocol error for unsupported A2A versions', async () => {
+      const response = await AGENT_EXECUTION_ROUTE.handler({
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        taskStore: mockTaskStore,
+        abortSignal: AbortSignal.abort(),
+        request: new Request('http://localhost/api/a2a/test-agent', {
+          headers: { 'A2A-Version': '2.0' },
+        }),
+        id: 2,
+        method: 'tasks/get',
+        params: { id: 'missing-task' },
+      });
+
+      expect(await response.json()).toEqual({
+        jsonrpc: '2.0',
+        id: 2,
+        error: {
+          code: -32009,
+          message: 'Version not supported: 2.0',
+          data: { version: '2.0' },
+        },
+      });
+    });
+
     it('returns SSE for streaming A2A methods', async () => {
       const mockAgent = mockMastra.getAgentById('test-agent');
       // @ts-expect-error - mockResolvedValue is not available on the Agent class
@@ -2839,7 +3956,7 @@ describe('A2A Handler', () => {
         agentId: 'test-agent',
         requestContext: new RequestContext(),
         taskStore: mockTaskStore,
-        abortSignal: AbortSignal.abort(),
+        abortSignal: new AbortController().signal,
         id: 42,
         method: 'message/stream',
         params: {

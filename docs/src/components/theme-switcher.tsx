@@ -26,16 +26,16 @@ export const ThemeSwitcher = () => {
           colorMode: colorModeChoice === 'light' ? 'dark' : colorModeChoice === 'dark' ? null : 'light',
         })
       }
-      className="w-fit cursor-pointer rounded-[10px] border-0 bg-transparent p-2 text-black transition-colors ease-linear hover:bg-(--mastra-surface-3) hover:text-black dark:text-white hover:dark:bg-[#121212] dark:hover:text-white"
+      className="w-fit cursor-pointer rounded-[10px] border-0 bg-transparent p-1 text-black transition-colors ease-linear hover:bg-(--mastra-surface-3) hover:text-black dark:text-white hover:dark:bg-[#121212] dark:hover:text-white"
       aria-label={getAriaLabel()}
       title={getAriaLabel()}
     >
       {colorModeChoice === 'light' ? (
-        <IconLightMode className="size-5" />
+        <IconLightMode className="size-6" />
       ) : colorModeChoice === 'dark' ? (
-        <IconDarkMode className="size-5" />
+        <IconDarkMode className="size-6" />
       ) : (
-        <IconSystemColorMode className="size-5" />
+        <IconSystemColorMode className="size-6" />
       )}
       <span className="sr-only">{getAriaLabel()}</span>
     </button>

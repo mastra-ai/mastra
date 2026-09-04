@@ -1,0 +1,25 @@
+{
+  "attachment": [
+    "google/gemma-4-31b-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "moonshotai/Kimi-K2.6",
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B"
+  ],
+  "temperature": [
+    "deepseek-ai/DeepSeek-V3-0324",
+    "google/gemma-4-31b-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "moonshotai/Kimi-K2.6",
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B",
+    "openai/gpt-oss-120b",
+    "zai/GLM-5.1",
+    "zai/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "google/gemma-4-31b-it",
+    "moonshotai/Kimi-K2.6",
+    "openai/gpt-oss-120b",
+    "zai/GLM-5.1",
+    "zai/GLM-5.2"
+  ]
+}

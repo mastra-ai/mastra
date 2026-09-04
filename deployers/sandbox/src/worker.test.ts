@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSandbox, makeBuildDir } from './fake-sandbox.mock.js';
-import { deployWorkerToSandbox } from './worker.js';
+import { SandboxWorkerCapabilityError } from './types.js';
+import { attachWorkerDeployment, deployWorkerToSandbox } from './worker.js';
 
 async function deploy(sandbox: FakeSandbox, overrides: Record<string, unknown> = {}) {
   return deployWorkerToSandbox({
@@ -40,6 +41,102 @@ describe('deployWorkerToSandbox', () => {
     expect(content).toContain('/attempt-1/stdout');
     expect(content).toContain('/attempt-1/stderr');
     expect(content).toContain("awk '{print $22}'");
+    expect(content).not.toContain('ulimit ');
+    expect(sandbox.commands.some(command => command.includes('MASTRA_WORKER_CAPABILITY:'))).toBe(false);
+  });
+
+  it('preflights requested hard limits before deployment and applies them immediately before exec', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox, {
+      resourceLimits: {
+        cpuTimeSeconds: 3,
+        addressSpaceBytes: 8_192,
+        fileSizeBytes: 2_048,
+        openFiles: 32,
+      },
+    });
+
+    const preflight = sandbox.commands.find(command => command.includes('MASTRA_WORKER_CAPABILITY:'));
+    expect(preflight).toContain('[ "$(uname -s 2>/dev/null)" = Linux ]');
+    expect(preflight).toContain("setsid sh -c 'kill -0 -$$ 2>/dev/null'");
+    expect(preflight).toContain('check_limit cpu_time -t 3');
+    expect(preflight).toContain('check_limit address_space -v 8');
+    expect(preflight).toContain('check_limit file_size -f 4');
+    expect(preflight).toContain('check_limit open_files -n 32');
+    expect(preflight).toContain('ulimit -H "$flag" "$((value + 1))"');
+
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    const content = String(script!.content);
+    const softCpu = content.indexOf('ulimit -S -t 3');
+    const hardCpu = content.indexOf('ulimit -H -t 3');
+    const exec = content.indexOf('exec ', content.indexOf('ulimit -H -n 32'));
+    expect(softCpu).toBeGreaterThan(-1);
+    expect(hardCpu).toBeGreaterThan(softCpu);
+    expect(content.indexOf('ulimit -S -v 8')).toBeGreaterThan(hardCpu);
+    expect(content.indexOf('ulimit -H -v 8')).toBeGreaterThan(content.indexOf('ulimit -S -v 8'));
+    expect(content.indexOf('ulimit -S -f 4')).toBeGreaterThan(content.indexOf('ulimit -H -v 8'));
+    expect(content.indexOf('ulimit -H -f 4')).toBeGreaterThan(content.indexOf('ulimit -S -f 4'));
+    expect(content.indexOf('ulimit -S -n 32')).toBeGreaterThan(content.indexOf('ulimit -H -f 4'));
+    expect(content.indexOf('ulimit -H -n 32')).toBeGreaterThan(content.indexOf('ulimit -S -n 32'));
+    expect(exec).toBeGreaterThan(content.indexOf('ulimit -H -n 32'));
+  });
+
+  it('preflights only the signal capability required by the requested limit', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox, { resourceLimits: { cpuTimeSeconds: 3 } });
+
+    const preflight = sandbox.commands.find(command => command.includes('MASTRA_WORKER_CAPABILITY:'))!;
+    expect(preflight).toContain('kill -l XCPU');
+    expect(preflight).not.toContain('kill -l XFSZ');
+  });
+
+  it('fails closed before upload when a requested capability is unavailable', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    vi.spyOn(sandbox, 'executeCommand').mockResolvedValueOnce({
+      success: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: 'MASTRA_WORKER_CAPABILITY:address_space\n',
+      executionTimeMs: 1,
+    });
+
+    const error = await deploy(sandbox, { resourceLimits: { addressSpaceBytes: 1_048_576 } }).catch(error => error);
+    expect(error).toBeInstanceOf(SandboxWorkerCapabilityError);
+    expect(error).toMatchObject({
+      code: 'SANDBOX_WORKER_CAPABILITY_UNAVAILABLE',
+      capability: 'address_space',
+    });
+    expect(sandbox.writtenFiles).toEqual([]);
+    expect(sandbox.commands).toHaveLength(0);
+  });
+
+  it.each([
+    ['cpuTimeSeconds', 0],
+    ['addressSpaceBytes', Number.NaN],
+    ['fileSizeBytes', 1.5],
+    ['openFiles', Number.POSITIVE_INFINITY],
+  ])('rejects an invalid %s hard limit', async (name, value) => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await expect(deploy(sandbox, { resourceLimits: { [name]: value } })).rejects.toThrow(
+      `resourceLimits.${name} must be a positive safe integer`,
+    );
+    expect(sandbox.writtenFiles).toEqual([]);
+  });
+
+  it('allows explicitly undefined limits without changing the launch path', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await deploy(sandbox, { resourceLimits: { cpuTimeSeconds: undefined } });
+
+    expect(sandbox.commands.some(command => command.includes('MASTRA_WORKER_CAPABILITY:'))).toBe(false);
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'))!;
+    expect(String(script.content)).not.toContain('ulimit ');
+  });
+
+  it('rejects unknown resource-limit fields', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    await expect(deploy(sandbox, { resourceLimits: { unsupportedLimit: 1 } as never })).rejects.toThrow(
+      'Unknown worker resource limit: unsupportedLimit',
+    );
   });
 
   it('stages bounded stdin before launch', async () => {
@@ -82,6 +179,37 @@ describe('deployWorkerToSandbox', () => {
       exitCode: 143,
       signal: 'SIGTERM',
     });
+  });
+
+  it.each([
+    ['cpu', 3, 'SIGXCPU'],
+    ['file_size', 2_048, 'SIGXFSZ'],
+  ] as const)('reports typed %s exhaustion only from its reliable signal', async (resource, limit, signal) => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatus: `resource_exhausted|attempt-1|${resource}|${limit}|${signal}`,
+    });
+    const deployment = await deploy(sandbox);
+
+    expect(await deployment.status()).toEqual({
+      state: 'resource_exhausted',
+      executionId: 'attempt-1',
+      resource,
+      limit,
+      signal,
+    });
+  });
+
+  it('does not attribute ordinary memory or file-descriptor failures to resource exhaustion', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatus: 'exited|attempt-1|1|',
+    });
+    const deployment = await deploy(sandbox, {
+      resourceLimits: { addressSpaceBytes: 1_048_576, openFiles: 16 },
+    });
+
+    expect(await deployment.status()).toEqual({ state: 'exited', executionId: 'attempt-1', exitCode: 1 });
   });
 
   it('reads separate bounded output with byte offsets and truncation', async () => {
@@ -259,9 +387,9 @@ describe('deployWorkerToSandbox', () => {
     await expect(status('attempt-b')).resolves.toMatchObject({ stdout: 'running' });
   });
 
-  it('relaunches under a new execution ID and rejects identity reuse', async () => {
+  it('relaunches under a new execution ID, preserving limits and rejecting identity reuse', async () => {
     const sandbox = new FakeSandbox({ withNetworking: false });
-    const deployment = await deploy(sandbox);
+    const deployment = await deploy(sandbox, { resourceLimits: { cpuTimeSeconds: 2 } });
 
     await expect(deployment.relaunch({ executionId: 'attempt-1' })).rejects.toThrow('new executionId');
     await expect(
@@ -272,6 +400,66 @@ describe('deployWorkerToSandbox', () => {
     ).rejects.toThrow('must stay within the deployed artifact root');
     const relaunched = await deployment.relaunch({ executionId: 'attempt-2' });
     expect(relaunched.executionId).toBe('attempt-2');
-    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-2/launch.sh'))).toBe(true);
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-2/launch.sh'));
+    expect(String(script!.content)).toContain('ulimit -H -t 2');
+  });
+});
+
+describe('attachWorkerDeployment', () => {
+  it('reattaches from persisted identity and operates without launch configuration', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerOutput: Buffer.from('persisted output').toString('base64'),
+    });
+    await deploy(sandbox);
+
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1' });
+
+    expect(attached).toMatchObject({ sandboxId: 'fake-info-id', executionId: 'attempt-1' });
+    expect('relaunch' in attached).toBe(false);
+    expect(await attached.status()).toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(Buffer.from((await attached.readOutput('stdout', { offset: 10 })).data).toString()).toBe('output');
+    expect(await attached.destroy()).toEqual({ state: 'destroyed', attempts: 1 });
+  });
+
+  it('retries remote directory resolution after waking a stopped sandbox', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    sandbox.status = 'stopped';
+    vi.spyOn(sandbox, 'executeCommand').mockRejectedValueOnce(new Error('sandbox stopped'));
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1' });
+
+    await expect(attached.readOutput('stdout')).resolves.toMatchObject({ interrupted: true, eof: false });
+    await expect(attached.status({ wake: true })).resolves.toEqual({ state: 'running', executionId: 'attempt-1' });
+    expect(sandbox.started).toBe(1);
+  });
+
+  it('returns distinct typed outcomes for completed, missing or corrupt, and destroyed executions', async () => {
+    const completed = new FakeSandbox({ withNetworking: false, workerStatus: 'exited|attempt-1|0' });
+    const missing = new FakeSandbox({ withNetworking: false, workerStatus: 'unknown|attempt-1' });
+    const corrupt = new FakeSandbox({ withNetworking: false, workerStatus: 'invalid-record' });
+    const destroyed = new FakeSandbox({ withNetworking: false });
+    destroyed.status = 'destroyed';
+
+    await expect(
+      (await attachWorkerDeployment({ sandbox: completed, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'exited', executionId: 'attempt-1', exitCode: 0 });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: missing, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: corrupt, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    await expect(
+      (await attachWorkerDeployment({ sandbox: destroyed, executionId: 'attempt-1' })).status(),
+    ).resolves.toEqual({ state: 'provider_unavailable', executionId: 'attempt-1', providerState: 'destroyed' });
+    expect(destroyed.commands).toEqual([]);
+  });
+
+  it('preserves stale PID protection after reattachment', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false, workerStatus: 'stale|attempt-1' });
+    const attached = await attachWorkerDeployment({ sandbox, executionId: 'attempt-1', remoteDir: '/home/fake/app' });
+
+    expect(await attached.cancel()).toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    expect(sandbox.commands.at(-1)).not.toContain('kill -TERM -"$pid"');
   });
 });

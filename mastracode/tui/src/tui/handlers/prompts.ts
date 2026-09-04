@@ -161,9 +161,6 @@ export async function handleAskQuestion(
 
           state.ui.requestRender();
 
-          // Ensure the chat scrolls to show the question
-          state.chatContainer.invalidate();
-
           // Focus the question component
           questionComponent.focused = true;
         } catch {
@@ -212,8 +209,6 @@ export async function handleAskQuestion(
       showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
       dialog.focused = true;
     }
-
-    ctx.notify('ask_question', question);
   });
 }
 
@@ -275,7 +270,6 @@ export async function handleSandboxAccessRequest(
       state.chatContainer.addChild(questionComponent);
       questionComponent.focused = true;
       state.ui.requestRender();
-      state.chatContainer.invalidate();
     };
 
     // If another inline question is already active, queue this one
@@ -284,8 +278,6 @@ export async function handleSandboxAccessRequest(
     } else {
       activate();
     }
-
-    ctx.notify('sandbox_access', `Sandbox access requested: ${requestedPath}`);
   });
 }
 
@@ -299,13 +291,11 @@ export async function handleSandboxAccessRequest(
  * "Request changes" rejects the tool call and aborts the agent so the user can
  * provide revision feedback via a normal chat message.
  */
-async function approvePlan(
+async function prepareApprovedPlan(
   ctx: EventHandlerContext,
-  toolCallId: string,
   title: string,
   plan: string,
   planPath: string | undefined,
-  submittedPath: string,
 ): Promise<void> {
   const { state } = ctx;
   await state.session.state.set({
@@ -329,8 +319,16 @@ async function approvePlan(
   // Reset in-memory diff state so the next plan doesn't diff against this one.
   state.previousPlanSnapshot = undefined;
   state.lastSubmitPlanComponent = undefined;
+}
 
-  await state.session.respondToToolSuspension({
+function resumeApprovedPlan(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  title: string,
+  plan: string,
+  submittedPath: string,
+): Promise<void> {
+  return ctx.state.session.respondToToolSuspension({
     toolCallId,
     resumeData: { action: 'approved', path: submittedPath, title, plan },
   });
@@ -388,6 +386,18 @@ export async function handlePlanApproval(
         ?.runPermissionResult('plan_approval', toolCallId, 'submit_plan', decision, { path: snapshotKey })
         .catch(() => {});
     };
+    // #21139: never force editor focus while an overlay is still up (it would
+    // deadlock the overlay via pi-tui's blocked-restore transfer), and drop any
+    // deferred focus that pointed at this approval.
+    const releaseApprovalFocus = () => {
+      state.activeInlinePlanApproval = undefined;
+      if (state.pendingFocus === approvalComponent) {
+        state.pendingFocus = undefined;
+      }
+      if (!state.ui.hasOverlay()) {
+        state.ui.setFocus(state.editor);
+      }
+    };
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -395,19 +405,23 @@ export async function handlePlanApproval(
       planFilename,
       previousPlan,
       onApprove: async () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('approved');
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
+        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
+        const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
+        // The controller emits the resumed tool's terminal events while this
+        // handler owns its serialized event queue. Let those events reach their
+        // render boundaries immediately instead of waiting for the resume promise.
         resolve();
+        await resumed;
       },
       onGoal: async () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('approved');
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
+        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
+        await resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
 
-        // `approvePlan` waits for plan mode to idle before `startGoal` sends
+        // The plan-mode resume reaches its idle boundary before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
         const objective = formatPlanGoalObjective(resolvedTitle, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
@@ -420,8 +434,7 @@ export async function handlePlanApproval(
         resolve();
       },
       onReject: () => {
-        state.activeInlinePlanApproval = undefined;
-        state.ui.setFocus(state.editor);
+        releaseApprovalFocus();
         firePermissionResult('declined');
         // Resume the tool with a rejection so the rejection result is persisted
         // in thread history (the next run sees it for context). For submit_plan,
@@ -480,9 +493,16 @@ export async function handlePlanApproval(
       state.chatContainer.addChild(approvalComponent);
     }
     state.ui.requestRender();
-    state.chatContainer.invalidate();
-    state.ui.setFocus(approvalComponent);
-
-    ctx.notify('plan_approval', `Plan "${resolvedTitle}" requires approval`);
+    // #21139: focusing the approval while a command overlay (e.g. the /models
+    // pack selector) is focused makes pi-tui record a blocked overlay-restore
+    // state; the unconditional editor refocus on resolve then transfers that
+    // block onto the editor and permanently deadlocks the overlay. Defer focus
+    // until the overlay stack empties (see installOverlayFocusHandoff in
+    // setup.ts).
+    if (state.ui.hasOverlay()) {
+      state.pendingFocus = approvalComponent;
+    } else {
+      state.ui.setFocus(approvalComponent);
+    }
   });
 }

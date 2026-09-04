@@ -1,10 +1,11 @@
 /**
- * Clicking a board card is a commitment to work, not a blank chat: the card's
- * click target starts its default run (with an invocation) so the resulting
- * thread gets a kickoff message instead of an empty "What can I help you
- * build?" session. Only cards with no run spec fall back to a plain session.
+ * Clicking a board card opens its details; committing to work happens through
+ * the dialog's run button. The run still starts with its invocation so the
+ * resulting thread gets a kickoff message instead of an empty "What can I help
+ * you build?" session. Only items with no run spec fall back to a plain session.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -41,11 +42,24 @@ const issueWorkItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const linearWorkItem = {
+  ...issueWorkItem,
+  id: 'linear-item-1',
+  externalSource: {
+    integrationId: 'linear',
+    type: 'issue',
+    externalId: 'linear:linear-issue-1',
+    url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+  },
+  title: 'ENG-42: Fix intake sync',
+  metadata: { identifier: 'ENG-42' },
+};
+
 /**
  * Stubs the board's data endpoints and captures run-start requests. The run
  * start never resolves, keeping the test on the board (no thread navigation).
  */
-function stubBoardEndpoints({ issues = [] as object[] } = {}) {
+function stubBoardEndpoints({ issues = [] as object[], workItems = [issueWorkItem] as object[] } = {}) {
   const startRequests: Array<Record<string, unknown>> = [];
 
   server.use(
@@ -73,9 +87,7 @@ function stubBoardEndpoints({ issues = [] as object[] } = {}) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [issueWorkItem] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
@@ -90,13 +102,41 @@ function stubBoardEndpoints({ issues = [] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // The label-filtered (auto-triaged) feed stays empty; the plain feed
+    // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-      HttpResponse.json({ issues: new URL(request.url).searchParams.has('label') ? [] : issues, nextPage: null }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
+      const label = new URL(request.url).searchParams.get('label');
+      if (label && label !== 'status: auto-triaged') {
+        return HttpResponse.error();
+      }
+
+      return HttpResponse.json({ issues: label ? [] : issues, nextPage: null });
+    }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/:number`, ({ params }) =>
+      HttpResponse.json({
+        number: Number(params.number),
+        title: 'Crash on logout',
+        url: `https://github.com/acme/app/issues/${String(params.number)}`,
+        author: 'octocat',
+        labels: [],
+        comments: 0,
+        createdAt: '2026-07-18T00:00:00.000Z',
+        updatedAt: '2026-07-18T00:00:00.000Z',
+        description: 'The app crashes when logging out.',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, ({ params }) =>
+      HttpResponse.json({
+        identifier: String(params.identifier),
+        title: 'Fix intake sync',
+        url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
+        description: 'The sync runs the wrong way.',
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs/:number`, () =>
+      HttpResponse.json({ error: 'pull_request_not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/issue-7' } }),
     ),
@@ -115,25 +155,125 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Board card click starts the default run', () => {
-  it('starts the default run with its invocation when a sessionless work-item card is clicked', async () => {
+async function startRunFromCardDetails(cardTitle: string) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: `Details for ${cardTitle}` }));
+
+  const dialog = await screen.findByRole('dialog', { name: cardTitle });
+  await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
+}
+
+describe('Board card details open the default run', () => {
+  it('starts the default run with its invocation from a sessionless work-item card details', async () => {
     const { startRequests } = stubBoardEndpoints();
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    // The click target announces the default run, not a blank thread.
-    const cardButton = await screen.findByRole('button', { name: 'Investigate Fix login bug' });
-    expect(screen.queryByRole('button', { name: 'Start session for Fix login bug' })).not.toBeInTheDocument();
-    await user.click(cardButton);
+    await startRunFromCardDetails('Fix login bug');
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { id: 'item-1', role: 'plan' },
+      workItem: { id: 'item-1', role: 'triage' },
     });
   });
 
-  it('starts the default run with its invocation when a candidate card title is clicked', async () => {
+  it('starts a hands-off run from the card menu, asking the server to preapprove its plans', async () => {
+    const { startRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Investigate hands-off' }));
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
+    expect(startRequests[0]).toMatchObject({
+      preapprovePlans: true,
+      workItem: { id: 'item-1', role: 'triage' },
+    });
+  });
+
+  it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
+    stubBoardEndpoints({
+      workItems: [
+        { ...issueWorkItem, metadata: { number: 7, labels: ['status: needs approval'] }, stages: ['triage'] },
+      ],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Prepare approval' });
+    expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
+  });
+
+  it('offers the ordinary runs once a labelled card sits in a working lane, even before acceptance was recorded', async () => {
+    stubBoardEndpoints({
+      workItems: [
+        {
+          ...issueWorkItem,
+          metadata: { number: 7, labels: ['status: needs approval'] },
+          stages: ['planning'],
+          triageType: 'feature request',
+          acceptedAt: null,
+        },
+      ],
+    });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
+    await screen.findByRole('menuitem', { name: 'Build' });
+    expect(screen.queryByRole('menuitem', { name: 'Prepare approval' })).not.toBeInTheDocument();
+  });
+
+  it("shows a Linear card's own description in its details", async () => {
+    stubBoardEndpoints({ workItems: [linearWorkItem] });
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for ENG-42: Fix intake sync' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'ENG-42: Fix intake sync' });
+    expect(await within(dialog).findByText('The sync runs the wrong way.')).toBeInTheDocument();
+  });
+
+  it('links the card source from the panel header', async () => {
+    stubBoardEndpoints();
+    renderWorkBoard();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
+    expect(within(dialog).getByRole('link', { name: 'Open in GitHub: #7' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/app/issues/7',
+    );
+  });
+
+  it('starts a persisted Linear Triage item with the Linear kickoff invocation', async () => {
+    const { startRequests } = stubBoardEndpoints({ workItems: [linearWorkItem] });
+    renderWorkBoard();
+
+    await startRunFromCardDetails('ENG-42: Fix intake sync');
+
+    await waitFor(() => expect(startRequests).toHaveLength(1));
+    expect(startRequests[0]).toMatchObject({
+      destinationStage: 'planning',
+      invocation: {
+        type: 'skill',
+        skillName: 'factory-triage',
+        arguments: expect.stringContaining(
+          `Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42/fix-intake-sync)\n\n` +
+            `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`,
+        ),
+      },
+      workItem: { id: 'linear-item-1', role: 'plan' },
+    });
+  });
+
+  it('shows the source description in the dialog and runs a candidate card from it', async () => {
     const { startRequests } = stubBoardEndpoints({
       issues: [
         {
@@ -148,15 +288,51 @@ describe('Board card click starts the default run', () => {
         },
       ],
     });
-    const user = userEvent.setup();
     renderWorkBoard();
 
-    await user.click(await screen.findByRole('button', { name: 'Issue: Crash on logout' }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
+    expect(await within(dialog).findByText('The app crashes when logging out.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Investigate' }));
 
     await waitFor(() => expect(startRequests).toHaveLength(1));
     expect(startRequests[0]).toMatchObject({
+      destinationStage: 'triage',
       invocation: { type: 'skill', skillName: 'factory-triage' },
-      workItem: { role: 'plan' },
+      workItem: { role: 'triage' },
     });
+  });
+
+  // Run clicks refetch worktrees before deciding what to do. When that
+  // refetch fails (e.g. the auth cookie expired overnight), the click used to
+  // die silently — no run, no toast, nothing. It must surface an error.
+  it('shows an error toast instead of failing silently when the pre-start refetch fails', async () => {
+    const { startRequests } = stubBoardEndpoints();
+    // First work-items read (board load) succeeds; the click's pre-start
+    // refetch 401s like an expired session would.
+    let itemsCalls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        itemsCalls += 1;
+        if (itemsCalls === 1) return HttpResponse.json({ workItems: [issueWorkItem] });
+        return HttpResponse.json({ error: 'unauthorized' }, { status: 401 });
+      }),
+    );
+    // The Toaster normally mounts in main.tsx, above the router.
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
+    renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+    );
+
+    await startRunFromCardDetails('Fix login bug');
+
+    // Both the click's toast and the poll's retry can surface the same message.
+    await waitFor(() => expect(screen.getAllByText(/unauthorized/i).length).toBeGreaterThanOrEqual(1));
+    expect(startRequests).toHaveLength(0);
   });
 });

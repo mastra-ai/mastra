@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ProcessStepList } from './process-step-list';
+import { ProcessStepListItem } from './process-step-list-item';
 import type { ProcessStep } from './shared';
 
 const meta: Meta<typeof ProcessStepList> = {
@@ -49,6 +50,27 @@ export const InProgress: Story = {
     steps: inProgressSteps,
     currentStep: inProgressSteps[1],
   },
+};
+
+export const PlainEmbedded: Story = {
+  args: {
+    steps: inProgressSteps,
+    currentStep: inProgressSteps[1],
+  },
+  render: () => (
+    <div className="flex w-full max-w-96 flex-col gap-1">
+      {inProgressSteps.map((step, index) => (
+        <ProcessStepListItem
+          key={step.id}
+          stepId={step.id}
+          step={step}
+          isActive={step.isActive}
+          position={index + 1}
+          variant="plain"
+        />
+      ))}
+    </div>
+  ),
 };
 
 export const AllCompleted: Story = {

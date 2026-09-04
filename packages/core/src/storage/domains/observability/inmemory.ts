@@ -38,6 +38,7 @@ import type {
   ListFeedbackArgs,
   ListFeedbackResponse,
   FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
 } from './feedback';
 import { listLogsArgsSchema } from './logs';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse, LogRecord } from './logs';
@@ -92,7 +93,6 @@ import type {
   ListBranchesArgs,
   ListBranchesResponse,
   ListTracesArgs,
-  ListTracesLightResponse,
   ListTracesResponse,
   SpanRecord,
   UpdateSpanArgs,
@@ -738,30 +738,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       spans: toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore },
       ...this.pageDeltaCursor(this.getMaxTraceCursorId(filters) ?? this.getMaxTraceStreamCursorId()),
-    };
-  }
-
-  async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
-    const { paged, total, page, perPage, hasMore } = this.getMatchingRootSpans(args);
-
-    return {
-      spans: paged.map(span => ({
-        traceId: span.traceId,
-        spanId: span.spanId,
-        parentSpanId: span.parentSpanId,
-        name: span.name,
-        spanType: span.spanType,
-        isEvent: span.isEvent,
-        startedAt: span.startedAt,
-        endedAt: span.endedAt,
-        error: span.error,
-        entityType: span.entityType,
-        entityId: span.entityId,
-        entityName: span.entityName,
-        createdAt: span.createdAt,
-        updatedAt: span.updatedAt,
-      })),
-      pagination: { total, page, perPage, hasMore },
     };
   }
 
@@ -1952,6 +1928,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         if (!score.tags.includes(tag)) return false;
       }
     }
+    // Metadata filter (partial match - all provided keys must match; empty filter is a no-op)
+    if (filters.metadata != null && Object.keys(filters.metadata).length > 0) {
+      if (score.metadata == null) return false;
+      for (const [key, value] of Object.entries(filters.metadata)) {
+        if (!jsonValueEquals(score.metadata[key], value)) return false;
+      }
+    }
 
     return true;
   }
@@ -2191,6 +2174,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         args.feedback.feedbackUserId ??
         args.feedback.userId ??
         (typeof args.feedback.metadata?.userId === 'string' ? args.feedback.metadata.userId : null),
+      reviewStatus: args.feedback.reviewStatus ?? 'needs-review',
     } as FeedbackRecord;
     this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
   }
@@ -2203,6 +2187,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         source: fb.feedbackSource ?? fb.source ?? '',
         feedbackUserId:
           fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+        reviewStatus: fb.reviewStatus ?? 'needs-review',
       } as FeedbackRecord;
       this.upsertByIdField(this.db.feedbackRecords, this.db.feedbackCursorIds, record, 'feedbackId');
     }
@@ -2249,6 +2234,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         ),
       ),
     };
+  }
+
+  async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    const feedback = this.db.feedbackRecords.find(record => record.feedbackId === args.feedbackId);
+    if (!feedback) {
+      throw new MastraError({
+        id: 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_NOT_FOUND',
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        text: 'Feedback record not found',
+      });
+    }
+
+    feedback.reviewStatus = args.reviewStatus;
+    return feedback;
   }
 
   async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
@@ -2508,6 +2508,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
+    if (filters.reviewStatus !== undefined && (fb.reviewStatus ?? 'needs-review') !== filters.reviewStatus)
+      return false;
     if (filters.tags != null && filters.tags.length > 0) {
       if (fb.tags == null) return false;
       for (const tag of filters.tags) {

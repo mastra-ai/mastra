@@ -26,6 +26,8 @@ export function getTokenMetricSamples(usage: UsageStats): TokenMetricSample[] {
     pushIfPositive(TokenMetrics.INPUT_TEXT, usage.inputDetails.text);
     pushIfPositive(TokenMetrics.INPUT_CACHE_READ, usage.inputDetails.cacheRead);
     pushIfPositive(TokenMetrics.INPUT_CACHE_WRITE, usage.inputDetails.cacheWrite);
+    pushIfPositive(TokenMetrics.INPUT_CACHE_WRITE_5M, usage.inputDetails.cacheWrite5m);
+    pushIfPositive(TokenMetrics.INPUT_CACHE_WRITE_1H, usage.inputDetails.cacheWrite1h);
     pushIfPositive(TokenMetrics.INPUT_AUDIO, usage.inputDetails.audio);
     pushIfPositive(TokenMetrics.INPUT_IMAGE, usage.inputDetails.image);
   }

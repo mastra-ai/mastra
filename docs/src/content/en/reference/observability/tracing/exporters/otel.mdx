@@ -1,6 +1,6 @@
 ---
 title: "Reference: OtelExporter | Observability"
-description: OpenTelemetry exporter for traces and logs
+description: "Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions."
 packages:
   - "@mastra/otel-exporter"
 ---
@@ -9,11 +9,11 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # OtelExporter
 
-Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions; logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.
+Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions. Logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new OtelExporter(config: OtelExporterConfig)
 ```
 
@@ -266,7 +266,7 @@ interface CustomConfig {
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -274,7 +274,7 @@ Exports a tracing event to the configured OTEL backend.
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -282,7 +282,7 @@ Force flushes any buffered spans to the OTEL backend without shutting down the e
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 
@@ -379,6 +379,6 @@ While the OpenTelemetry specification supports native array attributes, many bac
 
 ## Related
 
-- [OtelExporter Guide](/docs/observability/integrations/exporters/otel): Setup guide with provider configurations
-- [OtelBridge](/docs/observability/integrations/bridges/otel): For bidirectional OTEL context integration
+- [OtelExporter Guide](/integrations/observability/opentelemetry#exporter): Setup guide with provider configurations
+- [OtelBridge](/integrations/observability/opentelemetry#bridge): For bidirectional OTEL context integration
 - [Tracing Overview](/docs/observability/tracing/overview): General tracing concepts

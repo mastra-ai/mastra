@@ -170,4 +170,25 @@ describe('BackgroundTaskWorker', () => {
     const worker = new BackgroundTaskWorker();
     await expect(worker.start()).rejects.toThrow('call init() before start()');
   });
+
+  it('creates a fresh manager when restarted after stop', async () => {
+    const worker = new BackgroundTaskWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue({});
+    deps.mastra = {
+      getLogger: vi.fn().mockReturnValue(deps._logger),
+      __hasInternalWorkflow: vi.fn().mockReturnValue(false),
+      __registerInternalWorkflow: vi.fn(),
+    } as any;
+
+    await worker.init(deps);
+    await worker.start();
+    const firstManager = worker.manager;
+    await worker.stop();
+    await worker.start();
+
+    expect(worker.isRunning).toBe(true);
+    expect(worker.manager).not.toBe(firstManager);
+    await worker.stop();
+  });
 });

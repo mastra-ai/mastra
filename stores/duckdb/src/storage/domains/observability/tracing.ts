@@ -19,7 +19,14 @@ import type {
   BatchDeleteTracesArgs,
   SpanRecord,
 } from '@mastra/core/storage';
-import { BRANCH_SPAN_TYPES, listBranchesArgsSchema, listTracesArgsSchema, toTraceSpans } from '@mastra/core/storage';
+import {
+  BRANCH_SPAN_TYPES,
+  buildInputPreview,
+  computeTraceStatus,
+  listBranchesArgsSchema,
+  listTracesArgsSchema,
+  toTraceSpans,
+} from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
@@ -131,6 +138,29 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
 `;
 
 /**
+ * Lightweight list variant — also reconstructs `metadata` for the list's
+ * configurable columns and `input` so the row mapper can derive `inputPreview`
+ * without shipping the blob to the caller.
+ */
+const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
+  SELECT
+    traceId, spanId,
+    ${argMaxNonNull('name')},
+    ${argMaxNonNull('spanType')},
+    ${argMaxNonNull('parentSpanId')},
+    ${argMaxNonNull('isEvent')},
+    coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
+    ${argMaxNonNull('endedAt')},
+    ${argMaxNonNull('entityType')},
+    ${argMaxNonNull('entityId')},
+    ${argMaxNonNull('entityName')},
+    ${argMaxNonNull('error')},
+    ${argMaxNonNull('metadata')},
+    ${argMaxNonNull('input')}
+  FROM span_events
+`;
+
+/**
  * Which reconstructed columns each post-aggregation filter key can reference.
  * `status` is derived from endedAt + error (see buildWhereClause).
  */
@@ -221,6 +251,16 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
     error: parseJson(row.error),
     createdAt: toDate(row.startedAt), // DuckDB event-sourced — use startedAt as proxy
     updatedAt: toDateOrNull(row.endedAt),
+  };
+}
+
+function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpanRecord {
+  const record = rowToLightSpanRecord(row);
+  return {
+    ...record,
+    status: computeTraceStatus(record),
+    metadata: parseJson(row.metadata) as Record<string, unknown> | null,
+    inputPreview: buildInputPreview(row.input),
   };
 }
 
@@ -911,13 +951,23 @@ export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Pr
 }
 
 export async function listTracesLight(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesLightResponse> {
-  return listTraceRows(
+  const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+
+  const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : undefined;
+
+  const { pagination: resultPagination, spans } = await listTraceRows(
     db,
-    args,
-    SPAN_RECONSTRUCT_SELECT_LIGHT,
-    rowToLightSpanRecord,
+    { filters, pagination, orderBy },
+    SPAN_RECONSTRUCT_SELECT_LIGHT_LIST,
+    rowToLightSpanRecordWithPreview,
     spans => spans,
-  ) as Promise<ListTracesLightResponse>;
+  );
+
+  return {
+    pagination: resultPagination,
+    spans: spans as LightSpanRecord[],
+    ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
+  };
 }
 
 // ============================================================================

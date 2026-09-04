@@ -85,6 +85,32 @@ export function ensureAnthropicCompatibleMessages(
 }
 
 /**
+ * Tool call ids in the assistant message at `index` that already have a matching tool_result,
+ * either inline in the same message or in the tool message immediately after it — the only
+ * two positions providers accept.
+ */
+function collectPairedToolCallIds(messages: ModelMessage[], index: number): Set<string> {
+  const current = messages[index]!;
+  if (!Array.isArray(current.content)) return new Set();
+
+  const useIds = new Set<string>();
+  const resultIds = new Set<string>();
+  for (const part of current.content) {
+    if (part.type === 'tool-call') useIds.add(part.toolCallId);
+    else if (part.type === 'tool-result') resultIds.add(part.toolCallId);
+  }
+
+  const next = messages[index + 1];
+  if (next && next.role === 'tool' && Array.isArray(next.content)) {
+    for (const part of next.content) {
+      if (part.type === 'tool-result') resultIds.add(part.toolCallId);
+    }
+  }
+
+  return new Set([...useIds].filter(id => resultIds.has(id)));
+}
+
+/**
  * Removes orphan tool_use / tool_result blocks. Anthropic requires every tool_result
  * to be in the message immediately after its matching tool_use, and every tool_use
  * to have a matching tool_result in the next message. Recall windows can slice
@@ -97,22 +123,8 @@ export function sanitizeOrphanedToolPairs(messages: ModelMessage[]): ModelMessag
     const current = messages[i]!;
 
     if (current.role === 'assistant' && Array.isArray(current.content)) {
-      const useIds = new Set<string>();
-      const inlineResultIds = new Set<string>();
-      for (const part of current.content) {
-        if (part.type === 'tool-call') useIds.add(part.toolCallId);
-        else if (part.type === 'tool-result') inlineResultIds.add(part.toolCallId);
-      }
-
+      const validPairs = collectPairedToolCallIds(messages, i);
       const next = messages[i + 1];
-      const nextResultIds = new Set<string>();
-      if (next && next.role === 'tool' && Array.isArray(next.content)) {
-        for (const part of next.content) {
-          if (part.type === 'tool-result') nextResultIds.add(part.toolCallId);
-        }
-      }
-
-      const validPairs = new Set([...useIds].filter(id => inlineResultIds.has(id) || nextResultIds.has(id)));
 
       filteredContents[i] = filteredContents[i]!.filter(p => {
         if (p.type !== 'tool-call') return true;
@@ -152,6 +164,57 @@ export function sanitizeOrphanedToolPairs(messages: ModelMessage[]): ModelMessag
   }
 
   return result;
+}
+
+/**
+ * Keeps result-less tool calls in the prompt by pairing each one with a placeholder result.
+ *
+ * Used when the caller opted to keep suspended tool calls visible to the agent
+ * (`filterIncompleteToolCalls: false`). Providers reject a tool_use with no matching
+ * tool_result, so dropping the call is not the only option — synthesizing the missing
+ * half keeps the pending call in context while satisfying the pairing requirement.
+ *
+ * Provider-executed calls are left alone: they may be legitimately deferred to the next
+ * request, and giving them a result would resolve a call the provider intends to resume.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/20610
+ */
+export function pairOrphanedToolCalls(messages: ModelMessage[]): ModelMessage[] {
+  const paired: ModelMessage[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i]!;
+    paired.push(current);
+
+    if (current.role !== 'assistant' || !Array.isArray(current.content)) continue;
+
+    const pairedIds = collectPairedToolCallIds(messages, i);
+    const placeholders: ToolResultPart[] = [];
+    for (const part of current.content) {
+      if (part.type !== 'tool-call') continue;
+      const tc = part as { toolCallId: string; toolName: string; providerExecuted?: boolean };
+      if (tc.providerExecuted === true || pairedIds.has(tc.toolCallId)) continue;
+      placeholders.push({
+        type: 'tool-result',
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        output: { type: 'json', value: { status: 'pending' } },
+      });
+    }
+
+    if (placeholders.length === 0) continue;
+
+    const next = messages[i + 1];
+    if (next && next.role === 'tool' && Array.isArray(next.content)) {
+      paired.push({ ...next, content: [...next.content, ...placeholders] });
+      i++;
+    } else {
+      paired.push({ role: 'tool', content: placeholders });
+    }
+  }
+
+  // Every tool call is paired by now, so this only clears tool_results whose call is gone.
+  return sanitizeOrphanedToolPairs(paired);
 }
 
 /**

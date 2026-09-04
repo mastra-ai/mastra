@@ -2,9 +2,9 @@
  * Tests for issue #13038: chatRoute should pass abort signal to enable request cancellation.
  */
 import type { UIMessage } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 
 import { chatRoute, handleChatStream } from '../chat-route';
@@ -112,6 +112,7 @@ describe('abort signal propagation (issue #13038)', () => {
             if (name === 'agentId') return 'test-agent';
             return undefined;
           },
+          query: () => undefined,
         },
         get: (key: string) => contextStore.get(key),
       };

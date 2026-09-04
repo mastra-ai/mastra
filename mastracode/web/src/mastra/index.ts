@@ -20,20 +20,23 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
-import { PlatformSandbox } from '@mastra/platform-workspace';
+import { LocalSandbox } from '@mastra/core/workspace';
+import { PlatformSandbox, createRepoTemplate as createPlatformRepoTemplate } from '@mastra/platform-workspace';
+import { E2BSandbox, createRepoTemplate as createE2BRepoTemplate } from '@mastra/e2b';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraFactory } from '@mastra/factory';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
+import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -46,6 +49,44 @@ function positiveInt(raw: string | undefined): number | undefined {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
+}
+
+function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer {
+  const key = Buffer.from(encodedKey, 'base64');
+  if (key.byteLength !== 32) throw new Error(`${name} must contain base64-encoded 32-byte keys.`);
+  return key;
+}
+
+function credentialEncryption() {
+  const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
+  if (!encodedKey) {
+    console.warn(
+      '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
+        'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
+        '`openssl rand -base64 32` and set FACTORY_CREDENTIAL_ENCRYPTION_KEY to encrypt them at rest.',
+    );
+    return undefined;
+  }
+
+  const previousKeys: Record<string, unknown> = process.env.FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS
+    ? JSON.parse(process.env.FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS)
+    : {};
+  if (!previousKeys || Array.isArray(previousKeys) || typeof previousKeys !== 'object') {
+    throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS must be a JSON object of key ids to base64 keys.');
+  }
+
+  return createFactorySecretEncryption({
+    primary: {
+      id: process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID?.trim() || 'v1',
+      key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_KEY', encodedKey),
+    },
+    previous: Object.entries(previousKeys).map(([id, value]) => {
+      if (typeof value !== 'string') {
+        throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS values must be base64 strings.');
+      }
+      return { id, key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS', value) };
+    }),
+  });
 }
 
 function investigateIntakeIssue(context: FactoryStageRuleContext) {
@@ -78,14 +119,41 @@ if (redisUrl) {
   console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
 }
 
-// Factory dev is auth-less by default. Production can opt out explicitly;
-// otherwise MastraFactory installs its platform-backed auth provider.
+// Auth selection, ordered by how explicit the operator's intent is:
+//   1. MASTRACODE_AUTH_DISABLED=1 — explicit opt-out, auth off entirely.
+//   2. MASTRA_SHARED_API_URL — explicit platform deferral; identity rides the
+//      shared platform API (`.env.schema` names this the highest-precedence
+//      auth config), so it wins even over a configured WORKOS_* pair — but
+//      loudly, because silently ignoring sign-in config is how self-hosted
+//      logins end up 302-ing somewhere that rejects their redirect_uri.
+//   3. WORKOS_API_KEY + WORKOS_CLIENT_ID — self-managed WorkOS sign-in. The
+//      constructor reads the rest of the WORKOS_* group from env, and
+//      `init()` derives the /auth/callback redirect from the deployment's
+//      publicUrl when WORKOS_REDIRECT_URI is unset. `fetchMemberships` lets
+//      token auth resolve the user's organization so the bootstrapped
+//      personal org works without re-auth. Note MASTRA_PLATFORM_ACCESS_TOKEN /
+//      MASTRA_PLATFORM_SECRET_KEY do NOT defer to the platform here: they are
+//      compute/integration credentials (sandboxes, GitHub/Linear slots), not
+//      identity signals — platform compute plus self-managed sign-in is a
+//      supported combination.
+//   4. Nothing configured — leave undefined and MastraFactory installs its
+//      platform-backed default provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
+const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.env.WORKOS_CLIENT_ID?.trim());
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
+} else if (process.env.MASTRA_SHARED_API_URL?.trim()) {
+  if (workosConfigured) {
+    console.warn(
+      '[Auth] WORKOS_API_KEY/WORKOS_CLIENT_ID are set but ignored: MASTRA_SHARED_API_URL takes precedence, so sign-in defers to the platform. Unset MASTRA_SHARED_API_URL to use self-managed WorkOS auth.',
+    );
+  }
+} else if (workosConfigured) {
+  auth = new MastraAuthWorkos({ fetchMemberships: true });
 }
+const secretEncryption = auth === null ? undefined : credentialEncryption();
 
 // Direct GitHub App fallback: when the platform-backed integration isn't in
 // play (self-hosted / local deploys), a complete GITHUB_APP_* env group wires
@@ -106,6 +174,9 @@ const github =
         clientSecret: githubClientSecret,
         slug: githubAppSlug,
         webhookSecret: process.env.GITHUB_APP_WEBHOOK_SECRET?.trim() || undefined,
+        // Extra reviewer bot logins this deployment trusts to trigger
+        // review/comment notifications, on top of the built-in defaults.
+        authorizedBots: parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS),
       })
     : undefined;
 
@@ -151,19 +222,6 @@ function localSandboxEnv(): Record<string, string> {
   return env;
 }
 
-const PLATFORM_SANDBOX_ENV_KEYS = ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID', 'MASTRA_PLATFORM_SECRET_KEY'] as const;
-const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
-
-// Use PlatformSandbox only when its complete identity is configured. Otherwise
-// fall back to LocalSandbox for single-user development.
-const sandbox = hasPlatformSandboxEnv
-  ? new PlatformSandbox()
-  : new LocalSandbox({
-      workingDirectory:
-        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
-      env: localSandboxEnv(),
-    });
-
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth. `DATABASE_URL` set →
 // Postgres (the paired PgVector rides the same database for recall search).
@@ -203,13 +261,19 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
-// password. Unset → per-process random secret (single-process local dev only).
-const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+// password, then the Slack signing secret so a Slack-only deployment still has
+// a stable signer. Unset → per-process random secret (single-process local dev
+// only).
+const stateSecret =
+  process.env.GITHUB_APP_WEBHOOK_SECRET ||
+  process.env.WORKOS_COOKIE_PASSWORD ||
+  process.env.SLACK_APP_SIGNING_SECRET ||
+  undefined;
 
 // Slack channels + account linking. Optional: the Slack adapter validates the
 // signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads additionally need the
-// direct GitHub App wiring, hence the source-control slice.
+// Slack app env is configured. Repo-backed Slack threads come from the
+// factory's source-control owner (GitHub) — the integration wires itself.
 const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
 const slack = slackSigningSecret
   ? new SlackIntegration({
@@ -221,7 +285,6 @@ const slack = slackSigningSecret
       // origin rather than the app's own public URL.
       oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
       uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-      sourceControl: github ? createGithubSourceControl(github) : undefined,
     })
   : undefined;
 
@@ -238,17 +301,41 @@ export const factoryRules = defaultFactoryRules({
   },
 });
 
+const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
+  key => Boolean(process.env[key]?.trim()),
+);
 export const factory = new MastraFactory({
   auth,
+  secretEncryption,
   integrations,
   rules: factoryRules,
-  sandbox: {
-    machine: sandbox,
-    // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
-    // this in-sandbox path and uses its host workingDirectory instead.
-    workdir: process.env.MASTRACODE_SANDBOX_WORKDIR,
-    // Per-replica cap on concurrently provisioned sandboxes. Unset → unlimited.
-    maxSandboxes: positiveInt(process.env.MASTRACODE_MAX_SANDBOXES),
+  sandbox: ctx => {
+    if (hasPlatformSandboxEnv) {
+      return new PlatformSandbox({
+        id: ctx.sessionId,
+        template: createPlatformRepoTemplate(ctx),
+      });
+    }
+
+    if (process.env.E2B_API_KEY?.trim()) {
+      return new E2BSandbox({
+        id: ctx.sessionId,
+        template: createE2BRepoTemplate(ctx),
+      });
+    }
+
+    return new LocalSandbox({
+      workingDirectory: join(
+        process.env.MASTRACODE_LOCAL_SANDBOX_ROOT?.trim() || join(homedir(), '.mastracode', 'web', 'sandboxes'),
+        ctx.sessionId,
+      ),
+      env: localSandboxEnv(),
+    });
+  },
+  // Per-replica cap on concurrent Factory background dispatches. Unset means
+  // the dispatcher default; invalid and non-positive values are ignored.
+  dispatcher: {
+    maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and
@@ -258,8 +345,11 @@ export const factory = new MastraFactory({
   vector,
   pubsub,
   platform: {
-    // Platform's GitHub App identity is not included in the Platform credentials.
-    // Reuse the deployment's configured App slug to ignore Factory's own handoff writes.
+    // The deployment's own self-hosted App slug, when one is configured. It is
+    // NOT Platform's identity: Platform posts as its own App, which names
+    // itself. Reusing this value for that purpose left self-recognition
+    // comparing against `undefined[bot]` on every Platform deployment, where
+    // this is legitimately unset.
     githubAppSlug,
   },
   // Browser-facing origin. On the platform the SPA is hosted separately, so

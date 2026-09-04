@@ -67,12 +67,39 @@ if (!globalThis.ResizeObserver) {
   };
 }
 
+// jsdom has no IntersectionObserver; nothing intersects, so columns stay on their first page.
+if (!globalThis.IntersectionObserver) {
+  globalThis.IntersectionObserver = class IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds: readonly number[] = [];
+    constructor(_callback: IntersectionObserverCallback) {}
+    disconnect() {}
+    observe(_target: Element) {}
+    unobserve(_target: Element) {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  };
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.
+window.scrollTo = () => {};
+
 if (!Element.prototype.getAnimations) {
   Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
+}
+
+// jsdom implements no pointer capture; sonner's swipe-to-dismiss claims it on
+// every pointerdown, so clicking a toast action throws without these.
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+  Element.prototype.hasPointerCapture = () => false;
 }
 
 // jsdom has no PointerEvent constructor; Base UI's Switch builds one on click.

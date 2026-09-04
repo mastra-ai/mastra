@@ -31,69 +31,15 @@ const agent = new Agent({
 });
 ```
 
-### AWS credential provider chain
-
-When no credentials are provided, `S3Filesystem` uses the AWS SDK default credential provider chain to discover credentials from the environment automatically (environment variables, `~/.aws` config, ECS container credentials, EC2 instance profiles, etc.).
-
-```typescript
-import { S3Filesystem } from '@mastra/s3';
-
-// SDK discovers credentials from the environment
-const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-});
-```
-
-You can also pass a credential provider function for auto-refreshing credentials, which is useful for ECS, Lambda, SSO, or AssumeRole deployments:
-
-```typescript
-import { S3Filesystem } from '@mastra/s3';
-import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
-
-const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-  credentials: fromNodeProviderChain(),
-});
-```
-
-### Cloudflare R2
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-r2-bucket',
-    region: 'auto',
-    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  }),
-});
-```
-
-### With E2B Sandbox
-
-When used with `@mastra/e2b`, S3 filesystems can be mounted into E2B sandboxes via s3fs-fuse:
-
-```typescript
-import { Workspace } from '@mastra/core/workspace';
-import { S3Filesystem } from '@mastra/s3';
-import { E2BSandbox } from '@mastra/e2b';
-
-const workspace = new Workspace({
-  mounts: {
-    '/my-bucket': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-  },
-  sandbox: new E2BSandbox(),
-});
-```
-
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+- [Amazon S3 integration guide](https://mastra.ai/integrations/file-storage/amazon-s3)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/s3/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

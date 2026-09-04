@@ -12,6 +12,6 @@
     "src/**/*.mock.ts",
     "**/__tests__/**/*",
     "**/*.test-d.ts",
-    "src/**/test-utils/**/*"
+    "src/*/**/test-utils/**/*"
   ]
 }

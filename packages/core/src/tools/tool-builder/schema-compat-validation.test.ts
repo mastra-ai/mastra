@@ -1,12 +1,360 @@
-import { AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
-import { describe, expect, it } from 'vitest';
+import { AnthropicSchemaCompatLayer, isStandardSchemaWithJSON } from '@mastra/schema-compat';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
+import { createTool } from '../tool';
 import type { ToolAction } from '../types';
+import { validateToolInput } from '../validation';
 import { CoreToolBuilder } from './builder';
 
+const haikuModelConfig = {
+  provider: 'anthropic',
+  modelId: 'claude-3.5-haiku-20241022',
+  specificationVersion: 'v4' as const,
+  supportsStructuredOutputs: false,
+} as const;
+
+function buildCoreTool(
+  tool: ToolAction<any, any>,
+  name: string,
+  model: typeof haikuModelConfig | Record<string, unknown>,
+) {
+  return new CoreToolBuilder({
+    originalTool: tool,
+    options: {
+      name,
+      model: model as any,
+      requestContext: new RequestContext(),
+    },
+  }).build();
+}
+
 describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
-  it.skip('should use schema-compat transformed schema for BOTH LLM parameters AND validation', async () => {
+  it('createTool execute path skips author-schema re-validation after CoreToolBuilder compat validation', async () => {
+    const execute = vi.fn(async ({ text }: { text: string }) => ({ success: true, text }));
+    const shortTextTool = createTool({
+      id: 'short-text-tool',
+      description: 'Tool created via createTool',
+      inputSchema: z.object({
+        text: z.string().min(20),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(shortTextTool, 'shortTextTool', haikuModelConfig);
+    const executeResult = await coreTool.execute?.(
+      { text: 'Short text' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'call-create-tool',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ success: true, text: 'Short text' });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('processToCompatSchema accepts short strings on Haiku after stripping min/max', () => {
+    const inputSchema = z.object({ text: z.string().min(20) });
+    expect(isStandardSchemaWithJSON(inputSchema)).toBe(true);
+
+    const layer = new AnthropicSchemaCompatLayer(haikuModelConfig as any);
+    const shortInput = { text: 'Short text' };
+
+    const viaCompatSchema = layer.processToCompatSchema(inputSchema);
+    expect(validateToolInput(viaCompatSchema, shortInput, 'regression').error).toBeUndefined();
+  });
+
+  it('preserves cross-field refine rejection on Haiku compat validation', async () => {
+    const inputSchema = z
+      .object({
+        start: z.number(),
+        end: z.number(),
+      })
+      .refine(value => value.end > value.start);
+
+    const tool: ToolAction<any, any> = {
+      id: 'range-tool',
+      description: 'Validates start/end range',
+      inputSchema,
+      execute: async ({ start, end }) => ({ start, end }),
+    };
+
+    const coreTool = buildCoreTool(tool, 'range-tool', haikuModelConfig);
+    const executeResult = await coreTool.execute?.(
+      { start: 10, end: 1 },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).toHaveProperty('error', true);
+  });
+
+  it('keeps default fields optional in LLM-facing required array on Haiku', () => {
+    const inputSchema = z.object({
+      req: z.string(),
+      def: z.string().default('hi'),
+      opt: z.number().optional(),
+    });
+
+    const coreTool = buildCoreTool(
+      {
+        id: 'defaults-tool',
+        description: 'Defaults tool',
+        inputSchema,
+        execute: async () => ({}),
+      },
+      'defaults-tool',
+      haikuModelConfig,
+    );
+
+    const llmJsonSchema = (coreTool.parameters as { jsonSchema?: { required?: string[] } }).jsonSchema;
+    expect(llmJsonSchema?.required).toEqual(['req']);
+  });
+
+  it('accepts omitted optional fields on o4-mini via processToCompatSchema validation', async () => {
+    const execute = vi.fn(async (input: { a: string; b?: string }) => input);
+    const tool = createTool({
+      id: 'optional-o4-tool',
+      description: 'Optional field tool',
+      inputSchema: z.object({
+        a: z.string(),
+        b: z.string().optional(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'optional-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: 'x' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'optional-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(execute).toHaveBeenCalledWith({ a: 'x', b: undefined }, expect.any(Object));
+  });
+
+  it('accepts omitted default fields on o4-mini and applies defaults via compat validation', async () => {
+    const execute = vi.fn(async (input: { a: string; c: string }) => input);
+    const tool = createTool({
+      id: 'default-o4-tool',
+      description: 'Default field tool',
+      inputSchema: z.object({
+        a: z.string(),
+        c: z.string().default('fallback'),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'default-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: 'x' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'default-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(execute).toHaveBeenCalledWith({ a: 'x', c: 'fallback' }, expect.any(Object));
+  });
+
+  it('coerces string input to number on o4-mini without rejecting at validation', async () => {
+    const execute = vi.fn(async ({ a }: { a: number }) => ({ a }));
+    const tool = createTool({
+      id: 'coerce-o4-tool',
+      description: 'Coerce number field',
+      inputSchema: z.object({
+        a: z.coerce.number(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'coerce-o4-tool', {
+      provider: 'openai',
+      modelId: 'o4-mini',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: true,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: '42' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'coerce-o4',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ a: 42 });
+    expect(execute).toHaveBeenCalledWith({ a: 42 }, expect.any(Object));
+  });
+
+  it('coerces string input to number on gemini-2.0-flash-lite without rejecting at validation', async () => {
+    const execute = vi.fn(async ({ a }: { a: number }) => ({ a }));
+    const tool = createTool({
+      id: 'coerce-gemini-tool',
+      description: 'Coerce number field',
+      inputSchema: z.object({
+        a: z.coerce.number(),
+      }),
+      execute,
+    });
+
+    const coreTool = buildCoreTool(tool, 'coerce-gemini-tool', {
+      provider: 'google',
+      modelId: 'gemini-2.0-flash-lite',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: false,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { a: '42' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'coerce-gemini',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ a: 42 });
+    expect(execute).toHaveBeenCalledWith({ a: 42 }, expect.any(Object));
+  });
+
+  it('builds Haiku tools with z.tuple input schemas without throwing', () => {
+    const tool = createTool({
+      id: 'tuple-tool',
+      description: 'Tuple input tool',
+      inputSchema: z.tuple([z.string(), z.number()]),
+      execute: async () => ({ ok: true }),
+    });
+
+    expect(() => buildCoreTool(tool, 'tuple-tool', haikuModelConfig)).not.toThrow();
+  });
+
+  it('strips string minLength from LLM-facing parameters and execute validation on Haiku', async () => {
+    const inputSchema = z.object({
+      message: z.string().min(10).describe('A message with minimum 10 characters'),
+    });
+
+    const tool: ToolAction<any, any> = {
+      id: 'test-tool',
+      description: 'A test tool with string constraints',
+      inputSchema,
+      execute: async ({ message }) => ({ result: `Received: ${message}` }),
+    };
+
+    const coreTool = buildCoreTool(tool, 'test-tool', haikuModelConfig);
+    const llmJsonSchema = (coreTool.parameters as { jsonSchema?: { properties?: Record<string, unknown> } }).jsonSchema;
+    const messageProp = llmJsonSchema?.properties?.message as { minLength?: number } | undefined;
+
+    expect(messageProp?.minLength).toBeUndefined();
+
+    const executeResult = await coreTool.execute?.(
+      { message: 'Hi there' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({ result: 'Received: Hi there' });
+  });
+
+  it('still rejects invalid tool input on Haiku after compat transformation', async () => {
+    const inputSchema = z.object({
+      message: z.string().min(10),
+    });
+
+    const tool: ToolAction<any, any> = {
+      id: 'test-tool',
+      description: 'Reject invalid shapes',
+      inputSchema,
+      execute: async ({ message }) => ({ message }),
+    };
+
+    const coreTool = buildCoreTool(tool, 'test-tool', haikuModelConfig);
+
+    const wrongType = await coreTool.execute?.(
+      { message: 123 },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+    expect(wrongType).toHaveProperty('error', true);
+
+    const missingField = await coreTool.execute?.(
+      {},
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+    expect(missingField).toHaveProperty('error', true);
+  });
+
+  it('preserves original constraints when no schema compat layer applies', async () => {
+    const inputSchema = z.object({
+      message: z.string().min(10),
+    });
+
+    const tool: ToolAction<any, any> = {
+      id: 'test-tool',
+      description: 'No compat layers',
+      inputSchema,
+      execute: async ({ message }) => ({ message }),
+    };
+
+    const coreTool = buildCoreTool(tool, 'test-tool', {
+      provider: 'local',
+      modelId: 'local-test-model',
+      specificationVersion: 'v4',
+      supportsStructuredOutputs: false,
+    });
+
+    const executeResult = await coreTool.execute?.(
+      { message: 'short' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).toHaveProperty('error', true);
+    expect((executeResult as { message?: string }).message).toMatch(/validation failed/i);
+  });
+
+  it('should use schema-compat transformed schema for BOTH LLM parameters AND validation', async () => {
     // Create a tool with string min constraint
     const inputSchema = z.object({
       message: z.string().min(10).describe('A message with minimum 10 characters'),
@@ -23,24 +371,16 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     };
 
     // Create a model config that requires schema transformation (Claude 3.5 Haiku strips min/max from strings)
-    const modelConfig = {
-      provider: 'anthropic',
-      modelId: 'claude-3.5-haiku-20241022',
-      specificationVersion: 'v4' as const,
-      supportsStructuredOutputs: false,
-    } as const;
+    const modelConfig = haikuModelConfig;
 
-    // Build the tool
-    const builder = new CoreToolBuilder({
+    const coreTool = new CoreToolBuilder({
       originalTool: toolWithConstraints,
       options: {
         name: 'test-tool',
         model: modelConfig as any,
         requestContext: new RequestContext(),
       },
-    });
-
-    const coreTool = builder.build();
+    }).build();
 
     // ASSERTION 1: The parameters sent to the LLM should be transformed
     // (Claude 3.5 Haiku compatibility layer removes min/max constraints from strings)
@@ -51,9 +391,11 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     const messageField = originalSchema.shape.message as z.ZodString;
     // Zod v4 uses class instances for checks instead of plain objects
     // Check by looking for the MinLength check class
-    const hasMinCheck = messageField._def.checks.some(
-      (check: any) => check.constructor?.name === '$ZodCheckMinLength' || (check.kind === 'min' && check.value === 10),
-    );
+    const hasMinCheck =
+      messageField._def.checks?.some(
+        (check: any) =>
+          check.constructor?.name === '$ZodCheckMinLength' || (check.kind === 'min' && check.value === 10),
+      ) ?? false;
     expect(hasMinCheck).toBe(true);
 
     // The transformed schema should NOT have the min constraint (for Claude 3.5 Haiku)
@@ -61,7 +403,6 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     const transformedSchema = anthropicLayer.processZodType(originalSchema);
     const transformedMessageField = (transformedSchema as any).shape.message as z.ZodString;
 
-    // This assertion should PASS - the LLM receives transformed schema without min constraint
     // Zod v4 uses class instances for checks instead of plain objects
     const hasMinCheckAfterTransform =
       transformedMessageField._def.checks?.some(
@@ -69,14 +410,11 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       ) ?? false;
     expect(hasMinCheckAfterTransform).toBe(false);
 
-    // ASSERTION 2: The validation should use the SAME transformed schema
-    // This is the bug - validation currently uses the original schema with constraints
+    // ASSERTION 2: Validation must use the same transformed schema the LLM saw
 
     // Simulate what happens when the LLM calls the tool with a short string (< 10 chars)
     // The LLM was told there's no minimum, so it might send a short string
     const shortMessage = 'Hi there'; // Only 8 characters, less than the original min of 10
-
-    // Mock the execute function to capture what gets validated
 
     const executeResult = await coreTool.execute?.(
       { message: shortMessage },
@@ -87,9 +425,6 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     );
 
-    // THIS ASSERTION WILL FAIL - demonstrating the bug
-    // The validation should accept the short string because the LLM was told there's no minimum
-    // But currently, validation uses the original schema with min(10), so it will reject it
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toHaveProperty('result');
     expect(executeResult.result).toBe('Received: Hi there');
@@ -132,10 +467,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     // Anthropic's schema compat layer transforms number constraints
     // The LLM receives a schema without strict min/max enforcement
 
-    // If the LLM sends a value that would fail the original schema
-    // but passes the transformed schema, validation should accept it
     const executeResult = await coreTool.execute?.(
-      { age: 25 }, // Valid in both schemas
+      { age: 25 },
       {
         abortSignal: new AbortController().signal,
         toolCallId: 'test-call-id',
@@ -143,13 +476,11 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     );
 
-    // THIS SHOULD PASS - validation should use transformed schema
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toHaveProperty('result');
   });
 
-  it.skip('should demonstrate the bug: validation rejects input that LLM was told is valid', async () => {
-    // This test explicitly demonstrates the bug
+  it('validates short strings when Anthropic Haiku strips string min constraints from the LLM schema', async () => {
     const inputSchema4 = z.object({
       text: z.string().min(20).describe('Text with minimum 20 characters'),
     });
@@ -195,21 +526,11 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     );
 
-    // EXPECTED BEHAVIOR (this will fail, demonstrating the bug):
-    // Since the LLM was told there's no minimum length requirement,
-    // validation should accept this input
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toEqual({
       success: true,
       text: shortText,
     });
-
-    // ACTUAL BEHAVIOR (what currently happens):
-    // Validation uses the original schema with min(20),
-    // so it rejects the input even though the LLM was told it's valid
-    // Uncomment these to see the current (incorrect) behavior:
-    // expect(executeResult).toHaveProperty('error');
-    // expect(executeResult.error).toContain('String must contain at least 20 character(s)');
   });
 
   it('should handle OpenAI o3 reasoning model converting optional to nullable (working memory bug)', async () => {
@@ -266,8 +587,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       },
     );
 
-    // EXPECTED BEHAVIOR (with the fix):
-    // Validation should accept undefined because the compat layer uses a transform to convert the value back to undefined.
+    // Compat validation coerces null back to undefined for optional fields
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toEqual({
       success: true,
@@ -275,11 +595,6 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       searchString: undefined,
       updateReason: 'append-new-memory',
     });
-
-    // BEFORE THE FIX:
-    // This would fail with "Expected string, received null" because validation
-    // was using the original schema with .optional() instead of the transformed
-    // schema with .nullable()
   });
 
   it.skip('should respect structured outputs for v2 models and preserve enums/constraints', async () => {
@@ -327,11 +642,10 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
 
     // Ensure the parameters we send to the LLM are not empty objects
     const params = coreTool.parameters as any;
-    const schemaShape = params;
-    const props = schemaShape.properties || {};
+    const props = params.properties || {};
 
     expect(Object.keys(props)).toEqual(['category', 'price', 'label']);
-    const requiredFields = schemaShape?.required || [];
+    const requiredFields = params?.required || [];
     // Zod v4: .optional().transform() chains lose optional info during JSON Schema conversion
     // The transform wrapper becomes the outer type, so 'label' appears as required
     // This is a known limitation in Zod v4's toJSONSchema() implementation
@@ -369,6 +683,40 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(executeResult).toEqual({
       ok: true,
       received: { category: 'book', price: 25, label: 'blue' },
+    });
+  });
+
+  describe('strict: false opts out of strict-mode schema rewriting', () => {
+    const openaiModelConfig = {
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      specificationVersion: 'v4' as const,
+      supportsStructuredOutputs: true,
+    } as const;
+
+    const requiredKeysFor = (strict?: boolean) => {
+      const tool = createTool({
+        id: 'partial-update-tool',
+        description: 'Accepts partial updates',
+        inputSchema: z.object({
+          name: z.string().optional(),
+          city: z.string().optional(),
+        }),
+        ...(strict === undefined ? {} : { strict }),
+        execute: async () => ({ ok: true }),
+      });
+
+      const coreTool = buildCoreTool(tool, 'partialUpdateTool', openaiModelConfig);
+      const jsonSchema = (coreTool.parameters as any).jsonSchema ?? coreTool.parameters;
+      return (jsonSchema.required as string[] | undefined) ?? [];
+    };
+
+    it('promotes optional properties to required by default on OpenAI strict mode', () => {
+      expect(requiredKeysFor(undefined)).toEqual(expect.arrayContaining(['name', 'city']));
+    });
+
+    it('keeps optional properties optional when the tool sets strict: false', () => {
+      expect(requiredKeysFor(false)).toEqual([]);
     });
   });
 });

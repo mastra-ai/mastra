@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../../../factory/services/decisions';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
-import type { FactoryUserSession } from '../../services/github';
+import type { FactoryUserSession } from '../../services/user-sessions';
 import { WorkspacesSection } from '../WorkspacesSection';
 
 const factoryProjectId = 'factory-project-1';
@@ -21,11 +22,13 @@ const workSession: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
+  title: 'Implement loader',
   branch: 'factory/issue-24',
   baseBranch: 'main',
   sandboxId: null,
   sandboxWorkdir: null,
-  materializedAt: null,
+  materializedAt: '2026-07-20T00:00:00.000Z',
   createdAt: '2026-07-20T00:00:00.000Z',
   updatedAt: '2026-07-20T00:00:00.000Z',
 };
@@ -34,6 +37,7 @@ const reviewSession: FactoryUserSession = {
   ...workSession,
   id: 'workspace-row-2',
   sessionId: 'review-session',
+  title: 'Review loader',
   branch: 'factory/pr-202',
   createdAt: '2026-07-21T00:00:00.000Z',
   updatedAt: '2026-07-21T00:00:00.000Z',
@@ -66,15 +70,6 @@ interface WireWorkItemFixture {
   sessions: Record<string, WorkItemSessionRef>;
   metadata: Record<string, unknown>;
   revision: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ControllerThreadFixture {
-  id: string;
-  title: string;
-  state: 'active' | 'idle';
-  tags: { projectPath: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -134,40 +129,55 @@ function pullRequestSubscription(
   };
 }
 
-function controllerThread(
-  session: FactoryUserSession,
-  threadId: string,
-  title: string,
-  state: 'active' | 'idle',
-): ControllerThreadFixture {
+function decision(workItemId: string, status: FactoryDecisionStatus): FactoryDecisionSummary {
   return {
-    id: threadId,
-    title,
-    state,
-    tags: { projectPath: session.sessionId },
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
+    id: `decision-${workItemId}-${status}`,
+    evaluationId: 'evaluation-1',
+    workItemId,
+    type: 'invokeSkill',
+    role: 'work',
+    status,
+    attempts: status === 'proposed' ? 0 : 1,
+    failureOccurrence: 0,
+    source: null,
+    failureCode: null,
+    canRetry: false,
+    lastError: status === 'proposed' ? null : 'boom',
+    createdAt: '2026-07-20T00:00:00.000Z',
+    updatedAt: '2026-07-20T00:00:00.000Z',
+    completedAt: null,
   };
 }
 
 function stubWorkspaceStatuses({
   items,
-  threads,
+  activeSessionIds,
   subscriptionsBySession,
+  decisions = [],
 }: {
   items: WireWorkItemFixture[];
-  threads: ControllerThreadFixture[];
+  activeSessionIds: string[];
   subscriptionsBySession: Record<string, PullRequestSubscription[]>;
+  decisions?: FactoryDecisionSummary[];
 }) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/decisions`, () =>
+      HttpResponse.json({ decisions }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions: [workSession, reviewSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
       HttpResponse.json({ workItems: items }),
     ),
-    http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${resourceId}/threads`, () =>
-      HttpResponse.json({ threads }),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: activeSessionIds.map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: `${sessionId}-thread`,
+        })),
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
       const url = new URL(request.url);
@@ -211,6 +221,9 @@ function renderSection() {
         value={{
           resourceId,
           sessionEnabled: true,
+          resourceReady: true,
+          sandboxReady: true,
+          sandboxPreparing: false,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId, projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -244,13 +257,54 @@ const newestPullRequestCases: Array<{
 ];
 
 describe('Workspace sidebar statuses', () => {
-  it('shows the running status dot instead of a merged icon while the agent is active', async () => {
+  it('lights the waiting belt on a workspace whose card holds a run parked for approval', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'proposed')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Implement loader waiting on you' });
+  });
+
+  it('lights the waiting belt on a workspace whose automation failed for good', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'failed')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    await screen.findByRole('status', { name: 'Implement loader waiting on you' });
+  });
+
+  it('leaves the belt dark while the server still retries a failed automation on its own', async () => {
+    stubWorkspaceStatuses({
+      items: baseItems(false),
+      activeSessionIds: [],
+      subscriptionsBySession: {},
+      decisions: [decision('issue-24', 'retry')],
+    });
+
+    const { client } = renderSection();
+    await waitForMutationsIdle(client);
+
+    const row = (await screen.findByRole('button', { name: 'Implement loader' })).closest('li');
+    expect(row).not.toBeNull();
+    expect(row?.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('shows the running status belt instead of a merged icon while the agent is active', async () => {
     stubWorkspaceStatuses({
       items: baseItems(true),
-      threads: [
-        controllerThread(workSession, 'work-thread', 'Implement loader', 'active'),
-        controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-      ],
+      activeSessionIds: [workSession.sessionId],
       subscriptionsBySession: {
         'work-thread:work-session': [pullRequestSubscription(202, 'merged')],
         'review-thread:review-session': [pullRequestSubscription(202, 'merged')],
@@ -268,10 +322,7 @@ describe('Workspace sidebar statuses', () => {
     async ({ status, knownMerged, expectedMerged }) => {
       stubWorkspaceStatuses({
         items: baseItems(knownMerged),
-        threads: [
-          controllerThread(workSession, 'work-thread', 'Implement loader', 'idle'),
-          controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-        ],
+        activeSessionIds: [],
         subscriptionsBySession: {
           'work-thread:work-session': [pullRequestSubscription(202, status)],
           'review-thread:review-session': [pullRequestSubscription(202, status)],
@@ -321,10 +372,7 @@ describe('Workspace sidebar statuses', () => {
       const subscriptions = [pullRequestSubscription(201, 'merged'), pullRequestSubscription(202, newestStatus)];
       stubWorkspaceStatuses({
         items: [workItem, olderReview, newerReview],
-        threads: [
-          controllerThread(workSession, 'work-thread', 'Implement loader', 'idle'),
-          controllerThread(reviewSession, 'review-thread', 'Review loader', 'idle'),
-        ],
+        activeSessionIds: [],
         subscriptionsBySession: {
           'work-thread:work-session': subscriptions,
           'review-thread:review-session': subscriptions,

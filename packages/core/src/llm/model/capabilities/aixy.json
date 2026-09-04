@@ -1,0 +1,5 @@
+{
+  "attachment": ["openai/gpt-4.1-mini"],
+  "temperature": ["openai/gpt-4.1-mini"],
+  "structuredOutput": ["openai/gpt-4.1-mini"]
+}

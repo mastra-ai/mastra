@@ -10,6 +10,7 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConst
   };
 
   const mockPage = {
+    targetId: 'page-target-123',
     url: vi.fn().mockReturnValue('https://example.com'),
     title: vi.fn().mockResolvedValue('Example Page'),
     goto: vi.fn().mockResolvedValue(undefined),
@@ -29,6 +30,7 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConst
     init: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     context: mockContext,
+    ctx: { conn: mockCdpSession },
     act: vi.fn().mockResolvedValue({
       success: true,
       message: 'Clicked button',
@@ -57,6 +59,7 @@ vi.mock('@browserbasehq/stagehand', () => ({
     init = mockStagehand.init;
     close = mockStagehand.close;
     context = mockStagehand.context;
+    ctx = mockStagehand.ctx;
     act = mockStagehand.act;
     extract = mockStagehand.extract;
     observe = mockStagehand.observe;
@@ -262,6 +265,40 @@ describe('StagehandBrowser', () => {
       await browser.close();
       expect(browser.status).toBe('closed');
       expect(mockStagehand.close).toHaveBeenCalled();
+    });
+
+    it('preserves agent close reason in the last browser state', async () => {
+      await browser.launch();
+      browser.markBrowserCloseReason('agent');
+
+      await browser.close();
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'agent' }));
+    });
+
+    it('preserves user close reason when the browser disconnects externally', async () => {
+      await browser.launch();
+      const targetDestroyedHandler = mockCdpSession.on.mock.calls.find(
+        ([event]) => event === 'Target.targetDestroyed',
+      )?.[1];
+
+      targetDestroyedHandler?.({ targetId: 'page-target-123' });
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+    });
+
+    it('does not reuse stale close reasons after relaunch', async () => {
+      await browser.launch();
+      browser.markBrowserCloseReason('agent');
+      await browser.close();
+      await browser.ensureReady();
+      const targetDestroyedHandler = mockCdpSession.on.mock.calls.findLast(
+        ([event]) => event === 'Target.targetDestroyed',
+      )?.[1];
+
+      targetDestroyedHandler?.({ targetId: 'page-target-123' });
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
     });
 
     it('should handle close when not launched', async () => {

@@ -1,7 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { createUserSession, pushBranch } from '../ui/domains/workspaces/services/github';
+import { pushBranch } from '../ui/domains/workspaces/services/github';
+import { createUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
 /**
  * Mutation hooks for the per-project git write operations
@@ -19,12 +20,12 @@ export interface CreateUserSessionVariables {
   baseBranch?: string;
 }
 
-/** Create or reuse a Factory session. Its workspace is materialized by AgentController on session creation. */
+/** Create or reuse a Factory session. Creating one persists identity; the workspace is materialized when the session's sandbox first starts. */
 export function useCreateUserSessionMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ projectRepositoryId, branch, baseBranch }: CreateUserSessionVariables) =>
-      createUserSession(baseUrl, projectRepositoryId, branch, baseBranch),
+      createUserSession(baseUrl, projectRepositoryId, { branch, baseBranch }),
   });
 }
 

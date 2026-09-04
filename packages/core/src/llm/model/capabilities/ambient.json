@@ -3,6 +3,7 @@
   "temperature": [
     "ambient/large",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "stepfun/step-3.7-flash",
@@ -14,6 +15,7 @@
   "structuredOutput": [
     "ambient/large",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "stepfun/step-3.7-flash",

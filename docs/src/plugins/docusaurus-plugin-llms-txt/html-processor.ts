@@ -27,7 +27,7 @@ import {
 } from './component-handlers'
 import { extractMetadata, selectContent, removeUnwantedElements, type PageMetadata } from './content-extractor'
 import type { ResolvedOptions } from './options'
-import type { State } from 'hast-util-to-mdast'
+import { defaultHandlers, type State } from 'hast-util-to-mdast'
 import type { BlockContent, DefinitionContent } from 'mdast'
 
 export interface ProcessedPage {
@@ -85,6 +85,17 @@ function handleDiv(state: State, node: Element): BlockContent | Array<BlockConte
 }
 
 /**
+ * Custom handler for semantic card-grid lists
+ */
+function handleList(state: State, node: Element): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
+  if (isCardGridItems(node)) {
+    return handleCardGridItems(state, node)
+  }
+
+  return defaultHandlers.ul(state, node)
+}
+
+/**
  * Custom handler for details elements
  */
 function handleDetailsElement(
@@ -118,6 +129,7 @@ function createProcessor(options: ResolvedOptions) {
         pre: handleCodeBlock,
         a: linkHandler,
         div: handleDiv,
+        ul: handleList,
         details: handleDetailsElement,
       },
     })

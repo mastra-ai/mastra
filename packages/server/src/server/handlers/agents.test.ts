@@ -762,6 +762,73 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('hasBrowser capability', () => {
+    const stubAgentInternals = (agent: Agent) => {
+      vi.spyOn(agent, 'listTools').mockResolvedValue({});
+      vi.spyOn(agent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
+    };
+
+    it('reports hasBrowser: true for an agent with a workspace-level CLI browser and no SDK browser tools', async () => {
+      mockAgent = new Agent({
+        id: 'cli-browser-agent',
+        name: 'cli-browser-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      stubAgentInternals(mockAgent);
+      vi.spyOn(mockAgent, 'getWorkspace').mockResolvedValue({
+        id: 'test-workspace',
+        browser: { providerType: 'cli', getTools: () => ({}) },
+      } as any);
+
+      mastra = new Mastra({
+        agents: { 'cli-browser-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'cli-browser-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.browserTools).toEqual([]);
+      expect(result.hasBrowser).toBe(true);
+    });
+
+    it('reports hasBrowser: false for an agent with no browser configured', async () => {
+      mockAgent = new Agent({
+        id: 'no-browser-agent',
+        name: 'no-browser-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      stubAgentInternals(mockAgent);
+
+      mastra = new Mastra({
+        agents: { 'no-browser-agent': mockAgent },
+        logger: false,
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'no-browser-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.browserTools).toEqual([]);
+      expect(result.hasBrowser).toBe(false);
+    });
+  });
+
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
@@ -1792,6 +1859,48 @@ describe('Agent Routes Authorization', () => {
           signal: { type: 'user-message', contents: 'pause here' },
           runId: 'run-123',
           ifActive: { behavior: 'persist' },
+        }).success,
+      ).toBe(true);
+    });
+
+    it('should preserve transient on non-state signals', () => {
+      for (const transient of [true, false]) {
+        const result = sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'system-reminder', contents: 'steer once, do not retain', transient },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.success && result.data.signal.transient).toBe(transient);
+      }
+    });
+
+    it('should reject any supplied transient value on state signals', () => {
+      for (const transient of [true, false]) {
+        expect(
+          sendAgentSignalBodySchema.safeParse({
+            signal: { type: 'state', contents: 'full state snapshot', transient },
+            resourceId: 'user-a',
+            threadId: 'thread-a',
+          }).success,
+        ).toBe(false);
+      }
+
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot' },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(true);
+
+      // JSON cannot carry undefined, so an in-process undefined value is equivalent to omission.
+      expect(
+        sendAgentSignalBodySchema.safeParse({
+          signal: { type: 'state', contents: 'full state snapshot', transient: undefined },
+          resourceId: 'user-a',
+          threadId: 'thread-a',
         }).success,
       ).toBe(true);
     });

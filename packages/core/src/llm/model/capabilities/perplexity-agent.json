@@ -17,7 +17,8 @@
     "openai/gpt-5.2",
     "openai/gpt-5.4",
     "openai/gpt-5.5",
-    "xai/grok-4-1-fast-non-reasoning"
+    "xai/grok-4-1-fast-non-reasoning",
+    "xai/grok-4.6"
   ],
   "temperature": [
     "anthropic/claude-haiku-4-5",
@@ -25,13 +26,20 @@
     "anthropic/claude-opus-4-6",
     "anthropic/claude-sonnet-4-5",
     "anthropic/claude-sonnet-4-6",
+    "deepseek/deepseek-v4-flash-0731",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-pro",
     "google/gemini-3-flash-preview",
     "google/gemini-3.1-pro-preview",
     "nvidia/nemotron-3-super-120b-a12b",
     "perplexity/sonar",
-    "xai/grok-4-1-fast-non-reasoning"
+    "xai/grok-4-1-fast-non-reasoning",
+    "xai/grok-4.6"
   ],
-  "structuredOutput": ["moonshot-ai/kimi-k2.7-code", "moonshot-ai/kimi-k3"]
+  "structuredOutput": [
+    "deepseek/deepseek-v4-flash-0731",
+    "moonshot-ai/kimi-k2.7-code",
+    "moonshot-ai/kimi-k3",
+    "xai/grok-4.6"
+  ]
 }

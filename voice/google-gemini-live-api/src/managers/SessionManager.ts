@@ -92,6 +92,7 @@ export class SessionManager {
   async waitForSessionCreated(): Promise<void> {
     return new Promise((resolve, reject) => {
       let isResolved = false;
+      let readinessTimeout: NodeJS.Timeout | undefined;
 
       const onSetupComplete = () => {
         if (!isResolved) {
@@ -121,6 +122,10 @@ export class SessionManager {
         this.eventEmitter.removeListener('setupComplete', onSetupComplete);
         this.eventEmitter.removeListener('error', onError);
         this.eventEmitter.removeListener('sessionEnd', onSessionEnd);
+        if (readinessTimeout) {
+          clearTimeout(readinessTimeout);
+          readinessTimeout = undefined;
+        }
       };
 
       // Listen for setup completion
@@ -129,7 +134,7 @@ export class SessionManager {
       this.eventEmitter.once('sessionEnd', onSessionEnd);
 
       // Add timeout to prevent hanging indefinitely
-      setTimeout(() => {
+      readinessTimeout = setTimeout(() => {
         if (!isResolved) {
           isResolved = true;
           cleanup();

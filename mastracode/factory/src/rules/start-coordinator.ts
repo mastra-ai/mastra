@@ -3,7 +3,10 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { formatSkillActivation } from '@mastra/core/workspace';
 
-import type { MemorySettingsRecord, MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { hydrateFactorySession } from '../session/factory-session.js';
+import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
+import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -26,6 +29,10 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
+  /** Arm the item's autonomy in the same transaction that prepares the run. */
+  armAutonomy?: boolean;
+  /** The person chose a hands-off run: the item's parked plans get approved for them. */
+  preapprovePlans?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -64,7 +71,7 @@ async function resolveKickoffMessage(
   if (!invocation) return null;
   if (invocation.type === 'prompt') return invocation.prompt;
 
-  const skills = session.getWorkspace().skills;
+  const skills = session.getWorkspace()?.skills;
   await skills?.maybeRefresh();
   const skill = await skills?.get(invocation.skillName);
   if (!skill || skill['user-invocable'] === false) {
@@ -103,24 +110,13 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
   return threadId;
 }
 
-async function applyMemorySettings(session: FactorySession, record: MemorySettingsRecord | null): Promise<void> {
-  if (record?.observerModelId) await session.om.observer.switchModel({ modelId: record.observerModelId });
-  if (record?.reflectorModelId) await session.om.reflector.switchModel({ modelId: record.reflectorModelId });
-
-  const state = {
-    ...(record?.observationThreshold != null ? { observationThreshold: record.observationThreshold } : {}),
-    ...(record?.reflectionThreshold != null ? { reflectionThreshold: record.reflectionThreshold } : {}),
-    ...(record?.observeAttachments != null ? { observeAttachments: record.observeAttachments } : {}),
-  };
-  if (Object.keys(state).length > 0) await session.state.set(state);
-}
-
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
+  readonly #feedReader?: FactoryFeedReader;
 
   constructor(
     controller: FactoryController,
@@ -128,12 +124,14 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
+    feedReader?: FactoryFeedReader,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
+    this.#feedReader = feedReader;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -141,8 +139,19 @@ export class FactoryStartCoordinator {
     if (!this.#sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(this.#sourceControl, request);
     const requestContext = request.requestContext ?? new RequestContext();
-    if (!request.requestContext) {
-      requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
+    // Factory runs resolve model credentials org > user: the org's shared keys
+    // win, with the acting user's personal credentials as a fallback — a board
+    // run should never silently prefer whoever kicked it off. The flag rides
+    // the stashed user even when a caller-provided context already has one.
+    const existingUser = requestContext.get('user');
+    if (existingUser && typeof existingUser === 'object') {
+      requestContext.set('user', { ...existingUser, orgFirstCredentials: true });
+    } else {
+      requestContext.set('user', {
+        workosId: request.userId,
+        organizationId: request.orgId,
+        orgFirstCredentials: true,
+      });
     }
     // Sessions kicked off against third-party content (a PR under review, or
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
@@ -150,7 +159,8 @@ export class FactoryStartCoordinator {
     // or reminders — those files are attacker-writable in a PR branch.
     const untrustedCheckout =
       request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+      (request.invocation?.type === 'skill' &&
+        (request.invocation.skillName === 'factory-review' || request.invocation.skillName === 'factory-rereview'));
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
@@ -179,30 +189,35 @@ export class FactoryStartCoordinator {
     // boolean so it rides only on state (tags are string-valued).
     await session.state.set({
       ...sessionTags,
+      // The authoritative org id for every downstream identity read (the
+      // memory seam's organizationId): the session owner is a USER id, not an
+      // org, so it must never be improvised from ownerId.
+      factoryOrgId: request.orgId,
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
-    if (this.#memorySettings) {
-      try {
-        const record = await this.#memorySettings.get({ orgId: request.orgId, userId: request.userId });
-        await applyMemorySettings(session, record);
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply observational-memory settings', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    if (request.defaultModelId) {
-      try {
-        await session.model.switch({ modelId: request.defaultModelId });
-      } catch (error) {
-        console.warn('[Factory Start] Failed to apply factory default model', {
-          modelId: request.defaultModelId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    // Board runs are org-shared: hydrate with the factory's default model and
+    // the project's shared memory settings (falling back to the built-in
+    // defaults), never any individual user's stored settings.
+    await hydrateFactorySession(session, {
+      orgId: request.orgId,
+      factoryProjectId: request.factoryProjectId,
+      defaultModelId: request.defaultModelId,
+      memorySettings: this.#memorySettings,
+    });
+    // The tool is `requireApproval`, and that prompt parks the run whether or not
+    // someone pressed Start — a person is reading the plan, not an approval queue.
+    // Starting the run was already the say-so; the rules engine still governs.
+    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
-    const kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
+    // A null kickoff is a deliberate no-send branch and must stay null.
+    if (kickoffMessage !== null) {
+      kickoffMessage = await withWorkItemFeed(
+        this.#feedReader,
+        { orgId: request.orgId, factoryProjectId: request.factoryProjectId, workItemId: request.workItem.id },
+        kickoffMessage,
+      );
+    }
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
@@ -213,6 +228,8 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
       kickoffMessage,
+      armAutonomy: request.armAutonomy === true,
+      preapprovePlans: request.preapprovePlans === true,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

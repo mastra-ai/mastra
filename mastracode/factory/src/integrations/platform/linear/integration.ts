@@ -1,6 +1,7 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { MastraWorker } from '@mastra/core/worker';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -10,6 +11,8 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
+import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
+import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
@@ -20,6 +23,8 @@ import {
   PlatformApiError,
   platformApiClientConfigFromEnv,
 } from '../api-client.js';
+import { PlatformLinearEventWorker } from './event-worker.js';
+import type { PlatformLinearEventStorage } from './event-worker.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -356,6 +361,36 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     };
   }
 
+  workers(ctx: IntegrationContext): MastraWorker[] {
+    const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
+    const reconcileEnabled = linearIssueReconciliationEnabled();
+    if (!pollingEnabled && !reconcileEnabled) return [];
+
+    const ingest = attachLinearRules(ctx);
+    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this as unknown as LinearIntegration, ctx) : undefined;
+    const workItems = ctx.rules?.workItems;
+    if (!workItems) return [];
+    if (!ingest && !reconcile) return [];
+
+    const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
+    const reconcileIntervalMs = linearIssueReconciliationInterval();
+
+    return [
+      new PlatformLinearEventWorker({
+        client: this.#client,
+        linear: { listWorkspaces: () => this.listWorkspaces() },
+        storage: ctx.storage.generic as unknown as PlatformLinearEventStorage,
+        projects: ctx.storage.projects,
+        workItems,
+        ...(ingest ? { ingestFactoryIssue: ingest } : {}),
+        ...(reconcile ? { reconcileFactoryState: reconcile } : {}),
+        pollEventsEnabled: pollingEnabled,
+        ...(pollIntervalMs !== undefined ? { intervalMs: pollIntervalMs } : {}),
+        ...(reconcileIntervalMs !== undefined ? { reconcileIntervalMs } : {}),
+      }),
+    ];
+  }
+
   routes(ctx: IntegrationContext): ApiRoute[] {
     return [
       this.#connectRoute(ctx),
@@ -365,6 +400,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
+        projects: ctx.storage.projects,
         ingestFactoryIssues: attachLinearRules(ctx),
       }).filter(route => !route.path.startsWith('/auth/linear/')),
     ];
@@ -430,6 +466,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }),
     );
     return projectGroups.flat();
+  }
+
+  async listWorkspaces(): Promise<LinearWorkspace[]> {
+    return this.#listWorkspaces();
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
@@ -645,4 +685,14 @@ function requireLinearConnection(connection: IntegrationConnection): void {
 
 function isNotFound(error: unknown): boolean {
   return error instanceof PlatformApiError && error.status === 404;
+}
+
+function optionalPositiveIntegerEnv(name: string): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return parsed;
 }

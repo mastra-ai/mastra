@@ -1222,6 +1222,60 @@ describe('ToolSearchProcessor', () => {
     });
   });
 
+  describe('thread ID resolution from memory context', () => {
+    // HTTP calls pass the thread via memory options; the agent records the
+    // resolved thread under the 'MastraMemory' request-context key rather than
+    // the reserved mastra__threadId key. The processor must fall back to it.
+    function argsWithMemoryContext(threadId: string): ProcessInputStepArgs {
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threadId } });
+      return {
+        messageList: new MessageList({}),
+        requestContext,
+      };
+    }
+
+    it("'context' storage keeps load_tool state when the thread only exists in the memory context", async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+        storage: 'context',
+      });
+
+      const args = argsWithMemoryContext('http-thread');
+      const result = await processor.processInputStep(args);
+      expect(result.tools?.weather).toBeUndefined();
+
+      const loadResult = await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+      expect(loadResult.success).toBe(true);
+
+      // Next step in the same process: the supplemental set keyed by the
+      // memory-context thread ID bridges until the messages catch up.
+      const nextResult = await processor.processInputStep(argsWithMemoryContext('http-thread'));
+      expect(nextResult.tools?.weather).toBeDefined();
+    });
+
+    it('prefers the reserved mastra__threadId key over the memory context', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = argsWithMemoryContext('memory-thread');
+      args.requestContext!.set(MASTRA_THREAD_ID_KEY, 'override-thread');
+      const result = await processor.processInputStep(args);
+      await result.tools?.load_tool!.execute?.({ toolName: 'weather' }, undefined);
+
+      // Loaded state lives under the override thread, not the memory thread.
+      const overrideResult = await processor.processInputStep(createMockArgs('override-thread'));
+      expect(overrideResult.tools?.weather).toBeDefined();
+      const memoryResult = await processor.processInputStep(createMockArgs('memory-thread'));
+      expect(memoryResult.tools?.weather).toBeUndefined();
+    });
+  });
+
   describe('cache-friendliness (prefix stability)', () => {
     // Build step args carrying conversation messages with the given load_tool
     // results, plus a real thread ID — used to drive 'context' mode de-loading.

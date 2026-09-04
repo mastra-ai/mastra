@@ -190,7 +190,8 @@
                         }
                       },
                       "finishReason": "stop",
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -272,7 +273,7 @@
             "isRootSpan": false,
             "parentId": "<span-1>",
             "entityType": "output_processor",
-            "entityId": "test-agent",
+            "entityId": "structured-output",
             "attributes": {
               "processorExecutor": "legacy",
               "processorIndex": 0,

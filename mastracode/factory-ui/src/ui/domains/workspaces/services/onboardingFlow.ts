@@ -2,7 +2,7 @@
  * Session-scoped markers for the `/onboarding` wizard (`EmptyFactoryState`).
  * The step and pending factory id survive full-page OAuth redirects
  * (GitHub/Linear) so the flow can resume where it left off. The
- * `/factories/create` wizard uses separate keys (`useCreateFactoryFlow`) so
+ * create-Factory wizard uses separate keys (`useCreateFactoryFlow`) so
  * the two flows never collide.
  *
  * Every write also stamps `updated-at`: resumability is time-bound so a stale

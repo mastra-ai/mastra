@@ -8,6 +8,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
@@ -66,6 +67,20 @@ export interface PIIDetectionResult {
   categories: PIICategoryScores | null;
   detections: PIIDetection[] | null;
   redacted_content?: string | null; // Only present when strategy is 'redact'
+}
+
+/**
+ * Event passed to the `onDetection` callback
+ */
+export interface PIIDetectionEvent {
+  /** The raw detection result produced for this piece of content */
+  detectionResult: PIIDetectionResult;
+  /** The content that was analyzed */
+  input: string;
+  /** Whether the result crossed the configured threshold */
+  flagged: boolean;
+  /** The configured strategy when flagged, otherwise 'none' */
+  strategyApplied: 'block' | 'warn' | 'filter' | 'redact' | 'none';
 }
 
 /**
@@ -156,6 +171,19 @@ export interface PIIDetectorOptions extends LastMessageOnlyOption {
    * Lower values reduce latency but may miss PII that spans multiple chunks.
    */
   bufferSize?: number;
+
+  /**
+   * Called whenever a detection result is produced, so consumers can emit
+   * metrics or attach metadata to their own tracing.
+   *
+   * Fires for every analyzed message (flagged or not) in `processInput` and
+   * `processOutputResult`, and for every LLM buffer flush during streaming.
+   * During streaming, the zero-cost regex pass only reports when PII is
+   * actually found, to avoid firing once per token.
+   *
+   * Errors thrown by the callback are logged and ignored.
+   */
+  onDetection?: (event: PIIDetectionEvent) => void | Promise<void>;
 }
 
 /**
@@ -180,6 +208,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
   private bufferSize: number;
+  private onDetection?: (event: PIIDetectionEvent) => void | Promise<void>;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -240,6 +269,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
     this.bufferSize = options.bufferSize ?? PIIDetector.DEFAULT_BUFFER_SIZE;
+    this.onDetection = options.onDetection;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -257,10 +287,11 @@ export class PIIDetector implements Processor<'pii-detector'> {
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -284,9 +315,11 @@ export class PIIDetector implements Processor<'pii-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
+        const flagged = this.isPIIFlagged(detectionResult);
+        await this.emitDetection(textContent, detectionResult, flagged);
 
-        if (this.isPIIFlagged(detectionResult)) {
+        if (flagged) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'redact'
@@ -315,13 +348,34 @@ export class PIIDetector implements Processor<'pii-detector'> {
   }
 
   /**
+   * Notify the consumer-supplied `onDetection` callback. Never throws.
+   */
+  private async emitDetection(input: string, detectionResult: PIIDetectionResult, flagged: boolean): Promise<void> {
+    if (!this.onDetection) return;
+    try {
+      await this.onDetection({
+        detectionResult,
+        input,
+        flagged,
+        strategyApplied: flagged ? this.strategy : 'none',
+      });
+    } catch (error) {
+      console.warn('[PIIDetector] onDetection callback failed:', error);
+    }
+  }
+
+  /**
    * Detect PII using the internal agent
    */
-  private async detectPII(content: string, observabilityContext?: ObservabilityContext): Promise<PIIDetectionResult> {
+  private async detectPII(
+    content: string,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<PIIDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of PII detected'),
@@ -378,6 +432,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
+          requestContext,
           ...observabilityContext,
         });
         if (!response.object) {
@@ -390,6 +445,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
           output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          requestContext,
           ...observabilityContext,
         });
 
@@ -752,6 +808,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     state: Record<string, any>,
     abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<ChunkType | null> {
     const buffer: string = state._piiBuffer || '';
     const firstPayloadId: string = state._piiFirstPayloadId || 'text-0';
@@ -763,7 +820,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (!buffer) return null;
 
-    const detectionResult = await this.detectPII(buffer, observabilityContext);
+    const detectionResult = await this.detectPII(buffer, observabilityContext, requestContext);
+    const flagged = this.isPIIFlagged(detectionResult);
+    await this.emitDetection(buffer, detectionResult, flagged);
 
     const combinedPart: ChunkType = {
       type: 'text-delta',
@@ -772,7 +831,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       from: ChunkFrom.AGENT,
     };
 
-    if (this.isPIIFlagged(detectionResult)) {
+    if (flagged) {
       return this.applyStreamStrategy(combinedPart, detectionResult, abort);
     }
 
@@ -802,15 +861,16 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       state: Record<string, any>;
       abort: (reason?: string) => never;
       writer?: { custom: (data: ChunkType) => Promise<void> };
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, state, writer, ...rest } = args;
+    const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     try {
       // Handle non-text chunks: flush any pending LLM buffer first
       if (part.type !== 'text-delta') {
         if (this.hasLLMOnlyTypes && state._piiBuffer) {
-          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext);
+          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           if (flushed) {
             // Two parts to emit: flushed buffer + this non-text part.
             // Use REPROCESS_PART_KEY so the runner re-drives the non-text part.
@@ -862,6 +922,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
         this.isPIIFlagged(regexResult) && (regexResult.detections?.some(d => d.end > tail.length) ?? false);
 
       if (hasNewPII) {
+        await this.emitDetection(combined, regexResult, true);
         // Regex caught pattern-based PII — apply strategy to original chunk
         // (redaction is applied to `combined` then we extract the new portion)
         const combinedRedacted = regexResult.redacted_content;
@@ -896,7 +957,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
               : textContent;
           // Check flush threshold
           if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
-            return this.flushLLMBuffer(state, abort, observabilityContext);
+            return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
           }
           return null; // Hold back until flush
         }
@@ -919,7 +980,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
       // Flush on sentence boundary or size threshold
       if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
-        return this.flushLLMBuffer(state, abort, observabilityContext);
+        return this.flushLLMBuffer(state, abort, observabilityContext, requestContext);
       }
 
       return null; // Hold back until flush
@@ -938,10 +999,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   async processOutputResult({
     messages,
     abort,
+    requestContext,
     ...rest
   }: {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
+    requestContext?: RequestContext;
   } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
     const observabilityContext = resolveObservabilityContext(rest);
     try {
@@ -966,9 +1029,11 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           continue;
         }
 
-        const detectionResult = await this.detectPII(textContent, observabilityContext);
+        const detectionResult = await this.detectPII(textContent, observabilityContext, requestContext);
+        const flagged = this.isPIIFlagged(detectionResult);
+        await this.emitDetection(textContent, detectionResult, flagged);
 
-        if (this.isPIIFlagged(detectionResult)) {
+        if (flagged) {
           const processedMessage = this.handleDetectedPII(message, detectionResult, this.strategy, abort);
 
           // If we reach here, strategy is 'warn', 'filter', or 'redact'

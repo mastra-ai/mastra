@@ -8,16 +8,16 @@ import { randomUUID } from 'node:crypto';
 /**
  * Automatic tool resumption with `autoResumeSuspendedTools`.
  *
- * When a tool has `requireApproval: true` and the agent has
- * `defaultOptions: { autoResumeSuspendedTools: true }`, the agent will
- * automatically resume a suspended tool on the next user message in the
- * same thread. The second call to `agent.stream()` on the same agent+memory
- * detects the suspended state and auto-resumes.
+ * When a tool suspends for data and the agent has
+ * `defaultOptions: { autoResumeSuspendedTools: true }`, the agent can
+ * automatically resume it from the next user message in the same thread.
+ * Approval suspensions are intentionally excluded because consent must arrive
+ * through the explicit approval APIs.
  *
  * Regression classes:
- * - Tool with `requireApproval: true` emits `tool-call-approval` chunk
- * - `autoResumeSuspendedTools` detects suspended tool in memory on next call
- * - Tool executes with `resumeData: { approved: true }` injected by the loop
+ * - A data-bearing tool suspension is persisted in memory
+ * - `autoResumeSuspendedTools` detects it on the next call
+ * - The model supplies schema-valid `resumeData` from the user's message
  * - Final output reflects the resumed tool's result
  */
 describeForAllEngines(
@@ -33,13 +33,21 @@ describeForAllEngines(
         id: 'find-user',
         description: 'Finds a user by name',
         inputSchema: z.object({
+          query: z.string(),
+        }),
+        suspendSchema: z.object({
+          message: z.string(),
+        }),
+        resumeSchema: z.object({
           name: z.string(),
         }),
-        requireApproval: true,
-        execute: async inputData => {
+        execute: async (_inputData, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend({ message: 'Which user should I find?' });
+          }
           toolExecuted = true;
-          toolInputName = inputData.name;
-          return { name: inputData.name, email: `${inputData.name.toLowerCase()}@test.com` };
+          toolInputName = context.agent.resumeData.name;
+          return { name: toolInputName, email: `${toolInputName.toLowerCase()}@test.com` };
         },
       });
 
@@ -57,7 +65,7 @@ describeForAllEngines(
       const threadId = randomUUID();
       const resourceId = randomUUID();
 
-      // First call: model calls the tool, loop suspends for approval
+      // First call: model calls the tool, which suspends for the user's name
       const { chunks } = await runLoopScenario({
         engine,
         llm: getMock(),
@@ -72,7 +80,7 @@ describeForAllEngines(
               {
                 id: 'call-1',
                 name: 'find-user',
-                arguments: { name: 'Dero Israel' },
+                arguments: { query: 'user by name' },
               },
             ],
           });
@@ -80,9 +88,10 @@ describeForAllEngines(
         collectChunks: true,
       });
 
-      // Assert: tool-call-approval chunk emitted (tool suspended)
-      const approvalChunks = chunks!.filter(c => c.type === 'tool-call-approval');
-      expect(approvalChunks.length).toBeGreaterThan(0);
+      // Assert: the tool suspended for data rather than approval.
+      const suspendedChunks = chunks!.filter(c => c.type === 'tool-call-suspended');
+      expect(suspendedChunks.length).toBeGreaterThan(0);
+      expect(chunks!.some(c => c.type === 'tool-call-approval')).toBe(false);
 
       // Tool should NOT have executed yet (suspended before execution)
       expect(toolExecuted).toBe(false);
@@ -94,7 +103,7 @@ describeForAllEngines(
         engine,
         llm: getMock(),
         sharedAgent: shared,
-        prompt: 'Yes, approve it',
+        prompt: 'The user is Dero Israel',
         memory: sharedMemory,
         threadId,
         resourceId,
@@ -108,7 +117,7 @@ describeForAllEngines(
                 {
                   id: 'call-2',
                   name: 'find-user',
-                  arguments: { name: 'Dero Israel', resumeData: { approved: true } },
+                  arguments: { query: 'user by name', resumeData: { name: 'Dero Israel' } },
                 },
               ],
             },

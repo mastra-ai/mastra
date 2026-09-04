@@ -203,6 +203,38 @@ describe('AgentBrowserThreadManager', () => {
       expect(mockManager.launch).toHaveBeenCalledTimes(2);
     });
 
+    it('forwards cdpHeaders to BrowserManager.launch for thread-scoped browsers', async () => {
+      const cdpHeaders = { Authorization: 'Bearer test-token' };
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: {
+          headless: true,
+          cdpHeaders,
+        },
+      });
+
+      await threadManager.getManagerForThread('thread-1');
+
+      expect(mockManager.launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cdpHeaders,
+        }),
+      );
+    });
+
+    it('omits cdpHeaders from thread launch options when not configured', async () => {
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true },
+      });
+
+      await threadManager.getManagerForThread('thread-1');
+
+      const launchOptions = mockManager.launch.mock.calls[0]?.[0];
+      expect(launchOptions).toBeDefined();
+      expect(launchOptions).not.toHaveProperty('cdpHeaders');
+    });
+
     it('hasActiveThreadManagers returns true when browsers exist', async () => {
       const threadManager = new AgentBrowserThreadManager({
         scope: 'thread',

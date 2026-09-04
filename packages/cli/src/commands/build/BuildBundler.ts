@@ -2,9 +2,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
+import { Bundler } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
+import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
   private studio: boolean;
@@ -21,14 +22,18 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    const configuredExternals = Array.isArray(bundlerOptions.externals) ? bundlerOptions.externals : [];
 
-    if (!bundlerOptions?.[IS_DEFAULT]) {
+    if (bundlerOptions.externals === true || bundlerOptions.externals === false) {
       return bundlerOptions;
     }
+
+    const dynamicPackages = [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...configuredExternals])];
 
     return {
       ...bundlerOptions,
       externals: true,
+      ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
     };
   }
 
@@ -38,18 +43,7 @@ export class BuildBundler extends Bundler {
       return Promise.resolve([]);
     }
 
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
-
-    try {
-      const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
-
-      return Promise.resolve([envFile]);
-    } catch {
-      // ignore
-    }
-
-    return Promise.resolve([]);
+    return Promise.resolve(new FileService().getExistingFiles(['.env', '.env.local', '.env.production']));
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -72,6 +66,10 @@ export class BuildBundler extends Bundler {
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
     return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot }, toolsPaths);
+  }
+
+  protected getAdditionalEntries(): Record<string, string> {
+    return { worker: getWorkerEntry() };
   }
 
   protected getEntry(): string {

@@ -146,6 +146,204 @@ describe('CachingPubSub', () => {
       expect(history[0].index).toBe(0);
       expect(history[0].type).toBe('new-first');
     });
+
+    describe('localOnly', () => {
+      // `localOnly` events are never relayed to other instances, so nothing can
+      // replay them from the shared cache. Caching them grows the store without
+      // bound — `workflow.events.v2.*` watch events carry cumulative step results
+      // and run to megabytes each.
+      it('should not cache localOnly events', async () => {
+        const topic = 'workflow.events.v2.run-1';
+
+        await cachingPubsub.publish(
+          topic,
+          { type: 'watch', runId: 'run-1', data: { big: 'payload' } },
+          {
+            localOnly: true,
+          },
+        );
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cachingPubsub.getHistory(topic)).toHaveLength(0);
+      });
+
+      it('should not allocate an index counter for localOnly events', async () => {
+        const topic = 'workflow.events.v2.run-2';
+
+        await cachingPubsub.publish(topic, { type: 'watch', runId: 'run-2', data: {} }, { localOnly: true });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // A counter key would survive the run and leak forever, since nothing
+        // clears a topic that was never cached.
+        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+      });
+
+      it('should still deliver localOnly events live to subscribers', async () => {
+        const topic = 'local-live-topic';
+        const receivedEvents: Event[] = [];
+
+        await cachingPubsub.subscribe(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await cachingPubsub.publish(
+          topic,
+          { type: 'watch', runId: 'run-1', data: { foo: 'bar' } },
+          {
+            localOnly: true,
+          },
+        );
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0]).toMatchObject({ type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+        expect(receivedEvents[0].id).toBeDefined();
+        expect(receivedEvents[0].createdAt).toBeInstanceOf(Date);
+        // No index: the event was never assigned one from the counter.
+        expect(receivedEvents[0].index).toBeUndefined();
+      });
+
+      it('should forward the localOnly option to the inner pubsub', async () => {
+        const topic = 'local-forward-topic';
+        const publishSpy = vi.spyOn(innerPubsub, 'publish');
+
+        await cachingPubsub.publish(topic, { type: 'watch', runId: 'run-1', data: {} }, { localOnly: true });
+
+        expect(publishSpy).toHaveBeenCalledWith(topic, expect.objectContaining({ type: 'watch' }), {
+          localOnly: true,
+        });
+      });
+
+      it('should keep cached indices gap-free across interleaved localOnly publishes', async () => {
+        const topic = 'mixed-topic';
+
+        await cachingPubsub.publish(topic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await cachingPubsub.publish(topic, { type: 'local', runId: 'run-1', data: {} }, { localOnly: true });
+        await cachingPubsub.publish(topic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await cachingPubsub.getHistory(topic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['cached-first', 0],
+          ['cached-second', 1],
+        ]);
+      });
+
+      it('should deliver live localOnly events to a replay subscriber without caching them', async () => {
+        const topic = 'replay-mixed-topic';
+        const receivedEvents: Event[] = [];
+
+        await cachingPubsub.publish(topic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await cachingPubsub.subscribeWithReplay(topic, event => {
+          receivedEvents.push(event);
+        });
+
+        await cachingPubsub.publish(topic, { type: 'local', runId: 'run-1', data: {} }, { localOnly: true });
+        await cachingPubsub.publish(topic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(receivedEvents.map(event => event.type)).toEqual(['cached-first', 'local', 'cached-second']);
+        expect(await cachingPubsub.getHistory(topic)).toHaveLength(2);
+      });
+    });
+
+    describe('shouldCache', () => {
+      // `localOnly` is not always visible to this layer: when the inner PubSub
+      // is what decides `localOnly` (e.g. the `mastra.pubsub` proxy), the cache
+      // runs above that decision and never sees the flag. `shouldCache` lets the
+      // policy be declared at construction time instead.
+      const uncachedTopic = 'workflow.events.v2.run-1';
+      const cachedTopic = 'agent.stream.run-1';
+      let policyPubsub: CachingPubSub;
+
+      beforeEach(() => {
+        policyPubsub = new CachingPubSub(innerPubsub, cache, {
+          shouldCache: topic => !topic.startsWith('workflow.events.v2.'),
+        });
+      });
+
+      it('should not cache topics rejected by shouldCache', async () => {
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: { big: 'payload' } });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await policyPubsub.getHistory(uncachedTopic)).toHaveLength(0);
+      });
+
+      it('should not allocate an index counter for topics rejected by shouldCache', async () => {
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cache.get(`pubsub:${uncachedTopic}:counter`)).toBeUndefined();
+      });
+
+      it('should still deliver rejected topics live to subscribers', async () => {
+        const receivedEvents: Event[] = [];
+        await policyPubsub.subscribe(uncachedTopic, event => {
+          receivedEvents.push(event);
+        });
+
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+
+        expect(receivedEvents).toHaveLength(1);
+        expect(receivedEvents[0]).toMatchObject({ type: 'watch', runId: 'run-1', data: { foo: 'bar' } });
+        expect(receivedEvents[0].index).toBeUndefined();
+      });
+
+      it('should still cache topics accepted by shouldCache', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'text-delta', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await policyPubsub.getHistory(cachedTopic);
+        expect(history).toHaveLength(1);
+        expect(history[0].index).toBe(0);
+      });
+
+      it('should cache everything when shouldCache is not provided', async () => {
+        await cachingPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await cachingPubsub.getHistory(uncachedTopic)).toHaveLength(1);
+      });
+
+      it('should keep cached indices gap-free across interleaved rejected publishes', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'cached-first', runId: 'run-1', data: {} });
+        await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
+        await policyPubsub.publish(cachedTopic, { type: 'cached-second', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const history = await policyPubsub.getHistory(cachedTopic);
+        expect(history.map(event => [event.type, event.index])).toEqual([
+          ['cached-first', 0],
+          ['cached-second', 1],
+        ]);
+      });
+
+      it('should deliver live events on a rejected topic to a replay subscriber with nothing to replay', async () => {
+        const receivedEvents: Event[] = [];
+
+        await policyPubsub.publish(uncachedTopic, { type: 'before-subscribe', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await policyPubsub.subscribeWithReplay(uncachedTopic, event => {
+          receivedEvents.push(event);
+        });
+
+        await policyPubsub.publish(uncachedTopic, { type: 'after-subscribe', runId: 'run-1', data: {} });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Nothing replayed — the pre-subscribe event was never cached.
+        expect(receivedEvents.map(event => event.type)).toEqual(['after-subscribe']);
+        expect(await policyPubsub.getHistory(uncachedTopic)).toHaveLength(0);
+      });
+
+      it('should still bypass the cache for localOnly publishes on accepted topics', async () => {
+        await policyPubsub.publish(cachedTopic, { type: 'watch', runId: 'run-1', data: {} }, { localOnly: true });
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        expect(await policyPubsub.getHistory(cachedTopic)).toHaveLength(0);
+      });
+    });
   });
 
   describe('subscribe', () => {
@@ -172,7 +370,7 @@ describe('CachingPubSub', () => {
       );
     });
 
-    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+    it('forwards options (including startFrom and batch) verbatim to the inner PubSub', async () => {
       const subscribeSpy = vi.fn(async () => {});
       class StubInner extends PubSub {
         get supportsNativeBatching() {
@@ -185,7 +383,7 @@ describe('CachingPubSub', () => {
       }
       const wrapped = new CachingPubSub(new StubInner(), cache);
       const cb = () => {};
-      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      const options = { startFrom: 'latest' as const, batch: { maxSize: 2, maxWaitMs: 50 } };
       await wrapped.subscribe('t', cb, options);
       expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
     });
@@ -208,6 +406,10 @@ describe('CachingPubSub', () => {
       }
       expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
       expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
+    });
+
+    it('reports support for numeric offsets', () => {
+      expect(cachingPubsub.supportsOffsets).toBe(true);
     });
   });
 

@@ -220,9 +220,87 @@ function findApprovalRequest(
         return part;
       }
     }
+
+    const pendingToolApprovals = message.content.metadata?.pendingToolApprovals;
+    if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+      continue;
+    }
+
+    for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+      if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+        continue;
+      }
+
+      const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+      if (typeof toolCallId !== 'string') {
+        continue;
+      }
+
+      const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+      const pendingApprovalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+      if (pendingApprovalId !== approvalId) {
+        continue;
+      }
+
+      const existingPart = findToolInvocationPart(message.content.parts || [], toolCallId);
+      if (!existingPart) {
+        continue;
+      }
+
+      return createToolInvocationPart({
+        toolCallId: existingPart.toolInvocation.toolCallId,
+        toolName: existingPart.toolInvocation.toolName,
+        args: existingPart.toolInvocation.args,
+        state: 'approval-requested',
+        approval: { id: pendingApprovalId },
+        providerMetadata: existingPart.providerMetadata,
+        providerExecuted: existingPart.providerExecuted,
+        title: existingPart.title,
+        preliminary: existingPart.preliminary,
+      });
+    }
   }
 
   return undefined;
+}
+
+function rehydratePendingToolApprovals(parts: AIV6Type.UIMessage['parts'], metadata: Record<string, unknown>) {
+  const pendingToolApprovals = metadata.pendingToolApprovals;
+  if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+    return;
+  }
+
+  for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+    if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+      continue;
+    }
+
+    const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+    if (typeof toolCallId !== 'string') {
+      continue;
+    }
+
+    const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+    const approvalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+
+    const toolPartIndex = parts.findIndex(
+      part => AIV6.isToolUIPart(part) && part.toolCallId === toolCallId && part.state === 'input-available',
+    );
+    if (toolPartIndex === -1) {
+      continue;
+    }
+
+    const toolPart = parts[toolPartIndex];
+    if (!toolPart || !AIV6.isToolUIPart(toolPart) || toolPart.state !== 'input-available') {
+      continue;
+    }
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      state: 'approval-requested',
+      approval: { id: approvalId },
+    } as AIV6Type.UIMessage['parts'][number];
+  }
 }
 
 function createLegacyToolInvocations(
@@ -315,6 +393,8 @@ export class AIV6Adapter {
         }
       }
     }
+
+    rehydratePendingToolApprovals(parts, metadata);
 
     return {
       id: dbMsg.id,

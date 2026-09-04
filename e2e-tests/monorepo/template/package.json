@@ -9,5 +9,8 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
+  "dependencies": {
+    "unicorn-magic": "0.2.0"
+  },
   "packageManager": "pnpm@11.3.0"
 }

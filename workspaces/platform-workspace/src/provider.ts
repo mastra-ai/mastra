@@ -13,9 +13,16 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
     properties: {
       accessToken: {
         type: 'string',
-        description: 'Mastra Platform secret key (falls back to MASTRA_PLATFORM_SECRET_KEY)',
+        description: 'Mastra Platform access token (falls back to MASTRA_PLATFORM_ACCESS_TOKEN)',
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
+      actingUserId: { type: 'string', description: 'Opaque user subject attributed to sandbox requests' },
+      sandboxProvider: {
+        type: 'string',
+        description: 'Sandbox provider (falls back to SANDBOX_PROVIDER, then e2b)',
+        enum: ['railway', 'e2b'],
+        default: 'e2b',
+      },
       environmentId: { type: 'string', description: 'Platform environment ID (falls back to MASTRA_ENVIRONMENT_ID)' },
       sandboxId: { type: 'string', description: 'Reattach to an existing Platform sandbox by ID' },
       idleTimeoutMinutes: { type: 'number', description: 'Minutes before the sandbox can be destroyed while idle' },
@@ -41,7 +48,7 @@ export const platformFilesystemProvider: FilesystemProvider<PlatformFilesystemOp
     properties: {
       accessToken: {
         type: 'string',
-        description: 'Mastra Platform secret key (falls back to MASTRA_PLATFORM_SECRET_KEY)',
+        description: 'Mastra Platform access token (falls back to MASTRA_PLATFORM_ACCESS_TOKEN)',
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
       bucketName: {

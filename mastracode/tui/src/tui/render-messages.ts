@@ -12,6 +12,7 @@ import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -29,6 +30,10 @@ import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
+import {
+  parseSubconsciousActivitySnapshot,
+  SubconsciousActivityComponent,
+} from './components/subconscious-activity.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -48,6 +53,7 @@ import {
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import { pruneChatContainer } from './prune-chat.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -298,8 +304,7 @@ export function confirmPendingUserMessage(
   if (!pending) return;
 
   if (state.streamingComponent && state.session.displayState.get().isRunning) {
-    state.streamingComponent = undefined;
-    state.streamingMessage = undefined;
+    finalizeStreamingAssistant(state);
   }
 
   replacePendingUserMessage(state, messageId, text, attachments);
@@ -504,12 +509,18 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       return true;
     }
 
-    const component = new StateSignalComponent({
-      stateId: stateSignal.stateId,
-      mode: stateSignal.mode,
-      version: stateSignal.version,
-      message: stateSignal.message,
-    });
+    const subconsciousActivity =
+      stateSignal.stateId === 'subconscious-activity'
+        ? parseSubconsciousActivitySnapshot(stateSignal.value)
+        : undefined;
+    const component = subconsciousActivity
+      ? new SubconsciousActivityComponent(subconsciousActivity)
+      : new StateSignalComponent({
+          stateId: stateSignal.stateId,
+          mode: stateSignal.mode,
+          version: stateSignal.version,
+          message: stateSignal.message,
+        });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
@@ -613,10 +624,14 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
-  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
-  if (skillMatch) {
+  // Only the work-item feed the factory appends may trail the envelope; it folds
+  // into the collapsed content, any other trailer keeps the message raw.
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>\s*([\s\S]*)$/);
+  const skillTrailer = skillMatch?.[3]?.trim() ?? '';
+  if (skillMatch && (skillTrailer === '' || /^<work-item-feed>[\s\S]*<\/work-item-feed>$/.test(skillTrailer))) {
     const commandName = `skill/${skillMatch[1]!}`;
-    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const skillBody = skillTrailer ? `${skillMatch[2]!.trim()}\n\n${skillTrailer}` : skillMatch[2]!.trim();
+    const skillContent = unescapeSkillBoundary(skillBody);
     const pending = state.pendingSignalMessageComponentsById.get(message.id);
     if (pending) {
       state.chatContainer.removeChild(pending.component as never);
@@ -844,6 +859,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
+  disposeAssistantRenderState(state);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
@@ -1163,6 +1179,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);
+  pruneChatContainer(state);
   state.ui.requestRender();
 }
 

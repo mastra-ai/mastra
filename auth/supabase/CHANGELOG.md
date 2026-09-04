@@ -1,5 +1,32 @@
 # @mastra/auth-supabase
 
+## 1.1.4
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.1.4-alpha.1
+
+### Patch Changes
+
+- Update README to include accurate, up-to-date information ([#22858](https://github.com/mastra-ai/mastra/pull/22858))
+
+## 1.1.4-alpha.0
+
+### Patch Changes
+
+- Remove `CHANGELOG.md` from distributed npm files resulting in reduced package size ([#22737](https://github.com/mastra-ai/mastra/pull/22737))
+
+## 1.1.3
+
+### Patch Changes
+
+- dependencies updates: ([#20500](https://github.com/mastra-ai/mastra/pull/20500))
+  - Updated dependency [`@supabase/supabase-js@^2.110.9` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.110.9) (from `^2.110.8`, in `dependencies`)
+
 ## 1.1.3-alpha.0
 
 ### Patch Changes

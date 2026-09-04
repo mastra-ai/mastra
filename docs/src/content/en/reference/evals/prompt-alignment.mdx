@@ -1,6 +1,6 @@
 ---
 title: "Reference: Prompt alignment scorer | Evals"
-description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
+description: "Use createPromptAlignmentScorerLLM() to evaluate whether an agent response follows the user's intent, requirements, completeness, and requested format."
 packages:
   - "@mastra/evals"
 ---
@@ -40,6 +40,13 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
           "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
         required: false,
       },
+      {
+        name: 'includeConversationHistory',
+        type: 'boolean | { maxMessages?: number }',
+        description:
+          'Include prior conversation turns from the agent memory in the judge prompt so short replies are scored in context (default: false). Pass an object to cap how many recent messages are included (default: 10). Only applies to agent runs that carry remembered messages.',
+        required: false,
+      },
     ],
   },
 ]}
@@ -64,7 +71,7 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 
 `.run()` returns a result in the following shape:
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   runId: string,
   score: number,
@@ -115,6 +122,24 @@ const scorer = createPromptAlignmentScorerLLM({
   },
 })
 ```
+
+### Multi-turn conversations
+
+By default the scorer only sees the current turn. In a conversation, a reply like `"A"` is meaningless on its own, so the judge can't tell what the user asked for and scores the response as misaligned.
+
+Set `includeConversationHistory` to give the judge the prior turns from the agent's memory. The judge uses them to interpret the current prompt, but still scores only the current response.
+
+```typescript
+const scorer = createPromptAlignmentScorerLLM({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  options: {
+    evaluationMode: 'user',
+    includeConversationHistory: { maxMessages: 6 }, // or `true` for the last 10 messages
+  },
+})
+```
+
+This only affects agent runs, where the scorer receives the remembered messages. Runs scored from a plain prompt string are unchanged.
 
 ### Multi-Dimensional Analysis
 
@@ -316,7 +341,7 @@ for (const prompt of prompts) {
 
 Compare different agents or models:
 
-```typescript prettier:false
+```typescript oxfmt:false
 const agents = [agent1, agent2, agent3];
 const testPrompts = [...]; // Array of test prompts
 
@@ -451,7 +476,7 @@ console.log(result)
 
 The output receives a high score because it perfectly addresses the intent and fulfills all requirements. It also uses the appropriate format.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 0.95,
   reason: 'The score is 0.95 because the response perfectly addresses the primary intent of creating a factorial function and fulfills all requirements including Python implementation, error handling for negative numbers, and proper documentation. The code format is appropriate and the implementation is complete.'
@@ -492,7 +517,7 @@ console.log(result)
 
 The output receives a lower score because while the content is accurate, it doesn't follow the requested format (bullet points).
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 0.75,
   reason: 'The score is 0.75 because the response addresses the intent of explaining TypeScript benefits and provides accurate information, but fails to use the requested bullet point format, resulting in lower appropriateness scoring.'
@@ -536,7 +561,7 @@ console.log(result)
 
 The output receives a low score because it only partially fulfills the requirements, missing validation, error handling, and documentation.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 0.35,
   reason: 'The score is 0.35 because while the response addresses the basic intent of creating a Python class with initialization, it fails to include validation, error handling, and documentation as specifically requested, resulting in incomplete requirement fulfillment.'

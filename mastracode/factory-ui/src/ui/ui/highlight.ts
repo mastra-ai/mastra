@@ -98,7 +98,7 @@ const EXT_LANG: Record<string, string> = {
   markdown: 'markdown',
 };
 
-export function escapeHtml(s: string): string {
+function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -107,7 +107,7 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-export function normalizeLanguage(language: string | undefined): string | undefined {
+function normalizeLanguage(language: string | undefined): string | undefined {
   if (!language) return undefined;
   const normalized = LANG_ALIASES[language.toLowerCase()];
   return normalized && LANGUAGES.has(normalized) ? normalized : undefined;

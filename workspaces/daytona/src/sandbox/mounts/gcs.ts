@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validatePrefix } from './types';
+import { LOG_PREFIX, validateGCSBucketName, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -31,7 +31,7 @@ export interface DaytonaGCSMountConfig extends FilesystemMountConfig {
 export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig, ctx: MountContext): Promise<void> {
   const { run, writeFile, logger } = ctx;
 
-  validateBucketName(config.bucket);
+  validateGCSBucketName(config.bucket);
 
   const quotedMountPath = shellQuote(mountPath);
 

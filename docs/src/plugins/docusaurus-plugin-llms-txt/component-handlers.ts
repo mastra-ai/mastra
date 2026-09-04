@@ -246,29 +246,12 @@ export function handleCardGrid(_state: State, node: Element): BlockContent | Arr
 // ============================================
 
 /**
- * Check if an element is a CardGrid items container (grid with card items)
- * Structure: <div class="grid grid-cols-1 ..."><a><div data-slot="card">...</div></a>...</div>
+ * Check if an element is a CardGrid items container.
+ * Card grids expose an explicit data-slot contract so the rendered structure can
+ * use either generic containers or semantic list markup.
  */
 export function isCardGridItems(node: Element): boolean {
-  const classNames = node.properties?.className as string[] | undefined
-  if (!classNames) return false
-
-  // Check for grid layout class
-  const hasGridClass = classNames.some(cls => cls.startsWith('grid') && cls !== 'card__grid')
-  if (!hasGridClass) return false
-
-  // Check if it contains card items (a > div[data-slot=card])
-  for (const child of node.children) {
-    if (child.type === 'element' && child.tagName === 'a') {
-      for (const grandchild of child.children) {
-        if (grandchild.type === 'element' && grandchild.properties?.dataSlot === 'card') {
-          return true
-        }
-      }
-    }
-  }
-
-  return false
+  return node.properties?.dataSlot === 'card-grid'
 }
 
 /**
@@ -288,34 +271,33 @@ export function handleCardGridItems(
     }>
   }> = []
 
-  // Find all card links
-  for (const child of node.children) {
-    if (child.type === 'element' && child.tagName === 'a') {
-      const href = child.properties?.href as string | undefined
-      if (!href) continue
+  // Find links that contain card markup. This supports both direct links and
+  // semantic list structures such as ul > li > a.
+  const links = findAllElementsByTag(node, 'a')
+  for (const link of links) {
+    const href = link.properties?.href as string | undefined
+    if (!href || !findElementByDataSlot(link, 'card')) continue
 
-      // Find the card title
-      const cardTitle = findElementByDataSlot(child, 'card-title')
-      const title = cardTitle ? getTextContent(cardTitle).trim() : ''
+    const cardTitle = findElementByDataSlot(link, 'card-title')
+    const title = cardTitle ? getTextContent(cardTitle).trim() : ''
 
-      if (title) {
-        listItems.push({
-          type: 'listItem',
-          spread: false,
-          children: [
-            {
-              type: 'paragraph',
-              children: [
-                {
-                  type: 'link',
-                  url: href.startsWith('/') ? `https://mastra.ai${href}` : href,
-                  children: [{ type: 'text', value: title }],
-                },
-              ],
-            },
-          ],
-        })
-      }
+    if (title) {
+      listItems.push({
+        type: 'listItem',
+        spread: false,
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'link',
+                url: href.startsWith('/') ? `https://mastra.ai${href}` : href,
+                children: [{ type: 'text', value: title }],
+              },
+            ],
+          },
+        ],
+      })
     }
   }
 

@@ -158,6 +158,59 @@ export type BrowserLifecycleHook = (args: { browser: MastraBrowser }) => void | 
 export type CdpUrlProvider = string | (() => string | Promise<string>);
 
 /**
+ * Explicit viewport dimensions in CSS pixels.
+ */
+export interface BrowserViewportSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * Browser viewport configuration.
+ *
+ * Either explicit dimensions, or `'window'` to disable viewport emulation so the
+ * page renders at whatever size the real browser window is.
+ *
+ * Provider support for `'window'` differs, because it depends on the underlying
+ * driver being able to skip emulation:
+ * - `agent-browser`: supported (Playwright launches with emulation disabled).
+ * - `stagehand` connected over `cdpUrl`: supported.
+ * - `stagehand` launching its own local browser: **not** supported. Stagehand
+ *   forces its own default viewport when none is provided, so providers fall
+ *   back to explicit dimensions.
+ * - remote providers (e.g. Firecrawl): not meaningful, falls back to defaults.
+ */
+export type BrowserViewport = BrowserViewportSize | 'window';
+
+/**
+ * Fallback dimensions used when a provider cannot honor `'window'`.
+ */
+export const DEFAULT_BROWSER_VIEWPORT: BrowserViewportSize = { width: 1280, height: 720 };
+
+/**
+ * Narrow a viewport config to explicit dimensions, or `undefined` for `'window'`.
+ */
+export function resolveViewportSize(viewport: BrowserViewport | undefined): BrowserViewportSize | undefined {
+  return viewport === 'window' ? undefined : viewport;
+}
+
+/**
+ * Translate a viewport config into Playwright-style launch options for
+ * `agent-browser`.
+ *
+ * `agent-browser` disables viewport emulation when it sees a window-sizing
+ * argument, which is how `'window'` is expressed without passing a `null`
+ * viewport its public types don't accept.
+ */
+export function resolveLaunchViewport(viewport: BrowserViewport | undefined): {
+  viewport?: BrowserViewportSize;
+  args?: string[];
+} {
+  if (viewport === 'window') return { args: ['--start-maximized'] };
+  return { viewport };
+}
+
+/**
  * Base configuration properties shared by all browser providers.
  * This interface contains fields common to all browser configurations.
  *
@@ -177,11 +230,12 @@ export interface BrowserConfigBase {
   /**
    * Browser viewport dimensions.
    * Controls the size of the browser window and how websites render.
+   *
+   * Use `'window'` to skip viewport emulation entirely so the page follows the
+   * real browser window. Not every provider can honor this — see
+   * {@link BrowserViewport}.
    */
-  viewport?: {
-    width: number;
-    height: number;
-  };
+  viewport?: BrowserViewport;
 
   /**
    * Default timeout in milliseconds for browser operations.

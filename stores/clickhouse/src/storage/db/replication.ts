@@ -207,16 +207,3 @@ export function applyReplicationToDDL(sql: string, replication?: ClickhouseRepli
   const withReplicatedEngine = replication ? rewriteEngineClauses(sql, replication) : sql;
   return addOnClusterToDDL(withReplicatedEngine, replication);
 }
-
-export function buildLocalTableReplicationError(tables: Array<{ name: string; engine: string }>): MastraError {
-  const tableList = tables.map(table => `  - ${table.name} (${table.engine})`).join('\n');
-  return new MastraError({
-    id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'LOCAL_TABLES_UNSUPPORTED'),
-    domain: ErrorDomain.STORAGE,
-    category: ErrorCategory.USER,
-    text:
-      `ClickHouse replication is enabled, but existing Mastra tables use non-replicated local engines.\n` +
-      `Mastra will not automatically convert existing local tables to replicated tables.\n` +
-      `Please migrate or recreate these tables manually before enabling replication:\n${tableList}`,
-  });
-}

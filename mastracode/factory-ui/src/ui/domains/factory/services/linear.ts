@@ -33,10 +33,18 @@ export interface LinearIssue {
   stateType: string;
   priorityLabel: string;
   assignee: string | null;
+  creator?: string | null;
   team: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LinearIssueDetail {
+  identifier: string;
+  title: string;
+  url: string;
+  description: string | null;
 }
 
 export interface LinearIssuePage {
@@ -128,6 +136,18 @@ export async function listLinearIssues(
   const params = new URLSearchParams({ factoryProjectId });
   if (after) params.set('after', after);
   return getLinearResource<LinearIssuePage>(baseUrl, `/web/linear/issues?${params.toString()}`);
+}
+
+export async function getLinearIssue(
+  baseUrl: string,
+  factoryProjectId: string,
+  identifier: string,
+): Promise<LinearIssueDetail> {
+  const params = new URLSearchParams({ factoryProjectId });
+  return getLinearResource<LinearIssueDetail>(
+    baseUrl,
+    `/web/linear/issues/${encodeURIComponent(identifier)}?${params.toString()}`,
+  );
 }
 
 /** List the connected workspace's projects (Settings intake-source picker). */

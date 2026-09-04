@@ -1,8 +1,8 @@
 ---
-title: "Reference: CLI commands | CLI"
-description: Documentation for the Mastra CLI to develop, build, and start your project.
+title: 'Reference: CLI commands | CLI'
+description: "You can use the Command-Line Interface (CLI) provided by Mastra to develop, build, and start your Mastra project."
 packages:
-  - "mastra"
+  - 'mastra'
 ---
 
 # CLI commands
@@ -109,7 +109,7 @@ or `"anthropic/..."` model selections.
 
 ## `mastra factory dev`
 
-Starts a development server for [Agent Builder](/docs/agent-builder/overview) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
+Starts a development server for [Agent Builder](https://agent-builder.mastra.ai/) development. It uses the same dev runtime and flags as [`mastra dev`](#mastra-dev) and writes to the same `.mastra/output` directory.
 
 ```bash
 npx mastra factory dev
@@ -159,7 +159,7 @@ MASTRA_CONCURRENCY=2 mastra build
 
 ## `mastra start`
 
-:::info
+:::note
 
 You need to run `mastra build` before using `mastra start`.
 
@@ -209,9 +209,74 @@ Custom output directory. Defaults to `.mastra/output`.
 
 Enable debug logging during the build.
 
+## `mastra experiment build`
+
+Builds a standalone companion worker that runs experiments without exposing an HTTP server. The worker loads your exported `Mastra` instance and accepts versioned newline-delimited JSON (NDJSON) protocol messages on standard input. It writes protocol events to standard output.
+
+```bash
+mastra experiment build [options]
+```
+
+The command writes the worker to `.mastra/experiment-worker` by default. The directory contains the executable entry point, production dependencies, and `experiment-worker-manifest.json`. Treat standard output as protocol-only output. Worker diagnostics are written to standard error.
+
+### Artifact contract
+
+`experiment-worker-manifest.json` identifies the artifact as `mastra-experiment-worker` version `1` and provides:
+
+- The CLI version, creation time, and unique build ID embedded in the executable.
+- Supported protocol and dataset canonicalization versions.
+- The executable, arguments, and working directory required to launch the worker.
+- The dependency manifest and generated lockfile paths.
+- A sorted SHA-256 digest for each artifact file.
+- A SHA-256 content digest derived from those file paths and digests.
+
+The content digest excludes `experiment-worker-manifest.json` to avoid a self-referential digest. Package the manifest with the rest of the directory. Use an outer package digest when the manifest itself must be attested.
+
+### Protocol contract
+
+The worker implements the pinned experiment companion-worker protocol version `1`. It reads strict UTF-8 NDJSON frames from standard input and requires every frame, including the last one, to end with a newline. Frames larger than 1 MiB, malformed or truncated frames, unsupported protocol or canonicalization versions, and messages that don't match the active experiment correlation are rejected as protocol failures.
+
+A run request must match the artifact's embedded build ID and include the ordered dataset item count and SHA-256 attestation. The worker emits contiguous sequence numbers starting at `0`, timer-driven heartbeats, awaited experiment lifecycle events, and exactly one terminal event. Cancellation must match the active protocol version and experiment ID, plus the job ID, attempt, and idempotency key.
+
+Protocol exit codes are:
+
+| Code | Meaning |
+| - | - |
+| `0` | Completed |
+| `10` | Completed with item errors |
+| `20` | Fatal failure |
+| `21` | Retryable failure |
+| `30` | Cancelled |
+| `31` | Timed out |
+| `70` | Protocol failure |
+
+### Packet field handling
+
+The worker passes target identity, ordered inline dataset items, scorer IDs, concurrency, timeout, experiment metadata, request context, tool mocks, and cancellation to `runExperiment`. Scorer versions and artifact provenance are retained as experiment metadata. Scorer code provenance is enforced by artifact admission rather than runtime scorer lookup.
+
+Version `1` uses deterministic undeclared-tool denial. Non-empty network allowlists and secret references are rejected with a policy failure because network enforcement and secret materialization belong to the process sandbox. Dataset item source and expected-trajectory fields are preserved as item metadata when passed to `runExperiment`.
+
+### Flags
+
+#### `--dir`
+
+Path to your Mastra source directory. Defaults to `src/mastra`.
+
+#### `--root`
+
+Project root directory. Defaults to the current directory.
+
+#### `--output-dir`
+
+Custom artifact directory. Relative paths are resolved from the project root. Defaults to `.mastra/experiment-worker`.
+
+#### `--debug`
+
+Enable debug logging during the build.
+
 ## `mastra worker start`
 
-:::info
+:::note
 
 You need to run `mastra worker build` or `mastra build` before using `mastra worker start`.
 
@@ -300,7 +365,7 @@ The command runs `mastra build` and zips the output before uploading it to the s
 
 Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
+After confirmation, the CLI creates a missing project from the `package.json` `name` field and creates a missing target environment, defaulting to `type: staging` for anything other than `production`. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
 
 ```bash
 mastra deploy --env staging --yes
@@ -477,7 +542,7 @@ Emit machine-readable JSON.
 
 Provisions and attaches a managed database, then polls until it's ready. Provisioning errors are printed with the provider's error detail.
 
-By default the database is scoped to a single environment: pass an environment argument to pick it, or omit the argument to have the CLI pick for you. When the project has one environment, that environment is used. When it has several, the CLI prompts you to select one interactively; in non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
+By default, the database is scoped to a single environment. Pass an environment argument to select it. If you omit the argument, the CLI uses the project's only environment or prompts you when several are available. In non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
 
 Environment-scoped databases inherit their provider region from the environment. Shared databases accept `--region`.
 
@@ -490,11 +555,11 @@ mastra env db create --kind neon --name my-app-db --region aws-us-east-1 --share
 
 #### `--kind`
 
-Database provider (required). One of `turso` or `neon`.
+Database provider (required). One of `turso`, `neon`, or `redis`.
 
 #### `--name`
 
-Database name. Defaults to a name derived from the project slug (for example `my-app-db`).
+Database name. Defaults to a name derived from the project slug and provider (for example `my-app-turso` or `my-app-redis`).
 
 #### `--region`
 
@@ -558,7 +623,7 @@ Emit machine-readable JSON.
 
 ## `mastra studio deploy`
 
-:::info
+:::note
 
 `mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
 
@@ -668,7 +733,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ### `mastra studio projects`
 
@@ -676,11 +741,11 @@ Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
+Creates a new project through an interactive prompt, but doesn't accept a `--name` flag. For non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead. That command creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
-:::info
+:::note
 
 `mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
 
@@ -702,7 +767,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ## `mastra server pause`
 
@@ -754,7 +819,7 @@ Lists all environment variables for the linked project. Values are partially mas
 
 ### `mastra server env set`
 
-Sets an environment variable. The CLI reads the current map, applies the change, and uploads the result.
+Sets an environment variable. The CLI reads the current map and applies the change before uploading the result.
 
 ```bash
 mastra server env set <key> <value>
@@ -980,13 +1045,13 @@ Runs database migrations to update your storage schema. This command is useful w
 The command bundles your project and connects to your configured storage backend. It then executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
-- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
+- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/integrations/databases/clickhouse#migrating-from-legacy-to-vnext) for details.
 
 ```bash
 mastra migrate
 ```
 
-See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
+See the [Storage migration guide](/reference/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
 
 It accepts [common flags][common-flags].
 
@@ -1037,9 +1102,9 @@ For runtime commands, the command resolves the target server in this order:
 1. `http://localhost:4111` for a local `mastra dev` server.
 1. `.mastra-project.json` for a Mastra platform project.
 
-Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+Automatic Platform authentication is used when the CLI resolves a project from `.mastra-project.json` or recognizes an explicit Mastra-hosted Studio, Factory, or observability URL. Localhost and arbitrary explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
-For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. Both resolve credentials in this order:
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets the United States endpoint at `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. When the CLI selects either hosted target automatically, it resolves credentials in this order:
 
 1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
 1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
@@ -1048,7 +1113,13 @@ For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targ
 
 Learning commands also send `X-Mastra-Organization-Id`, resolved from an explicit `--header`, `MASTRA_ORGANIZATION_ID` in your environment, or `.mastra-project.json`, in that order.
 
-Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
+European Union observability data is stored at `https://observability.eu.mastra.ai`. Pass that trusted host with `--url`; it uses the same Platform credential resolution as the default United States endpoint:
+
+```bash
+mastra api --url https://observability.eu.mastra.ai trace list
+```
+
+Use `--url` and `--header` when you need to override another target or its credentials.
 
 ### Flags
 
@@ -1163,7 +1234,7 @@ mastra api agent get <agentId>
 
 #### `mastra api agent run`
 
-Runs an agent with JSON input. Use command help to see examples for text prompts, chat messages, and memory thread options.
+Runs an agent with JSON input. Use command help to see examples for text prompts and chat messages, including memory thread options.
 
 ```bash
 mastra api agent run <agentId> <input>
@@ -1307,7 +1378,7 @@ mastra api thread get <threadId>
 
 #### `mastra api thread create`
 
-Creates a memory thread. Pass one JSON input object; the CLI splits fields such as `agentId` into query parameters when required by the server route.
+Creates a memory thread. Pass one JSON input object. The CLI splits fields such as `agentId` into query parameters when required by the server route.
 
 ```bash
 mastra api thread create <input>
@@ -1464,7 +1535,7 @@ mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","p
 
 #### Observability with `curl`
 
-You can call the hosted observability API directly with your platform access token and project ID:
+You can call the hosted observability API directly with your platform access token and project ID. The examples below use the United States host. Substitute `https://observability.eu.mastra.ai` for a European Union environment. The [hosted feedback query API](/docs/mastra-platform/api#observability-feedback-query-api) documents feedback endpoints that don't have CLI commands:
 
 ```bash
 curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \
@@ -1707,6 +1778,8 @@ By default, Mastra collects anonymous information about your project like your O
 When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
 
 At server startup, Mastra also sends an anonymous project-surface snapshot: counts of registered agents, agent controllers, workflows, tools, processors, vector stores, scorers, workspaces, MCP servers, gateways, and channels, plus booleans for memory, voice, editor, and observability usage and the coarse storage backend category. It doesn't send names or identifiers. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+
+The Studio UI also collects anonymous browser-side usage analytics, such as page views and UI interactions. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/playground/src/lib/analytics.tsx) to check what's collected. Setting `MASTRA_TELEMETRY_DISABLED` disables this too: the value is injected into the served page, so it applies to `mastra dev` and self-hosted builds alike.
 
 You can opt out of all CLI and usage analytics by setting an environment variable:
 

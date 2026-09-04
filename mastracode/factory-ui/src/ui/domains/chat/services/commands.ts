@@ -1,43 +1,67 @@
-/**
- * Slash-command registry. A single source of truth for the composer's
- * autocomplete menu and the `/help` listing, so they never drift apart.
- */
-export interface SlashCommand {
-  /** Command name without the leading slash (e.g. "mode"). */
+export interface SlashCommandDescriptor {
   name: string;
-  /** Argument hint shown after the name (e.g. "<id>"). */
   args?: string;
-  /** One-line description. */
   description: string;
+  requiresSession: boolean;
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: 'model', args: '<id>', description: 'Switch model' },
-  { name: 'goal', args: '<objective>', description: 'Set a goal' },
-  { name: 'goal-clear', description: 'Clear the active goal' },
-  { name: 'goal-pause', description: 'Pause the active goal' },
-  { name: 'goal-resume', description: 'Resume the paused goal' },
-  { name: 'permissions', description: 'Show permission rules' },
-  { name: 'yolo', description: 'Auto-allow all tool categories' },
-  { name: 'cost', description: 'Show token usage' },
-  { name: 'think', description: 'Hint on extended thinking' },
-  { name: 'om', description: 'Show observational-memory phase' },
-  { name: 'settings', description: 'Show session state' },
-  { name: 'follow-up', args: '<message>', description: 'Queue a follow-up message' },
-  { name: 'abort', description: 'Abort the current run' },
-  { name: 'help', description: 'Show the command list' },
-];
+export interface SlashCommandOption {
+  value: string;
+  label: string;
+  description?: string;
+  active?: boolean;
+}
 
-/**
- * Commands matching the current draft. Returns the full list while the user has
- * only typed "/", then narrows by prefix as they type the command name. Returns
- * an empty array once a complete command + space has been typed (args phase).
- */
-export function matchCommands(draft: string): SlashCommand[] {
+export interface SlashCommand extends SlashCommandDescriptor {
+  options?: readonly SlashCommandOption[];
+  execute: (rawArguments: string, originalText: string) => Promise<void>;
+}
+
+export interface ParsedSlashCommand {
+  name?: string;
+  rawArguments: string;
+}
+
+export function parseSlashCommand(text: string): ParsedSlashCommand {
+  if (!text.startsWith('/')) return { rawArguments: '' };
+  const withoutSlash = text.slice(1);
+  const firstWhitespace = withoutSlash.search(/\s/);
+  if (firstWhitespace === -1) return { name: withoutSlash, rawArguments: '' };
+  return {
+    name: withoutSlash.slice(0, firstWhitespace),
+    rawArguments: withoutSlash.slice(firstWhitespace).trim(),
+  };
+}
+
+export function commandRequiresReadySession(commands: readonly SlashCommandDescriptor[], text: string): boolean {
+  const { name } = parseSlashCommand(text);
+  return commands.find(command => command.name === name)?.requiresSession ?? false;
+}
+
+export function findCommand<T extends SlashCommandDescriptor>(commands: readonly T[], text: string): T | undefined {
+  const { name } = parseSlashCommand(text);
+  return commands.find(command => command.name === name);
+}
+
+export function matchCommands<T extends SlashCommandDescriptor>(commands: readonly T[], draft: string): T[] {
   if (!draft.startsWith('/')) return [];
   const rest = draft.slice(1);
-  // Once there's whitespace, the user is typing args — stop suggesting.
   if (/\s/.test(rest)) return [];
   const query = rest.toLowerCase();
-  return SLASH_COMMANDS.filter(c => c.name.toLowerCase().startsWith(query));
+  return commands.filter(command => command.name.toLowerCase().startsWith(query));
+}
+
+export function matchCommandOptions(
+  commands: readonly SlashCommand[],
+  draft: string,
+): { command: SlashCommand; options: SlashCommandOption[] } | undefined {
+  if (!draft.startsWith('/')) return undefined;
+  const firstWhitespace = draft.search(/\s/);
+  if (firstWhitespace === -1) return undefined;
+  const command = commands.find(candidate => candidate.name === draft.slice(1, firstWhitespace));
+  if (!command?.options) return undefined;
+  const query = draft.slice(firstWhitespace).trim().toLowerCase();
+  if (/\s/.test(query)) return undefined;
+  const options = command.options.filter(option => option.value.toLowerCase().startsWith(query));
+  return options.length > 0 ? { command, options } : undefined;
 }

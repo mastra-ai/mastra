@@ -81,6 +81,8 @@ export class MockSandbox implements WorkspaceSandbox {
     this.status = 'running';
   }
 
+  async snapshot(): Promise<void> {}
+
   async stop(): Promise<void> {
     this.status = 'stopping';
     this.status = 'stopped';

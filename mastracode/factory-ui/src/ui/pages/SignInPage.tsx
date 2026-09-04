@@ -6,7 +6,6 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useSearchParams } from 'react-router';
-import '@fontsource-variable/mona-sans/standard.css';
 
 import { useApiConfig } from '../../api/config';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
@@ -148,7 +147,10 @@ export function SignInPage() {
   const auth = useFactoryAuth();
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
-  const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
+  const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
+  const authError = searchParams.get('error');
+  const authErrorDescription = searchParams.get('error_description');
+  const accessDenied = authError === 'access_denied';
   const credentialForm = auth.data?.provider === 'better-auth';
   const studioAuth = auth.data?.provider === 'mastra-studio';
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
@@ -162,7 +164,7 @@ export function SignInPage() {
   }
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
@@ -178,6 +180,23 @@ export function SignInPage() {
           </Txt>
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
+            {authError ? (
+              <div role="alert" className="border-accent2/30 bg-surface3 mb-6 rounded-lg border px-4 py-3">
+                <Txt as="p" variant="ui-md" className="text-accent2 font-medium">
+                  {accessDenied ? 'Access denied' : 'Sign-in failed'}
+                </Txt>
+                {authErrorDescription ? (
+                  <Txt as="p" variant="ui-sm" className="text-neutral4 mt-1 leading-5">
+                    {authErrorDescription}
+                  </Txt>
+                ) : null}
+                {accessDenied ? (
+                  <Txt as="p" variant="ui-sm" className="text-neutral3 mt-1 leading-5">
+                    Ask an organization admin to add your account, then sign in again.
+                  </Txt>
+                ) : null}
+              </div>
+            ) : null}
             {credentialForm ? (
               <>
                 <div className="mb-6">

@@ -3,67 +3,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const dbUpdates: Array<Record<string, unknown>> = [];
 
-import { SandboxFleet } from '../../sandbox/fleet.js';
-import type { MaterializationSandbox, SandboxCommandResult, SandboxFactory } from '../../sandbox/fleet.js';
+import { requireExec } from '../../sandbox/materialization.js';
+import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
+import { __clearSessionSandboxesForTests } from '../../sandbox/session-sandbox.js';
 import type {
   ProjectRepositorySandbox,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
   checkoutSessionBranch,
-  computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
-  ensureProjectSandbox as ensureProjectSandboxWithStorage,
-  ensureWorktree,
   isValidGitRef,
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
-  recycleClaimedWorkdir,
   resolveGitIdentity,
-  runWorktreeSetup,
-  safeBranchDir,
+  runSetupCommand,
+  runTeardownCommand,
   shellQuote,
   withInstallToken,
-  WorktreeError,
+  SetupCommandError,
 } from './sandbox.js';
 import type { RepoMaterializeInfo } from './sandbox.js';
-
-/** Minimal cloneable template sandbox standing in for Railway/Local instances. */
-function templateSandbox(opts: { provider?: string; idleTimeoutMinutes?: number } = {}): WorkspaceSandbox {
-  const template = {
-    id: 'template-1',
-    name: 'Template',
-    provider: opts.provider ?? 'railway',
-    ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
-    clone: () => template,
-  };
-  return template as unknown as WorkspaceSandbox;
-}
-
-/** Build a fleet from a factory-shaped sandbox runtime. */
-function makeFleet(
-  opts: { provider?: string; idleTimeoutMinutes?: number; workdirBase?: string; maxSandboxes?: number } = {},
-): SandboxFleet {
-  return new SandboxFleet({
-    machine: templateSandbox(opts),
-    workdirBase: opts.workdirBase ?? '/workspace',
-    ...(opts.maxSandboxes !== undefined ? { maxSandboxes: opts.maxSandboxes } : {}),
-  });
-}
-
-/** The fleet under test; recreated per test, factory overridden as needed. */
-let fleet = makeFleet();
-
-function setSandboxFactory(factory: SandboxFactory): void {
-  fleet.setFactory(factory);
-}
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
 
-class FakeSandbox implements MaterializationSandbox {
+class FakeSandbox implements ExecutableSandbox {
   readonly id = 'logical-id';
   readonly calls: string[] = [];
   startCount = 0;
@@ -74,8 +41,19 @@ class FakeSandbox implements MaterializationSandbox {
     this.responder = responder ?? (() => OK);
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<{ outcome: 'created' | 'connected' }> {
     this.startCount += 1;
+    return { outcome: this.startCount === 1 ? 'created' : 'connected' };
+  }
+
+  env: Record<string, string | undefined> = {};
+  setEnv(update: (env: Record<string, string | undefined>) => Record<string, string | undefined>): void {
+    this.env = { ...update({ ...this.env }) };
+  }
+
+  destroyed = false;
+  async destroy(): Promise<void> {
+    this.destroyed = true;
   }
 
   async getInfo() {
@@ -85,6 +63,8 @@ class FakeSandbox implements MaterializationSandbox {
   async executeCommand(command: string, args?: string[]): Promise<SandboxCommandResult> {
     const script = command === 'sh' && args?.[0] === '-c' ? args[1]! : [command, ...(args ?? [])].join(' ');
     this.calls.push(script);
+    // The workdir resolver probes the VM's default cwd (its home dir).
+    if (script === 'pwd') return { exitCode: 0, stdout: '/home/user\n', stderr: '' };
     return this.responder(script);
   }
 }
@@ -107,28 +87,15 @@ function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMateria
 }
 
 const storage = {
-  setSandboxId: vi.fn(async ({ sandboxId }: { id: string; sandboxId: string }) => {
-    dbUpdates.push({ sandboxId });
-  }),
-  clearBinding: vi.fn(async (_input: { id: string }) => {
-    dbUpdates.push({ sandboxId: null });
-  }),
   markMaterialized: vi.fn(async (_input: { id: string }) => {
     dbUpdates.push({ materializedAt: new Date() });
   }),
-} as unknown as SourceControlStorageHandle['sandboxes'];
-
-function ensureProjectSandbox(
-  row: ProjectRepositorySandbox,
-  onProgress?: Parameters<typeof ensureProjectSandboxWithStorage>[0]['onProgress'],
-) {
-  return ensureProjectSandboxWithStorage({ fleet, row, storage, token: 'install-token', onProgress });
-}
+} as unknown as SourceControlStorageHandle['sessions'];
 
 function materializeRepo(
   row: ProjectRepositorySandbox,
   repoInfo: RepoMaterializeInfo,
-  sandbox: MaterializationSandbox,
+  sandbox: ExecutableSandbox,
   token: string,
 ) {
   return materializeRepoWithStorage({ row, repoInfo, sandbox, token, storage });
@@ -136,91 +103,7 @@ function materializeRepo(
 
 beforeEach(() => {
   dbUpdates.length = 0;
-  fleet = makeFleet();
-});
-
-describe('ensureProjectSandbox', () => {
-  it('provisions a new sandbox and persists the provider id on first open', async () => {
-    const sandbox = new FakeSandbox();
-    setSandboxFactory(() => sandbox);
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(result).toBe(sandbox);
-    expect(sandbox.startCount).toBe(1);
-    expect(dbUpdates).toEqual([{ sandboxId: 'railway-vm-123' }]);
-  });
-
-  it('reattaches to the stored sandbox id without re-persisting', async () => {
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { providerSandboxId?: string } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(factoryArgs?.providerSandboxId).toBe('railway-vm-existing');
-    expect(dbUpdates).toEqual([]);
-  });
-
-  it('authenticates the GitHub CLI in provisioned and reattached sandboxes', async () => {
-    const calls: Parameters<SandboxFactory>[0][] = [];
-    setSandboxFactory(opts => {
-      calls.push(opts);
-      return new FakeSandbox();
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-    await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
-
-    expect(calls).toEqual([
-      expect.objectContaining({ env: { GH_TOKEN: 'install-token' } }),
-      expect.objectContaining({
-        providerSandboxId: 'railway-vm-existing',
-        env: { GH_TOKEN: 'install-token' },
-      }),
-    ]);
-  });
-
-  it('passes the template-configured idle timeout on provision', async () => {
-    fleet = makeFleet({ idleTimeoutMinutes: 15 });
-    const sandbox = new FakeSandbox();
-    let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
-    setSandboxFactory(opts => {
-      factoryArgs = opts;
-      return sandbox;
-    });
-
-    await ensureProjectSandbox(makeRow({ sandboxId: null }));
-
-    expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
-  });
-
-  it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {
-    const dead = new FakeSandbox();
-    dead.start = async () => {
-      throw new Error('sandbox not found');
-    };
-    const fresh = new FakeSandbox();
-    fresh.providerId = 'railway-vm-new';
-
-    const provided: Array<string | undefined> = [];
-    setSandboxFactory(opts => {
-      provided.push(opts.providerSandboxId);
-      return opts.providerSandboxId ? dead : fresh;
-    });
-
-    const result = await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-dead' }));
-
-    // First call reattaches (dead), second provisions fresh.
-    expect(provided).toEqual(['railway-vm-dead', undefined]);
-    expect(result).toBe(fresh);
-    expect(fresh.startCount).toBe(1);
-    // The stale id is cleared, then the new provider id persisted.
-    expect(dbUpdates).toEqual([{ sandboxId: null }, { sandboxId: 'railway-vm-new' }]);
-  });
+  __clearSessionSandboxesForTests();
 });
 
 describe('materializeRepo', () => {
@@ -232,6 +115,8 @@ describe('materializeRepo', () => {
     expect(sandbox.calls[0]).toBe('git --version');
     expect(joined).toContain('git clone --depth=1 --single-branch --branch');
     expect(joined).toContain('https://x-access-token:tok-123@github.com/octocat/hello.git');
+    expect(joined).toContain("find '/workspace/hello' -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +");
+    expect(sandbox.calls).not.toContain("rm -rf '/workspace/hello'");
     // token scrubbed afterwards
     expect(joined).toContain('remote set-url origin');
     expect(joined).toContain('https://github.com/octocat/hello.git');
@@ -239,7 +124,11 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('pulls (not clones) on re-open', async () => {
+  it('leaves an existing checkout of this repo untouched on re-open, whatever it is on', async () => {
+    // A repo template image sits detached at its pinned sha; a resumed session
+    // sits on its branch. Neither gets a fetch or a pull here: the branch
+    // checkout that follows fetches what it needs, and syncing is the
+    // session's business.
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
         return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
@@ -248,11 +137,72 @@ describe('materializeRepo', () => {
     });
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
 
-    const joined = sandbox.calls.join('\n');
-    expect(joined).toContain('git -C ');
-    expect(joined).toContain('pull --ff-only');
+    const gitCalls = sandbox.calls.filter(c => c.includes('git ') && !c.includes('git --version'));
+    expect(gitCalls).toEqual([expect.stringContaining('remote get-url origin')]);
+    expect(sandbox.calls.join('\n')).not.toContain('tok-xyz');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('leaves the checkout alone when the DB says first open but the workdir already holds this repo', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
+
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
+  it('scrubs a tokenized remote an earlier start left behind, without cloning', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('stale');
+  });
+
+  it('surfaces a failed scrub of a stale tokenized remote instead of leaving the token in place', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(String(err.message)).toContain('scrub');
+  });
+
+  it.each([
+    'https://evilgithub.com/octocat/hello.git',
+    'https://github.com.evil.example/octocat/hello.git',
+    'https://github.com/other/hello.git',
+    'https://github.com/octocat/hello-fork.git',
+    'https://github.com:8443/octocat/hello.git',
+    'https://github.com/octocat/hello.git?x=1',
+    'https://github.com//octocat/hello.git',
+    'http://github.com/octocat/hello.git',
+  ])('re-clones over a checkout whose origin is %s', async origin => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) return { exitCode: 0, stdout: `${origin}\n`, stderr: '' };
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
   });
 
   it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
@@ -278,20 +228,24 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
-  it('pulls (not clones) when the DB says first open but the workdir already holds this repo', async () => {
-    // DB/disk drift: a fresh binding row (materializedAt null) over a workdir
-    // that was already cloned by an earlier flow or before a dev DB reset.
+  it('clears a non-empty workdir before cloning so a partial tree cannot wedge the workspace', async () => {
+    // A checkpoint seed or a clone killed partway (crashed/OOM-killed server)
+    // leaves a populated workdir with no usable checkout. `git clone` refuses
+    // a non-empty destination with a non-retryable fatal, so every later
+    // workspace operation failed with "destination path ... already exists and
+    // is not an empty directory" until the sandbox was wiped by hand.
     const sandbox = new FakeSandbox(script => {
       if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+        return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' };
       }
       return OK;
     });
     await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
 
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('pull --ff-only');
+    const rm = sandbox.calls.findIndex(c => c.includes('rm -rf') && c.includes('/workspace/hello'));
+    const clone = sandbox.calls.findIndex(c => c.includes('git clone'));
+    expect(rm).toBeGreaterThanOrEqual(0);
+    expect(clone).toBeGreaterThan(rm);
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
@@ -306,24 +260,6 @@ describe('materializeRepo', () => {
 
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
     expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
-  });
-
-  it('detects an existing checkout even when a tokenized remote was left behind', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://x-access-token:stale@github.com/octocat/hello.git\n', stderr: '' };
-      }
-      return OK;
-    });
-    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-abc');
-
-    const joined = sandbox.calls.join('\n');
-    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
-    expect(joined).toContain('pull --ff-only');
-    // scrub still resets to the tokenless URL
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('stale');
   });
 
   it('throws git-missing when git is absent', async () => {
@@ -348,6 +284,42 @@ describe('materializeRepo', () => {
     expect(err.code).toBe('egress-blocked');
   });
 
+  it('surfaces the clone failure when the token scrub throws on a missing workdir', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.startsWith('test -d')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('remote set-url origin')) {
+        throw new Error('Command failed with ENOENT: The "cwd" option is invalid');
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).not.toContain('additionally');
+  });
+
+  it('reports a failed scrub when the failed clone left the checkout behind', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('git clone')) {
+        return { exitCode: 128, stdout: '', stderr: 'warning: Clone succeeded, but checkout failed.' };
+      }
+      if (script.startsWith('test -d')) return OK;
+      if (script.includes('remote set-url origin')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok-secret').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+    expect(err.message).toMatch(/checkout failed.*Failed to scrub installation token/s);
+  });
+
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
     const err = await materializeRepo(
@@ -370,185 +342,6 @@ describe('materializeRepo', () => {
     expect(sandbox.calls).toHaveLength(0);
   });
 
-  it('keeps a diverged session branch on re-open instead of failing the pull', async () => {
-    // The shared workdir is routinely left on a session's working branch with
-    // local commits. When its upstream moved, `git pull --ff-only` aborts with
-    // "Not possible to fast-forward" — that is the session's work, not an
-    // error, so materialization must succeed and leave the checkout alone.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 128,
-          stdout: '',
-          stderr:
-            "hint: Diverging branches can't be fast-forwarded, you need to either:\nfatal: Not possible to fast-forward, aborting.\n",
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-secret');
-
-    // No destructive recovery: never rebase, reset, or re-clone over the work.
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard/);
-    // Token scrubbed and the binding marked materialized as on any success.
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('tok-secret');
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a dirty checkout as-is when local changes block the pull', async () => {
-    // A previous run left uncommitted modifications in the checkout (e.g. a
-    // changeset-version run or build residue); git refuses to merge over
-    // them. The checkout is intact — keep it, never discard the local state.
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            'error: Your local changes to the following files would be overwritten by merge:\n\tpackage.json\nPlease commit your changes or stash them before you merge.\nAborting\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-secret');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('keeps a checkout with blocking untracked files as-is on re-open', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr:
-            'error: The following untracked working tree files would be overwritten by merge:\n\t.changeset/new-note.md\nPlease move or remove them before you merge.\nAborting\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    const joined = sandbox.calls.join('\n');
-    expect(joined).not.toContain('git clone');
-    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('treats a session branch without an upstream as materialized on re-open', async () => {
-    // Session branches are created from FETCH_HEAD and have no tracking
-    // branch; `git pull` then exits with "no tracking information".
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return {
-          exitCode: 1,
-          stdout: '',
-          stderr: 'There is no tracking information for the current branch.\n',
-        };
-      }
-      return OK;
-    });
-
-    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
-
-    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
-  });
-
-  it('scrubs the tokenized remote even when the pull fails on re-open', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script === 'git --version') return OK;
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(
-      makeRow({ materializedAt: new Date() }),
-      makeRepoInfo(),
-      sandbox,
-      'tok-secret',
-    ).catch(e => e);
-
-    // The pull failure is surfaced...
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    // ...but the token is still scrubbed back to the tokenless URL afterwards,
-    // and no tokenized remote is left as the final remote state.
-    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
-    expect(scrub).toContain('https://github.com/octocat/hello.git');
-    expect(scrub).not.toContain('tok-secret');
-    // The repo is not marked materialized when the pull failed.
-    expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
-  });
-
-  it('surfaces the pull failure (not the scrub failure) when both fail', async () => {
-    // Regression: the scrub in the `finally` used to throw over the in-flight
-    // clone/pull error, hiding the actionable failure (e.g. "cannot change to
-    // <workdir>") behind "Failed to scrub installation token".
-    const sandbox = new FakeSandbox(script => {
-      if (script === 'git --version') return OK;
-      if (script.includes('remote get-url origin')) {
-        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
-      }
-      if (script.includes('pull --ff-only')) {
-        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
-      }
-      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
-        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
-      e => e,
-    );
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(String(err.message)).toContain('not a fast-forward');
-    expect(String(err.message)).not.toContain('scrub');
-  });
-
-  it('surfaces a scrub failure on the success path when the remote reset fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.includes('remote set-url origin') && script.includes('github.com/octocat/hello.git')) {
-        // The final tokenless scrub fails — the token may still be persisted.
-        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
-      }
-      return OK;
-    });
-
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
-      e => e,
-    );
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(String(err.message)).toContain('scrub');
-  });
 });
 
 describe('checkoutSessionBranch', () => {
@@ -621,60 +414,76 @@ describe('checkoutSessionBranch', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('clone-failed');
   });
+
+  it('adopts a branch created concurrently between the show-ref probe and checkout -b', async () => {
+    // Two materializations of the same session raced: the other one created
+    // the branch after this one's probe missed it. Adopt it instead of 500ing.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('checkout -b') && script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain("checkout 'factory/pr-1'");
+    // The healthy branch is adopted as-is — no ref surgery.
+    expect(joined).not.toContain('update-ref -d');
+  });
+
+  it('replaces a broken loose ref and retries the branch create', async () => {
+    // A reused pooled sandbox carries a corrupt loose ref: show-ref cannot
+    // resolve it, checkout -b refuses "already exists", and plain checkout
+    // fails too. Drop the wedged ref and recreate the branch from FETCH_HEAD.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      if (script.includes("checkout 'factory/pr-1'")) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: unable to resolve reference 'refs/heads/factory/pr-1'\n" };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    // `--no-deref` so a broken symref cannot redirect the delete onto another
+    // branch, and the loose-ref-file fallback survives an `update-ref` refusal.
+    expect(joined).toContain("update-ref --no-deref -d refs/heads/'factory/pr-1'");
+    expect(joined).toMatch(/update-ref [^\n]* \|\| rm -f -- "[^\n]*\/refs\/heads\/factory\/pr-1"/);
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' checkout -b 'factory/pr-1' FETCH_HEAD");
+    // Token still scrubbed back to the clean URL in the finally.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('surfaces the collision when the wedged ref cannot be dropped', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('fetch origin')) {
+        return { exitCode: 1, stdout: '', stderr: "fatal: a branch named 'factory/pr-1' already exists\n" };
+      }
+      if (script.includes("checkout 'factory/pr-1'") || script.includes('update-ref --no-deref -d')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: cannot lock ref\n' };
+      }
+      return OK;
+    });
+
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
+  });
 });
 
-describe('recycleClaimedWorkdir', () => {
-  it('is a no-op when the claimed workdir has no checkout yet', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls).toHaveLength(1);
-    expect(sandbox.calls[0]).toContain('rev-parse --is-inside-work-tree');
-  });
-
-  it('resets the previous session state back to the default branch', async () => {
-    const sandbox = new FakeSandbox();
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    const recycle = sandbox.calls[1]!;
-    expect(recycle).toContain("checkout -f 'main'");
-    expect(recycle).toContain('reset --hard');
-    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
-    expect(recycle).toContain('clean -fdx');
-    expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
-  });
-
-  it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('checkout -f') ? { exitCode: 1, stdout: '', stderr: 'index locked' } : OK,
-    );
-
-    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
-
-    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
-  });
-
-  it('throws when the wedged checkout cannot even be wiped', async () => {
-    const sandbox = new FakeSandbox(script =>
-      script.includes('rev-parse') ? OK : { exitCode: 1, stdout: '', stderr: 'device busy' },
-    );
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main')).rejects.toBeInstanceOf(MaterializeError);
-  });
-
-  it('refuses shell-hostile default branch names', async () => {
-    const sandbox = new FakeSandbox();
-
-    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main; rm -rf /')).rejects.toBeInstanceOf(
-      MaterializeError,
-    );
-    expect(sandbox.calls).toHaveLength(0);
-  });
-});
 
 describe('isValidGitRef', () => {
   it('accepts normal branch names', () => {
@@ -796,6 +605,24 @@ describe('withInstallToken', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('rethrows the error fn threw when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote set-url origin') && !script.includes('x-access-token')
+        ? { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' }
+        : OK,
+    );
+    const primary = new SetupCommandError('setup command failed', 'setup-failed');
+
+    const err = await withInstallToken(sandbox, '/workspace/hello', 'octocat/hello', 'tok-secret', async () => {
+      throw primary;
+    }).catch(e => e);
+
+    // Routes map SetupCommandError and MaterializeError to different responses.
+    expect(err).toBe(primary);
+    expect(err.code).toBe('setup-failed');
+    expect(err.message).toMatch(/setup command failed.*Failed to scrub installation token/s);
+  });
+
   it('rejects a malformed repo full name before touching the remote', async () => {
     const sandbox = new FakeSandbox();
     const err = await withInstallToken(sandbox, '/workspace/hello', 'evil; whoami', 'tok', async () => undefined).catch(
@@ -843,6 +670,22 @@ describe('pushBranch', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('keeps the push failure and its classification when the scrub also fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('push -u origin')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 255, stdout: '', stderr: 'error: could not lock config file .git/config' };
+      }
+      return OK;
+    });
+    const err = await pushBranch(sandbox, '/workspace/hello', 'feat/x', 'tok-secret', 'octocat/hello').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('egress-blocked');
+    expect(err.message).toMatch(/could not reach github\.com.*Failed to scrub installation token/s);
+  });
+
   it('classifies an egress failure during push', async () => {
     const sandbox = new FakeSandbox(script =>
       script.includes('push -u origin')
@@ -855,161 +698,21 @@ describe('pushBranch', () => {
   });
 });
 
-describe('safeBranchDir', () => {
-  it('leaves already-safe names untouched', () => {
-    expect(safeBranchDir('main')).toBe('main');
-    expect(safeBranchDir('release-1.2.3')).toBe('release-1.2.3');
-  });
-
-  it('collapses slashes and unsafe chars and appends a hash to stay unique', () => {
-    expect(safeBranchDir('feat/cloud-agent')).toBe('feat-cloud-agent-53bf6e98');
-    expect(safeBranchDir('release/1.2.3')).toBe('release-1.2.3-88ded651');
-  });
-
-  it('never produces an empty segment', () => {
-    expect(safeBranchDir('///')).toBe('work-732c4e97');
-  });
-
-  it('gives ambiguous branches distinct directories', () => {
-    // Without the hash suffix both of these would collapse to `feat-a`.
-    expect(safeBranchDir('feat/a')).not.toBe(safeBranchDir('feat-a'));
-  });
-});
-
-describe('computeWorktreePath', () => {
-  it('places worktrees in a sibling worktrees/ dir of the repo checkout', () => {
-    expect(computeWorktreePath('/workspace/hello', 'feat/x')).toBe('/workspace/worktrees/feat-x-79b4cc55');
-  });
-
-  it('tolerates a trailing slash on the repo workdir', () => {
-    expect(computeWorktreePath('/workspace/hello/', 'main')).toBe('/workspace/worktrees/main');
-  });
-});
-
-describe('ensureWorktree', () => {
-  const WT_OPTS = { branch: 'feat/x', baseBranch: 'main', token: 'tok', repoFullName: 'octocat/hello' };
-
-  // The default FakeSandbox responder returns OK for everything, which would
-  // make `test -e <path>/.git` look like the worktree already exists. Use a
-  // responder that fails the existence check so the create path runs.
-  const notExisting = (script: string): SandboxCommandResult =>
-    script.startsWith('test -e') ? { exitCode: 1, stdout: '', stderr: '' } : OK;
-
-  it('creates a branch + worktree from the freshly fetched origin base when none exists', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result).toEqual({
-      worktreePath: '/workspace/worktrees/feat-x-79b4cc55',
-      branch: 'feat/x',
-      baseBranch: 'main',
-      reused: false,
-    });
-    const joined = sandbox.calls.join('\n');
-    // The base branch is fetched from origin with an explicit refspec so the
-    // fork point is the latest remote state, not the stale local ref.
-    expect(joined).toContain("git -C '/workspace/hello' fetch origin '+refs/heads/main:refs/remotes/origin/main'");
-    expect(joined).toContain(
-      "git -C '/workspace/hello' worktree add --no-track -B 'feat/x' '/workspace/worktrees/feat-x-79b4cc55' 'origin/main'",
-    );
-  });
-
-  it('fetches with the install token and scrubs the remote afterwards', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    const setUrlIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && c.includes('tok'));
-    const fetchIdx = sandbox.calls.findIndex(c => c.includes('fetch origin'));
-    const scrubIdx = sandbox.calls.findIndex(c => c.includes('remote set-url origin') && !c.includes('tok'));
-    expect(setUrlIdx).toBeGreaterThanOrEqual(0);
-    expect(fetchIdx).toBeGreaterThan(setUrlIdx);
-    expect(scrubIdx).toBeGreaterThan(fetchIdx);
-  });
-
-  it('fails instead of forking a stale local ref when the fetch fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin')) return { exitCode: 128, stdout: '', stderr: 'fatal: unable to fetch' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('pull-failed');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-  });
-
-  it('classifies an egress-blocked fetch failure', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('fetch origin'))
-        return { exitCode: 128, stdout: '', stderr: 'fatal: unable to access: Could not resolve host: github.com' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(MaterializeError);
-    expect(err.code).toBe('egress-blocked');
-  });
-
-  it('reuses an existing worktree without fetching or running git worktree add', async () => {
-    // Default responder => `test -e` returns OK => path exists => reuse.
-    const sandbox = new FakeSandbox();
-    const result = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS);
-
-    expect(result.reused).toBe(true);
-    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x-79b4cc55');
-    expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
-    expect(sandbox.calls.some(c => c.includes('fetch origin'))).toBe(false);
-  });
-
-  it('rejects an unsafe branch name before touching the sandbox', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      branch: "x'; rm -rf /; '",
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('rejects an unsafe base branch name', async () => {
-    const sandbox = new FakeSandbox(notExisting);
-    const err = await ensureWorktree(sandbox, '/workspace/hello', {
-      ...WT_OPTS,
-      baseBranch: 'bad branch',
-    }).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('invalid-branch');
-    expect(sandbox.calls).toHaveLength(0);
-  });
-
-  it('surfaces a worktree-failed error when git worktree add fails', async () => {
-    const sandbox = new FakeSandbox(script => {
-      if (script.startsWith('test -e')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('worktree add')) return { exitCode: 1, stdout: '', stderr: 'fatal: branch in use' };
-      return OK;
-    });
-    const err = await ensureWorktree(sandbox, '/workspace/hello', WT_OPTS).catch(e => e);
-    expect(err).toBeInstanceOf(WorktreeError);
-    expect(err.code).toBe('worktree-failed');
-  });
-});
-
-describe('runWorktreeSetup', () => {
+describe('runSetupCommand', () => {
   it('runs the command inside the worktree directory', async () => {
     const sandbox = new FakeSandbox();
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i && pnpm build');
 
     expect(sandbox.calls).toHaveLength(1);
     expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feat-x'");
     expect(sandbox.calls[0]).toContain('pnpm i && pnpm build');
   });
 
-  it('throws a setup-failed WorktreeError with the command output on a non-zero exit', async () => {
+  it('throws a setup-failed SetupCommandError with the command output on a non-zero exit', async () => {
     const sandbox = new FakeSandbox(() => ({ exitCode: 1, stdout: '', stderr: 'ERR_PNPM_NO_LOCKFILE' }));
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
-    expect(err).toBeInstanceOf(WorktreeError);
+    expect(err).toBeInstanceOf(SetupCommandError);
     expect(err.code).toBe('setup-failed');
     expect(err.message).toContain('exit 1');
     expect(err.message).toContain('ERR_PNPM_NO_LOCKFILE');
@@ -1021,13 +724,13 @@ describe('runWorktreeSetup', () => {
       const sandbox = new FakeSandbox();
       // A sandbox whose shell never returns must not hang the request forever.
       sandbox.executeCommand = () => new Promise<never>(() => {});
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       const outcome = pending.catch(e => e);
       await vi.advanceTimersByTimeAsync(15 * 60_000 + 1_000);
       const err = await outcome;
       expect(err).toBeInstanceOf(Error);
       expect(err.message).toContain('timed out');
-      expect(err.message).toContain('worktree setup');
+      expect(err.message).toContain('setup command');
     } finally {
       vi.useRealTimers();
     }
@@ -1037,9 +740,45 @@ describe('runWorktreeSetup', () => {
     const sandbox = new FakeSandbox();
     const spy = vi.spyOn(sandbox, 'executeCommand');
 
-    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+    await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
 
     expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+  });
+});
+
+describe('runTeardownCommand', () => {
+  it('uses the same quoted workdir shell and reports bounded command output', async () => {
+    const sandbox = new FakeSandbox(() => ({ exitCode: 9, stdout: '', stderr: `prefix-${'x'.repeat(3000)}` }));
+    const err = await runTeardownCommand(
+      sandbox,
+      "/workspace/worktrees/feature's-branch",
+      'pnpm local worktree teardown',
+    ).catch(e => e);
+
+    expect(sandbox.calls[0]).toContain("cd '/workspace/worktrees/feature'\\''s-branch'");
+    expect(err).toBeInstanceOf(SetupCommandError);
+    expect(err.code).toBe('teardown-failed');
+    expect(err.message).toContain('exit 9');
+    expect(err.message.length).toBeLessThan(2100);
+  });
+
+  it('times out with the teardown phase while forwarding the same provider budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox();
+      const execute = vi.fn(() => new Promise<never>(() => {}));
+      sandbox.executeCommand = execute;
+      const outcome = runTeardownCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm local teardown', {
+        timeoutMs: 20,
+      }).catch(e => e);
+      await vi.advanceTimersByTimeAsync(21);
+
+      const err = await outcome;
+      expect(err.message).toContain('teardown command');
+      expect(execute).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 20 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -1056,7 +795,7 @@ describe('sh transport retry', () => {
         return OK;
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
       await vi.advanceTimersByTimeAsync(2000);
       await pending;
 
@@ -1073,7 +812,7 @@ describe('sh transport retry', () => {
         throw Object.assign(new Error('Platform proxy request failed with 500'), { status: 500 });
       });
 
-      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+      const pending = runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
       await vi.advanceTimersByTimeAsync(10_000);
       const err = await pending;
 
@@ -1089,11 +828,85 @@ describe('sh transport retry', () => {
       throw Object.assign(new Error('Sandbox not found'), { status: 404 });
     });
 
-    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+    const err = await runSetupCommand(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
 
     expect(err.status).toBe(404);
     expect(sandbox.calls).toHaveLength(1);
   });
+});
+
+describe('git transfer retry', () => {
+  // A git command that reaches github.com and then loses the connection exits
+  // non-zero rather than throwing, so the `sh` transport retry above never sees
+  // it. One HTTP/2 hiccup used to permanently fail opening a workspace.
+  const HTTP2_GLITCH = {
+    exitCode: 128,
+    stdout: '',
+    stderr: "fatal: unable to access 'https://github.com/octocat/hello.git/': Error in the HTTP2 framing layer",
+  };
+
+  it('retries a clone that lost the connection mid-transfer and succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      let clones = 0;
+      const sandbox = new FakeSandbox(script => {
+        if (script.includes('git clone')) return ++clones === 1 ? HTTP2_GLITCH : OK;
+        return OK;
+      });
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(clones).toBe(2);
+      // The dead attempt leaves a partial directory that git refuses to clone
+      // into, so the retry has to clear it first.
+      const cloneCalls = sandbox.calls.filter(call => call.includes('git clone'));
+      // Skip the pre-clone wipe that clears a dirty destination up front.
+      const firstClone = sandbox.calls.indexOf(cloneCalls[0]!);
+      const wipe = sandbox.calls.findIndex(
+        (call, i) => i > firstClone && call.includes('-mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'),
+      );
+      expect(cloneCalls).toHaveLength(2);
+      expect(wipe).toBeGreaterThan(firstClone);
+      expect(wipe).toBeLessThan(sandbox.calls.lastIndexOf(cloneCalls[1]!));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up and reports the clone failure once the retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox(script => (script.includes('git clone') ? HTTP2_GLITCH : OK));
+
+      const pending = materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await pending;
+
+      expect(err).toBeInstanceOf(MaterializeError);
+      expect(err.code).toBe('clone-failed');
+      expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry a refusal, which would only fail slower', async () => {
+    // Bad credentials, a missing repo, or blocked egress are settled answers:
+    // the user needs them now, not in six seconds.
+    const sandbox = new FakeSandbox(script =>
+      script.includes('git clone')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: Authentication failed for https://github.com/octocat/hello/' }
+        : OK,
+    );
+
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
+
+    expect(err.code).toBe('clone-failed');
+    expect(sandbox.calls.filter(call => call.includes('git clone'))).toHaveLength(1);
+  });
+
 });
 
 describe('createPullRequest', () => {
@@ -1242,5 +1055,20 @@ describe('createPullRequest', () => {
     }).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pr-failed');
+  });
+});
+
+describe('requireExec', () => {
+  it('accepts a sandbox that can run commands', () => {
+    const sandbox = new FakeSandbox();
+    expect(requireExec(sandbox as unknown as WorkspaceSandbox)).toBe(sandbox);
+  });
+
+  it('names the missing capability instead of failing later inside a git helper', () => {
+    // A filesystem-only provider: `executeCommand` is optional on core's
+    // `WorkspaceSandbox`, so this is a legal sandbox that simply cannot serve
+    // the git routes.
+    const filesystemOnly = { id: 'sbx-1', provider: 'read-only-fs' } as unknown as WorkspaceSandbox;
+    expect(() => requireExec(filesystemOnly)).toThrow(/'read-only-fs' does not support executeCommand/);
   });
 });

@@ -3,7 +3,7 @@ import { MastraClientError } from '../types';
 
 export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 
-type ParsedA2AEvent = { done: true; event?: never } | { done?: false; event?: A2AStreamEventData };
+type ParsedA2AEvent<T> = { done: true; event?: never } | { done?: false; event?: T };
 
 function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
   const normalizedBuffer = buffer.replace(/\x1E/g, '\n\n');
@@ -20,7 +20,7 @@ function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
   };
 }
 
-function parseEventBlock(eventBlock: string): ParsedA2AEvent {
+function parseEventBlock<T>(eventBlock: string): ParsedA2AEvent<T> {
   const trimmedBlock = eventBlock.trim();
 
   if (!trimmedBlock) {
@@ -50,15 +50,15 @@ function parseEventBlock(eventBlock: string): ParsedA2AEvent {
   }
 
   if (parsed && typeof parsed === 'object' && 'result' in parsed) {
-    return { event: parsed.result as A2AStreamEventData };
+    return { event: parsed.result as T };
   }
 
-  return { event: parsed as A2AStreamEventData };
+  return { event: parsed as T };
 }
 
-export async function* processA2AStream(
+export async function* processA2AStream<T = A2AStreamEventData>(
   stream: globalThis.ReadableStream<Uint8Array>,
-): AsyncGenerator<A2AStreamEventData, void, undefined> {
+): AsyncGenerator<T, void, undefined> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -81,7 +81,7 @@ export async function* processA2AStream(
           break;
         }
 
-        const parsedEvent = parseEventBlock(eventBlock);
+        const parsedEvent = parseEventBlock<T>(eventBlock);
 
         if (parsedEvent.done) {
           return;
@@ -98,7 +98,7 @@ export async function* processA2AStream(
     }
 
     if (buffer.trim()) {
-      const parsedEvent = parseEventBlock(buffer);
+      const parsedEvent = parseEventBlock<T>(buffer);
 
       if (!parsedEvent.done && parsedEvent.event) {
         yield parsedEvent.event;

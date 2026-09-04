@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk';
+import type { AgentCard, Message, Task, TaskArtifactUpdateEvent, TaskStatusUpdateEvent } from '@a2a-js/sdk-v0_3';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../agent/message-list';
@@ -156,6 +156,33 @@ function isTerminalTaskState(state: Task['status']['state'] | undefined) {
   return state === 'completed' || state === 'failed' || state === 'canceled' || state === 'rejected';
 }
 
+function isInterruptedTaskState(state: Task['status']['state'] | undefined) {
+  return state === 'input-required' || state === 'auth-required';
+}
+
+function throwIfA2AErrorResponse(response: unknown): void {
+  if (!response || typeof response !== 'object' || !('error' in response)) {
+    return;
+  }
+
+  const error = response.error;
+  if (error == null) {
+    return;
+  }
+
+  if (
+    typeof error !== 'object' ||
+    !('code' in error) ||
+    typeof error.code !== 'number' ||
+    !('message' in error) ||
+    typeof error.message !== 'string'
+  ) {
+    throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned a malformed JSON-RPC error response.');
+  }
+
+  throw new MastraA2AError(error.code, error.message, 'data' in error ? error.data : undefined);
+}
+
 function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
   const normalizedBuffer = buffer.replace(/\x1E/g, '\n\n');
   const match = normalizedBuffer.match(/\r?\n\r?\n/);
@@ -192,6 +219,8 @@ function parseEventBlock(eventBlock: string): { done: true } | { event?: A2AStre
   } catch {
     return {};
   }
+
+  throwIfA2AErrorResponse(parsed);
 
   if ('result' in parsed && parsed.result) {
     return { event: parsed.result };
@@ -329,6 +358,19 @@ function resumeDataToPrompt(resumeData: unknown): string {
   return JSON.stringify(resumeData, null, 2);
 }
 
+/**
+ * Structured resume data is also sent as an A2A data part — the spec-idiomatic
+ * carrier for machine-readable input — alongside the JSON text part kept for
+ * servers that only read text.
+ */
+function resumeDataToDataPart(resumeData: unknown): Record<string, unknown> | undefined {
+  if (!resumeData || typeof resumeData !== 'object' || Array.isArray(resumeData)) {
+    return undefined;
+  }
+
+  return resumeData as Record<string, unknown>;
+}
+
 function createResumeSchema(): string {
   return JSON.stringify({
     type: 'object',
@@ -439,6 +481,8 @@ function unwrapA2AResult(result: unknown): Message | Task {
   if (!result || typeof result !== 'object') {
     throw MastraA2AError.invalidAgentResponse('Remote A2A agent returned an invalid response.');
   }
+
+  throwIfA2AErrorResponse(result);
 
   if ('result' in result && result.result && typeof result.result === 'object') {
     return result.result as Message | Task;
@@ -585,9 +629,10 @@ export class A2AAgent implements SubAgent {
         bootstrap,
         runId,
         prompt,
+        data: resumeDataToDataPart(resumeData),
         signal: options?.abortSignal,
         contextId: state.contextId,
-        referenceTaskIds: state.taskId ? [state.taskId] : undefined,
+        taskId: state.taskId,
         ...memoryInfo,
       });
     }
@@ -661,9 +706,10 @@ export class A2AAgent implements SubAgent {
         bootstrap,
         runId,
         prompt,
+        data: resumeDataToDataPart(resumeData),
         signal: options?.abortSignal,
         contextId: state.contextId,
-        referenceTaskIds: state.taskId ? [state.taskId] : undefined,
+        taskId: state.taskId,
         // Resumed runs skip the `start` chunk, mirroring the regular Agent loop.
         emitStart: false,
         ...memoryInfo,
@@ -726,15 +772,17 @@ export class A2AAgent implements SubAgent {
   async #sendMessage({
     bootstrap,
     prompt,
+    data,
     signal,
     contextId,
-    referenceTaskIds,
+    taskId,
   }: {
     bootstrap: AgentBootstrap;
     prompt: string;
+    data?: Record<string, unknown>;
     signal?: AbortSignal;
     contextId?: string;
-    referenceTaskIds?: string[];
+    taskId?: string;
   }): Promise<Message | Task> {
     const response = await this.#request(bootstrap.executionUrl, {
       method: 'POST',
@@ -748,9 +796,9 @@ export class A2AAgent implements SubAgent {
             role: 'user',
             kind: 'message',
             messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }],
+            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
             ...(contextId ? { contextId } : {}),
-            ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
+            ...(taskId ? { taskId } : {}),
           },
         },
       } satisfies JSONRPCRequestBody,
@@ -764,27 +812,30 @@ export class A2AAgent implements SubAgent {
     bootstrap,
     runId,
     prompt,
+    data,
     signal,
     contextId,
-    referenceTaskIds,
+    taskId,
     threadId,
     resourceId,
   }: {
     bootstrap: AgentBootstrap;
     runId: string;
     prompt: string;
+    data?: Record<string, unknown>;
     signal?: AbortSignal;
     contextId?: string;
-    referenceTaskIds?: string[];
+    taskId?: string;
     threadId?: string;
     resourceId?: string;
   }): Promise<A2AAgentGenerateResult> {
     const response = await this.#sendMessage({
       bootstrap,
       prompt,
+      data,
       signal,
       contextId,
-      referenceTaskIds,
+      taskId,
     });
 
     if (isMessage(response)) {
@@ -885,7 +936,7 @@ export class A2AAgent implements SubAgent {
         lastTask: evaluation.task,
       });
 
-      if (evaluation.task.status.state === 'input-required') {
+      if (isInterruptedTaskState(evaluation.task.status.state)) {
         return createGenerateResult({
           runId,
           text: evaluation.text,
@@ -910,7 +961,7 @@ export class A2AAgent implements SubAgent {
   #evaluateTask({ bootstrap, task }: { bootstrap: AgentBootstrap; task: Task }): TerminalEvaluation {
     const text = extractTaskText(task);
 
-    if (task.status.state === 'input-required') {
+    if (isInterruptedTaskState(task.status.state)) {
       return {
         kind: 'suspended',
         text,
@@ -954,9 +1005,10 @@ export class A2AAgent implements SubAgent {
     bootstrap,
     runId,
     prompt,
+    data,
     signal,
     contextId,
-    referenceTaskIds,
+    taskId,
     threadId,
     resourceId,
     emitStart,
@@ -964,9 +1016,10 @@ export class A2AAgent implements SubAgent {
     bootstrap: AgentBootstrap;
     runId: string;
     prompt: string;
+    data?: Record<string, unknown>;
     signal?: AbortSignal;
     contextId?: string;
-    referenceTaskIds?: string[];
+    taskId?: string;
     threadId?: string;
     resourceId?: string;
     emitStart: boolean;
@@ -984,9 +1037,9 @@ export class A2AAgent implements SubAgent {
             role: 'user',
             kind: 'message',
             messageId: randomUUID(),
-            parts: [{ kind: 'text', text: prompt }],
+            parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
             ...(contextId ? { contextId } : {}),
-            ...(referenceTaskIds?.length ? { referenceTaskIds } : {}),
+            ...(taskId ? { taskId } : {}),
           },
         },
       } satisfies JSONRPCRequestBody,
@@ -1189,7 +1242,7 @@ export class A2AAgent implements SubAgent {
 
           if (isTask(event)) {
             task = event;
-            if (event.status.state === 'input-required') {
+            if (isInterruptedTaskState(event.status.state)) {
               suspended = {
                 taskId: event.id,
                 contextId: event.contextId,
@@ -1234,7 +1287,7 @@ export class A2AAgent implements SubAgent {
                   status: event.status,
                 }
               : task;
-            if (event.status.state === 'input-required' && task) {
+            if (isInterruptedTaskState(event.status.state) && task) {
               suspended = {
                 taskId: task.id,
                 contextId: task.contextId,
@@ -1328,7 +1381,7 @@ export class A2AAgent implements SubAgent {
             task = event;
             textBuffer = extractTaskArtifactText(event) || textBuffer;
 
-            if (event.status.state === 'input-required') {
+            if (isInterruptedTaskState(event.status.state)) {
               suspended = {
                 payload: {
                   taskId: event.id,
@@ -1373,7 +1426,7 @@ export class A2AAgent implements SubAgent {
                 }
               : task;
 
-            if (event.status.state === 'input-required' && task) {
+            if (isInterruptedTaskState(event.status.state) && task) {
               suspended = {
                 payload: {
                   taskId: task.id,

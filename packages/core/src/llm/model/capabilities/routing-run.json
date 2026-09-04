@@ -8,7 +8,8 @@
     "kimi-k2.6",
     "kimi-k2.6-nitro",
     "kimi-k2.7-code",
-    "kimi-k2.7-code-nitro"
+    "kimi-k2.7-code-nitro",
+    "qwen3.5-9b"
   ],
   "temperature": [
     "claude-sonnet-4-6",

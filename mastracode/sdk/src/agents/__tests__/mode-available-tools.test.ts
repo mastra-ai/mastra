@@ -44,6 +44,12 @@ describe('mode availableTools configuration', () => {
       expect(tools).toContain(MC_TOOLS.STRING_REPLACE_LSP);
     });
 
+    it('leaves the plan directory to the session-specific system prompt', () => {
+      expect(planMode.instructions).toContain('session-specific plan directory identified in your system prompt');
+      expect(planMode.instructions).not.toContain('.mastracode/plans/');
+      expect(planMode.instructions).not.toContain('.artifacts/plans/');
+    });
+
     it('allows plan-mode writes to any .md file inside .mastracode/plans/', () => {
       const projectPath = '/tmp/mastracode-plan-guard';
       // Mirror the real HarnessRequestContext shape: session.modeId is a string
@@ -91,6 +97,58 @@ describe('mode availableTools configuration', () => {
         proceed: false,
         output: 'Plan mode can only write plan files inside .mastracode/plans/. Refusing to edit src/index.ts.',
       });
+    });
+
+    it('allows Factory plan files only inside .artifacts/plans/', () => {
+      const projectPath = '/tmp/mastracode-factory-plan-guard';
+      const context = {
+        requestContext: {
+          harness: {
+            session: {
+              modeId: 'plan',
+              state: { get: () => ({ projectPath, factoryProjectId: 'factory-123' }) },
+            },
+          },
+        },
+      };
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.artifacts/plans/add-dark-mode.md' },
+          context,
+        }),
+      ).toBeUndefined();
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.STRING_REPLACE_LSP,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+          input: { path: `${projectPath}/.artifacts/plans/another-plan.md` },
+          context,
+        }),
+      ).toBeUndefined();
+
+      for (const inputPath of [
+        '.mastracode/plans/legacy.md',
+        'src/index.ts',
+        '.artifacts/plans/notes.txt',
+        '.artifacts/plans/sub/plan.md',
+        '.artifacts/plans/../../evil.md',
+      ]) {
+        expect(
+          guardPlanModePlanFileWrites({
+            toolName: MC_TOOLS.WRITE_FILE,
+            workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+            input: { path: inputPath },
+            context,
+          }),
+        ).toMatchObject({
+          proceed: false,
+          output: `Plan mode can only write plan files inside .artifacts/plans/. Refusing to edit ${inputPath}.`,
+        });
+      }
     });
 
     it('rejects plan-mode writes to non-markdown or nested paths inside the plans dir', () => {

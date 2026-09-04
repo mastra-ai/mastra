@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 // Keep prompt tests independent from optional web-search package artifacts.
 vi.mock('../../tools/index.js', () => ({
+  hasParallelKey: () => false,
   hasTavilyKey: () => false,
 }));
 
@@ -160,6 +161,29 @@ describe('buildFullPrompt', () => {
     );
     expect(prompt).toContain('**Start as goal**');
     expect(prompt).toContain('goal judge can tell when the work is done');
+  });
+
+  it('uses Factory artifact paths consistently throughout the plan prompt', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'plan',
+      activePlan: null,
+      modeId: 'plan',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        factoryProjectId: 'factory-123',
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('.artifacts/plans/');
+    expect(prompt).toContain('.artifacts/plans/add-dark-mode.md');
+    expect(prompt).not.toContain('.mastracode/plans/');
   });
 
   it('includes the selected model id in commit co-author guidance', () => {

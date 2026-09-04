@@ -4,11 +4,14 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
+  resolveDefaultThinkingLevel,
+  resolveModePackModels,
   resolveThreadActiveModelPackId,
   saveSettings,
+  stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
@@ -92,8 +95,14 @@ async function selectModel(
       titleColor: modeColor,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
-        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-        resolve(model.id);
+        const apiKeyResult = await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        if (apiKeyResult === 'cancelled') {
+          resolve(undefined);
+          return;
+        }
+        ctx.state.controller.invalidateAvailableModelsCache();
+        const { customProviders } = loadSettings();
+        resolve(stripMastraCodeCustomProviderPrefix(model.id, customProviders));
       },
       onCancel: () => {
         ctx.state.ui.hideOverlay();
@@ -182,6 +191,63 @@ async function askCustomPackAction(
     };
 
     detailText.setText(detailById['activate']!);
+    container.addChild(selectList);
+    container.addChild(new Spacer(1));
+    container.addChild(detailText);
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg('dim', '↑↓ navigate · Enter select · Esc cancel'), 0, 0));
+    (container as Box & { handleInput: (data: string) => void }).handleInput = (data: string) =>
+      selectList.handleInput(data);
+
+    showModalOverlay(ctx.state.ui, container, { maxHeight: '75%' });
+  });
+}
+
+async function askModifiedBuiltinPackAction(
+  ctx: SlashCommandContext,
+  pack: ModePack,
+  builtinPack: ModePack,
+): Promise<'activate' | 'reset' | null> {
+  const actions = [
+    { id: 'activate', label: 'Activate', description: 'Use the modified models' },
+    { id: 'reset', label: 'Reset to built-in models', description: 'Remove all overrides' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(4, 2, text => theme.bg('overlayBg', text));
+    container.addChild(new Text(theme.bold(theme.fg('warning', `Modified built-in pack: ${pack.name}`)), 0, 0));
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(action => ({
+      value: action.id,
+      label: `  ${action.label}  ${theme.fg('dim', action.description)}`,
+    }));
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+    const detailText = new Text('', 0, 0);
+    const detailById: Record<string, string> = {
+      activate: `${theme.fg('warning', '  This built-in pack has model overrides.')}\n${getModifiedPackDetail(pack, builtinPack)}`,
+      reset: `${theme.fg('dim', '  Restore the original built-in models:')}\n${getPackDetail(builtinPack)}`,
+    };
+
+    const closeOverlay = () => {
+      ctx.state.ui.hideOverlay();
+      ctx.state.ui.requestRender();
+    };
+
+    selectList.onSelectionChange = item => {
+      detailText.setText(detailById[item.value] ?? '');
+      ctx.state.ui.requestRender();
+    };
+    selectList.onSelect = item => {
+      closeOverlay();
+      resolve(item.value as 'activate' | 'reset');
+    };
+    selectList.onCancel = () => {
+      closeOverlay();
+      resolve(null);
+    };
+
+    detailText.setText(detailById.activate!);
     container.addChild(selectList);
     container.addChild(new Spacer(1));
     container.addChild(detailText);
@@ -330,6 +396,13 @@ async function runCustomPackEditFlow(
   }
 }
 
+export function resetBuiltinPackOverrides(settings: GlobalSettings, packId: string): void {
+  delete settings.models.modePackOverrides?.[packId];
+  if (settings.models.activeModelPackId === packId) {
+    settings.models.modeDefaults = {};
+  }
+}
+
 export function upsertCustomPackInSettings(
   settings: GlobalSettings,
   pack: ModePack,
@@ -401,15 +474,44 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
 
   s.models.subagentModels = {};
 
-  const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
-  const currentThinking = ((ctx.state.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
-  if (hasOpenAI && currentThinking === 'off') {
-    await ctx.state.session.state.set({ thinkingLevel: 'low' } as any);
+  const hasOpenAI = Object.values(pack.models).some(modelId => modelId.startsWith('openai/'));
+  const sessionOverride = (ctx.state.session.state.get() as any)?.thinkingLevel as string | undefined;
+  const defaultThinking = resolveDefaultThinkingLevel(s, currentModeId);
+  const effectiveThinking = sessionOverride ?? defaultThinking.level;
+  if (
+    hasOpenAI &&
+    sessionOverride === undefined &&
+    defaultThinking.source === 'global' &&
+    defaultThinking.level === 'off'
+  ) {
+    // Bump the active global fallback so OpenAI models don't silently run
+    // without reasoning, while preserving explicit session and mode defaults.
     s.preferences.thinkingLevel = 'low';
+  } else if (currentModeModel?.startsWith('openai/') && effectiveThinking === 'max') {
+    // OpenAI API-key models do not accept the Codex-only `max` effort.
+    await ctx.state.session.state.set({ thinkingLevel: 'xhigh' });
   }
 
   saveSettings(s);
   updateStatusLine(ctx.state);
+}
+
+export function getOverriddenPackModes(pack: ModePack, builtinPack: ModePack): Array<'plan' | 'build' | 'fast'> {
+  return (['plan', 'build', 'fast'] as const).filter(mode => pack.models[mode] !== builtinPack.models[mode]);
+}
+
+function getModifiedPackDetail(pack: ModePack, builtinPack: ModePack): string {
+  const overriddenModes = new Set(getOverriddenPackModes(pack, builtinPack));
+  const modelText = (mode: 'plan' | 'build' | 'fast') =>
+    overriddenModes.has(mode)
+      ? theme.fg('warning', `${pack.models[mode]} (overridden)`)
+      : theme.fg('text', pack.models[mode]);
+
+  return [
+    `  ${chalk.hex(mastra.purple)('plan')}  → ${modelText('plan')}`,
+    `  ${chalk.hex(mastra.green)('build')} → ${modelText('build')}`,
+    `  ${chalk.hex(mastra.orange)('fast')}  → ${modelText('fast')}`,
+  ].join('\n');
 }
 
 function getPackDetail(pack: ModePack): string {
@@ -552,6 +654,11 @@ async function askImportCollision(
 }
 
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
+  if (ctx.state.pendingNewThread) {
+    await ctx.state.session.thread.create();
+    ctx.state.pendingNewThread = false;
+  }
+
   const controller = ctx.state.controller;
   const models = await controller.listAvailableModels();
 
@@ -580,7 +687,16 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   }
 
   const settings = loadSettings();
-  const packs = getAvailableModePacks(access, settings.customModelPacks);
+  const modifiedPackIds = new Set(
+    Object.entries(settings.models.modePackOverrides ?? {})
+      .filter(([, overrides]) => Object.keys(overrides).length > 0)
+      .map(([packId]) => packId),
+  );
+  const packs = getAvailableModePacks(access, settings.customModelPacks).map(pack =>
+    modifiedPackIds.has(pack.id)
+      ? { ...pack, models: resolveModePackModels(settings, pack) as ModePack['models'] }
+      : pack,
+  );
   if (packs.length === 0) {
     ctx.showInfo('No model packs available. Configure provider auth first.');
     return;
@@ -596,7 +712,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
   const items: SelectItem[] = packs.map(p => ({
     value: p.id,
-    label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
+    label: `  ${p.name}${modifiedPackIds.has(p.id) ? theme.fg('warning', ' (modified)') : ''}  ${theme.fg('dim', p.description)}${p.id === currentPackId ? theme.fg('dim', ' (current)') : ''}`,
   }));
   items.push({
     value: '__import__',
@@ -689,6 +805,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
       let pack: ModePack | null | undefined = packs.find(p => p.id === item.value);
       let previousPackId: string | undefined;
+      let resetBuiltinPack = false;
       if (!pack) {
         resolve();
         return;
@@ -696,6 +813,25 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
 
       if (pack.id === 'custom') {
         pack = await runCustomFlow(ctx);
+      } else if (modifiedPackIds.has(pack.id)) {
+        const builtinPack = getBuiltinModePack(pack.id);
+        if (!builtinPack) {
+          resolve();
+          return;
+        }
+        const action = await askModifiedBuiltinPackAction(ctx, pack, builtinPack);
+        if (action === null) {
+          await handleModelsPackCommand(ctx);
+          resolve();
+          return;
+        }
+        if (action === 'reset') {
+          const nextSettings = loadSettings();
+          resetBuiltinPackOverrides(nextSettings, pack.id);
+          saveSettings(nextSettings);
+          pack = builtinPack;
+          resetBuiltinPack = true;
+        }
       } else if (pack.id.startsWith('custom:')) {
         while (true) {
           const action = await askCustomPackAction(ctx, pack);
@@ -740,7 +876,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
       }
 
       await applyPack(ctx, pack, previousPackId);
-      ctx.showInfo(`Switched to ${pack.name} pack`);
+      ctx.showInfo(resetBuiltinPack ? `Reset and switched to ${pack.name} pack` : `Switched to ${pack.name} pack`);
       resolve();
     };
 

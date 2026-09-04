@@ -12,6 +12,7 @@ const issue = {
   stateType: 'unstarted',
   priorityLabel: 'High',
   assignee: 'ada',
+  creator: 'grace',
   team: 'ENG',
   labels: ['bug'],
   createdAt: '2026-07-01T00:00:00Z',

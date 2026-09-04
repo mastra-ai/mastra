@@ -1,8 +1,34 @@
 import type { WorkItem } from '../../factory/services/workItems';
-import { USER_SESSION_BRANCH_PREFIX } from './github';
-import type { FactoryUserSession } from './github';
+import { USER_SESSION_BRANCH_PREFIX } from './user-sessions';
+import type { FactoryUserSession } from './user-sessions';
 
 const REVIEW_BRANCH_PREFIX = 'factory/pr-';
+
+export interface SessionOwnerDetails {
+  name: string;
+  avatarUrl?: string;
+}
+
+export interface SessionViewerProfile {
+  userId?: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+export function getSessionOwnerDetails(
+  session: FactoryUserSession,
+  viewer: SessionViewerProfile | undefined,
+): SessionOwnerDetails {
+  const isViewer = Boolean(viewer?.userId) && session.userId === viewer?.userId;
+  const name =
+    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) || session.owner?.name?.trim() || session.userId;
+  const avatarUrl = (isViewer && viewer?.avatarUrl?.trim()) || session.owner?.avatarUrl?.trim();
+  return {
+    name,
+    ...(avatarUrl ? { avatarUrl } : {}),
+  };
+}
 
 export function getFactorySessionKind(session: FactoryUserSession, workItem: WorkItem | undefined): 'work' | 'review' {
   if (workItem?.source === 'github-pr') return 'review';
@@ -10,7 +36,6 @@ export function getFactorySessionKind(session: FactoryUserSession, workItem: Wor
   return 'work';
 }
 
-/** `#900` from a `factory/pr-900` branch — the only identifier left when work items fail to load. */
 export function getReviewBranchIdentifier(branch: string): string | undefined {
   if (!branch.startsWith(REVIEW_BRANCH_PREFIX)) return undefined;
   const number = branch.slice(REVIEW_BRANCH_PREFIX.length);
@@ -18,7 +43,14 @@ export function getReviewBranchIdentifier(branch: string): string | undefined {
   return `#${number}`;
 }
 
+export function isAutomaticUserSessionBranch(session: FactoryUserSession): boolean {
+  return session.branch === `${USER_SESSION_BRANCH_PREFIX}session-${session.sessionId}`;
+}
+
 export function getUserSessionLabel(session: FactoryUserSession): string {
+  const title = session.title?.trim();
+  if (title) return title;
   if (!session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)) return session.branch;
+  if (isAutomaticUserSessionBranch(session)) return 'New session';
   return session.branch.slice(USER_SESSION_BRANCH_PREFIX.length);
 }

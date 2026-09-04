@@ -2,14 +2,18 @@ import type { ZodSchema } from 'zod/v4';
 import type { Processor } from '../processors';
 
 /**
- * The five processor phases corresponding to the five optional methods on Processor.
+ * The six processor phases corresponding to the six optional message-mutating
+ * methods on Processor. (processAPIError is intentionally excluded — it is an
+ * error-handler phase with a different return shape and isn't surfaced through
+ * processor providers.)
  */
 export type ProcessorPhase =
   | 'processInput'
   | 'processInputStep'
   | 'processOutputStream'
   | 'processOutputResult'
-  | 'processOutputStep';
+  | 'processOutputStep'
+  | 'processToolResult';
 
 /**
  * All processor phases.
@@ -20,6 +24,7 @@ export const ALL_PROCESSOR_PHASES: ProcessorPhase[] = [
   'processOutputStream',
   'processOutputResult',
   'processOutputStep',
+  'processToolResult',
 ];
 
 /**

@@ -67,6 +67,25 @@ describe('Factory rule resolution', () => {
     ).toEqual([]);
   });
 
+  it('re-runs only entry rules on same-stage reentry', () => {
+    const onExit = vi.fn(() => undefined);
+    const onEnter = vi.fn(() => undefined);
+    const rules = defaultFactoryRules({
+      version: 'resolve-v4',
+      overrides: { work: { planning: { issue: { onExit, onEnter } } } },
+    });
+
+    expect(
+      resolveFactoryStageRules(rules, {
+        board: 'work',
+        source: 'issue',
+        fromStage: 'planning',
+        toStage: 'planning',
+        reenter: true,
+      }),
+    ).toEqual([{ phase: 'enter', handler: onEnter }]);
+  });
+
   it('resolves open tool names and closed integration event leaves', () => {
     const onResult = vi.fn(() => undefined);
     const onEvent = vi.fn(() => undefined);
@@ -84,7 +103,7 @@ describe('Factory rule resolution', () => {
     expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
     expect(resolveFactoryGithubRule(rules, 'pullRequestMerged')).toBe(onEvent);
     expect(resolveFactoryGithubRule(rules, 'issueOpened')).toEqual(expect.any(Function));
-    expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toBeUndefined();
+    expect(resolveFactoryGithubRule(rules, 'pullRequestUpdated')).toEqual(expect.any(Function));
     expect(resolveFactoryLinearRule(rules, 'issueObserved')).toBe(onLinearEvent);
   });
 });

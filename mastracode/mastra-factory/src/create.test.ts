@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const clack = vi.hoisted(() => ({
@@ -49,11 +50,10 @@ vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import type { Analytics } from './analytics.js';
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
-const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as Analytics;
+const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
 const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
 
 const ENV_EXAMPLE = `# Mastra Factory environment.
@@ -61,6 +61,10 @@ const ENV_EXAMPLE = `# Mastra Factory environment.
 # MASTRACODE_PUBLIC_URL=
 
 # APP_DATABASE_URL=
+
+# FACTORY_CREDENTIAL_ENCRYPTION_KEY=
+# FACTORY_CREDENTIAL_ENCRYPTION_KEY_ID=v1
+# FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS=
 
 # ANTHROPIC_API_KEY=
 # OPENAI_API_KEY=

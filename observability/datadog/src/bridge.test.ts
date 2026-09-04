@@ -15,7 +15,8 @@ import type {
   ScoreEvent,
   SpanType as SpanTypeGeneric,
 } from '@mastra/core/observability';
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
+import { DefaultObservabilityInstance } from '@mastra/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -242,6 +243,90 @@ describe('DatadogBridge', () => {
       });
     });
 
+    it('preserves a resumed Mastra parent instead of marking it as external', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'resume-parent',
+        name: 'resume-parent-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'resumed-agent',
+        parentSpanId: '1234567890abcdef',
+      })!;
+
+      expect(span.exportSpan().parentSpanId).toBe('1234567890abcdef');
+      expect(span.exportSpan().externalParentSpanId).toBeUndefined();
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
+    it('keeps a resumed Mastra parent instead of adopting the active dd-trace scope', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'resume-under-ambient',
+        name: 'resume-under-ambient-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const requestSpan = {
+        context: () => ({
+          toSpanId: () => 'aaaaaaaaaaaaaaaa',
+          toTraceId: () => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        }),
+      };
+      mockScopeActive.mockReturnValueOnce(requestSpan);
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'resumed-agent',
+        parentSpanId: '1234567890abcdef',
+      })!;
+
+      expect(span.exportSpan().parentSpanId).toBe('1234567890abcdef');
+      expect(span.exportSpan().externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
+    it('marks a bridged root external when it inherits the active dd-trace scope', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'bridged-root',
+        name: 'bridged-root-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+      });
+
+      const requestSpan = {
+        context: () => ({
+          toSpanId: () => 'aaaaaaaaaaaaaaaa',
+          toTraceId: () => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        }),
+      };
+      mockScopeActive.mockReturnValueOnce(requestSpan);
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'bridged-root-agent',
+      })!;
+
+      expect(span.exportSpan().parentSpanId).toBeUndefined();
+      expect(span.exportSpan().externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
+
+      span.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
     it('registers the eager span with the LLMObs tagger', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
@@ -327,7 +412,8 @@ describe('DatadogBridge', () => {
       const result = bridge.createSpan(createMockSpanOptions())!;
 
       expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
-      expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
+      expect(result.parentSpanId).toBeUndefined();
+      expect(result.externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
       expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
       expect(llmobsRegistrations[0]?.options.parent).toBeUndefined();
     });
@@ -356,7 +442,8 @@ describe('DatadogBridge', () => {
       )!;
 
       expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
-      expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
+      expect(result.parentSpanId).toBeUndefined();
+      expect(result.externalParentSpanId).toBe('aaaaaaaaaaaaaaaa');
       expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
       expect(llmobsRegistrations[0]?.options.parent).toBe(requestSpan);
     });

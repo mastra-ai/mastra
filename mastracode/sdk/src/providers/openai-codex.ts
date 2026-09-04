@@ -12,8 +12,12 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import { supportsMaxReasoningEffort } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
+export { supportsMaxReasoningEffort } from '../thinking.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
@@ -45,8 +49,7 @@ const CODEX_INSTRUCTIONS = `You are an interactive CLI tool that helps users wit
 
 IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user's problem efficiently.`;
 
-/** Valid thinking level values. */
-export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevel = ThinkingLevelSetting;
 
 const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 
@@ -56,17 +59,25 @@ export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel)
     return 'low';
   }
 
+  // Clamp `max` to `xhigh` only for models whose effort scale tops out there.
+  if (level === 'max' && !supportsMaxReasoningEffort(modelId)) {
+    return 'xhigh';
+  }
+
   return level;
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
-// undefined means omit the parameter (no reasoning).
+// undefined means omit the parameter (no reasoning). Model-dependent clamping
+// (e.g. `max` → `xhigh` for pre-GPT-5.6 models) happens in
+// getEffectiveThinkingLevel before this lookup.
 export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',
   medium: 'medium',
   high: 'high',
   xhigh: 'xhigh',
+  max: 'max',
 };
 
 /**
@@ -121,14 +132,14 @@ async function getCodexBearer(
 
   const cred = storage.get('openai-codex');
   if (!cred || cred.type !== 'oauth') {
-    throw new Error('Not logged in to OpenAI Codex. Run /login first.');
+    throw new ProviderAuthRequiredError('Not logged in to OpenAI Codex.');
   }
 
   let accessToken = cred.access;
   if (Date.now() >= cred.expires) {
     const refreshedToken = await storage.getApiKey('openai-codex');
     if (!refreshedToken) {
-      throw new Error('Failed to refresh OpenAI Codex token. Please /login again.');
+      throw new ProviderAuthRequiredError('Failed to refresh the OpenAI Codex token.');
     }
     accessToken = refreshedToken;
     storage.reload();

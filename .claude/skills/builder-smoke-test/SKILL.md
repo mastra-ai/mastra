@@ -417,7 +417,7 @@ Mobile renders a bottom-bar with the same primary entries.
 
 Use whichever browser tool the harness has wired up (Stagehand, Chrome MCP, etc.). Don't assume a specific provider — discover what's available, then drive the same checklist in `references/ui.md`.
 
-The scaffolded project registers `StagehandBrowser` (matching `examples/agent-builder`). If `BROWSERBASE_*` keys aren't set in the shell, Stagehand falls back to local Playwright; that's fine for smoke. If neither Stagehand nor a local browser is reachable, mark UI as `⏭️ Skipped (no browser provider)`.
+The scaffolded project registers `StagehandBrowser` (matching `examples/agent-builder`). If `BROWSERBASE_*` keys aren't set in the shell, Stagehand launches an installed local Chromium browser such as Google Chrome; no separate Playwright browser install is required. If neither Stagehand nor a local Chromium browser is reachable, mark UI as `⏭️ Skipped (no browser provider)`.
 
 ## Result reporting
 

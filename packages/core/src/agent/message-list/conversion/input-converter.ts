@@ -46,8 +46,10 @@ export function inputToMastraDBMessage(
     );
   }
 
-  // Validate resourceId matches
+  // Validate resourceId matches (except for memory messages, which can carry a
+  // system resourceId — e.g. observational-memory continuation messages)
   if (
+    messageSource !== `memory` &&
     `resourceId` in message &&
     message.resourceId &&
     context.memoryInfo?.resourceId &&
@@ -185,6 +187,10 @@ export function hydrateMastraDBMessageFields(
   context: InputConversionContext,
   messageSource: MessageSource,
 ): MastraDBMessage {
+  message.content.parts = Array.isArray(message.content.parts)
+    ? message.content.parts.filter(part => part !== null && typeof part === 'object')
+    : [];
+
   // Generate ID if missing
   if (!message.id) {
     message.id = context.newMessageId();

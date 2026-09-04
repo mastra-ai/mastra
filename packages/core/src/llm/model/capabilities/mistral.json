@@ -9,7 +9,8 @@
     "mistral-small-2603",
     "mistral-small-latest",
     "pixtral-12b",
-    "pixtral-large-latest"
+    "pixtral-large-latest",
+    "voxtral-small-latest"
   ],
   "temperature": [
     "codestral-latest",
@@ -40,7 +41,9 @@
     "open-mixtral-8x22b",
     "open-mixtral-8x7b",
     "pixtral-12b",
-    "pixtral-large-latest"
+    "pixtral-large-latest",
+    "voxtral-small-latest",
+    "zai-glm-5-2"
   ],
-  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest"]
+  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest", "zai-glm-5-2"]
 }

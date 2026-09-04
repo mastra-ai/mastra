@@ -6,7 +6,7 @@ import { fetchRepositorySettings, saveRepositorySettings } from '../ui/domains/w
 import type { RepositorySettings } from '../ui/domains/workspaces/services/github';
 
 /**
- * Per-repository settings (worktree setup command) through the shared React Query
+ * Per-repository worktree lifecycle settings through the shared React Query
  * cache. Gated on a `githubProjectId` — local factories have no server-side
  * settings, so the query stays idle for them.
  */

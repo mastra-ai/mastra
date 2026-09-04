@@ -88,7 +88,7 @@ function getGitBranch(projectDir: string): string | null {
   }
 }
 
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -102,7 +102,9 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.on('error', reject);
 
     archive.pipe(output);
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: 'output' });
+    // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
+    // copies into the output so private-registry installs work remotely.
+    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
     void archive.finalize();
   });
 }

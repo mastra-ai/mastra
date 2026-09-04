@@ -10,6 +10,7 @@
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -44,13 +45,13 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
 
     const cred = storage.get(XAI_PROVIDER_ID);
     if (!cred || cred.type !== 'oauth') {
-      throw new Error('Not logged in to xAI. Run /login first.');
+      throw new ProviderAuthRequiredError('Not logged in to xAI.');
     }
 
     // getApiKey() refreshes the access token if it has expired.
     const accessToken = await storage.getApiKey(XAI_PROVIDER_ID);
     if (!accessToken) {
-      throw new Error('Failed to refresh xAI token. Please /login again.');
+      throw new ProviderAuthRequiredError('Failed to refresh the xAI token.');
     }
 
     // Preserve existing headers, strip auth-related ones. Explicit init

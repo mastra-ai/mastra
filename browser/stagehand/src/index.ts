@@ -3,6 +3,7 @@ export { StagehandBrowser } from './stagehand-browser';
 
 // Utilities
 export { getStagehandChromePid } from './utils';
+export { STAGEHAND_MODEL_PROVIDERS } from './types';
 
 // Type exports
 export type {

@@ -27,6 +27,233 @@ describe('OpenAISchemaCompatLayer', () => {
   createSuite(compat);
   createOpenAISuite(compat);
 
+  // Optional properties from external JSON Schema / MCP tools must not have their
+  // nested subtrees copied across the containing property and anyOf branches, which
+  // caused exponential schema growth with nesting depth.
+  describe('optional properties from external JSON Schema', () => {
+    const searchToolSchema = {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        filter: {
+          type: ['string', 'object'],
+          description: 'Filter object or saved filter name',
+          properties: {
+            field: { type: 'string' },
+            note: { type: 'string' },
+          },
+          required: ['field'],
+          additionalProperties: false,
+        },
+      },
+      required: ['query'],
+    };
+
+    it('keeps recursive object structure only in the object branch', () => {
+      const result = compat.processToJSONSchema(structuredClone(searchToolSchema) as any) as Record<string, any>;
+      const filter = result.properties.filter;
+
+      expect(filter).not.toHaveProperty('properties');
+      expect(filter).not.toHaveProperty('required');
+      expect(filter).not.toHaveProperty('additionalProperties');
+      expect(filter).not.toHaveProperty('x-optional');
+      expect(filter).not.toHaveProperty('type');
+
+      const types = filter.anyOf.map((b: any) => b.type);
+      expect(types).toEqual(['string', 'object', 'null']);
+
+      expect(filter.description).toBe('Filter object or saved filter name');
+      const objectBranch = filter.anyOf.find((b: any) => b.type === 'object');
+      expect(objectBranch.properties.field).toEqual({ type: 'string' });
+      expect(objectBranch.additionalProperties).toBe(false);
+      expect(objectBranch.required).toEqual(['field', 'note']);
+      expect(objectBranch['x-optional']).toEqual(['note']);
+
+      const stringBranch = filter.anyOf.find((b: any) => b.type === 'string');
+      expect(stringBranch).toEqual({ type: 'string' });
+      expect(JSON.stringify(result).split('Filter object or saved filter name').length - 1).toBe(1);
+
+      expect(result.required).toContain('filter');
+      expect(result['x-optional']).toContain('filter');
+      expect(result.additionalProperties).toBe(false);
+    });
+
+    it('still accepts an object, a string, and null through the compat validation path', async () => {
+      const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
+
+      const objectResult = await compatSchema['~standard'].validate({ query: 'a', filter: { field: 'name' } });
+      expect(objectResult).not.toHaveProperty('issues');
+
+      const stringResult = await compatSchema['~standard'].validate({ query: 'a', filter: 'saved-filter' });
+      expect(stringResult).not.toHaveProperty('issues');
+
+      // null was promoted by the compat layer, so it converts back to undefined
+      const nullResult: any = await compatSchema['~standard'].validate({ query: 'a', filter: null });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value.filter).toBeUndefined();
+    });
+
+    it('converts branch-local nested optional nulls back to undefined', async () => {
+      const compatSchema = compat.processToCompatSchema(structuredClone(searchToolSchema) as any);
+
+      // `note` is optional inside the object branch; strict mode makes the model emit null
+      const result: any = await compatSchema['~standard'].validate({
+        query: 'a',
+        filter: { field: 'name', note: null },
+      });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.filter.note).toBeUndefined();
+    });
+
+    it('keeps items only in the array branch for array/string unions', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          tags: {
+            type: ['array', 'string'],
+            items: { type: 'string' },
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const tags = result.properties.tags;
+      expect(tags).not.toHaveProperty('items');
+
+      const arrayBranch = tags.anyOf.find((b: any) => b.type === 'array');
+      expect(arrayBranch.items).toEqual({ type: 'string' });
+
+      const stringBranch = tags.anyOf.find((b: any) => b.type === 'string');
+      expect(stringBranch).toEqual({ type: 'string' });
+    });
+
+    it('handles type arrays that already include null', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          value: { type: ['string', 'null'], minLength: 2 },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const value = result.properties.value;
+      // string constraints were already folded into the description by preprocessing
+      expect(value.anyOf).toEqual([{ type: 'string' }, { type: 'null' }]);
+      expect(value.description).toContain('minimum length 2');
+      expect(value).not.toHaveProperty('type');
+      expect(value).not.toHaveProperty('minLength');
+    });
+
+    it('preserves parent date metadata when traversing a multi-type property', async () => {
+      const dateSchema = {
+        '~standard': {
+          version: 1,
+          vendor: 'test',
+          validate: (value: any) =>
+            value.timestamp instanceof Date
+              ? { value }
+              : { issues: [{ message: 'timestamp must be a Date', path: ['timestamp'] }] },
+          jsonSchema: {
+            input: () => ({
+              type: 'object',
+              properties: {
+                timestamp: {
+                  type: ['string', 'number'],
+                  format: 'date-time',
+                  'x-date': true,
+                },
+              },
+              required: [],
+            }),
+            output: () => ({}),
+          },
+        },
+      } as any;
+      const compatSchema = compat.processToCompatSchema(dateSchema);
+
+      const result: any = await compatSchema['~standard'].validate({ timestamp: '2026-08-12T12:00:00.000Z' });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.timestamp).toEqual(new Date('2026-08-12T12:00:00.000Z'));
+    });
+
+    it('keeps multi-type enum constraints once while accepting optional nulls', async () => {
+      const compatSchema = compat.processToCompatSchema({
+        type: 'object',
+        properties: {
+          mode: { type: ['string', 'integer'], enum: ['fast', 'slow', 1, 2] },
+        },
+        required: [],
+      } as any);
+      const result = compatSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      const mode = result.properties.mode;
+      expect(mode.enum).toEqual(['fast', 'slow', 1, 2, null]);
+      expect(mode.anyOf).toEqual([{ type: 'string' }, { type: 'integer' }, { type: 'null' }]);
+      expect(JSON.stringify(mode).split('"enum"').length - 1).toBe(1);
+
+      const nullResult: any = await compatSchema['~standard'].validate({ mode: null });
+      expect(nullResult).not.toHaveProperty('issues');
+      expect(nullResult.value).toEqual({ mode: undefined });
+
+      const validResult: any = await compatSchema['~standard'].validate({ mode: 'fast' });
+      expect(validResult).not.toHaveProperty('issues');
+      const invalidResult: any = await compatSchema['~standard'].validate({ mode: 'invalid' });
+      expect(invalidResult).toHaveProperty('issues');
+    });
+
+    it('grows linearly for nested multi-type optional properties', () => {
+      function nested(depth: number): Record<string, any> {
+        if (depth === 0) {
+          return {
+            type: 'object',
+            properties: { sentinel: { type: 'string', description: 'SENTINEL_MARKER' } },
+            required: ['sentinel'],
+            additionalProperties: false,
+          };
+        }
+        return {
+          type: 'object',
+          properties: {
+            filter: {
+              type: ['object', 'string'],
+              properties: { child: nested(depth - 1) },
+              required: ['child'],
+              additionalProperties: false,
+            },
+          },
+          required: [],
+          additionalProperties: false,
+        };
+      }
+
+      const sizes: number[] = [];
+      for (const depth of [1, 2, 8]) {
+        const json = JSON.stringify(compat.processToJSONSchema(nested(depth) as any));
+        expect(json.split('SENTINEL_MARKER').length - 1).toBe(1);
+        sizes.push(json.length);
+      }
+
+      const perLevel = sizes[1]! - sizes[0]!;
+      expect(sizes[2]!).toBe(sizes[1]! + 6 * perLevel);
+    });
+  });
+
+  // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
+  // See https://github.com/mastra-ai/mastra/issues/19273
+  describe('z.record() under strict mode', () => {
+    it('drops propertyNames from a top-level record', () => {
+      const json = compat.processToJSONSchema(z.record(z.string(), z.string()));
+
+      expect(json).not.toHaveProperty('propertyNames');
+    });
+
+    it('drops propertyNames from a nested record', () => {
+      const json = compat.processToJSONSchema(z.object({ flags: z.record(z.string(), z.string()) }));
+
+      expect(json.properties!['flags']).not.toHaveProperty('propertyNames');
+    });
+  });
+
   describe('shouldApply', () => {
     it('should apply for OpenAI models without structured outputs', () => {
       const modelInfo: ModelInformation = {

@@ -23,4 +23,18 @@ describe('buildToolGuidance task tools', () => {
     expect(guidance).toContain('task_complete');
     expect(guidance).not.toContain('task_write');
   });
+
+  it('uses the supplied plan directory in plan-mode guidance', () => {
+    const guidance = buildToolGuidance('plan', { plansDir: '.artifacts/plans' });
+
+    expect(guidance).toContain('.artifacts/plans/');
+    expect(guidance).not.toContain('.mastracode/plans/');
+  });
+
+  it('uses .mastracode/plans/ by default in plan-mode guidance', () => {
+    const guidance = buildToolGuidance('plan');
+
+    expect(guidance).toContain('.mastracode/plans/');
+    expect(guidance).not.toContain('.artifacts/plans/');
+  });
 });

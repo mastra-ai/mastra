@@ -1,5 +1,6 @@
 import type { AgentBrowserSession, AgentBrowserThreadManagerConfig } from '@mastra/agent-browser';
 import { AgentBrowserThreadManager } from '@mastra/agent-browser';
+import { resolveViewportSize, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import { BrowserManager } from 'agent-browser';
 import type { Firecrawl } from 'firecrawl';
@@ -75,7 +76,7 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
 
       const launchOptions: BrowserLaunchOptions = {
         headless: this.browserConfig.headless ?? true,
-        viewport: this.browserConfig.viewport,
+        viewport: resolveViewportSize(this.browserConfig.viewport) ?? DEFAULT_BROWSER_VIEWPORT,
         profile: this.browserConfig.profile,
         executablePath: this.browserConfig.executablePath,
         storageState: this.browserConfig.storageState,

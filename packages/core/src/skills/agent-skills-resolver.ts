@@ -7,6 +7,7 @@
  */
 
 import type { RequestContext } from '../request-context';
+import { SearchEngine } from '../workspace/search';
 import { LocalSkillSource } from '../workspace/skills/local-skill-source';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '../workspace/skills/skill-source';
 import type { WorkspaceSkills } from '../workspace/skills/types';
@@ -111,6 +112,7 @@ export function resolveAgentSkills(skills: SkillInput[]): WorkspaceSkills {
   return new WorkspaceSkillsImpl({
     source,
     skills: skillPaths,
+    searchEngine: new SearchEngine({ bm25: {} }),
     validateOnLoad: true,
   });
 }
@@ -160,6 +162,13 @@ class MergedWorkspaceSkills implements WorkspaceSkills {
 
   async has(name: string) {
     return (await this.#primary.has(name)) || (await this.#secondary.has(name));
+  }
+
+  registerLocationAlias(location: string, skillPath: string): void {
+    // Forward to both sides: resolution validates the target path exists, so
+    // registering on the side that doesn't own the skill is harmless.
+    this.#primary.registerLocationAlias?.(location, skillPath);
+    this.#secondary.registerLocationAlias?.(location, skillPath);
   }
 
   async refresh() {

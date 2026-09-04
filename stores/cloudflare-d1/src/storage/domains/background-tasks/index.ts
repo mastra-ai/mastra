@@ -124,7 +124,11 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     await this.#db.executeQuery({ sql, params });
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const sets: string[] = [];
     const params: any[] = [];
     if ('status' in update) {
@@ -159,15 +163,17 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
       sets.push('completedAt = ?');
       params.push(update.completedAt?.toISOString() ?? null);
     }
-    if (sets.length === 0) return;
+    if (sets.length === 0) return false;
     params.push(taskId);
+    const statusPredicate = options?.expectedStatus ? ' AND status = ?' : '';
+    if (options?.expectedStatus) params.push(options.expectedStatus);
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
-    await this.#db.executeQuery({
-      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?`,
+    const result = await this.#db.executeQuery({
+      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?${statusPredicate} RETURNING id`,
       params,
     });
+    return Array.isArray(result) && result.length > 0;
   }
-
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const { sql, params } = createSqlBuilder().select('*').from(fullTableName).where('id = ?', taskId).build();

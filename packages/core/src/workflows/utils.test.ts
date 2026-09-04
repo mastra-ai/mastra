@@ -8,14 +8,16 @@
  *   - getResumeLabelsByStepId  – filters resume labels by step
  *   - createDeprecationProxy   – warns once when a deprecated property is accessed
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  abortableSleep,
   cleanStepResult,
   createDeprecationProxy,
   getResumeLabelsByStepId,
   getStepIds,
   hydrateSerializedStepErrors,
+  waitForSuspendedSnapshot,
 } from './utils';
 
 // ---------------------------------------------------------------------------
@@ -339,5 +341,99 @@ describe('createDeprecationProxy', () => {
     });
 
     expect(proxy.retryCount).toBe(5);
+  });
+});
+
+describe('waitForSuspendedSnapshot', () => {
+  function storeReturning(sequence: (string | null)[]) {
+    return {
+      loadWorkflowSnapshot: vi.fn(async () => {
+        const next = sequence.length > 1 ? sequence.shift()! : sequence[0]!;
+        return next === null ? null : ({ status: next, runId: 'run-1' } as any);
+      }),
+    };
+  }
+
+  it('returns immediately when no snapshot exists by default', async () => {
+    const workflowsStore = storeReturning([null]);
+
+    await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toBeNull();
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a caller-requested grace period for a temporarily missing snapshot', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning([null, null, 'suspended']);
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1', {
+      missingSnapshotGraceReads: 3,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+
+    await expect(snapshotPromise).resolves.toMatchObject({ status: 'suspended' });
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it.each(['success', 'failed', 'canceled', 'tripwire', 'bailed'])('returns immediately for %s', async status => {
+    const workflowsStore = storeReturning([status]);
+
+    await expect(waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1')).resolves.toMatchObject({ status });
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits while a running snapshot transitions to suspended', async () => {
+    vi.useFakeTimers();
+    const workflowsStore = storeReturning(['running', 'pending', 'suspended']);
+
+    const snapshotPromise = waitForSuspendedSnapshot(workflowsStore, 'workflow', 'run-1');
+    await vi.advanceTimersByTimeAsync(50);
+
+    await expect(snapshotPromise).resolves.toMatchObject({ status: 'suspended' });
+    expect(workflowsStore.loadWorkflowSnapshot).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+});
+
+describe('abortableSleep', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves after the requested duration', async () => {
+    const sleep = abortableSleep(100);
+    let resolved = false;
+    void sleep.then(() => {
+      resolved = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(sleep).resolves.toBeUndefined();
+  });
+
+  it('resolves immediately when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(abortableSleep(60_000, controller.signal)).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the timer and resolves when aborted during the sleep', async () => {
+    const controller = new AbortController();
+    const sleep = abortableSleep(60_000, controller.signal);
+
+    expect(vi.getTimerCount()).toBe(1);
+    controller.abort();
+
+    await expect(sleep).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

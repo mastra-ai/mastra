@@ -4,7 +4,7 @@ import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
 
-import { LOG_PREFIX, validateBucketName, runCommand, detectPackageManager } from './types';
+import { LOG_PREFIX, validateGCSBucketName, runCommand, detectPackageManager } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -28,7 +28,7 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateGCSBucketName(config.bucket);
 
   const quotedMountPath = shellQuote(mountPath);
 

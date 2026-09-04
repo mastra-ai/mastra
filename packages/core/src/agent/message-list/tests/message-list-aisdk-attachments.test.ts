@@ -189,4 +189,37 @@ describe('MessageList - AI SDK v4 Attachment Handling', () => {
     // The file part should be silently dropped
     expect(result[0].content).toEqual([{ type: 'text', text: 'Describe it' }]);
   });
+
+  it('should pass an OpenAI Files API file ID through the v1 prompt path without throwing', () => {
+    const messageList = new MessageList();
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    const v2Message: MastraDBMessage = {
+      id: 'file-id-msg',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Summarize this document' },
+          { type: 'file', mimeType: 'application/pdf', data: fileId },
+        ],
+      },
+      createdAt: new Date(),
+      resourceId: 'test-resource',
+      threadId: 'test-thread',
+    };
+
+    messageList.add(v2Message, 'memory');
+
+    // Regression for #16408 follow-up: the v1 prompt path (used by semantic recall)
+    // must not throw "Invalid URL: file-..." and must keep the ID untouched.
+    let v1Messages: ReturnType<MessageList['get']['all']['aiV4']['prompt']>;
+    expect(() => {
+      v1Messages = messageList.get.all.aiV4.prompt();
+    }).not.toThrow();
+
+    const serialized = JSON.stringify(v1Messages!);
+    expect(serialized).toContain(fileId);
+    expect(serialized).not.toContain('data:application/pdf');
+  });
 });

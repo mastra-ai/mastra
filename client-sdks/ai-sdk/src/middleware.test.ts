@@ -19,7 +19,7 @@ import type {
 } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
-import { ObservationalMemory } from '@mastra/memory/processors';
+import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProcessorMiddleware, withMastra } from './middleware';
@@ -820,10 +820,17 @@ describe('withMastra middleware', () => {
     });
 
     it('should save messages via observational memory after streaming completes', async () => {
-      const observationalMemory = new ObservationalMemory({
-        storage: memoryStore,
-        observation: { messageTokens: 100000, model: 'test-model', bufferTokens: false },
-        reflection: { observationTokens: 200000, model: 'test-model' },
+      // The OM engine is not a Processor itself — Memory wraps it in an
+      // ObservationalMemoryProcessor via getInputProcessors/getOutputProcessors.
+      const memory = new Memory({
+        storage,
+        options: {
+          lastMessages: false,
+          observationalMemory: {
+            observation: { messageTokens: 100000, model: 'test-model', bufferTokens: false },
+            reflection: { observationTokens: 200000, model: 'test-model' },
+          },
+        },
       });
 
       const model = withMastra(createMockModel(), {
@@ -833,8 +840,8 @@ describe('withMastra middleware', () => {
           resourceId,
           lastMessages: false,
         },
-        inputProcessors: [observationalMemory],
-        outputProcessors: [observationalMemory],
+        inputProcessors: await memory.getInputProcessors(),
+        outputProcessors: await memory.getOutputProcessors(),
       });
 
       const { messages: initialMessages } = await memoryStore.listMessages({ threadId });

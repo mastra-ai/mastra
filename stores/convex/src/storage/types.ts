@@ -83,13 +83,14 @@ export type StorageRequest =
       tableName: TABLE_NAMES | string;
       id: string;
       record: Record<string, any>;
+      expected?: Record<string, any>;
     }
   | {
       op: 'updateThread';
       tableName: TABLE_NAMES | string;
       id: string;
-      title: string;
-      metadata: Record<string, any>;
+      title?: string;
+      metadata?: Record<string, any>;
       updatedAt: string;
     }
   | {

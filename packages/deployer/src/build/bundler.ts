@@ -1,12 +1,12 @@
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import { rollup } from 'rollup';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
+import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
 import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { esbuild } from './plugins/esbuild';
 import { esmShim } from './plugins/esm-shim';
@@ -23,26 +23,25 @@ import type { BundlerPlatform } from './utils';
 export function mastraInternalAliasPlugin(entryFile: string): Plugin {
   const normalizedEntryFile = slash(entryFile);
 
-  return alias({
-    entries: [
-      {
-        find: /^\#server$/,
-        replacement: slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server'))),
+  return {
+    name: 'mastra-internal-alias',
+    resolveId: {
+      order: 'pre',
+      handler(id) {
+        if (id === '#server') {
+          return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
+        }
+
+        if (id.startsWith('@mastra/server/')) {
+          return fileURLToPath(import.meta.resolve(id));
+        }
+
+        if (id === '#mastra') {
+          return normalizedEntryFile;
+        }
       },
-      {
-        find: /^\@mastra\/server\/(.*)/,
-        replacement: `@mastra/server/$1`,
-        customResolver: id => {
-          if (id.startsWith('@mastra/server')) {
-            return {
-              id: fileURLToPath(import.meta.resolve(id)),
-            };
-          }
-        },
-      },
-      { find: /^\#mastra$/, replacement: normalizedEntryFile },
-    ],
-  });
+    },
+  } satisfies Plugin;
 }
 
 export function mastraToolsAliasPlugin(): Plugin {
@@ -71,6 +70,7 @@ export async function getInputOptions(
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
+    minify = false,
     isDev = false,
     projectRoot,
     workspaceRoot = undefined,
@@ -78,6 +78,7 @@ export async function getInputOptions(
     externalsPreset = false,
   }: {
     sourcemap?: boolean;
+    minify?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
@@ -166,6 +167,11 @@ export async function getInputOptions(
         include: entryFile,
         platform,
       }),
+      // Runs at renderChunk, so the emitted chunks are minified as a whole rather
+      // than module by module. Last in the list so nothing transforms after it.
+      // `sourceMap` follows the build's own setting: the plugin defaults it to true,
+      // which would build a map Rollup then discards on a non-sourcemap build.
+      minify ? esbuildMinify({ target: 'node20', sourceMap: sourcemap }) : null,
     ].filter(Boolean),
   } satisfies InputOptions;
 }

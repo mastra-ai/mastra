@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer, ScorerRunError } from './base';
 import type { ScorerJudgeExecutionFailure, ScorerJudgeExecutionSuccess } from './base';
@@ -1529,6 +1530,79 @@ describe('createScorer', () => {
             hasGroundTruth: false,
           },
         }),
+      });
+    });
+
+    describe('requestContext persistence on the scorer-run input', () => {
+      function captureScorerRun() {
+        const captured: { input?: any } = {};
+        const mockMastra = createMockMastra({
+          startSpan: (options: any) => {
+            captured.input = options?.input;
+            return createMockSpan('rc-trace', SpanType.SCORER_RUN);
+          },
+        });
+        const scorer = createScorer({ id: 'rc-scorer', description: 'rc scorer' }).generateScore(() => 1);
+        scorer.__registerMastra(mockMastra as any);
+        return { captured, scorer };
+      }
+
+      it('persists nothing when requestContextKeys is omitted', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: { userId: 'u1', apiKey: 'sk-secret' },
+        });
+
+        expect(captured.input).toBeDefined();
+        expect(captured.input).not.toHaveProperty('requestContext');
+      });
+
+      it('persists only the listed keys, including nested paths, and drops the rest', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: {
+            userId: 'u1',
+            tenant: { id: 't1', secret: 'do-not-store' },
+            apiKey: 'sk-secret',
+          },
+          requestContextKeys: ['userId', 'tenant.id'],
+        });
+
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1', tenant: { id: 't1' } });
+      });
+
+      it('persists the whole safe context with the ["*"] wildcard', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext: { userId: 'u1', locale: 'en' },
+          requestContextKeys: ['*'],
+        });
+
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1', locale: 'en' });
+      });
+
+      it('redacts the framework auth token even with the wildcard', async () => {
+        const { captured, scorer } = captureScorerRun();
+
+        const requestContext = new RequestContext([
+          ['userId', 'u1'],
+          [MASTRA_AUTH_TOKEN_KEY, 'super-secret-token'],
+        ]);
+
+        await scorer.run({
+          ...testData.scoringInput,
+          requestContext,
+          requestContextKeys: ['*'],
+        });
+
+        expect(captured.input?.requestContext?.userId).toBe('u1');
+        expect(captured.input?.requestContext?.[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
       });
     });
 

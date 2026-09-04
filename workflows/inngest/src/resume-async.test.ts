@@ -110,7 +110,10 @@ describe('InngestRun.resumeAsync()', () => {
     const sentEvent = sendMock.mock.calls[0][0];
     expect(sentEvent.name).toBe('workflow.resume-async-wf');
     expect(sentEvent.data.runId).toBe(run.runId);
+    expect(sentEvent.data).not.toHaveProperty('initialState');
+    expect(sentEvent.data).not.toHaveProperty('stepResults');
     expect(sentEvent.data.resume.steps).toEqual(['step1']);
+    expect(sentEvent.data.resume).not.toHaveProperty('stepResults');
     expect(sentEvent.data.resume.resumePayload).toEqual({ resumed: 'world' });
   });
 

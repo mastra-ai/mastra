@@ -1,1 +1,6 @@
 .env.mastra
+
+# Fixture dirs for exec-codegen tests. Anchored to the package root (not the
+# cwd) so bare specifiers resolve through the workspace regardless of where
+# vitest was invoked from.
+.tmp-fs-exec-*

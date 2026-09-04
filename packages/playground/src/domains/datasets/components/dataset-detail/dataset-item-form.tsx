@@ -4,6 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Pencil } from 'lucide-react';
+import { DatasetItemScorerSelector } from './dataset-item-scorer-selector';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
@@ -44,6 +45,10 @@ export interface EditModeContentProps {
   setTrajectoryValue: (value: string) => void;
   toolMocksValue: string;
   setToolMocksValue: (value: string) => void;
+  scorerOverrideEnabled: boolean;
+  setScorerOverrideEnabled: (enabled: boolean) => void;
+  selectedScorerIds: string[];
+  setSelectedScorerIds: (scorerIds: string[]) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -63,6 +68,10 @@ export function EditModeContent({
   setTrajectoryValue,
   toolMocksValue,
   setToolMocksValue,
+  scorerOverrideEnabled,
+  setScorerOverrideEnabled,
+  selectedScorerIds,
+  setSelectedScorerIds,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -125,6 +134,14 @@ export function EditModeContent({
             <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
           )}
         </div>
+
+        <DatasetItemScorerSelector
+          overrideEnabled={scorerOverrideEnabled}
+          onOverrideEnabledChange={setScorerOverrideEnabled}
+          selectedScorerIds={selectedScorerIds}
+          onSelectedScorerIdsChange={setSelectedScorerIds}
+          disabled={isSaving}
+        />
 
         <div className="space-y-2">
           <Label>Request Context (JSON, optional)</Label>

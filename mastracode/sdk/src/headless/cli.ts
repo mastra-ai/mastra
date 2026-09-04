@@ -10,6 +10,11 @@ import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
+import {
+  createProcessMemoryDiagnosticsFromEnvironment,
+  startConfiguredProcessMemoryDiagnostics,
+  stopProcessMemoryDiagnosticsWithTimeout,
+} from '../process-memory-diagnostics.js';
 import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 
@@ -184,23 +189,29 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
     process.exit(1);
   }
 
-  const boot = await createMastraCode({ settingsPath: args.settings });
-  const { controller, session, mcpManager, effectiveDefaults } = boot;
+  const diagnosticsSetup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
+  const processMemoryDiagnostics = await startConfiguredProcessMemoryDiagnostics(diagnosticsSetup, warning => {
+    process.stderr.write(`Warning: ${warning}\n`);
+  });
 
-  if (mcpManager?.hasServers()) {
-    try {
-      await mcpManager.initInBackground();
-    } catch (err) {
-      process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
-    }
-  }
-
-  setupDebugLogging();
-
+  let boot: Awaited<ReturnType<typeof createMastraCode>> | undefined;
   // Default to a non-zero exit so an unexpected throw before the run resolves
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
+    boot = await createMastraCode({ settingsPath: args.settings });
+    const { controller, session, mcpManager, effectiveDefaults } = boot;
+
+    if (mcpManager?.hasServers()) {
+      try {
+        await mcpManager.initInBackground();
+      } catch (err) {
+        process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
+      }
+    }
+
+    setupDebugLogging();
+
     const humanState = createHumanFormatState();
     const run = runMC({
       controller,
@@ -249,13 +260,27 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   } finally {
     // --- Teardown (always runs, even on a thrown error) ---
     releaseAllThreadLocks();
-    const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-    await Promise.allSettled([
-      mcpManager?.disconnect(),
-      controller.getMastra()?.stopWorkers(),
-      controller?.stopIntervals(),
-      closeSignalsPubSub?.(),
-    ]);
+    if (boot) {
+      // Stop plugin-contributed signal providers (and the plugin reload listener)
+      // before quiescing workers: a provider that keeps polling past this point
+      // could dispatch into a controller that is shutting down.
+      try {
+        boot.stopPluginSignalProviders();
+      } catch {
+        // Best-effort — the process is exiting.
+      }
+      const { controller, mcpManager } = boot;
+      const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      await Promise.allSettled([
+        mcpManager?.disconnect(),
+        controller.getMastra()?.stopWorkers(),
+        controller.stopIntervals(),
+        closeSignalsPubSub?.(),
+      ]);
+    }
+    await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, warning => {
+      process.stderr.write(`Warning: ${warning}\n`);
+    });
   }
 
   process.exit(exitCode);

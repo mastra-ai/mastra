@@ -1,9 +1,8 @@
 /**
- * DurableAgent client-tool onInputStart / onInputDelta callback tests.
+ * DurableAgent client-tool lifecycle callback tests.
  *
- * Verifies that tool-level onInputStart and onInputDelta callbacks are
- * invoked during durable streaming when the LLM streams tool-call input
- * (Bug 10 parity fix).
+ * Covers streamed input callbacks and server-side `onOutput` handling for
+ * client-executed tool results.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -13,6 +12,7 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -193,5 +193,119 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
         }),
       );
     }
+  });
+
+  it('invokes onOutput for a client-executed tool result arriving on a follow-up request', async () => {
+    const onOutputSpy = vi.fn();
+
+    // Second (text-only) response shape is enough: the incoming request already
+    // carries the tool result, so no tool call is needed on this run.
+    const model = createStreamingToolInputModel('client-tool', ['{}']);
+
+    const baseAgent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent',
+      model,
+      tools: {
+        // Execute-less: the tool runs on the client; the server only observes.
+        'client-tool': createTool({
+          id: 'client-tool',
+          description: 'A client-side tool',
+          inputSchema: z.object({ query: z.string().optional() }),
+          onOutput: onOutputSpy,
+        }),
+      },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    _mastra = new Mastra({
+      agents: { 'test-agent': durableAgent },
+      storage: new InMemoryStore(),
+    });
+
+    // Follow-up request shape from @mastra/client-js: previous assistant
+    // tool-call + the client-produced tool result.
+    const { output } = await durableAgent.stream(
+      [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+        },
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
+        },
+      ] satisfies Parameters<typeof durableAgent.stream>[0],
+      { maxSteps: 2 },
+    );
+
+    await output.consumeStream();
+
+    expect(onOutputSpy).toHaveBeenCalledTimes(1);
+    expect(onOutputSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'tc-client-1',
+        toolName: 'client-tool',
+        output: { ok: true },
+      }),
+    );
+  });
+
+  it('does not invoke onOutput when an input processor tripwires the request', async () => {
+    const onOutputSpy = vi.fn();
+
+    const model = createStreamingToolInputModel('client-tool', ['{}']);
+
+    const baseAgent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a test agent',
+      model,
+      tools: {
+        'client-tool': createTool({
+          id: 'client-tool',
+          description: 'A client-side tool',
+          inputSchema: z.object({ query: z.string().optional() }),
+          onOutput: onOutputSpy,
+        }),
+      },
+      inputProcessors: [
+        {
+          id: 'block-everything',
+          name: 'block-everything',
+          processInput: async ({ abort, messages }) => {
+            abort('blocked by policy');
+            return messages;
+          },
+        },
+      ],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    _mastra = new Mastra({
+      agents: { 'test-agent': durableAgent },
+      storage: new InMemoryStore(),
+    });
+
+    const { output } = await durableAgent.stream(
+      [
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+        },
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { ok: true } }],
+        },
+      ] satisfies Parameters<typeof durableAgent.stream>[0],
+      { maxSteps: 2 },
+    );
+
+    await output.consumeStream();
+
+    expect(onOutputSpy).not.toHaveBeenCalled();
   });
 });

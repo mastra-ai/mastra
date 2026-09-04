@@ -126,7 +126,7 @@ function findV6ToolPart(messages: MastraDBMessage[], toolCallId: string) {
   return undefined;
 }
 
-async function runApprovalFlow(decision: 'approve' | 'decline') {
+async function runApprovalFlow(decision: 'approve' | 'decline', declineReason?: string) {
   mockFindUser.mockClear();
 
   const agent = new Agent({
@@ -141,7 +141,7 @@ async function runApprovalFlow(decision: 'approve' | 'decline') {
   const mastra = new Mastra({ agents: { userAgent: agent }, logger: false, storage: new InMemoryStore() });
   const registered = mastra.getAgent('userAgent');
 
-  const threadId = `thread-${decision}`;
+  const threadId = `thread-${decision}${declineReason ? '-custom-reason' : ''}`;
   const stream = await registered.stream('Find the user with name - Dero Israel', {
     requireToolApproval: true,
     memory: { resource: 'user-1', thread: { id: threadId } },
@@ -158,7 +158,7 @@ async function runApprovalFlow(decision: 'approve' | 'decline') {
   const resumeStream =
     decision === 'approve'
       ? await registered.approveToolCall({ runId: stream.runId, toolCallId })
-      : await registered.declineToolCall({ runId: stream.runId, toolCallId });
+      : await registered.declineToolCall({ runId: stream.runId, toolCallId, reason: declineReason });
 
   for await (const _chunk of resumeStream.fullStream) {
     // drain so the resumed turn persists
@@ -183,6 +183,16 @@ describe('issue #17218: tool approval decisions round-trip on recall', () => {
     expect(v6).toBeDefined();
     expect(v6?.state).toBe('output-denied');
     expect(v6?.approval).toMatchObject({ approved: false, reason: DECLINE_REASON });
+  }, 30000);
+
+  it('persists a caller-supplied decline reason instead of the default (#20495)', async () => {
+    const reason = 'Reading other users PII is not allowed';
+    const { stored, v6 } = await runApprovalFlow('decline', reason);
+    expect(mockFindUser).toHaveBeenCalledTimes(0);
+
+    expect(stored?.state).toBe('output-denied');
+    expect(stored?.approval).toMatchObject({ approved: false, reason });
+    expect(v6?.approval).toMatchObject({ approved: false, reason });
   }, 30000);
 
   it('approve persists the approval and recalls it on the v6 output-available part', async () => {

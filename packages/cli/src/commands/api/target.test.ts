@@ -149,6 +149,23 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
   });
 
+  it('does not start interactive login when only an observability env token is available', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+    mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toEqual({
+      baseUrl: 'https://observability.mastra.ai',
+      headers: {
+        Authorization: 'Bearer env-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(mocks.getToken).toHaveBeenCalledWith(undefined, { allowLogin: false });
+  });
+
   it('uses CLI auth and project config when observability env credentials are unavailable', async () => {
     mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
 
@@ -276,6 +293,70 @@ describe('resolveTarget', () => {
     });
   });
 
+  it.each(['https://observability.mastra.ai', 'https://observability.eu.mastra.ai'])(
+    'uses Platform credentials for the trusted observability URL %s',
+    async url => {
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+      process.env.MASTRA_PROJECT_ID = 'env-project';
+
+      await expect(
+        resolveTarget(options({ url }), fetchMock as typeof fetch, '/observability/traces'),
+      ).resolves.toEqual({
+        baseUrl: url,
+        headers: {
+          Authorization: 'Bearer env-token',
+          'X-Mastra-Project-Id': 'env-project',
+        },
+        fallbackHeaders: {
+          Authorization: 'Bearer platform-token',
+          'X-Mastra-Project-Id': 'env-project',
+        },
+        timeoutMs: 30_000,
+      });
+    },
+  );
+
+  it('preserves explicit credentials for a trusted observability URL', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(
+      resolveTarget(
+        options({
+          url: 'https://observability.eu.mastra.ai',
+          header: ['Authorization: Bearer custom', 'X-Mastra-Project-Id: custom-project'],
+        }),
+        fetchMock as typeof fetch,
+        '/observability/traces',
+      ),
+    ).resolves.toEqual({
+      baseUrl: 'https://observability.eu.mastra.ai',
+      headers: {
+        Authorization: 'Bearer custom',
+        'X-Mastra-Project-Id': 'custom-project',
+      },
+      timeoutMs: 30_000,
+    });
+  });
+
+  it.each([
+    'https://observability.mastra.ai.attacker.example',
+    'https://observability.eu.mastra.ai:444',
+    'http://observability.eu.mastra.ai',
+  ])('does not send Platform credentials to the untrusted observability URL %s', async url => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(resolveTarget(options({ url }), fetchMock as typeof fetch, '/observability/traces')).resolves.toEqual({
+      baseUrl: url,
+      headers: {},
+      timeoutMs: 30_000,
+    });
+
+    expect(mocks.loadProjectConfig).not.toHaveBeenCalled();
+    expect(mocks.getToken).not.toHaveBeenCalled();
+  });
+
   it('carries --server-api-prefix for observability paths when --url is set', async () => {
     await expect(
       resolveTarget(
@@ -381,6 +462,82 @@ describe('resolveTarget', () => {
   it.each(['-1', 'not-a-number'])(`defaults invalid timeout %s to 30 seconds`, async timeout => {
     await expect(resolveTarget(options({ url: 'https://runtime.example.com', timeout }))).resolves.toMatchObject({
       timeoutMs: 30_000,
+    });
+  });
+
+  describe('platform-hosted --url', () => {
+    it.each([
+      ['https://shipyard.factory.mastra.cloud', 'production factory'],
+      ['https://shipyard.studio.mastra.cloud', 'production studio'],
+      ['https://shipyard.factory.staging.mastra.cloud', 'staging factory'],
+      ['https://shipyard.studio.staging.mastra.cloud', 'staging studio'],
+    ])('attaches Bearer from stored credentials for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: { Authorization: 'Bearer platform-token' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['https://shipyard.server.mastra.cloud', 'production user-provided server'],
+      ['https://shipyard.server.staging.mastra.cloud', 'staging user-provided server'],
+      ['https://runtime.example.com', 'arbitrary custom URL'],
+      ['http://shipyard.factory.mastra.cloud', 'non-HTTPS platform host'],
+    ])('does not attach Bearer for %s (%s)', async url => {
+      await expect(resolveTarget(options({ url }))).resolves.toEqual({
+        baseUrl: url,
+        headers: {},
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('respects an explicit Authorization header for platform-hosted URLs', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['Authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { Authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('matches an explicit Authorization header case-insensitively', async () => {
+      await expect(
+        resolveTarget(
+          options({
+            url: 'https://shipyard.factory.mastra.cloud',
+            header: ['authorization: Bearer override'],
+          }),
+        ),
+      ).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: { authorization: 'Bearer override' },
+        timeoutMs: 30_000,
+      });
+
+      expect(mocks.getToken).not.toHaveBeenCalled();
+    });
+
+    it('omits Authorization when no stored credentials are available', async () => {
+      mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+      await expect(resolveTarget(options({ url: 'https://shipyard.factory.mastra.cloud' }))).resolves.toEqual({
+        baseUrl: 'https://shipyard.factory.mastra.cloud',
+        headers: {},
+        timeoutMs: 30_000,
+      });
     });
   });
 

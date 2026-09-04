@@ -35,6 +35,8 @@ function makeMastra(
     agentThrows?: boolean;
     hooks?: any;
     scheduleGet?: ReturnType<typeof vi.fn>;
+    editorGetById?: ReturnType<typeof vi.fn>;
+    fsHandler?: any;
   } = {},
 ) {
   const storage = opts.storage ?? makeStorage();
@@ -49,6 +51,8 @@ function makeMastra(
     getLogger: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }),
     ...(opts.hooks ? { __getScheduleHooks: () => opts.hooks } : {}),
     ...(opts.scheduleGet ? { schedules: { get: opts.scheduleGet } } : {}),
+    ...(opts.editorGetById ? { getEditor: () => ({ agent: { getById: opts.editorGetById } }) } : {}),
+    ...(opts.fsHandler ? { __getFsAgentScheduleHandler: () => opts.fsHandler } : {}),
   } as unknown as Mastra;
 }
 
@@ -70,6 +74,53 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     expect(result.status).toBe('agent-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('agent_a1');
+  });
+
+  it('falls back to the editor for stored agents not yet hydrated into the registry', async () => {
+    const storage = makeStorage();
+    const storedAgent = {
+      sendSignal: vi.fn(),
+      generate: vi.fn(async () => ({ text: 'ok' })),
+      getMemory: vi.fn(),
+    };
+    const editorGetById = vi.fn(async () => storedAgent);
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(storedAgent.generate).toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'fired', outcome: 'succeeded' });
+    expect(storage.deleteSchedule).not.toHaveBeenCalled();
+  });
+
+  it('returns agent-missing and self-cleans when both registry and editor miss', async () => {
+    const storage = makeStorage();
+    const editorGetById = vi.fn(async () => null);
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(result.status).toBe('agent-missing');
+    expect(storage.deleteSchedule).toHaveBeenCalledWith('agent_a1');
+  });
+
+  it('preserves the schedule when the editor lookup throws', async () => {
+    const storage = makeStorage();
+    const editorGetById = vi.fn(async () => {
+      throw new Error('storage down');
+    });
+    const mastra = makeMastra({ agentThrows: true, storage, editorGetById });
+
+    const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(result).toMatchObject({
+      status: 'agent-missing',
+      outcome: 'failed',
+      reason: 'failed to resolve agent "a1"',
+    });
+    expect(storage.deleteSchedule).not.toHaveBeenCalled();
   });
 
   it('returns thread-missing and self-cleans when the thread is not found', async () => {
@@ -298,5 +349,199 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
     expect(storage.deleteSchedule).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgentScheduleWorker — handler-mode file-based schedules', () => {
+  const rowId = 'fsa_support__billing%2Fsweep';
+
+  it('fires with the prompt the handler computes', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const fsHandler = vi.fn(async () => ({ prompt: 'computed at fire time' }));
+    const mastra = makeMastra({ agent, fsHandler });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.status).toBe('fired');
+    expect((generate.mock.calls[0] as any[])[0]).toBe('computed at fire time');
+  });
+
+  it('passes the decoded agent id and path-derived key to the handler', async () => {
+    const agent = { sendSignal: vi.fn(), generate: vi.fn(async () => ({})), getMemory: vi.fn() };
+    const fsHandler = vi.fn(async () => ({ prompt: 'go' }));
+    const mastra = makeMastra({ agent, fsHandler });
+
+    await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(fsHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'a1', scheduleId: rowId, key: 'billing/sweep' }),
+    );
+  });
+
+  it('skips the fire when the handler returns null', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const onFinish = vi.fn();
+    const mastra = makeMastra({ agent, fsHandler: async () => null, hooks: { onFinish } });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.outcome).toBe('skipped');
+    expect(generate).not.toHaveBeenCalled();
+    expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'skipped' }));
+  });
+
+  it('uses the stored row defaults when the handler returns nothing', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({ agent, fsHandler: async () => undefined });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: 'from the row' }));
+
+    expect(result.status).toBe('fired');
+    expect((generate.mock.calls[0] as any[])[0]).toBe('from the row');
+  });
+
+  it('fails with a reason when neither the row nor the handler supplies a prompt', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({ agent, fsHandler: async () => ({}) });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.status).toBe('invalid-input');
+    expect(result.outcome).toBe('failed');
+    expect(result.reason).toMatch(/handler returned no prompt/);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('reports a throwing handler as invalid input and never runs the agent', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const onError = vi.fn();
+    const mastra = makeMastra({
+      agent,
+      hooks: { onError },
+      fsHandler: async () => {
+        throw new Error('upstream is down');
+      },
+    });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.status).toBe('invalid-input');
+    expect(result.reason).toBe('upstream is down');
+    expect(generate).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ phase: 'prepare' }));
+  });
+
+  it('lets the Mastra-level prepare hook override the handler', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({
+      agent,
+      fsHandler: async () => ({ prompt: 'from the handler' }),
+      hooks: { prepare: async () => ({ prompt: 'from the hook' }) },
+    });
+
+    await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect((generate.mock.calls[0] as any[])[0]).toBe('from the hook');
+  });
+
+  it('runs the handler before the prepare hook, so the hook sees the fire last', async () => {
+    const order: string[] = [];
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({
+      agent,
+      fsHandler: async () => {
+        order.push('handler');
+        return { prompt: 'from the handler', tagName: 'from-handler' };
+      },
+      hooks: {
+        prepare: async () => {
+          order.push('prepare');
+          return { prompt: 'from the hook' };
+        },
+      },
+    });
+
+    await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(order).toEqual(['handler', 'prepare']);
+    expect((generate.mock.calls[0] as any[])[0]).toBe('from the hook');
+  });
+
+  it('keeps handler overrides the prepare hook does not replace', async () => {
+    const sendSignal = vi.fn(() => signalResult({ action: 'wake', runId: 'run-1' }));
+    const agent = {
+      sendSignal,
+      generate: vi.fn(),
+      getMemory: vi.fn(async () => ({ getThreadById: async () => ({ id: 'ops' }) })),
+    };
+    const mastra = makeMastra({
+      agent,
+      fsHandler: async () => ({ threadId: 'ops', resourceId: 'team', tagName: 'sweep' }),
+      hooks: { prepare: async () => ({ prompt: 'from the hook' }) },
+    });
+
+    await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    const signal = (sendSignal.mock.calls[0] as any[])[0];
+    expect(signal.tagName).toBe('sweep');
+    expect(signal.contents).toBe('from the hook');
+  });
+
+  it('does not run the prepare hook when the handler skips the fire', async () => {
+    const prepare = vi.fn();
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({ agent, fsHandler: async () => null, hooks: { prepare } });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.outcome).toBe('skipped');
+    expect(prepare).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('skips when the prepare hook returns null even after the handler supplied a fire', async () => {
+    const generate = vi.fn(async () => ({}));
+    const agent = { sendSignal: vi.fn(), generate, getMemory: vi.fn() };
+    const mastra = makeMastra({
+      agent,
+      fsHandler: async () => ({ prompt: 'from the handler' }),
+      hooks: { prepare: async () => null },
+    });
+
+    const result = await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    expect(result.outcome).toBe('skipped');
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('routes channel delivery through requestContext returned by the handler', async () => {
+    const sendSignal = vi.fn(() => signalResult({ action: 'wake', runId: 'run-1' }));
+    const agent = {
+      sendSignal,
+      generate: vi.fn(),
+      getMemory: vi.fn(async () => ({ getThreadById: async () => ({ id: 'ops' }) })),
+    };
+    const mastra = makeMastra({
+      agent,
+      fsHandler: async () => ({
+        prompt: 'go',
+        threadId: 'ops',
+        resourceId: 'team',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext: { channel: 'slack' } } },
+      }),
+    });
+
+    await executeAgentSchedule(mastra, rowId, makeTarget({ prompt: '' }));
+
+    const options = (sendSignal.mock.calls[0] as any[])[1];
+    expect(options.ifIdle.streamOptions.requestContext.get('channel')).toBe('slack');
   });
 });

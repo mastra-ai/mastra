@@ -84,7 +84,10 @@ export async function beginGoalActivity({
   try {
     store = await resolveGoalStore(mastra);
     objective = await readObjective(store, threadId);
-    cacheGoalObjective(requestContext, threadId, objective);
+    // Only memoize a hit. A miss here is not authoritative: the objective may be
+    // written after this read (e.g. a goal started while this run is in flight),
+    // and a cached miss would shadow it for the next projection step.
+    if (objective) cacheGoalObjective(requestContext, threadId, objective);
   } catch (error) {
     debugFailure(mastra, 'Failed to begin goal activity tracking', { error, agentId, threadId, runId });
     return;

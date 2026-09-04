@@ -45,6 +45,43 @@ export const OneActiveTask: Story = {
   },
 };
 
+export const Collapsed: Story = {
+  args: { ...MixedProgress.args, defaultOpen: false },
+};
+
+export const LongList: Story = {
+  args: {
+    tasks: [
+      { id: 'signal', content: 'Collect existing review signal', status: 'completed', activeForm: 'Collecting signal' },
+      {
+        id: 'gate',
+        content: 'Run quality gate in the sandbox',
+        status: 'completed',
+        activeForm: 'Running quality gate',
+      },
+      { id: 'history', content: 'Trace history and architecture', status: 'completed', activeForm: 'Tracing history' },
+      {
+        id: 'verdict',
+        content: 'Form a verdict with an adversarial check',
+        status: 'in_progress',
+        activeForm: 'Forming a verdict with an adversarial check',
+      },
+      {
+        id: 'publish',
+        content: 'Publish the review on the pull request',
+        status: 'pending',
+        activeForm: 'Publishing the review',
+      },
+      {
+        id: 'handoff',
+        content: 'Request the stage transition and post the handoff',
+        status: 'pending',
+        activeForm: 'Posting the handoff',
+      },
+    ],
+  },
+};
+
 export const Empty: Story = {
   args: { tasks: [], hideWhenEmpty: false },
 };

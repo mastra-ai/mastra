@@ -10,9 +10,19 @@
  * uncompiled theme lets Tailwind read @theme and generate DS utilities without
  * treating theme.css as the component stylesheet. */
 @import '@mastra/playground-ui/theme.css';
-@import './domains/factory/metrics-theme.css';
 
 @custom-variant dark (&:is(.dark *));
+
+/* Mona Sans everywhere, same as Studio. Faces come from
+ * @fontsource-variable/mona-sans, imported in main.tsx. */
+@layer base {
+  :root {
+    --font-display:
+      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+      'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-body: var(--font-display);
+  }
+}
 
 /* Alias the `icon` text ramp onto the design-system `neutral` ramp.
  * The web UI uses `text-icon1..6` for its text hierarchy, but the DS theme
@@ -27,6 +37,17 @@
   --color-icon4: var(--neutral4);
   --color-icon5: var(--neutral5);
   --color-icon6: var(--neutral6);
+  --color-pr-merged: var(--pr-merged);
+}
+
+/* Merged pull requests read purple everywhere; the DS accent ramp has no purple.
+ * Brightens on near-black, darkens on white so it stays legible in both themes. */
+:root {
+  --pr-merged: oklch(0.714 0.203 305.5);
+}
+
+html.light {
+  --pr-merged: oklch(0.496 0.265 302);
 }
 
 /* Keyframes must live inside @theme so Tailwind emits them alongside the

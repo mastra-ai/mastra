@@ -35,6 +35,7 @@ Usage:
 - By default, read file output includes line number prefixes (e.g., "     1→"). Ensure you preserve the exact indentation as it appears AFTER the arrow. Never include any part of the line number prefix in old_string or new_string.
 - Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.
 - Use replace_all only when intentionally replacing all occurrences.`,
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path to the file to edit'),
     old_string: z.string().describe('The exact text to find and replace. Must be unique in the file.'),

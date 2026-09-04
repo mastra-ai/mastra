@@ -17,6 +17,14 @@ export const NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID = '__mastra_notification_disp
 export const NOTIFICATION_DISPATCH_DEFAULT_CRON = '*/1 * * * *';
 export const NOTIFICATION_DISPATCH_DEFAULT_BATCH_SIZE = 100;
 
+/**
+ * The dispatcher ticks once a minute, has a single non-suspending step, and is
+ * never resumed — no code path consumes its snapshot. Opting out of snapshot
+ * persistence entirely keeps `mastra_workflow_snapshot` from growing by one
+ * dead row per minute forever (issue #20254).
+ */
+const NOTIFICATION_DISPATCH_SHOULD_PERSIST_SNAPSHOT = () => false;
+
 export type NotificationDispatchConfig = {
   /** Defaults to true. Set false to opt out of automatic scheduled dispatch. */
   enabled?: boolean;
@@ -101,6 +109,9 @@ export function createNotificationDispatchWorkflow({
       delivered: z.number(),
       failed: z.number(),
     }),
+    options: {
+      shouldPersistSnapshot: NOTIFICATION_DISPATCH_SHOULD_PERSIST_SNAPSHOT,
+    },
   })
     .then(dispatchStep)
     .commit();

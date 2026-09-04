@@ -14,8 +14,8 @@ import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../line-utils';
-import { startWorkspaceSpan } from '../tools/tracing';
-import type { Skill, WorkspaceSkills } from './types';
+import { startSkillSpan } from '../tools/tracing';
+import type { Skill, SkillsContext, WorkspaceSkills } from './types';
 
 // =============================================================================
 // Factory
@@ -61,6 +61,12 @@ export function formatSkillActivation(skill: Skill): string {
 // Individual Tools
 // =============================================================================
 
+async function getScopedSkills(skills: WorkspaceSkills, requestContext?: object): Promise<WorkspaceSkills> {
+  return skills.getScoped
+    ? skills.getScoped({ requestContext: requestContext as SkillsContext['requestContext'] })
+    : skills;
+}
+
 /**
  * Resolve a skill identifier (name or path) to a Skill.
  * The `skills.get()` method handles both name-based lookup (with tie-breaking)
@@ -97,14 +103,15 @@ function createSkillTool(skills: WorkspaceSkills) {
         .describe('The name or path of the skill to activate. Use the path when multiple skills share the same name.'),
     }),
     execute: async ({ name }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'activate',
         input: { name },
+        attributes: { skillName: name },
       });
 
       try {
-        const result = await resolveSkill(skills, name);
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
+        const result = await resolveSkill(scopedSkills, name);
 
         if ('notFound' in result) {
           span.end({ success: false });
@@ -137,16 +144,16 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
     }),
     execute: async ({ query, skillNames, topK }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'search',
         input: { query, skillNames, topK },
         attributes: {},
       });
 
       try {
-        await skills.maybeRefresh();
-        const results = await skills.search(query, { topK, skillNames });
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
+        await scopedSkills.maybeRefresh();
+        const results = await scopedSkills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
           span.end({ success: true }, { resultCount: 0 });
@@ -193,16 +200,16 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
     execute: async ({ skillName, path, startLine, endLine }, context) => {
-      const span = startWorkspaceSpan(context, context?.workspace, {
-        category: 'skill',
+      const span = startSkillSpan(context, {
         operation: 'read',
         input: { skillName, path, startLine, endLine },
-        attributes: {},
+        attributes: { skillName },
       });
 
       try {
+        const scopedSkills = await getScopedSkills(skills, context?.requestContext);
         // Resolve skill by name or path (get() handles both with tie-breaking)
-        const resolved = await resolveSkill(skills, skillName);
+        const resolved = await resolveSkill(scopedSkills, skillName);
         if ('notFound' in resolved) {
           span.end({ success: false });
           return resolved.notFound;
@@ -211,14 +218,14 @@ function createSkillReadTool(skills: WorkspaceSkills) {
 
         // Try each reader using the resolved path to target the exact skill candidate
         let content: string | Buffer | null = null;
-        content = await skills.getReference(resolvedPath, path);
-        if (content === null) content = await skills.getScript(resolvedPath, path);
-        if (content === null) content = await skills.getAsset(resolvedPath, path);
+        content = await scopedSkills.getReference(resolvedPath, path);
+        if (content === null) content = await scopedSkills.getScript(resolvedPath, path);
+        if (content === null) content = await scopedSkills.getAsset(resolvedPath, path);
 
         if (content === null) {
-          const refs = (await skills.listReferences(resolvedPath)).map(f => `references/${f}`);
-          const scriptsList = (await skills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
-          const assets = (await skills.listAssets(resolvedPath)).map(f => `assets/${f}`);
+          const refs = (await scopedSkills.listReferences(resolvedPath)).map(f => `references/${f}`);
+          const scriptsList = (await scopedSkills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
+          const assets = (await scopedSkills.listAssets(resolvedPath)).map(f => `assets/${f}`);
           const allFiles = [...refs, ...scriptsList, ...assets];
           const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
           span.end({ success: false });

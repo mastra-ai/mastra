@@ -53,6 +53,13 @@ export interface MCPServerHonoSSEOptions extends MCPServerSSEOptionsBase {
    * Incoming Hono context
    */
   context: HonoContextLike;
+
+  /**
+   * Auth info for this request, surfaced to tool and agent execution as
+   * `extra.authInfo`. Streamable HTTP carries this on `req.auth`; the Hono SSE
+   * transport has no Node request, so adapters pass it explicitly.
+   */
+  authInfo?: unknown;
 }
 
 export interface MCPServerHTTPOptions {
@@ -79,7 +86,7 @@ export interface MCPServerHTTPOptions {
   /**
    * Optional options to pass to the transport (e.g. sessionIdGenerator)
    */
-  options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/sdk if possible
+  options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/node if possible
 }
 
 // +++ MCP Registry API Spec Types +++

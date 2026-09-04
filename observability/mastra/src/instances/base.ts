@@ -37,10 +37,43 @@ import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
 import { MetricsContextImpl } from '../context/metrics';
+import { resolveExportedSpanId } from '../ids';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
+import { resolveModelId } from '../model-id';
 import { NoOpSpan } from '../spans';
+import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+
+function hasMetadataKey(metadata: unknown, key: string): boolean {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+
+  try {
+    return Object.prototype.hasOwnProperty.call(Object.getOwnPropertyDescriptors(metadata), key);
+  } catch {
+    return true;
+  }
+}
+
+function injectEnvironmentMetadata(
+  metadata: unknown,
+  environment: string | undefined,
+): Record<string, any> | undefined {
+  if (environment === undefined || hasMetadataKey(metadata, 'environment')) {
+    return metadata as Record<string, any> | undefined;
+  }
+
+  // Only plain records can be merged without losing the original value's shape.
+  // A Map, Date, or class instance would otherwise be replaced by `{ environment }`,
+  // discarding all user-provided metadata.
+  if (metadata && !isPlainRecord(metadata)) {
+    return metadata as Record<string, any>;
+  }
+
+  return mergeMetadata(metadata, { environment });
+}
 
 // ============================================================================
 // Abstract Base Class
@@ -201,9 +234,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = this.computeTraceState(tracingOptions);
     }
 
-    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
+    // spans, but a key it merely names with an `undefined` value must not erase the span's own value)
     const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
-    const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
+    const mergedMetadata = mergeMetadata(stripUndefined(metadata), stripUndefined(tracingMetadata));
 
     // Extract metadata from RequestContext
     const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
@@ -215,27 +249,28 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // getCorrelationContext) is what lets the storage record-builders populate
     // the `environment` column on SpanRecord, which is then read by stored
     // score/feedback events via RecordedSpan / RecordedTrace.addScore.
-    const finalMetadata =
-      !options.parent &&
-      this.#mastraEnvironment !== undefined &&
-      (enrichedMetadata === undefined || enrichedMetadata.environment === undefined)
-        ? { ...(enrichedMetadata ?? {}), environment: this.#mastraEnvironment }
-        : enrichedMetadata;
+    const finalMetadata = !options.parent
+      ? injectEnvironmentMetadata(enrichedMetadata, this.#mastraEnvironment)
+      : enrichedMetadata;
 
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
-    // Extract traceId and parentSpanId from tracingOptions for root spans (no parent)
-    // These allow nested workflows to join the parent workflow's trace
+    // Extract traceId and parent ids from tracingOptions for root spans (no parent)
+    // These allow nested workflows to join the parent workflow's trace.
+    // tracingOptions.parentSpanId is the public external-correlation channel,
+    // so it feeds externalParentSpanId — not Mastra's own parent link.
     const traceId = !options.parent ? (options.traceId ?? tracingOptions?.traceId) : options.traceId;
-    const parentSpanId = !options.parent
-      ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
-      : options.parentSpanId;
+    const parentSpanId = options.parentSpanId;
+    const externalParentSpanId = !options.parent
+      ? (options.externalParentSpanId ?? tracingOptions?.parentSpanId)
+      : options.externalParentSpanId;
 
     const span = this.createSpan<TType>({
       ...rest,
       traceId,
       parentSpanId,
+      externalParentSpanId,
       metadata: finalMetadata,
       traceState,
       tags,
@@ -247,7 +282,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // original creation options so captureExcludedModelUsage can use them.
     if (rest.type === SpanType.MODEL_GENERATION && this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) {
       const attrs = rest.attributes as ModelGenerationAttributes | undefined;
-      const model = attrs?.responseModel ?? attrs?.model;
+      const model = resolveModelId(attrs?.responseModel, attrs?.model);
       if (attrs?.provider || model) {
         this.#excludedModelMeta.set(span, { provider: attrs?.provider, model });
       }
@@ -436,7 +471,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // Resolve to a spanId that actually reaches exporters; a raw span.id may
+      // belong to an internal/excluded span that is never exported, leaving
+      // signals referencing a span that doesn't exist downstream.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       observabilityBus: this.observabilityBus,
@@ -455,7 +493,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
-      spanId: span?.id,
+      // See getLoggerContext: only reference spanIds that reach exporters.
+      spanId: resolveExportedSpanId(span),
       correlationContext,
       metadata,
       cardinalityFilter: this.cardinalityFilter,
@@ -518,6 +557,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     span.end = (options?: EndSpanOptions<TType>) => {
       if (span.isEvent) {
         this.logger.warn(`End event is not available on event spans`);
+        return;
+      }
+
+      if (span.endTime) {
         return;
       }
 
@@ -624,10 +667,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return undefined;
     }
 
-    return {
-      ...extracted,
-      ...explicitMetadata, // Explicit metadata always wins
-    };
+    // Explicit metadata always wins, but a key it merely names with an
+    // `undefined` value must not erase the extracted RequestContext value.
+    return mergeMetadata(extracted, stripUndefined(explicitMetadata));
   }
 
   /**
@@ -852,7 +894,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (!ancestor) return undefined;
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
-    const model = endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model;
+    const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
 
     return { ancestor, usage, provider, model };
   }
@@ -881,8 +923,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // (provider, model). Fall back to the stash populated at creation time.
     const stashed = this.#excludedModelMeta.get(span);
     const provider = endAttrs?.provider ?? liveAttrs?.provider ?? stashed?.provider;
-    const model =
-      endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model ?? stashed?.model;
+    const model = resolveModelId(
+      endAttrs?.responseModel,
+      endAttrs?.model,
+      liveAttrs?.responseModel,
+      liveAttrs?.model,
+      stashed?.model,
+    );
 
     return { usage, provider, model };
   }

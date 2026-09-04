@@ -11,10 +11,15 @@ import {
   convertZodSchemaToAISDKSchema,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import {
+  backgroundOverrideJsonSchema,
+  backgroundOverrideZodSchema,
+  isToolBackgroundEligible,
+} from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -26,10 +31,11 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
-import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
+import { markBuilderValidatedInput } from '../builder-validation-context';
+import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
   CoreTool,
@@ -40,7 +46,6 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -259,10 +264,20 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
 
     // Only inject the `_background` override schema for tools that are actually
-    // eligible for background execution — otherwise every user tool's input
-    // schema would be mutated with a v4 Zod field, which breaks v3-authored
-    // tools (keyValidator._parse crashes in schema-compat validation).
-    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    // eligible for background execution: the manager must be enabled AND this
+    // specific tool must be opted in at the agent or tool layer (the same
+    // resolution `resolveBackgroundConfig` uses at dispatch time). Otherwise
+    // every user tool's schema would advertise `_background` even though the
+    // runtime would never honor it (issue #22724), and mutating every schema
+    // with a v4 Zod field breaks v3-authored tools (keyValidator._parse
+    // crashes in schema-compat validation).
+    const isBackgroundEligible =
+      !!input.backgroundTaskEnabled &&
+      isToolBackgroundEligible({
+        toolName: this.options.name,
+        toolConfig: this.options.backgroundConfig,
+        agentConfig: this.options.agentBackgroundConfig,
+      });
     const isResumableTool =
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
@@ -305,7 +320,7 @@ export class CoreToolBuilder extends MastraBase {
                 .optional(),
             });
           }
-          this.originalTool.inputSchema = nextSchema;
+          this.originalTool.inputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -379,6 +394,32 @@ export class CoreToolBuilder extends MastraBase {
 
     return schema;
   };
+
+  /** Compat-layer validation schema for execute-time checks (when a layer applies). */
+  private buildCompatValidationSchema(
+    originalSchema: unknown,
+    schemaCompatLayers: SchemaCompatLayer[],
+  ): StandardSchemaWithJSON | undefined {
+    if (!originalSchema) {
+      return undefined;
+    }
+
+    let schema = originalSchema;
+    if (typeof schema === 'function') {
+      schema = schema();
+    }
+
+    if (!isStandardSchemaWithJSON(schema)) {
+      return undefined;
+    }
+
+    const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
+    if (!applicableLayer) {
+      return undefined;
+    }
+
+    return applicableLayer.processToCompatSchema(schema as any);
+  }
 
   private getOutputSchema = () => {
     if ('outputSchema' in this.originalTool) {
@@ -534,7 +575,12 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
+  private createExecute(
+    tool: ToolToConvert,
+    options: ToolOptions,
+    logType?: 'tool' | 'toolset' | 'client-tool',
+    inputValidationSchema?: StandardSchemaWithJSON,
+  ) {
     // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
     const {
       logger,
@@ -611,7 +657,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
-            observe: execOptions.observe ?? noopObserve,
+            observe: execOptions.observe ?? createToolObserve(toolSpan),
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -655,9 +701,12 @@ export class CoreToolBuilder extends MastraBase {
             // Nest agent-specific properties under 'agent' key
             // Do NOT include workflow context even if workflow properties exist
             // (agents use workflows internally but tools should see agent context)
+            // Preserve MCP context when the agent run originated from an MCP tools/call
+            // so nested tools can use elicitation/log/progress.
             const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
@@ -675,6 +724,7 @@ export class CoreToolBuilder extends MastraBase {
             const { suspend, resumeData, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,
@@ -706,7 +756,15 @@ export class CoreToolBuilder extends MastraBase {
             }
           }
 
-          result = await executeWithContext({ span: toolSpan, fn: async () => tool?.execute?.(args, toolContext) });
+          result = await executeWithContext({
+            span: toolSpan,
+            fn: async () => {
+              if (inputValidationSchema) {
+                markBuilderValidatedInput(toolContext);
+              }
+              return tool?.execute?.(args, toolContext);
+            },
+          });
         }
 
         if (suspendData) {
@@ -815,7 +873,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       try {
-        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
         // validation. The original args were already validated during the initial
@@ -823,11 +881,13 @@ export class CoreToolBuilder extends MastraBase {
         // and returns early without using the input args.
         const isResuming = !!execOptions?.resumeData;
 
-        // Validate input parameters if schema exists
-        // Use the processed schema for validation if available, otherwise fall back to original
-        const parameters = this.getParameters();
+        const parameters = inputValidationSchema ?? this.getParameters();
         if (!isResuming) {
-          const { data, error } = validateToolInput(parameters, args, options.name);
+          const { data, error } = validateToolInput(
+            parameters as StandardSchemaWithJSON | undefined,
+            args,
+            options.name,
+          );
           //suspendedToolRunId is only required when resumeData is provided
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
@@ -836,8 +896,9 @@ export class CoreToolBuilder extends MastraBase {
             toolSpan?.end({ output: error, attributes: { success: false } });
             return error;
           }
-          // Use validated/transformed data
-          args = data;
+          if (data !== undefined) {
+            args = data;
+          }
         }
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
@@ -857,16 +918,17 @@ export class CoreToolBuilder extends MastraBase {
             id: 'TOOL_EXECUTION_FAILED',
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
+            // Raw args are intentionally omitted: they can carry credentials or PII and
+            // are already recorded on the tool span, where observability redaction applies.
             details: {
               errorMessage: String(err),
-              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },
           err,
         );
         toolSpan?.error({ error: mastraError, attributes: { success: false } });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
         throw mastraError;
       }
     };
@@ -918,7 +980,13 @@ export class CoreToolBuilder extends MastraBase {
 
     const schemaCompatLayers = [];
 
-    if (model) {
+    // `strict: false` opts the tool out of strict structured-output schema rewriting.
+    // OpenAI strict mode forces every property into `required` (nullable), which makes it
+    // impossible for a model to genuinely omit a field - tools that rely on partial input
+    // (e.g. working memory merge updates) need the original optionality preserved.
+    const optsOutOfStrictSchemas = 'strict' in this.originalTool && this.originalTool.strict === false;
+
+    if (model && !optsOutOfStrictSchemas) {
       // Respect the model's own capability flag; do not disable it based solely on specificationVersion.
       const supportsStructuredOutputs =
         'supportsStructuredOutputs' in model ? (model.supportsStructuredOutputs ?? false) : false;
@@ -940,6 +1008,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     const originalSchema = this.getParameters();
+    const inputValidationSchema = this.buildCompatValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 
     if (originalSchema) {
@@ -1059,6 +1128,7 @@ export class CoreToolBuilder extends MastraBase {
             this.originalTool,
             { ...this.options, description: this.originalTool.description },
             this.logType,
+            inputValidationSchema,
           )
         : undefined,
     };

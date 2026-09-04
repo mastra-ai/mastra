@@ -9,6 +9,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -513,6 +514,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           method: route.method,
         });
       }
+      const customResponse = getCustomHTTPExceptionResponse(error);
+      if (customResponse) {
+        ctx.status = customResponse.status;
+        customResponse.headers.forEach((value, name) => ctx.set(name, value));
+        ctx.body = Buffer.from(await customResponse.arrayBuffer());
+        return;
+      }
+
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {
@@ -565,7 +574,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const reader = readableStream.getReader();
 
     ctx.res.on('close', () => {
-      void reader.cancel('request aborted');
+      void reader.cancel('request aborted').catch(() => {});
     });
 
     try {
@@ -740,7 +749,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error');
+          void reader.cancel('response write error').catch(() => {});
         };
         ctx.res.once('error', onResError);
 
@@ -876,10 +885,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
+    const routes = await this.registerSchemaApiRoutes();
+    if (!(await this.buildCustomRouteHandler(routes))) return;
 
     const server = this;
-
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
       // Check if this request matches a protected custom route and run auth
       const path = String(ctx.path || '/');
@@ -1002,6 +1011,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+    this.app.use(async (ctx: Context, next: Next) => {
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+      ctx.res.once('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, ctx.res.statusCode);
+      });
+      await next();
+    });
   }
 
   registerAuthMiddleware(): void {

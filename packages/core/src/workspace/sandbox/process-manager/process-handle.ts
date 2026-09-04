@@ -134,6 +134,17 @@ class RetainedOutputBuffer {
 }
 
 /**
+ * Thrown by {@link ProcessHandle.closeStdin} when the sandbox provider has no
+ * way to close a running process's stdin.
+ *
+ * `handle.writer.end()` treats this error as a successful finish, so piping to
+ * a process stays safe on providers without stdin close support.
+ */
+export class UnsupportedStdinCloseError extends Error {
+  readonly name = 'UnsupportedStdinCloseError';
+}
+
+/**
  * Handle to a spawned process.
  *
  * Subclasses implement the platform-specific primitives (kill, sendStdin,
@@ -190,18 +201,35 @@ export abstract class ProcessHandle {
   abstract sendStdin(data: string): Promise<void>;
 
   /**
+   * Close the process's stdin, signaling EOF.
+   *
+   * Providers that cannot close stdin throw {@link UnsupportedStdinCloseError}.
+   * The default implementation is the unsupported case, so providers only
+   * override this when their transport exposes a stdin close primitive.
+   */
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError(`${this.constructor.name} does not support closing stdin`);
+  }
+
+  /**
    * Wait for the process to finish and return the result.
    *
    * Optionally pass `onStdout`/`onStderr` callbacks to stream output chunks
    * while waiting. The callbacks are automatically removed when `wait()`
    * resolves, so there's no cleanup needed by the caller.
    *
-   * Subclasses implement `wait()` with platform-specific logic — the base
+   * Optionally pass an `abortSignal` to couple the blocking wait to a caller
+   * lifetime: on abort the process is killed (mirroring the spawn-time
+   * `abortSignal` convention in {@link CommandOptions}), which lets the wait
+   * settle with the killed process's result instead of blocking forever.
+   *
+   * Subclasses implement `wait()` with platform-specific logic; the base
    * constructor wraps it to handle the optional streaming callbacks.
    */
   async wait(_options?: {
     onStdout?: (data: string) => void;
     onStderr?: (data: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<CommandResult> {
     throw new Error(`${this.constructor.name} must implement wait()`);
   }
@@ -228,9 +256,22 @@ export abstract class ProcessHandle {
     // with a wrapper that handles optional streaming callbacks.
     const implWait = this.wait.bind(this);
 
-    this.wait = async (waitOptions?: { onStdout?: (data: string) => void; onStderr?: (data: string) => void }) => {
+    this.wait = async (waitOptions?: {
+      onStdout?: (data: string) => void;
+      onStderr?: (data: string) => void;
+      abortSignal?: AbortSignal;
+    }) => {
       if (waitOptions?.onStdout) this._stdoutListeners.add(waitOptions.onStdout);
       if (waitOptions?.onStderr) this._stderrListeners.add(waitOptions.onStderr);
+      // Abort kills the process (same convention as spawn-time `abortSignal`
+      // in the process manager) so the wait settles via the normal exit path
+      // instead of blocking past the caller's lifetime.
+      const abortSignal = waitOptions?.abortSignal;
+      const onAbort = () => {
+        void this.kill().catch(() => {});
+      };
+      if (abortSignal?.aborted) onAbort();
+      else abortSignal?.addEventListener('abort', onAbort, { once: true });
       try {
         const result = await implWait();
         return {
@@ -241,6 +282,7 @@ export abstract class ProcessHandle {
           stderrDroppedBytes: this.stderrDroppedBytes,
         };
       } finally {
+        abortSignal?.removeEventListener('abort', onAbort);
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
       }
@@ -314,6 +356,12 @@ export abstract class ProcessHandle {
       this._writer = new Writable({
         write: (chunk, _encoding, cb) => {
           this.sendStdin(chunk.toString()).then(() => cb(), cb);
+        },
+        final: cb => {
+          this.closeStdin().then(
+            () => cb(),
+            (err: unknown) => cb(err instanceof UnsupportedStdinCloseError ? null : (err as Error)),
+          );
         },
       });
     }

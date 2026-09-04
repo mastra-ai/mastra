@@ -77,4 +77,4 @@ agents. Try:
   the nested `historian` subagent.
 - Ask about a storm — the `severe-weather` skill prepends a safety note.
 
-See the full docs at `/docs/agents/file-based-agents`.
+See the full docs at [`/docs/getting-started/develop`](https://mastra.ai/docs/getting-started/develop).

@@ -1,6 +1,7 @@
 export * as agentBuilder from './handlers/agent-builder';
 export { formatZodError, isZodError, type ZodErrorLike } from './handlers/error';
 export * as agents from './handlers/agents';
+export * as plans from './handlers/plans';
 export * as a2a from './handlers/a2a';
 export * as conversations from './handlers/conversations';
 export * as logs from './handlers/logs';
@@ -14,4 +15,4 @@ export * as workspace from './handlers/workspace';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
 export * as workflows from './handlers/workflows';
-export * as storedWorkflows from './handlers/stored-workflows';
+export * as dynamicWorkflows from './handlers/dynamic-workflows';

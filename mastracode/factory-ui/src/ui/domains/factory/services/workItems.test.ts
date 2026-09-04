@@ -36,7 +36,7 @@ describe('Factory work item service boundary', () => {
   it('maps provider-neutral server work items to the board source model', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] })));
 
-    const [item] = await listWorkItems('', 'project-1');
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
 
     expect(item).toMatchObject({
       githubProjectId: 'project-1',
@@ -67,7 +67,7 @@ describe('Factory work item service boundary', () => {
       ),
     );
 
-    const [item] = await listWorkItems('', 'project-1');
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
 
     expect(item).toMatchObject({
       source: 'slack-thread',

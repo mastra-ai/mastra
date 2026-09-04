@@ -133,6 +133,18 @@ describe('formatUsageMetrics', () => {
     expect(result['gen_ai.usage.cache_creation.input_tokens']).toBe(500);
   });
 
+  it('should preserve cache creation TTL splits as extension attributes', () => {
+    const usage: UsageStats = {
+      inputTokens: 1000,
+      outputTokens: 200,
+      inputDetails: { cacheWrite: 500, cacheWrite5m: 300, cacheWrite1h: 200 },
+    };
+    const result = formatUsageMetrics(usage);
+    expect(result['gen_ai.usage.cache_creation.input_tokens']).toBe(500);
+    expect(result['gen_ai.usage.cache_creation.5m_input_tokens']).toBe(300);
+    expect(result['gen_ai.usage.cache_creation.1h_input_tokens']).toBe(200);
+  });
+
   it('should extract reasoning from outputDetails', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = formatUsageMetrics(usage);

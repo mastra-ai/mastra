@@ -1,5 +1,51 @@
 # mastra-docs
 
+## 0.0.74
+
+## 0.0.73
+
+## 0.0.72
+
+## 0.0.71
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.70
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.69
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.68
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.67
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.66
+
+### Patch Changes
+
+- Improved docs sidebar transitions when opening and closing contextual menus. ([#20933](https://github.com/mastra-ai/mastra/pull/20933))
+
+## 0.0.65
+
+## 0.0.64
+
 ## 0.0.63
 
 ## 0.0.62

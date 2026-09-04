@@ -255,18 +255,15 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       expect(workingMemoryContent).toContain('TypeScript');
     });
 
-    it.skip('should use custom working memory template when provided', async () => {
-      // TODO: Fix this test - template should be WorkingMemoryTemplate object, not a function
-      const customTemplate = (workingMemory: string) => {
-        return `CUSTOM CONTEXT:\n${workingMemory}\n\nUse this information to answer questions.`;
-      };
+    it('should use custom working memory template when provided', async () => {
+      const customTemplate = `CUSTOM CONTEXT:\n\nUse this information to answer questions.`;
 
       const memory = new Memory({
         storage: new MockStore({ id: `mock-store-${randomUUID()}` }),
         options: {
           workingMemory: {
             enabled: true,
-            template: customTemplate as any,
+            template: customTemplate,
           },
         },
       });

@@ -54,6 +54,23 @@ describe('deriveLoadedNamesFromMessages', () => {
     expect([...deriveLoadedNamesFromMessages(args)].sort()).toEqual(['calendar', 'weather']);
   });
 
+  it('reads the single-name load_tool result shape ({ success: true, toolName })', () => {
+    const args = argsWithMessages([
+      {
+        toolName: 'load_tool',
+        result: { success: true, message: 'Tool "weather" loaded successfully.', toolName: 'weather' },
+      },
+    ]);
+    expect([...deriveLoadedNamesFromMessages(args)]).toEqual(['weather']);
+  });
+
+  it('ignores toolName on failed load_tool results (not-found shape)', () => {
+    const args = argsWithMessages([
+      { toolName: 'load_tool', result: { success: false, message: 'Tool "weather" not found.', toolName: 'weather' } },
+    ]);
+    expect(deriveLoadedNamesFromMessages(args).size).toBe(0);
+  });
+
   it('returns empty when messages are missing', () => {
     expect(deriveLoadedNamesFromMessages({} as ProcessInputStepArgs).size).toBe(0);
   });

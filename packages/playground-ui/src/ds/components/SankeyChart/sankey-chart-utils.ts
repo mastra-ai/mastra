@@ -38,6 +38,8 @@ export type FixedSankeyNodeGeometry = {
 };
 
 export type FixedSankeyLinkGeometry = {
+  sourceX: number;
+  targetX: number;
   sourceY: number;
   targetY: number;
   sourceWidth: number;
@@ -320,6 +322,11 @@ export function buildFixedSankeyGeometry(
     const sourceOffset = sourceOffsets.get(link.sourceNode.id) ?? sourceGeometry.y;
     const targetOffset = targetOffsets.get(link.targetNode.id) ?? targetGeometry.y;
     links.set(link.id, {
+      // ribbons anchor to their own nodes' columns: depth-based layouts (like
+      // the underlying recharts sankey) would otherwise stretch links of a
+      // disconnected graph across the full chart width
+      sourceX: sourceGeometry.x + SANKEY_NODE_WIDTH,
+      targetX: targetGeometry.x,
       sourceY: sourceOffset + sourceWidth / 2,
       targetY: targetOffset + targetWidth / 2,
       sourceWidth,

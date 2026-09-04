@@ -36,6 +36,7 @@ import {
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
 import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { validateAgentInstructionReferences } from './validate-agent-instructions';
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
@@ -86,6 +87,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'skills',
   'workspace',
   'browser',
+  'durable',
 ] as const;
 
 const CODE_AGENT_OVERRIDE_FIELDS = [
@@ -645,6 +647,12 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         }
       }
 
+      await validateAgentInstructionReferences({
+        instructions: createInstructions,
+        mastra,
+        requestContext,
+      });
+
       const input = {
         id,
         authorId,
@@ -829,6 +837,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Studio to own. This keeps stored snapshots (and the per-entity files
       // they get persisted to) free of fields the server never reads back.
       let codeAgentForUpdate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      let shouldValidateStoredInstructions = true;
       try {
         codeAgentForUpdate = mastra.getAgentById?.(storedAgentId) as typeof codeAgentForUpdate;
       } catch {
@@ -842,12 +851,19 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
           }
         } else {
           instructions = undefined;
+          shouldValidateStoredInstructions = false;
         }
         if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
           tools = undefined;
           integrationTools = undefined;
           mcpClients = undefined;
         }
+      }
+
+      if (shouldValidateStoredInstructions) {
+        const effectiveInstructions =
+          instructions ?? (await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' }))?.instructions;
+        await validateAgentInstructionReferences({ instructions: effectiveInstructions, mastra, requestContext });
       }
 
       const mergedMetadata: Record<string, unknown> = { ...(existing.metadata ?? {}), ...(metadata ?? {}) };

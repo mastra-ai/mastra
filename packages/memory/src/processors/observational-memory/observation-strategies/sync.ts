@@ -16,6 +16,7 @@ import {
 import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
+import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -122,11 +123,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
+      rawObservations: result.observations,
+      recentMessages: formatMessagesForObserver(this.opts.messages, { maxPartLength: 500 }),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
       memory: this.deps.memory,
       sendSignal: this.opts.sendSignal,
+      sendStateSignal: this.opts.sendStateSignal,
+      writer: this.opts.writer,
+      abortSignal: this.opts.abortSignal,
       requestContext: this.opts.requestContext,
     });
     const output = {
@@ -212,9 +218,9 @@ export class SyncObservationStrategy extends ObservationStrategy {
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
-      await this.storage.updateThread({
+      await this.storage.patchThread({
         id: threadId,
-        title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+        ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
         metadata: newMetadata,
       });
 

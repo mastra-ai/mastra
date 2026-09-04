@@ -60,8 +60,8 @@ function getRouteBadge(sectionTitle?: string) {
   return sectionTitle;
 }
 
-function getObservabilityEntityPath(entity: string) {
-  return `/observability?entity=${encodeURIComponent(entity)}`;
+function getTracesEntityPath(entity: string) {
+  return `/traces?entity=${encodeURIComponent(entity)}`;
 }
 
 type NavigationSection = {
@@ -355,12 +355,12 @@ const ObservabilityResults = ({
     <>
       <CommandGroup heading="Observability">
         <CommandPaletteItem
-          value="observability traces telemetry signals /observability"
-          onSelect={() => handleSelect('/observability')}
+          value="observability traces telemetry signals /traces"
+          onSelect={() => handleSelect('/traces')}
           icon={<EyeIcon />}
           title="Traces"
           subtitle="Runtime traces"
-          path="/observability"
+          path="/traces"
           badge="Signal"
         />
         <CommandPaletteItem
@@ -386,7 +386,7 @@ const ObservabilityResults = ({
       {agentEntries.length > 0 && (
         <CommandGroup heading="Agent Traces">
           {agentEntries.map(([id, agent]) => {
-            const path = getObservabilityEntityPath(id);
+            const path = getTracesEntityPath(id);
 
             return (
               <CommandPaletteItem
@@ -407,7 +407,7 @@ const ObservabilityResults = ({
       {workflowEntries.length > 0 && (
         <CommandGroup heading="Workflow Traces">
           {workflowEntries.map(([id, workflow]) => {
-            const path = getObservabilityEntityPath(workflow.name);
+            const path = getTracesEntityPath(workflow.name);
 
             return (
               <CommandPaletteItem

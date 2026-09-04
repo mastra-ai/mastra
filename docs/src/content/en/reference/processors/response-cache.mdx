@@ -1,11 +1,17 @@
 ---
 title: "Reference: ResponseCache | Processors"
-description: "API reference for the ResponseCache input processor that caches LLM responses inside the agentic loop."
+description: "ResponseCache is an input processor that caches LLM responses on the request/response boundary inside the agentic loop."
 packages:
   - "@mastra/core"
 ---
 
 # ResponseCache
+
+:::beta
+
+Breaking changes may occur without a major version bump until the API is stable.
+
+:::
 
 `ResponseCache` is an input processor that caches LLM responses on the request/response boundary inside the agentic loop. It hooks into `processLLMRequest` for cache lookup and short-circuits on a hit. It uses `processLLMResponse` to write the completed response.
 

@@ -15,10 +15,12 @@ export function createCloseTool(browser: StagehandBrowser) {
     execute: async (_input, { agent }) => {
       // For thread scope, close only the thread's session
       const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       if (browser.getScope() !== 'shared') {
         if (!threadId) {
           throw new Error('stagehand_close requires agent.threadId when browser scope is not shared');
         }
+        browser.markBrowserCloseReason('agent', threadId);
         await browser.closeThreadSession(threadId);
         return {
           success: true,
@@ -26,6 +28,7 @@ export function createCloseTool(browser: StagehandBrowser) {
         };
       }
       // For shared scope, close the entire browser
+      browser.markBrowserCloseReason('agent');
       await browser.close();
       return {
         success: true,

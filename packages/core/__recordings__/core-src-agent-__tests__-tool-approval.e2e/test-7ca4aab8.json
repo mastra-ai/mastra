@@ -5,11 +5,11 @@
     "testName": "tool approval and suspension > suspension > should call findUserWorkflow with suspend and resume via generate",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:52:19.772Z",
-    "updatedAt": "2026-06-17T13:35:53.226Z"
+    "updatedAt": "2026-08-12T23:59:58.757Z"
   },
   "recordings": [
     {
-      "hash": "9a672e337270b6da",
+      "hash": "16fdf8601e8ee188",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -55,7 +55,6 @@
                     "description": "The runId of the suspended tool",
                     "anyOf": [
                       {
-                        "description": "The runId of the suspended tool",
                         "type": "string"
                       },
                       {
@@ -91,7 +90,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781703350674
+        "timestamp": 1786579196503
       },
       "response": {
         "status": 200,
@@ -100,13 +99,13 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0d270979bd12953-SJC",
+          "cf-ray": "a2a36fca4916cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 17 Jun 2026 13:35:52 GMT",
-          "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "1310",
-          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
+          "date": "Wed, 12 Aug 2026 23:59:57 GMT",
+          "openai-organization": "redacted",
+          "openai-processing-ms": "1122",
+          "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -114,21 +113,21 @@
           "x-ratelimit-limit-requests": "5000",
           "x-ratelimit-limit-tokens": "2000000",
           "x-ratelimit-remaining-requests": "4999",
-          "x-ratelimit-remaining-tokens": "1999653",
+          "x-ratelimit-remaining-tokens": "1999664",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "10ms",
-          "x-request-id": "req_6123916bebb94ec38befcd502e5c0b7a"
+          "x-request-id": "req_006c0a6d843e46eba39b55e9a8cf1df8"
         },
         "body": {
-          "id": "resp_0f590bba17bf0e2b006a32a2b707c881989480a381fb4f66e2",
+          "id": "resp_01ce771177f2c171006a7d08fc914c8199bc9e103b680409d3",
           "object": "response",
-          "created_at": 1781703351,
+          "created_at": 1786579196,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781703352,
+          "completed_at": 1786579197,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -139,11 +138,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0f590bba17bf0e2b006a32a2b7d6fc8198b5e56de58f6a484d",
+              "id": "fc_01ce771177f2c171006a7d08fd2b50819995fbed189343eb2e",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_zNHfQP4rui8eOf8TZ3qNsEYr",
+              "call_id": "call_1G1yLD8nQ9VqNIRhBwYLYCtV",
               "name": "workflow-findUserWorkflow"
             }
           ],
@@ -168,11 +167,30 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "This is a test tool that returns the name and email",
               "name": "workflow-findUserWorkflow",
+              "output_schema": null,
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -193,7 +211,6 @@
                     "description": "The runId of the suspended tool",
                     "anyOf": [
                       {
-                        "description": "The runId of the suspended tool",
                         "type": "string"
                       },
                       {
@@ -231,15 +248,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 130,
+            "input_tokens": 119,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
             "output_tokens": 36,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 166
+            "total_tokens": 155
           },
           "user": null,
           "metadata": {}
@@ -248,7 +266,7 @@
       }
     },
     {
-      "hash": "39c5cc2dc89f54da",
+      "hash": "7ae46a79bab42937",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -270,12 +288,12 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0f590bba17bf0e2b006a32a2b7d6fc8198b5e56de58f6a484d"
+              "id": "fc_01ce771177f2c171006a7d08fd2b50819995fbed189343eb2e"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_zNHfQP4rui8eOf8TZ3qNsEYr",
-              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"},\"runId\":\"00000000-0000-4000-8000-000000000058\"}"
+              "call_id": "call_1G1yLD8nQ9VqNIRhBwYLYCtV",
+              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"},\"runId\":\"00000000-0000-4000-8000-000000000057\"}"
             }
           ],
           "tools": [
@@ -303,7 +321,6 @@
                     "description": "The runId of the suspended tool",
                     "anyOf": [
                       {
-                        "description": "The runId of the suspended tool",
                         "type": "string"
                       },
                       {
@@ -339,7 +356,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781703352150
+        "timestamp": 1786579197864
       },
       "response": {
         "status": 200,
@@ -348,13 +365,13 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0d270a0c82b2953-SJC",
+          "cf-ray": "a2a36fd2d936cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 17 Jun 2026 13:35:53 GMT",
-          "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "923",
-          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
+          "date": "Wed, 12 Aug 2026 23:59:58 GMT",
+          "openai-organization": "redacted",
+          "openai-processing-ms": "684",
+          "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -362,21 +379,21 @@
           "x-ratelimit-limit-requests": "5000",
           "x-ratelimit-limit-tokens": "2000000",
           "x-ratelimit-remaining-requests": "4999",
-          "x-ratelimit-remaining-tokens": "1999570",
+          "x-ratelimit-remaining-tokens": "1999581",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "12ms",
-          "x-request-id": "req_8b36129473a94d71922fcca19cb940c9"
+          "x-request-id": "req_ddda095b13c34c609c5806c4fc6b001b"
         },
         "body": {
-          "id": "resp_0f590bba17bf0e2b006a32a2b87b58819883b9d904e6c18593",
+          "id": "resp_01ce771177f2c171006a7d08fdee488199824168062c9219e3",
           "object": "response",
-          "created_at": 1781703352,
+          "created_at": 1786579197,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781703353,
+          "completed_at": 1786579198,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -387,7 +404,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0f590bba17bf0e2b006a32a2b9071c8198a158ca3f703ad140",
+              "id": "msg_01ce771177f2c171006a7d08fe56d881998d3c0cc74a854d77",
               "type": "message",
               "status": "completed",
               "content": [
@@ -395,7 +412,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I found the user:\n\n- **Name:** Dero Israel\n- **Email:** test@test.com"
+                  "text": "The user **Dero Israel** has the email **test@test.com**."
                 }
               ],
               "role": "assistant"
@@ -422,11 +439,30 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "This is a test tool that returns the name and email",
               "name": "workflow-findUserWorkflow",
+              "output_schema": null,
               "parameters": {
                 "type": "object",
                 "properties": {
@@ -447,7 +483,6 @@
                     "description": "The runId of the suspended tool",
                     "anyOf": [
                       {
-                        "description": "The runId of the suspended tool",
                         "type": "string"
                       },
                       {
@@ -485,15 +520,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 213,
+            "input_tokens": 202,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 22,
+            "output_tokens": 18,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 235
+            "total_tokens": 220
           },
           "user": null,
           "metadata": {}

@@ -12,7 +12,7 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware } from '../auth/helpers';
+import { coreAuthMiddleware, findMatchingCustomRoute, isCustomRoutePublic, pathMatchesPattern } from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -22,14 +22,19 @@ import {
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
+import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
+import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
+export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
+export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
@@ -43,6 +48,36 @@ export {
 export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
+export { HTTPException };
+
+export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof HTTPException) || !error.res) {
+    return undefined;
+  }
+
+  return error.getResponse();
+}
+
+/**
+ * Hono/adapter context key set by the framework-public middleware.
+ *
+ * When true, the current request targets a route the framework has declared
+ * public (via `createPublicRoute()` / `requiresAuth: false`). Adapter authors
+ * MUST short-circuit any user-registered middleware for such requests so that
+ * users cannot accidentally (or intentionally) 401 routes the framework needs
+ * to keep reachable (e.g. Studio sign-in endpoints).
+ */
+export const MASTRA_FRAMEWORK_PUBLIC_KEY = '__mastraFrameworkPublic';
+
+/**
+ * A pre-computed matcher that returns true if a given (path, method) targets a
+ * route the framework has declared public via `requiresAuth: false`.
+ *
+ * Built once at server-adapter registration time from `SERVER_ROUTES` and the
+ * `customRouteAuthConfig` map. Called by each adapter's context middleware to
+ * stash a boolean on the per-request context under `MASTRA_FRAMEWORK_PUBLIC_KEY`.
+ */
+export type FrameworkPublicMatcher = (path: string, method: string) => boolean;
 
 export interface OpenAPIConfig {
   title?: string;
@@ -69,6 +104,8 @@ export interface StreamOptions {
   redact?: boolean;
 }
 
+const AGENT_CHANNEL_WEBHOOK_PATH = /^\/api\/agents\/([^/]+)\/channels\/([^/]+)\/webhook\/?$/;
+
 /**
  * MCP transport options for configuring MCP HTTP and SSE transports.
  */
@@ -85,6 +122,15 @@ export interface MCPOptions {
    * Custom session ID generator function.
    */
   sessionIdGenerator?: () => string;
+  /**
+   * Sets `req.auth` before the MCP transport reads it, which is what surfaces as
+   * `extra.authInfo` inside tool and agent execution.
+   *
+   * When omitted, the principal resolved by `server.auth` is bridged
+   * automatically. Provide this hook when your own middleware performs the
+   * verification and you want full control over the resulting `AuthInfo`.
+   */
+  setRequestAuth?: SetMcpRequestAuth;
 }
 
 /**
@@ -139,6 +185,15 @@ function isProtectedFGARoute(route: Pick<ServerRoute, 'requiresAuth'>): boolean 
 
 function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
   return `${route.method} ${route.path}`;
+}
+
+/** A schema-aware custom route created by `createRoute()`. */
+type SchemaCustomApiRoute = Extract<ApiRoute, { readonly _mastraSchemaRoute: true }>;
+/** A Hono-style custom route created by `registerApiRoute()`. */
+type HonoCustomApiRoute = Exclude<ApiRoute, SchemaCustomApiRoute>;
+
+function isSchemaApiRoute(route: ApiRoute): route is SchemaCustomApiRoute {
+  return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
 }
 
 function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
@@ -344,6 +399,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       ) => Promise<Response>)
     | null = null;
 
+  /**
+   * Whether custom (non-schema) API routes were registered. Adapters use this
+   * at request time to decide if they need to preserve a pristine copy of the
+   * request body for the custom-route bridge.
+   */
+  protected get hasCustomRouteHandler(): boolean {
+    return this.customRouteHandler !== null;
+  }
+
   constructor({
     app,
     mastra,
@@ -434,6 +498,32 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Uses segment-aware matching so '/health' excludes '/health' and '/health/deep' but not '/healthcheck'
     const excludePaths = this.httpLoggingConfig.excludePaths || [];
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
+  }
+
+  /** Warn when a request looks like an agent channel webhook whose route was never registered. */
+  protected warnIfUnregisteredChannelWebhook(path: string, method: string, status: number): void {
+    if (status !== 404 || method.toUpperCase() !== 'POST') return;
+
+    const match = AGENT_CHANNEL_WEBHOOK_PATH.exec(path);
+    if (!match) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (findMatchingCustomRoute(path, method.toUpperCase(), routes)) return;
+
+    const agentId = match[1]!;
+    const platform = match[2]!;
+    const platformLabel = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(platform)
+      ? platform
+          .split(/[-_]/)
+          .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+          .join(' ')
+      : 'channel';
+    this.mastra
+      .getLogger()
+      ?.warn(
+        `Received a ${platformLabel} webhook, but this agent doesn't have a ${platformLabel} adapter. Add one to the agent's channels.adapters configuration and restart the server.`,
+        { agentId, platform },
+      );
   }
 
   protected mergeRequestContext({
@@ -697,6 +787,48 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return null;
   }
 
+  /**
+   * Build a matcher that answers "is this (path, method) a framework-public
+   * route?" — i.e. registered with `requiresAuth: false`.
+   *
+   * Adapters call this once at registration time and use the returned function
+   * inside their context middleware to stash a boolean on the per-request
+   * context under `MASTRA_FRAMEWORK_PUBLIC_KEY`. That boolean is then read by
+   * per-user-middleware wrappers to short-circuit user middleware for
+   * framework-public routes, guaranteeing that user middleware cannot 401
+   * routes the framework declared public (e.g. Studio sign-in endpoints).
+   *
+   * The matcher considers:
+   *   - Built-in `SERVER_ROUTES` entries with `requiresAuth === false`
+   *     (paths joined with the adapter's configured `prefix`).
+   *   - Custom user API routes registered with `requiresAuth: false` via the
+   *     `customRouteAuthConfig` map.
+   */
+  getFrameworkPublicMatcher(): FrameworkPublicMatcher {
+    const prefix = this.prefix ?? '';
+
+    const publicRoutes = SERVER_ROUTES.filter(r => r.requiresAuth === false).map(r => ({
+      method: r.method.toUpperCase(),
+      pattern: `${prefix}${r.path}`,
+    }));
+
+    return (path: string, method: string): boolean => {
+      const upperMethod = method.toUpperCase();
+
+      for (const r of publicRoutes) {
+        if ((r.method === upperMethod || r.method === 'ALL') && pathMatchesPattern(path, r.pattern)) {
+          return true;
+        }
+      }
+
+      // Read `customRouteAuthConfig` at request time, not at matcher build
+      // time: adapters constructed without an explicit map only populate it
+      // later, in registerCustomApiRoutes(), after the context middleware has
+      // already built this matcher.
+      return isCustomRoutePublic(path, upperMethod, this.customRouteAuthConfig);
+    };
+  }
+
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract getParams(route: ServerRoute, request: TRequest): Promise<ParsedRequestParams>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
@@ -708,6 +840,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    this.validateAuthResourceScoping();
+    this.registerUserMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
     await this.validateAgentBuilderLicense();
@@ -785,6 +919,27 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Warn when `server.auth` is configured without `mapUserToResourceId`.
+   *
+   * Without it, MASTRA_RESOURCE_ID_KEY is never set in the request context, so
+   * built-in routes fall back to the client-supplied resource ID (for example
+   * `memory.resource`) and ownership checks run against a caller-chosen value.
+   */
+  validateAuthResourceScoping(): void {
+    const auth = this.mastra.getServer()?.auth as { mapUserToResourceId?: unknown } | undefined;
+    if (!auth || typeof auth.mapUserToResourceId === 'function') return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        '[mastra/auth] server.auth is configured without mapUserToResourceId. ' +
+          'Memory, thread and workflow ownership checks will trust the resource ID supplied by the client ' +
+          "(e.g. memory.resource in the request body), so an authenticated user can read or write another user's threads. " +
+          'Configure server.auth.mapUserToResourceId to derive the resource ID from the authenticated user.',
+      );
+  }
+
+  /**
    * Validate route-level FGA policy coverage when an FGA provider opts into
    * startup checks.
    */
@@ -830,12 +985,65 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Register user-provided middleware from the Mastra config (`server.middleware`)
+   * and from `mastra.setServerMiddleware()`. Called by init() between
+   * registerAuthMiddleware() and registerHttpLoggingMiddleware().
+   *
+   * Mastra middleware handlers use Hono's `(c, next)` signature, so only
+   * Hono-based adapters can run them. Those adapters override this method and
+   * MUST wrap each handler with `skipIfFrameworkPublic` (exported by
+   * `@mastra/hono`) so user middleware cannot block framework-public routes.
+   * The default implementation warns when middleware is configured so the
+   * config is not silently ignored on adapters that cannot honor it.
+   */
+  registerUserMiddleware(): void {
+    const instanceMiddleware = this.mastra.getServerMiddleware?.() ?? [];
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    const hasConfigMiddleware = Array.isArray(configMiddleware) ? configMiddleware.length > 0 : !!configMiddleware;
+    if (instanceMiddleware.length === 0 && !hasConfigMiddleware) return;
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        'Mastra server middleware (`server.middleware` or `setServerMiddleware()`) is configured, but this server adapter cannot run Hono middleware handlers. The configured middleware will not run — register middleware through your server framework instead.',
+      );
+  }
+
+  /**
    * Override in adapters to register custom API routes defined via registerApiRoute().
    * Called by init() between registerAuthMiddleware() and registerRoutes().
    */
   async registerCustomApiRoutes(): Promise<void> {
     // Default no-op. Adapters override this to register custom routes
     // using their framework-specific middleware.
+  }
+
+  /** Ensures every custom route has an auth entry without overriding supplied values. */
+  private initializeCustomRouteAuthConfig(routes: ApiRoute[]): void {
+    this.customRouteAuthConfig ??= new Map();
+    for (const route of routes) {
+      const routeKey = `${route.method}:${route.path}`;
+      if (!this.customRouteAuthConfig.has(routeKey)) {
+        this.customRouteAuthConfig.set(routeKey, route.requiresAuth !== false);
+      }
+    }
+  }
+
+  /**
+   * Registers schema-aware custom routes through the adapter's native route pipeline.
+   * Returns the remaining Hono-style routes for the custom-route bridge.
+   */
+  protected async registerSchemaApiRoutes(): Promise<HonoCustomApiRoute[]> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+    this.validateCustomRoutePaths(routes);
+    this.initializeCustomRouteAuthConfig(routes);
+
+    const schemaRoutes = routes.filter(isSchemaApiRoute);
+    for (const route of schemaRoutes) {
+      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix: '' });
+    }
+
+    return routes.filter((route): route is HonoCustomApiRoute => !isSchemaApiRoute(route));
   }
 
   /**
@@ -862,9 +1070,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Stores the handler on this instance for use by handleCustomRouteRequest().
    * Returns true if custom routes were found and registered.
    */
-  protected async buildCustomRouteHandler(): Promise<boolean> {
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
-    if (!routes || routes.length === 0) return false;
+  protected async buildCustomRouteHandler(routes: HonoCustomApiRoute[]): Promise<boolean> {
+    if (routes.length === 0) return false;
 
     const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
     const mastra = this.mastra;
@@ -897,8 +1104,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       });
       return c.json({ error: 'Internal Server Error' }, 500);
     });
-
-    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {

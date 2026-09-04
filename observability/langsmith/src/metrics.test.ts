@@ -23,6 +23,20 @@ describe('formatUsageMetrics', () => {
     expect(result.input_token_details?.cache_write).toBe(500);
   });
 
+  it('should preserve cache creation TTL splits in input token details', () => {
+    const usage: UsageStats = {
+      inputTokens: 1000,
+      outputTokens: 200,
+      inputDetails: { cacheWrite: 500, cacheWrite5m: 300, cacheWrite1h: 200 },
+    };
+    const result = formatUsageMetrics(usage);
+    expect(result.input_token_details).toEqual({
+      cache_write: 500,
+      cache_creation_5m: 300,
+      cache_creation_1h: 200,
+    });
+  });
+
   it('should extract reasoning from outputDetails', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = formatUsageMetrics(usage);

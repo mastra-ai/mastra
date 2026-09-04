@@ -1,0 +1,164 @@
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ArrowUpRight, CircleSlash, FastForward, ShieldCheck, Trash2 } from 'lucide-react';
+import type { ReactElement } from 'react';
+import { Link, useParams } from 'react-router';
+
+import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
+import type { ItemRunSpec, RunAction } from '../boardRunSpecs';
+import { externalLinkLabel, githubNumberForItem } from '../boardItems';
+import { itemStageOptions } from '../boardStages';
+import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
+import { workItemPrompt } from '../../supervisor/services/supervisor';
+import type { FactoryDecisionSummary } from '../services/decisions';
+import type { WorkItem } from '../services/workItems';
+import type { BoardStageId } from '../stages';
+import { BoardStageIcon, actionIcon } from './BoardIcons';
+
+export interface WorkItemMenuProps {
+  item: WorkItem;
+  columnStage: BoardStageId;
+  runSpec?: ItemRunSpec;
+  runActions: RunAction[];
+  reReviewAction?: RunAction;
+  laneAction?: RunAction;
+  proposal?: FactoryDecisionSummary;
+  proposedRunLabel?: string;
+  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
+  runDisabled: boolean;
+  approvingDecisionId?: string;
+  onStartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  /** Re-run an action whose session slot is already used (e.g. re-review an updated PR). */
+  onRestartRun: (spec: ItemRunSpec, action: RunAction, options?: { preapprovePlans?: boolean }) => void;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
+  onMove: (toStage: string) => void;
+  onRemove: () => void;
+}
+
+/** Deep link into the Supervisor chat with a question about this card prefilled. */
+export function askSupervisorPath(
+  factoryId: string | undefined,
+  item: Pick<WorkItem, 'id' | 'source' | 'metadata' | 'title'>,
+) {
+  const number = githubNumberForItem(item);
+  const ask = workItemPrompt({ id: item.id, title: item.title, ...(number ? { number } : {}) });
+  return `/factories/${factoryId}/supervisor?ask=${encodeURIComponent(ask)}`;
+}
+
+/** An action's menu entries: the plain run and, unless a person must decide its outcome, a hands-off twin. */
+function runItemPair(
+  spec: ItemRunSpec,
+  action: RunAction,
+  label: string,
+  startRun: WorkItemMenuProps['onStartRun'],
+  { runDisabled, pendingRunRoles }: Pick<WorkItemMenuProps, 'runDisabled' | 'pendingRunRoles'>,
+): ReactElement[] {
+  const starting = pendingRunRoles.has(action.role);
+  return [
+    <DropdownMenu.Item key={label} disabled={runDisabled || starting} onClick={() => startRun(spec, action)}>
+      {actionIcon(action.label)}
+      <span>{starting ? 'Starting…' : label}</span>
+    </DropdownMenu.Item>,
+    ...(action.awaitsHumanDecision
+      ? []
+      : [
+          <DropdownMenu.Item
+            key={`${label} hands-off`}
+            disabled={runDisabled || starting}
+            onClick={() => startRun(spec, action, { preapprovePlans: true })}
+          >
+            <FastForward aria-hidden />
+            <span>{`${label} hands-off`}</span>
+          </DropdownMenu.Item>,
+        ]),
+  ];
+}
+
+export function WorkItemMenuItems({
+  item,
+  columnStage,
+  runSpec,
+  runActions,
+  reReviewAction,
+  laneAction,
+  proposal,
+  proposedRunLabel,
+  pendingRunRoles,
+  runDisabled,
+  approvingDecisionId,
+  onStartRun,
+  onRestartRun,
+  onApproveProposal,
+  onDismissProposal,
+  onMove,
+  onRemove,
+}: WorkItemMenuProps): ReactElement {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  // A held card leads with the maintainer's decision. Nothing that starts,
+  // restarts, or releases a run is offered until the card is accepted: every
+  // one of those would advance it as a side effect. Dismissing a stale
+  // suggestion stays, since that starts nothing.
+  const decision = awaitsTriageDecision(item, columnStage);
+  const runsOffered = runSpec !== undefined && !decision;
+  return (
+    <>
+      {decision &&
+        TRIAGE_DECISIONS.map(choice => (
+          <DropdownMenu.Item key={choice.stage} onClick={() => onMove(choice.stage)}>
+            <BoardStageIcon stage={choice.stage} />
+            <span>{choice.label}</span>
+          </DropdownMenu.Item>
+        ))}
+      {runsOffered &&
+        runActions.flatMap(action =>
+          runItemPair(runSpec, action, action.label, onStartRun, { runDisabled, pendingRunRoles }),
+        )}
+      {runsOffered &&
+        reReviewAction !== undefined &&
+        runItemPair(runSpec, reReviewAction, 'Re-review', onRestartRun, { runDisabled, pendingRunRoles })}
+      {runsOffered &&
+        laneAction !== undefined &&
+        runItemPair(runSpec, laneAction, laneAction.label, onRestartRun, { runDisabled, pendingRunRoles })}
+      {/* Once the card has a live session its surface opens details, so the
+          menus stay the only place left to release a proposed run. */}
+      {proposal !== undefined && !decision && (
+        <DropdownMenu.Item
+          disabled={runDisabled || approvingDecisionId === proposal.id}
+          onClick={() => onApproveProposal(proposal.id)}
+        >
+          {actionIcon(proposedRunLabel ?? 'Start run')}
+          <span>{approvingDecisionId === proposal.id ? 'Starting…' : 'Start suggested run'}</span>
+        </DropdownMenu.Item>
+      )}
+      {proposal !== undefined && (
+        <DropdownMenu.Item onClick={() => onDismissProposal(proposal.id)}>
+          <CircleSlash aria-hidden />
+          <span>Dismiss suggested run</span>
+        </DropdownMenu.Item>
+      )}
+      {item.url !== null && (
+        <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+          <ArrowUpRight aria-hidden />
+          <span>{externalLinkLabel(item.source)}</span>
+        </DropdownMenu.Item>
+      )}
+      <DropdownMenu.Item render={<Link to={askSupervisorPath(factoryId, item)} />}>
+        <ShieldCheck aria-hidden />
+        <span>Ask supervisor</span>
+      </DropdownMenu.Item>
+      {itemStageOptions(item)
+        .filter(stage => stage.id !== columnStage)
+        .filter(stage => !decision || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
+        .map(stage => (
+          <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+            <BoardStageIcon stage={stage.id} />
+            <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+          </DropdownMenu.Item>
+        ))}
+      <DropdownMenu.Item onClick={onRemove}>
+        <Trash2 aria-hidden />
+        <span>Remove</span>
+      </DropdownMenu.Item>
+    </>
+  );
+}

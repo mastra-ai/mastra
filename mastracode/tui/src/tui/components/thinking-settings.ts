@@ -7,6 +7,8 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
+import { getAvailableThinkingLevelsForModel } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
@@ -22,12 +24,12 @@ export interface ThinkingSettingsCallbacks {
 // Thinking Levels
 // =============================================================================
 
-export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ThinkingLevelId = ThinkingLevelSetting;
 
 export interface ThinkingLevelOption {
   id: ThinkingLevelId;
   label: string;
-  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   description: string;
 }
 
@@ -37,6 +39,7 @@ const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
   { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
   { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
   { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
+  { id: 'max', label: 'Max', providerValue: 'max', description: 'Unbounded reasoning (Anthropic, GPT-5.6+)' },
 ];
 
 function isOpenAIModel(modelId: string): boolean {
@@ -44,14 +47,10 @@ function isOpenAIModel(modelId: string): boolean {
 }
 
 export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
-  if (!isOpenAIModel(modelId)) {
-    return [...BASE_THINKING_LEVELS];
-  }
-
-  return BASE_THINKING_LEVELS.map(level => ({
-    ...level,
-    label: level.providerValue,
-  }));
+  const availableLevels = getAvailableThinkingLevelsForModel(modelId);
+  const levels = BASE_THINKING_LEVELS.filter(level => availableLevels.some(available => available === level.id));
+  if (!modelId.startsWith('openai/')) return [...levels];
+  return levels.map(level => ({ ...level, label: level.providerValue }));
 }
 
 export const THINKING_LEVELS = getThinkingLevelsForModel('');

@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { ThreadManager, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import { ThreadManager, DEFAULT_THREAD_ID, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/browser';
 import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, BrowserServer, CDPSession, Page } from 'playwright-core';
@@ -215,7 +215,10 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
       // Create context and initial page
       const context = await browser.newContext({
-        viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
+        // Playwright treats a null viewport as "disable emulation", which is
+        // exactly what `'window'` means.
+        viewport:
+          this.browserConfig.viewport === 'window' ? null : (this.browserConfig.viewport ?? DEFAULT_BROWSER_VIEWPORT),
       });
 
       await context.newPage();

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/blaxel",
-  "version": "0.6.0",
+  "version": "0.9.0",
   "description": "Blaxel cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@blaxel/core": "^0.2.87"
+    "@blaxel/core": "^0.3.8"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -53,8 +53,7 @@
     "@mastra/core": ">=1.12.0-0 <2.0.0-0"
   },
   "files": [
-    "dist",
-    "CHANGELOG.md"
+    "dist"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -30,16 +30,21 @@ export interface MountContext {
   };
 }
 
-/**
- * Validate a bucket name before interpolating into shell commands.
- * Covers S3, GCS, and S3-compatible (R2, MinIO) naming rules.
- */
-const SAFE_BUCKET_NAME = /^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$/;
+const SAFE_S3_BUCKET_NAME = /^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$/;
+const SAFE_GCS_BUCKET_NAME = /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/;
 
-export function validateBucketName(bucket: string): void {
-  if (!SAFE_BUCKET_NAME.test(bucket)) {
+export function validateS3BucketName(bucket: string): void {
+  if (!SAFE_S3_BUCKET_NAME.test(bucket)) {
     throw new Error(
-      `Invalid bucket name: "${bucket}". Bucket names must be 3-63 characters, lowercase alphanumeric, hyphens, or dots.`,
+      `Invalid S3 bucket name: "${bucket}". Bucket names must be 3-63 characters, lowercase alphanumeric, hyphens, or dots.`,
+    );
+  }
+}
+
+export function validateGCSBucketName(bucket: string): void {
+  if (!SAFE_GCS_BUCKET_NAME.test(bucket)) {
+    throw new Error(
+      `Invalid GCS bucket name: "${bucket}". Bucket names must be 3-63 characters, lowercase alphanumeric, hyphens, underscores, or dots.`,
     );
   }
 }

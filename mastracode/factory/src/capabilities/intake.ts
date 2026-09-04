@@ -49,6 +49,7 @@ export interface IntakeIssue {
   stateType: string | null;
   priority: string | null;
   assignee: string | null;
+  assignees?: string[];
   source: string | null;
   labels: string[];
   commentCount: number | null;

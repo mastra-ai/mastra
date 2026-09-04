@@ -5,6 +5,8 @@ import {
   savePlanToDisk,
   getPlanFilename,
   getLocalPlansDir,
+  getLocalPlansRelativeDir,
+  getSuggestedPlanRelativePath,
   isPlanFilePath,
   readPlanFile,
   approvePlanFile,
@@ -162,6 +164,22 @@ function writePlanFile(filename: string, content: string): string {
   return filePath;
 }
 
+describe('local plan directories', () => {
+  it('uses .mastracode/plans/ outside Factory sessions', () => {
+    expect(getLocalPlansRelativeDir()).toBe('.mastracode/plans');
+    expect(getSuggestedPlanRelativePath('Add dark mode')).toBe('.mastracode/plans/add-dark-mode.md');
+    expect(getLocalPlansDir(tmpProjectPath)).toBe(path.join(tmpProjectPath, '.mastracode', 'plans'));
+  });
+
+  it('uses .artifacts/plans/ for Factory sessions', () => {
+    const options = { factoryProjectId: 'factory-123' };
+
+    expect(getLocalPlansRelativeDir(options)).toBe('.artifacts/plans');
+    expect(getSuggestedPlanRelativePath('Add dark mode', options)).toBe('.artifacts/plans/add-dark-mode.md');
+    expect(getLocalPlansDir(tmpProjectPath, options)).toBe(path.join(tmpProjectPath, '.artifacts', 'plans'));
+  });
+});
+
 describe('isPlanFilePath', () => {
   it('accepts a .md file directly inside .mastracode/plans/', () => {
     expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/add-dark-mode.md')).toBe(true);
@@ -172,18 +190,33 @@ describe('isPlanFilePath', () => {
     expect(isPlanFilePath(tmpProjectPath, abs)).toBe(true);
   });
 
-  it('rejects files outside .mastracode/plans/', () => {
+  it('accepts relative and absolute .md files directly inside .artifacts/plans/ for Factory sessions', () => {
+    const options = { factoryProjectId: 'factory-123' };
+    const abs = path.join(getLocalPlansDir(tmpProjectPath, options), 'feature.md');
+
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/add-dark-mode.md', options)).toBe(true);
+    expect(isPlanFilePath(tmpProjectPath, abs, options)).toBe(true);
+  });
+
+  it('rejects files outside the configured plan directory', () => {
     expect(isPlanFilePath(tmpProjectPath, 'src/index.ts')).toBe(false);
     expect(isPlanFilePath(tmpProjectPath, '.mastracode/other.md')).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/legacy.md', { factoryProjectId: 'factory-123' })).toBe(
+      false,
+    );
   });
 
   it('rejects non-markdown files and nested subdirectories', () => {
-    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/notes.txt')).toBe(false);
-    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/sub/plan.md')).toBe(false);
+    const options = { factoryProjectId: 'factory-123' };
+
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/notes.txt', options)).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/sub/plan.md', options)).toBe(false);
   });
 
-  it('rejects path traversal out of the plans directory', () => {
-    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/../../evil.md')).toBe(false);
+  it('rejects path traversal out of the configured plan directory', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.artifacts/plans/../../evil.md', { factoryProjectId: 'factory-123' })).toBe(
+      false,
+    );
   });
 });
 

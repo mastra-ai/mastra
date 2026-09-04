@@ -682,9 +682,72 @@ describe('LanguageDetector', () => {
     });
   });
 
-  describe('translation quality settings', () => {
-    it('should pass translation quality to agent prompt', async () => {
-      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false, undefined, true));
+  describe('translationQuality (deprecated, no effect)', () => {
+    /**
+     * Captures the whole call the detection agent makes, not just the prompt, so the assertions
+     * cover every request setting the option could plausibly have been wired into.
+     */
+    function setupRequestCapturingModel(result: LanguageDetectionResult) {
+      const requests: string[] = [];
+      const model = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async options => {
+          requests.push(JSON.stringify(options));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `${JSON.stringify(result)}`,
+          };
+        },
+      });
+      return { model, requests };
+    }
+
+    async function requestFor(translationQuality?: 'speed' | 'quality' | 'balanced') {
+      const { model, requests } = setupRequestCapturingModel(
+        createMockLanguageResult('French', 'fr', 0.9, false, undefined, true),
+      );
+      const detector = new LanguageDetector({
+        model,
+        strategy: 'translate',
+        targetLanguages: ['English'],
+        ...(translationQuality ? { translationQuality } : {}),
+      });
+
+      await detector.processInput({
+        messages: [createTestMessage('Bonjour le monde', 'user')],
+        // any: `abort` is typed `() => never`, which a vitest mock cannot satisfy. Same cast the
+        // rest of this file uses.
+        abort: vi.fn() as any,
+      });
+
+      expect(requests).toHaveLength(1);
+      return requests[0]!;
+    }
+
+    it('should send an identical request no matter which value is configured', async () => {
+      const omitted = await requestFor();
+      const speed = await requestFor('speed');
+      const quality = await requestFor('quality');
+      const balanced = await requestFor('balanced');
+
+      // The option is accepted but never reaches the model. Pinning this keeps the docs and the
+      // code honest: wiring it up later must be a deliberate change that updates both.
+      expect(speed).toBe(omitted);
+      expect(quality).toBe(omitted);
+      expect(balanced).toBe(omitted);
+    });
+
+    it('should still translate the message when the option is set', async () => {
+      const translation: TranslationResult = {
+        original_text: 'Bonjour le monde',
+        original_language: 'French',
+        translated_text: 'Hello world',
+        target_language: 'English',
+        confidence: 0.93,
+      };
+      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false, translation, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -693,14 +756,25 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
+      const result = await detector.processInput({
+        messages: [createTestMessage('Bonjour le monde', 'user')],
+        // any: `abort` is typed `() => never`, which a vitest mock cannot satisfy. Same cast the
+        // rest of this file uses.
+        abort: mockAbort as any,
+      });
 
-      const messages = [createTestMessage('Bonjour le monde', 'user')];
-      await detector.processInput({ messages, abort: mockAbort as any });
-
-      // The model should have been called with quality settings
-      // We can't easily verify the exact call without exposing internals,
-      // but we can verify the process completed successfully
       expect(mockAbort).not.toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+      // The deprecated option must not get in the way of the translation actually happening.
+      expect(result[0]!.content.content).toBe('Hello world');
+      // any: message metadata is typed as an open record; the existing tests read it the same way.
+      const detection = (result[0]!.content.metadata as any)?.language_detection;
+      expect(detection?.detected_language).toBe('French');
+      expect(detection?.translation).toMatchObject({
+        original_language: 'French',
+        target_language: 'English',
+      });
+      expect(detection?.original_content).toBe('Bonjour le monde');
     });
   });
 

@@ -18,10 +18,18 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
-import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
+import {
+  TraceQueryExecutionError,
+  encodeTraceQueryCursor,
+  parseTraceQueryRequest,
+  planTraceQuery,
+} from '@mastra/core/storage';
+import { QUERY_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
+import { MASTRA_IS_STUDIO_KEY, createRoute } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { MastraServer } from '../index';
 
 function sleep(ms: number): Promise<void> {
@@ -144,6 +152,303 @@ describe('Hono Server Adapter', () => {
         };
       }
     },
+  });
+
+  describe('Trace query error responses over HTTP', () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+
+    function getErrorSchema(status: 400 | 409 | 422 | 501 | 504) {
+      const schema = QUERY_TRACES.openapi?.responses[status]?.content?.['application/json']?.schema;
+      if (!schema) throw new Error(`Missing trace-query error schema for ${status}`);
+      return schema;
+    }
+
+    function createMastraWithObservabilityStore(observabilityStore: object) {
+      const mastra = new Mastra({ logger: false });
+      const storage = {
+        getStore: vi.fn().mockResolvedValue(observabilityStore),
+      } as unknown as NonNullable<ReturnType<Mastra['getStorage']>>;
+      vi.spyOn(mastra, 'getStorage').mockReturnValue(storage);
+      return mastra;
+    }
+
+    async function requestTraceQuery(mastra: Mastra, body: unknown) {
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+      await adapter.init();
+      return app.request('/api/observability/traces/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+
+    async function expectErrorResponse(response: Response, status: 400 | 409 | 422 | 501 | 504, body: unknown) {
+      expect(response.status).toBe(status);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      const actual = await response.json();
+      expect(getErrorSchema(status).safeParse(actual).success).toBe(true);
+      expect(actual).toEqual(body);
+      return actual;
+    }
+
+    it('preserves a malformed cursor response', async () => {
+      const response = await requestTraceQuery(new Mastra({ logger: false }), {
+        timeRange,
+        page: { after: 'not-a-cursor' },
+      });
+
+      await expectErrorResponse(response, 400, {
+        code: 'TRACE_QUERY_CURSOR_MALFORMED',
+        message: 'The trace query cursor is malformed',
+      });
+    });
+
+    it('preserves a cursor conflict response', async () => {
+      const original = planTraceQuery(parseTraceQueryRequest({ timeRange }));
+      const after = encodeTraceQueryCursor(original, {
+        result: 'traces',
+        sortValue: '2026-08-20T10:00:00.000Z',
+        traceId: 'trace-a',
+      });
+      const response = await requestTraceQuery(new Mastra({ logger: false }), {
+        timeRange,
+        where: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
+        page: { after },
+      });
+
+      await expectErrorResponse(response, 409, {
+        code: 'TRACE_QUERY_CURSOR_CONFLICT',
+        message: 'The cursor does not match the query',
+      });
+    });
+
+    it('preserves semantic validation issues', async () => {
+      const response = await requestTraceQuery(new Mastra({ logger: false }), {
+        timeRange,
+        where: { op: 'eq', left: { path: 'input' }, right: { literal: 'sensitive search' } },
+      });
+
+      const body = await expectErrorResponse(response, 422, {
+        code: 'TRACE_QUERY_INVALID',
+        message: 'The trace query is invalid',
+        issues: [
+          {
+            code: 'field_not_allowed',
+            path: ['where', 'left', 'path'],
+            message: 'The predicate field is not allowed here',
+          },
+        ],
+      });
+      expect(JSON.stringify(body)).not.toContain('sensitive search');
+    });
+
+    it('preserves an unsupported-store response', async () => {
+      const queryTraces = vi.fn();
+      const response = await requestTraceQuery(
+        createMastraWithObservabilityStore({ getFeatures: () => [], queryTraces }),
+        { timeRange },
+      );
+
+      await expectErrorResponse(response, 501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Advanced trace queries are not supported by the configured observability store',
+      });
+      expect(queryTraces).not.toHaveBeenCalled();
+    });
+
+    it('preserves a timeout response without storage details', async () => {
+      const queryTraces = vi.fn().mockRejectedValue(new TraceQueryExecutionError());
+      const response = await requestTraceQuery(
+        createMastraWithObservabilityStore({ getFeatures: () => ['trace-query'], queryTraces }),
+        { timeRange },
+      );
+
+      const body = await expectErrorResponse(response, 504, {
+        code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+        message: 'The trace query exceeded its execution timeout',
+      });
+      expect(JSON.stringify(body)).not.toMatch(/select|parameter|stack|driver/i);
+    });
+  });
+
+  it('returns the documented malformed-body response for trace queries', async () => {
+    const mastra = new Mastra({ logger: false });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/api/observability/traces/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"timeRange":',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid request body',
+      issues: [{ field: 'body', message: expect.any(String) }],
+    });
+  });
+
+  it('rejects an oversized trace-query body before planning or storage access', async () => {
+    const mastra = new Mastra({ logger: false });
+    const getStorage = vi.spyOn(mastra, 'getStorage');
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/api/observability/traces/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 'x'.repeat(256 * 1024) }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+    expect(getStorage).not.toHaveBeenCalled();
+  });
+
+  it('registers createRoute routes from server.apiRoutes with runtime validation', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/validated',
+      responseType: 'json',
+      bodySchema: z.object({ name: z.string() }),
+      handler: async ({ name }) => ({ greeting: `Hello, ${name}` }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const invalidResponse = await app.request('/custom/validated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 42 }),
+    });
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({ error: 'Invalid request body' });
+
+    const validResponse = await app.request('/custom/validated', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ada' }),
+    });
+    expect(validResponse.status).toBe(200);
+    await expect(validResponse.json()).resolves.toEqual({ greeting: 'Hello, Ada' });
+  });
+
+  it('preserves streaming responses for createRoute routes from server.apiRoutes', async () => {
+    const route = createRoute({
+      method: 'GET',
+      path: '/custom/stream',
+      responseType: 'stream',
+      requiresAuth: false,
+      handler: async () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue('hello');
+            controller.close();
+          },
+        }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra });
+
+    await adapter.init();
+
+    const response = await app.request('/custom/stream');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/plain');
+    expect(await response.text()).toContain('hello');
+  });
+
+  it('applies auth to createRoute routes from server.apiRoutes', async () => {
+    const protectedRoute = createRoute({
+      method: 'GET',
+      path: '/custom/secure',
+      responseType: 'json',
+      requiresAuth: true,
+      handler: async () => ({ secret: true }),
+    });
+    const publicRoute = createRoute({
+      method: 'GET',
+      path: '/custom/open',
+      responseType: 'json',
+      requiresAuth: false,
+      handler: async () => ({ open: true }),
+    });
+
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [protectedRoute, publicRoute] } });
+    const originalGetServer = mastra.getServer.bind(mastra);
+    mastra.getServer = () =>
+      ({
+        ...originalGetServer(),
+        auth: {
+          authenticateToken: async (token: string) => (token === 'valid-token' ? { id: 'user-1' } : null),
+          authorize: async () => true,
+        },
+      }) as any;
+
+    const app = new Hono();
+    const adapter = new MastraServer({
+      app,
+      mastra,
+      customRouteAuthConfig: new Map([['GET:/custom/open', false]]),
+    });
+    await adapter.init();
+
+    const unauthenticated = await app.request('/custom/secure');
+    expect(unauthenticated.status).toBe(401);
+
+    const authenticated = await app.request('/custom/secure', {
+      headers: { Authorization: 'Bearer valid-token' },
+    });
+    expect(authenticated.status).toBe(200);
+    await expect(authenticated.json()).resolves.toEqual({ secret: true });
+
+    const open = await app.request('/custom/open');
+    expect(open.status).toBe(200);
+    await expect(open.json()).resolves.toEqual({ open: true });
+  });
+
+  it('includes createRoute routes from server.apiRoutes in the OpenAPI spec', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/custom/spec',
+      responseType: 'json',
+      bodySchema: z.object({ name: z.string() }),
+      responseSchema: z.object({ name: z.string() }),
+      tags: ['Custom'],
+      handler: async ({ name }) => ({ name }),
+    });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [route] } });
+    const app = new Hono();
+    const adapter = new MastraServer({ app, mastra, openapiPath: '/openapi.json' });
+
+    await adapter.init();
+
+    const response = await app.request('/api/openapi.json');
+    expect(response.status).toBe(200);
+    const spec = await response.json();
+    const operation = spec.paths['/custom/spec'].post;
+    expect(spec.paths['/custom/spec'].servers).toEqual([{ url: '/' }]);
+    expect(operation.tags).toEqual(['Custom']);
+    expect(operation.requestBody.content['application/json'].schema).toMatchObject({
+      type: 'object',
+      required: ['name'],
+    });
+    expect(operation.responses['200'].content['application/json'].schema).toMatchObject({
+      type: 'object',
+      required: ['name'],
+    });
   });
 
   describe('SSE stream handshake', () => {
@@ -868,6 +1173,27 @@ describe('Hono Server Adapter', () => {
     });
   });
 
+  describe('Channel webhook diagnostics', () => {
+    it('warns for an unregistered channel webhook when no custom API routes exist', async () => {
+      const mastra = new Mastra({ logger: false });
+      const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      await adapter.init();
+
+      const response = await app.request('/api/agents/support/channels/slack/webhook', {
+        method: 'POST',
+      });
+
+      expect(response.status).toBe(404);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+        agentId: 'support',
+        platform: 'slack',
+      });
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
@@ -1288,6 +1614,17 @@ describe('Hono Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         }),
       );
+      return { status: response.status };
+    },
+
+    executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
+      const request = new Request(url, {
+        method,
+        headers: options.headers,
+        ...(options.body ? { body: options.body } : {}),
+      });
+      expect(request.headers.has('content-length')).toBe(false);
+      const response = await app.request(request);
       return { status: response.status };
     },
   });

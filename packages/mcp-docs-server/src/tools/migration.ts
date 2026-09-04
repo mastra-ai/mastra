@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
 
-const migrationsBaseDir = fromPackageRoot('.docs/guides/migrations');
+const migrationsBaseDir = fromPackageRoot('.docs/reference/migrations');
 
 interface ParsedSection {
   title: string;

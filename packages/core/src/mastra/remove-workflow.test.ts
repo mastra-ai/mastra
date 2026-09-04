@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createWorkflow } from '../workflows/create';
-import { toStorableGraph } from '../workflows/stored';
+import { toStorableGraph } from '../workflows/dynamic';
 import { Mastra } from './index';
 
 const doubleTool = createTool({
@@ -88,7 +88,7 @@ describe('Mastra.removeWorkflow', () => {
   });
 });
 
-describe('Mastra.addStoredWorkflow replaces on re-save', () => {
+describe('Mastra.addDynamicWorkflow replaces on re-save', () => {
   it('re-saving the same id with a new graph replaces the live registration', async () => {
     const storage = new InMemoryStore({ id: 're-save' });
     const mastra = new Mastra({
@@ -101,7 +101,7 @@ describe('Mastra.addStoredWorkflow replaces on re-save', () => {
     const graphA = JSON.parse(
       JSON.stringify(toStorableGraph(buildWorkflow('A=${stepResults.double-tool.doubled}').stepGraph)),
     );
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'shared-id',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
@@ -117,7 +117,7 @@ describe('Mastra.addStoredWorkflow replaces on re-save', () => {
     const graphB = JSON.parse(
       JSON.stringify(toStorableGraph(buildWorkflow('B=${stepResults.double-tool.doubled}').stepGraph)),
     );
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'shared-id',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
@@ -149,7 +149,7 @@ describe('Mastra.getWorkflowOrigin', () => {
     expect(mastra.getWorkflowOrigin('myWorkflow')).toBeUndefined();
   });
 
-  it("stamps 'stored' for workflows added via addStoredWorkflow", async () => {
+  it("stamps 'dynamic' for workflows added via addDynamicWorkflow", async () => {
     const storage = new InMemoryStore({ id: 'origin-stored' });
     const mastra = new Mastra({
       logger: false,
@@ -160,16 +160,16 @@ describe('Mastra.getWorkflowOrigin', () => {
     const graph = JSON.parse(
       JSON.stringify(toStorableGraph(buildWorkflow('v=${stepResults.double-tool.doubled}').stepGraph)),
     );
-    await mastra.addStoredWorkflow({
+    await mastra.addDynamicWorkflow({
       id: 'stored-wf',
       inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
       graph,
     });
 
-    expect(mastra.getWorkflowOrigin('stored-wf')).toBe('stored');
+    expect(mastra.getWorkflowOrigin('stored-wf')).toBe('dynamic');
     // Origin lives on the workflow instance itself, not in Mastra-side state.
-    expect(mastra.getWorkflow('stored-wf' as never).origin).toBe('stored');
+    expect(mastra.getWorkflow('stored-wf' as never).origin).toBe('dynamic');
 
     mastra.removeWorkflow('stored-wf');
     expect(mastra.getWorkflowOrigin('stored-wf')).toBeUndefined();

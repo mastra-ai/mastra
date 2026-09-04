@@ -43,6 +43,17 @@ export abstract class MemoryStorage extends StorageDomain {
    */
   readonly supportsObservationalMemory?: boolean = false;
 
+  /**
+   * Whether this adapter's `updateThread` treats an omitted `title`/`metadata`
+   * as "leave that column untouched" (partial update).
+   *
+   * Adapters compiled before partial updates existed require both fields and
+   * may write `NULL` into the title column when it is omitted. They won't set
+   * this flag, so `patchThread` backfills the current title for them.
+   * Adapters that implement partial updates must set this to true.
+   */
+  readonly supportsPartialThreadUpdate?: boolean = false;
+
   constructor() {
     super({
       component: 'STORAGE',
@@ -60,15 +71,61 @@ export abstract class MemoryStorage extends StorageDomain {
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
+  /**
+   * Update a thread's title and/or metadata.
+   *
+   * `title` and `metadata` are each optional and independent: omitting one
+   * leaves that column untouched rather than blanking it. Callers that only
+   * need to change metadata (working memory, for example) must omit `title`
+   * instead of reading the thread and passing its title back, because a title
+   * generated between that read and this write would be silently overwritten.
+   */
   abstract updateThread({
     id,
     title,
     metadata,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType>;
+
+  /**
+   * Partial-update a thread's title and/or metadata, tolerating adapters that
+   * predate partial `updateThread` support.
+   *
+   * Adapters that declare `supportsPartialThreadUpdate` receive the arguments
+   * as-is (omitted fields are left untouched). For legacy adapters — whose
+   * `updateThread` writes both columns unconditionally and would blank or
+   * `NULL` an omitted title — the current values are read and backfilled
+   * first. That restores the legacy adapter's previous behavior (including
+   * its title-clobbering race) instead of crashing on a NOT NULL constraint.
+   *
+   * Callers that only change metadata should use this instead of calling
+   * `updateThread` directly.
+   */
+  async patchThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<StorageThreadType> {
+    if (!this.supportsPartialThreadUpdate && (title === undefined || metadata === undefined)) {
+      const existing = await this.getThreadById({ threadId: id });
+      if (existing) {
+        title = title ?? existing.title ?? '';
+        metadata = metadata ?? existing.metadata ?? {};
+      }
+    }
+    return this.updateThread({
+      id,
+      ...(title !== undefined ? { title } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
+    });
+  }
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 

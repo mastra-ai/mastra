@@ -14,7 +14,6 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   addOnClusterToDDL,
   applyReplicationToDDL,
-  buildLocalTableReplicationError,
   isReplicationConfigured,
   isReplicatedOrSharedEngine,
   validateReplicationConfig,
@@ -194,9 +193,12 @@ export class ClickhouseDB extends MastraBase {
       format: 'JSONEachRow',
     });
     const rows = (await result.json()) as Array<{ name: string; engine: string }>;
-    const localTables = rows.filter(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
-    if (localTables.length > 0) {
-      throw buildLocalTableReplicationError(localTables);
+    const localTable = rows.find(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
+    if (localTable) {
+      this.logger.warn(
+        `ClickHouse replication is enabled, but pre-existing table '${localTable.name}' uses local engine '${localTable.engine}'. ` +
+          `CREATE TABLE IF NOT EXISTS will leave the existing table untouched.`,
+      );
     }
   }
 
@@ -573,7 +575,7 @@ export class ClickhouseDB extends MastraBase {
           `;
       }
 
-      await this.client.query({
+      await this.client.command({
         query: applyReplicationToDDL(sql, this.replication),
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -629,7 +631,7 @@ export class ClickhouseDB extends MastraBase {
           const alterSql =
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
 
-          await this.client.query({
+          await this.client.command({
             query: addOnClusterToDDL(alterSql, this.replication),
           });
           this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
@@ -683,7 +685,7 @@ export class ClickhouseDB extends MastraBase {
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await this.client.query({
+      await this.client.command({
         query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${tableName}`, this.replication),
       });
     } catch (error: any) {

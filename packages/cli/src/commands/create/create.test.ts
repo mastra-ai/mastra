@@ -106,7 +106,7 @@ const mockTemplate = {
   slug: 'template-agent-harness',
   agents: ['agent'],
   mcp: [],
-  tools: ['web-fetch'],
+  tools: [],
   networks: [],
   workflows: [],
 };
@@ -181,12 +181,9 @@ beforeEach(async () => {
   const adapter = await import('./provider-adapter');
   vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
     displayName: 'OpenAI',
-    sdkPackage: '@ai-sdk/openai',
-    sdkVersion: 'template-version',
-    providerIdentifier: 'openai',
     apiKeyEnv: 'OPENAI_API_KEY',
-    apiKeyPrerequisite: 'An OpenAI API key',
-    featureDescription: 'OpenAI web search and direct web page fetching',
+    apiKeyWritten: false,
+    adaptationFailed: false,
   });
 });
 
@@ -745,24 +742,62 @@ describe('create materialization lifecycle', () => {
     expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(cleanupOwnedStagingDirectory));
   });
 
-  it('cleans owned staging and does not publish when managed adaptation fails', async () => {
+  it('warns once and continues install and publication after partial managed adaptation', async () => {
     const { create } = await import('./create');
     const { installDependencies } = await import('../../utils/clone-template');
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     const { cleanupOwnedStagingDirectory, publishStagedProject } = await import('./utils');
-    vi.mocked(adaptDefaultTemplate).mockRejectedValueOnce(new Error('compatibility failure'));
+    const prompts = await import('@clack/prompts');
+    vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
+      displayName: 'OpenAI',
+      apiKeyEnv: 'OPENAI_API_KEY',
+      apiKeyWritten: false,
+      adaptationFailed: true,
+    });
 
-    await expect(
-      create({
-        projectName: 'my-project',
-        llmProvider: 'openai',
-        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
-      }),
-    ).rejects.toThrow('compatibility failure');
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'openai',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
 
-    expect(installDependencies).not.toHaveBeenCalled();
-    expect(publishStagedProject).not.toHaveBeenCalled();
+    expect(prompts.log.warn).toHaveBeenCalledTimes(1);
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Some provider setup could not be applied. Review the generated project before running it.',
+    );
+    expect(installDependencies).toHaveBeenCalledBefore(vi.mocked(publishStagedProject));
+    expect(publishStagedProject).toHaveBeenCalled();
+    expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(cleanupOwnedStagingDirectory));
     expect(cleanupOwnedStagingDirectory).toHaveBeenCalledWith('/tmp/.my-project.mastra-create-test');
+  });
+
+  it('does not include secure temp filenames in the partial-adaptation warning', async () => {
+    const { create } = await import('./create');
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    const { publishStagedProject } = await import('./utils');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
+      displayName: 'Anthropic',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      apiKeyWritten: false,
+      adaptationFailed: true,
+    });
+
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'anthropic',
+      llmApiKey: 'test-provider-key-do-not-use',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(publishStagedProject).toHaveBeenCalled();
+    expect(prompts.log.warn).toHaveBeenCalledWith(
+      'Some provider setup could not be applied. Review the generated project before running it.',
+    );
+    expect(prompts.log.warn).not.toHaveBeenCalledWith(expect.stringContaining('.env.mastra-create-test.tmp'));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Set ANTHROPIC_API_KEY in .env before starting.'),
+    );
   });
 
   it('keeps install failures fatal, cleans staging, and never publishes the target', async () => {
@@ -855,12 +890,11 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      sdkPackage: '@ai-sdk/anthropic',
-      sdkVersion: 'configured-version',
-      providerIdentifier: 'anthropic',
+      primaryModel: 'anthropic/claude-sonnet-5',
+      observationalModel: 'anthropic/claude-haiku-4-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
-      apiKeyPrerequisite: 'An Anthropic API key',
-      featureDescription: 'Anthropic web search and direct web page fetching',
+      apiKeyWritten: false,
+      adaptationFailed: false,
     });
 
     await create({
@@ -871,6 +905,34 @@ describe('create materialization lifecycle', () => {
 
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('.env.example'));
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('ANTHROPIC_API_KEY'));
+  });
+
+  it('does not claim a supplied API key was written when secure persistence was skipped', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const { adaptDefaultTemplate } = await import('./provider-adapter');
+    vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
+      displayName: 'Anthropic',
+      primaryModel: 'anthropic/claude-sonnet-5',
+      observationalModel: 'anthropic/claude-haiku-4-5',
+      apiKeyEnv: 'ANTHROPIC_API_KEY',
+      apiKeyWritten: false,
+      adaptationFailed: true,
+    });
+
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'anthropic',
+      llmApiKey: 'test-key-do-not-use',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(prompts.log.warn).toHaveBeenCalledTimes(1);
+    expect(prompts.log.warn).not.toHaveBeenCalledWith(expect.stringContaining('test-key-do-not-use'));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Set ANTHROPIC_API_KEY in .env before starting.'),
+    );
+    expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('was written'));
   });
 });
 

@@ -105,7 +105,7 @@ describe('convertMessages', () => {
   // AI SDK v4 has no denied state and requires every tool invocation to carry a result, so
   // converting to AIV4.Core (used by the agent's onFinish memory save) used to throw
   // "ToolInvocation must have a result". It must downgrade to a result whose value is the reason.
-  describe('Mastra V2 output-denied tool invocation', () => {
+  describe('Mastra V2 completed tool invocations unsupported by AI SDK v4', () => {
     const deniedMessage: MastraDBMessage = {
       id: 'assistant-denied',
       role: 'assistant',
@@ -145,6 +145,54 @@ describe('convertMessages', () => {
         toolCallId: 'call-1',
         result: 'Tool call was not approved by the user',
       });
+    });
+
+    const errorMessage: MastraDBMessage = {
+      id: 'assistant-error',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId: 'call-2',
+              toolName: 'failingTool',
+              args: {},
+              errorText: 'TOOL_FAILED',
+            },
+          },
+        ],
+      },
+    };
+
+    it('converts output-error to AIV4.Core without throwing, using the error text as the result', () => {
+      const result = convertMessages(errorMessage).to('AIV4.Core');
+      const toolMessage = result.find(message => message.role === 'tool');
+      expect(toolMessage?.content).toMatchObject([
+        { type: 'tool-result', toolCallId: 'call-2', result: 'TOOL_FAILED' },
+      ]);
+    });
+
+    it('converts output-error to AIV4.UI as a result carrying the error text', () => {
+      const [uiMessage] = convertMessages(errorMessage).to('AIV4.UI');
+      const toolPart = (uiMessage.parts ?? []).find((part: any) => part.type === 'tool-invocation') as any;
+      expect(toolPart?.toolInvocation).toMatchObject({
+        state: 'result',
+        toolCallId: 'call-2',
+        result: 'TOOL_FAILED',
+        // v4 has no output-error state, so the downgrade to `result` has to stay
+        // distinguishable from a tool that actually succeeded.
+        isError: true,
+      });
+    });
+
+    it('does not mark a denied approval as an error', () => {
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
+      const toolPart = (uiMessage.parts ?? []).find((part: any) => part.type === 'tool-invocation') as any;
+      expect(toolPart?.toolInvocation.isError).toBeUndefined();
     });
   });
 

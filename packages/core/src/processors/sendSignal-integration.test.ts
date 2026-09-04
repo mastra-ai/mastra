@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { isTransientSignalMessage } from '../agent/signals';
 import type { IMastraLogger } from '../logger';
 import { ProcessorRunner } from './runner';
 import type { ProcessorStreamWriter } from './index';
@@ -407,5 +408,111 @@ describe('sendSignal integration through ProcessorRunner', () => {
     const signals = messageList.get.all.db().filter(m => m.role === 'signal');
     expect(signals).toHaveLength(1);
     expect(signals[0]!.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'no rotate test' }));
+  });
+
+  it('threads transient: true from a processor sendSignal through to the DB message', async () => {
+    // Regression: MessageList.addSignal rebuilds the signal via createSignal, so it must forward
+    // the transient flag. Otherwise transient signals sent from a processor (the main use case)
+    // lose the flag before toDBMessage() and get persisted.
+    const runner = new ProcessorRunner({
+      inputProcessors: [
+        {
+          id: 'transient-signal',
+          processInputStep: async ({ sendSignal }) => {
+            await sendSignal?.({
+              type: 'system-reminder',
+              contents: 'transient steering reminder',
+              transient: true,
+            });
+          },
+        },
+      ],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    await runner.runProcessInputStep({
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      model: {} as any,
+      tools: {},
+      retryCount: 0,
+      messageId: 'response-1',
+      writer: { custom: async () => {} },
+    });
+
+    const signals = messageList.get.all.db().filter(m => m.role === 'signal');
+    expect(signals).toHaveLength(1);
+    // The flag survived addSignal → the save-time filters will drop this from storage.
+    expect((signals[0]!.content.metadata?.signal as Record<string, unknown>).transient).toBe(true);
+    expect(isTransientSignalMessage(signals[0]!)).toBe(true);
+  });
+
+  it('re-sending a transient reminder each step keeps a single fresh copy in the prompt', async () => {
+    // Regression for #22060: processInputStep runs once per model call within a turn, and the
+    // docs' SteeringReminderProcessor pattern re-sends a transient reminder on every step.
+    // Without dedupe, each re-send appended a new row (5 copies by step 5).
+    const runner = new ProcessorRunner({
+      inputProcessors: [
+        {
+          id: 'steering-reminder',
+          processInputStep: async ({ sendSignal }) => {
+            await sendSignal?.({
+              type: 'system-reminder',
+              contents: 'Stay focused on the current task.',
+              transient: true,
+            });
+          },
+        },
+      ],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const runStep = (stepNumber: number) =>
+      runner.runProcessInputStep({
+        messageList,
+        stepNumber,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        messageId: `response-${stepNumber}`,
+        writer: { custom: async () => {} },
+      });
+
+    await runStep(0);
+    messageList.add([{ role: 'assistant', content: 'calling tool' }], 'response');
+    await runStep(1);
+    messageList.add([{ role: 'assistant', content: 'calling another tool' }], 'response');
+    await runStep(2);
+
+    // Exactly one copy of the reminder, not one per step.
+    const dbMessages = messageList.get.all.db();
+    const signals = dbMessages.filter(m => m.role === 'signal');
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.content.parts[0]).toEqual(
+      expect.objectContaining({ type: 'text', text: 'Stay focused on the current task.' }),
+    );
+
+    // The surviving copy is the freshest one — positioned after the latest assistant message.
+    const lastAssistantIndex = dbMessages.map(m => m.role).lastIndexOf('assistant');
+    const signalIndex = dbMessages.findIndex(m => m.role === 'signal');
+    expect(signalIndex).toBeGreaterThan(lastAssistantIndex);
+
+    // And the prompt sent to the model contains the reminder exactly once.
+    const promptMessages = await messageList.get.all.aiV5.prompt();
+    const reminderCount = promptMessages.filter((m: any) =>
+      extractPromptText(m).includes('Stay focused on the current task.'),
+    ).length;
+    expect(reminderCount).toBe(1);
+
+    // Transient: only one signal row is drained, and it's flagged so save-time filters drop it.
+    const unsavedSignals = messageList.drainUnsavedMessages().filter(m => m.role === 'signal');
+    expect(unsavedSignals).toHaveLength(1);
+    expect(isTransientSignalMessage(unsavedSignals[0]!)).toBe(true);
   });
 });

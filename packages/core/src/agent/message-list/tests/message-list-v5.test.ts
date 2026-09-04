@@ -17,6 +17,42 @@ const resourceId = 'test-resource';
 describe('MessageList V5 Support', () => {
   describe('V4/V5 Detection', () => {
     describe('hasAIV5CoreMessageCharacteristics', () => {
+      it('ignores malformed entries before valid v5 content', () => {
+        const message = {
+          role: 'assistant',
+          content: [undefined, { type: 'text', text: 'hello' }],
+        } as never;
+
+        expect(() => hasAIV5CoreMessageCharacteristics(message)).not.toThrow();
+        expect(hasAIV5CoreMessageCharacteristics(message)).toBe(true);
+      });
+
+      it('detects v6 approval content after a malformed entry', () => {
+        const message = {
+          role: 'assistant',
+          content: [
+            undefined,
+            {
+              type: 'tool-approval-request',
+              approvalId: 'approval-1',
+              toolCallId: 'call-1',
+            },
+          ],
+        } as never;
+
+        expect(() => TypeDetector.hasAIV6CoreMessageCharacteristics(message)).not.toThrow();
+        expect(TypeDetector.hasAIV6CoreMessageCharacteristics(message)).toBe(true);
+      });
+
+      it('classifies missing content without throwing', () => {
+        const message = { role: 'assistant', content: undefined } as never;
+
+        expect(() => TypeDetector.hasAIV6CoreMessageCharacteristics(message)).not.toThrow();
+        expect(() => hasAIV5CoreMessageCharacteristics(message)).not.toThrow();
+        expect(TypeDetector.hasAIV6CoreMessageCharacteristics(message)).toBe(false);
+        expect(hasAIV5CoreMessageCharacteristics(message)).toBe(true);
+      });
+
       it('should detect v5 messages with output in tool-result parts', () => {
         const v5Message: AIV5ModelMessage = {
           role: 'assistant',
@@ -2583,6 +2619,73 @@ describe('MessageList V5 Support', () => {
       // Default AI SDK conversion — json wrapping
       expect(toolResultPart.output.type).toBe('json');
       expect(toolResultPart.output.value).toEqual({ results: ['a', 'b', 'c'] });
+    });
+
+    it('should fall back to the raw result when a stored modelOutput is nullish', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Read the file', 'input');
+
+      // Durable runs used to persist `mastra.modelOutput: undefined` whenever a tool's
+      // toModelOutput opted out of mapping. Keying off presence blanked out `output`,
+      // and providers throw on a tool-result without one.
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-nullish-model-output',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-undefined',
+                toolName: 'read_file',
+                state: 'result',
+                args: { path: 'data.txt' },
+                result: { contents: 'the answer is 42' },
+              },
+              providerMetadata: {
+                mastra: { modelOutput: undefined } as any,
+              },
+            },
+            {
+              // Same thing after a JSON round-trip through storage, where `undefined`
+              // may have been normalized to `null`.
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-null',
+                toolName: 'read_file_2',
+                state: 'result',
+                args: { path: 'other.txt' },
+                result: { contents: 'still 42' },
+              },
+              providerMetadata: {
+                mastra: { modelOutput: null } as any,
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResults = prompt
+        .filter(m => m.role === 'tool')
+        .flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
+
+      const undefinedCase = toolResults.find((p: any) => p.toolCallId === 'call-undefined');
+      expect(undefinedCase.output).toBeDefined();
+      expect(undefinedCase.output.type).toBe('json');
+      expect(undefinedCase.output.value).toEqual({ contents: 'the answer is 42' });
+
+      const nullCase = toolResults.find((p: any) => p.toolCallId === 'call-null');
+      expect(nullCase.output).toBeDefined();
+      expect(nullCase.output.type).toBe('json');
+      expect(nullCase.output.value).toEqual({ contents: 'still 42' });
     });
   });
 });

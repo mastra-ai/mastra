@@ -6,7 +6,13 @@ import { copy } from 'fs-extra';
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/analytics/index.ts', 'src/commands/create/create.ts', 'src/internal/auth.ts'],
+  entry: [
+    'src/index.ts',
+    'src/analytics/index.ts',
+    'src/commands/create/create.ts',
+    'src/commands/experiment/runtime.ts',
+    'src/internal/auth.ts',
+  ],
   treeshake: true,
   format: ['esm'],
   fixedExtension: false,

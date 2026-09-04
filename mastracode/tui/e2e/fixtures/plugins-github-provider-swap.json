@@ -1,0 +1,62 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Probe the signal provider before update.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_signal_probe_before",
+            "name": "e2e_signal_probe",
+            "arguments": {
+              "query": "before"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_signal_probe_before",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Signal provider probe complete."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_signal_probe_after",
+            "name": "e2e_signal_probe",
+            "arguments": {
+              "query": "after"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_signal_probe_after",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Signal provider probe complete."
+      }
+    }
+  ]
+}

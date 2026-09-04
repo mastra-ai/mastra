@@ -4,7 +4,7 @@ import { useFactoryQuery } from '../../../../../hooks/useFactories';
 import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
-import { ActiveModel } from './ActiveModel';
+import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
@@ -36,10 +36,10 @@ export function StatusLine() {
   return (
     <div
       aria-label="Session status line"
-      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-3 gap-y-1"
+      className="text-ui-sm text-icon3 flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModesSelection />
-      <ActiveModel />
+      <ModelPicker />
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />

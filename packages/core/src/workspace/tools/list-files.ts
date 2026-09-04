@@ -22,6 +22,7 @@ Examples:
 - Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }
 
 To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z

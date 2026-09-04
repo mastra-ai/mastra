@@ -8,9 +8,9 @@
  * step-start chunks without text content.
  */
 import type { UIMessage } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 
 import { handleChatStream } from '../chat-route';

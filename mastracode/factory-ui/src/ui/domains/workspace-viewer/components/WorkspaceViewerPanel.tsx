@@ -1,92 +1,127 @@
 import { useState } from 'react';
 
-import { useWorkspaceFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
-import type { RenderedWorkspacePath } from '../config';
+import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import type { WorkspacePanelSize } from '../layout';
+import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
+import type { WorkItem } from '../../factory/services/workItems';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
+import { WorkspaceOverview } from './WorkspaceOverview';
+import { selectWorkspaceFilePreview } from './workspace-file-preview';
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
-  renderedPaths: RenderedWorkspacePath[];
-  /** Fires when the file viewer opens or closes, so a floating host can widen its surface. */
-  onExpandedChange?: (expanded: boolean) => void;
+  threadId: string;
+  onSizeChange?: (size: WorkspacePanelSize) => void;
+  visible?: boolean;
+  workItem?: WorkItem;
+  factoryProjectId?: string;
 }
 
-export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }: WorkspaceViewerPanelProps) {
-  const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
+type WorkspacePanelView =
+  | { type: 'overview' }
+  | { type: 'files'; selectedPath?: string }
+  | { type: 'file'; path: string }
+  | { type: 'changes' }
+  | { type: 'feed' };
 
-  return (
-    <WorkspaceViewerPanelReset key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
-  );
-}
-
-function WorkspaceViewerPanelReset(props: WorkspaceViewerPanelProps) {
-  const [view, setView] = useState<'files' | 'changes'>('files');
-
-  if (view === 'changes') {
-    return <WorkspaceChangesPanel workspacePath={props.workspacePath} onShowFiles={() => setView('files')} />;
-  }
-
-  return <WorkspaceViewerPanelInner {...props} onShowChanges={() => setView('changes')} />;
-}
-
-function WorkspaceViewerPanelInner({
+export function WorkspaceViewerPanel({
   workspacePath,
-  renderedPaths,
-  onExpandedChange,
-  onShowChanges,
-}: WorkspaceViewerPanelProps & { onShowChanges: () => void }) {
-  const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
-  const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
-  const [viewerOpen, setViewerOpenState] = useState(false);
+  threadId,
+  onSizeChange,
+  visible = true,
+  workItem,
+  factoryProjectId,
+}: WorkspaceViewerPanelProps) {
+  const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const selectedFilePath = view.type === 'file' ? view.path : undefined;
+  const listing = useWorkspaceFiles(workspacePath, threadId, { enabled: visible });
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const file = useWorkspaceFile(workspacePath, selectedFilePath, threadId, {
+    enabled: visible && view.type === 'file',
+    select: selectWorkspaceFilePreview,
+  });
 
-  const selectedRenderedPath = renderedPaths.find(path => path.id === selectedRenderedPathId) ?? renderedPaths[0];
-  const selectedFileRequestPath = selectedFilePath ? `${selectedRenderedPath?.root}/${selectedFilePath}` : undefined;
-  const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
-  const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: viewerOpen });
-  const selectedFile = file.data?.path === selectedFileRequestPath ? file.data : undefined;
-
-  if (!selectedRenderedPath) return null;
-
-  const setViewerOpen = (open: boolean) => {
-    setViewerOpenState(open);
-    onExpandedChange?.(open);
+  const showOverview = () => {
+    setView({ type: 'overview' });
+    onSizeChange?.('compact');
+  };
+  const showView = (type: 'files' | 'changes') => {
+    setView({ type });
+    onSizeChange?.('full');
+  };
+  // The feed grows with the conversation, so an empty one is a composer rather than a void.
+  const showFeed = () => {
+    setView({ type: 'feed' });
+    onSizeChange?.('half');
   };
 
+  if (view.type === 'feed' && workItem) {
+    return (
+      <WorkItemFeedPanel item={workItem} factoryProjectId={factoryProjectId} visible={visible} onBack={showOverview} />
+    );
+  }
+
+  if (view.type === 'changes') {
+    return (
+      <WorkspaceChangesPanel
+        workspacePath={workspacePath}
+        visible={visible}
+        changes={changes.data}
+        isLoading={changes.isLoading}
+        isRefreshing={changes.isFetching}
+        error={changes.error ?? undefined}
+        onRefresh={() => changes.refetch()}
+        onBack={showOverview}
+      />
+    );
+  }
+
+  if (view.type === 'file') {
+    return (
+      <WorkspaceFileViewer
+        filePath={view.path}
+        file={file.data}
+        isLoading={file.isLoading || (file.isFetching && !file.data)}
+        isRefreshing={file.isFetching}
+        error={file.error ?? undefined}
+        onRefresh={() => file.refetch()}
+        onBack={() => setView({ type: 'files', selectedPath: view.path })}
+      />
+    );
+  }
+
+  if (view.type === 'files') {
+    return (
+      <WorkspaceFileBrowser
+        files={listing.data?.files}
+        selectedFilePath={view.selectedPath}
+        isLoading={listing.isLoading}
+        isRefreshing={listing.isFetching}
+        error={listing.error ?? undefined}
+        onRefresh={() => listing.refetch()}
+        onFileSelect={path => setView({ type: 'file', path })}
+        openFolders={openFolders}
+        onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
+        onBack={showOverview}
+      />
+    );
+  }
+
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden" data-testid="workspace-viewer-panel">
-      {viewerOpen ? (
-        <WorkspaceFileViewer
-          key={selectedFileRequestPath}
-          filePath={selectedFilePath}
-          file={selectedFile}
-          isLoading={file.isLoading || (file.isFetching && !selectedFile)}
-          error={file.error instanceof Error ? file.error : undefined}
-          onBack={() => setViewerOpen(false)}
-        />
-      ) : (
-        <WorkspaceFileBrowser
-          renderedPaths={renderedPaths}
-          selectedPath={selectedRenderedPath}
-          selectedFilePath={selectedFilePath}
-          listing={listing.data}
-          isLoading={listing.isLoading}
-          isRefreshing={listing.isFetching}
-          error={listing.error instanceof Error ? listing.error : undefined}
-          onRefresh={() => listing.refetch()}
-          onRenderedPathChange={path => {
-            setSelectedRenderedPathId(path.id);
-            setSelectedFilePath(undefined);
-            setViewerOpen(false);
-          }}
-          onFileSelect={filePath => {
-            setSelectedFilePath(filePath);
-            setViewerOpen(true);
-          }}
-          onShowChanges={onShowChanges}
-        />
-      )}
-    </div>
+    <WorkspaceOverview
+      listing={listing.data}
+      changes={changes.data}
+      filesLoading={listing.isLoading}
+      changesLoading={changes.isLoading}
+      filesError={listing.error ?? undefined}
+      changesError={changes.error ?? undefined}
+      onShowFiles={() => showView('files')}
+      onShowChanges={() => showView('changes')}
+      commentCount={workItem?.commentCount}
+      onShowComments={workItem ? showFeed : undefined}
+    />
   );
 }

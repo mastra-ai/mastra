@@ -1,8 +1,9 @@
 {
   "extends": "../../../tsconfig.node.json",
-  "include": ["./global.d.ts", "src/**/*", "scripts/**/*", "tsdown.config.ts"],
+  "include": ["./global.d.ts", "src/**/*", "scripts/**/*", "tsdown*.ts"],
   "exclude": ["**/*.test.ts", "**/__fixtures__/"],
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"]
   }
 }

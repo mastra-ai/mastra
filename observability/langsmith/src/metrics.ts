@@ -58,6 +58,20 @@ export function formatUsageMetrics(usage?: UsageStats): LangSmithUsageMetrics {
     };
   }
 
+  if (usage?.inputDetails?.cacheWrite5m !== undefined) {
+    metrics.input_token_details = {
+      ...(metrics.input_token_details ?? {}),
+      cache_creation_5m: usage.inputDetails.cacheWrite5m,
+    };
+  }
+
+  if (usage?.inputDetails?.cacheWrite1h !== undefined) {
+    metrics.input_token_details = {
+      ...(metrics.input_token_details ?? {}),
+      cache_creation_1h: usage.inputDetails.cacheWrite1h,
+    };
+  }
+
   if (usage?.inputDetails?.audio !== undefined) {
     metrics.input_token_details = {
       ...(metrics.input_token_details ?? {}),

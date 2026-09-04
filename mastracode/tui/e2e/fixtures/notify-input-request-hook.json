@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Run the notify input request hook e2e.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notify_input_request",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Which notification channel should the notify hook e2e verify?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notify_input_request",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Notify hook e2e complete for Bell."
+      }
+    }
+  ]
+}

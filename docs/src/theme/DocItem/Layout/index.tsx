@@ -26,9 +26,7 @@ function useDocTOC() {
 
   const hidden = frontMatter.hide_table_of_contents
   const canRender = !hidden && toc.length > 0
-
   const mobile = canRender ? <DocItemTOCMobile /> : undefined
-
   const desktop = canRender && (windowSize === 'desktop' || windowSize === 'ssr') ? <DocItemTOCDesktop /> : undefined
 
   return {
@@ -59,19 +57,19 @@ export default function DocItemLayout({ children }: Props): ReactNode {
         </div>
       </div>
 
-      {docTOC.desktop ? (
-        <div id="toc-column" className={clsx('col col--3')}>
+      {docTOC.desktop && !docTOC.hidden ? (
+        <div id="toc-column" data-size="desktop" className={clsx('col col--3')}>
           {docTOC.desktop}
         </div>
-      ) : (
-        <div id="toc-column" className={clsx('col col--3')}>
+      ) : !docTOC.hidden ? (
+        <div id="toc-column" data-size="mobile" className={clsx('col col--3')}>
           {/* TODO: Do not hide on mobile, properly add feedback and newsletter form */}
           <div className="hidden flex-col gap-4 px-1.5 xl:flex">
             <SubscribeForm />
             <FeedbackTrigger />
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { ToolBackgroundConfig } from './background-tasks';
+import type { AgentBackgroundConfig, ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
@@ -26,10 +26,21 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export { fetchWithRetry } from './utils/fetchWithRetry';
 export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 
-export { ensureSerializable, safeStringify } from './utils/safe-stringify';
+export { boundedStringify, ensureSerializable, isBoundedSerializable, safeStringify } from './utils/safe-stringify';
 export { deepEqual } from './utils/deep-equal';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Read a positive-integer environment variable (e.g. a TTL in ms). Unset, empty,
+ * non-numeric, fractional, or non-positive values fall back to `fallback`.
+ */
+export function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 /**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
@@ -286,6 +297,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    */
   workspace?: Workspace;
   backgroundConfig?: ToolBackgroundConfig;
+  /**
+   * Agent-level backgroundTasks config. Combined with `backgroundConfig` (the
+   * tool-level config) to decide whether the `_background` override schema is
+   * injected for this specific tool. See `isToolBackgroundEligible`.
+   */
+  agentBackgroundConfig?: AgentBackgroundConfig;
   /**
    * Browser available for tool execution. When provided, tools can access
    * browser capabilities for web automation, screenshots, and data extraction.

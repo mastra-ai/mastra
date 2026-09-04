@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Type } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
@@ -245,6 +245,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     if (isObjectSchema(schema)) {
       schema.additionalProperties = false;
 
+      // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
+      delete schema.propertyNames;
+
       if (schema.properties) {
         for (const key of Object.keys(schema.properties)) {
           const prop = schema.properties[key] as JSONSchema7;
@@ -257,40 +260,61 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             // @ts-expect-error - x-optional is a custom property
             schema['x-optional'] = [...(schema['x-optional'] || []), key];
             schema.required?.push(key);
-            if (prop.type) {
-              if (Array.isArray(prop.type)) {
-                const types = [...prop.type];
-                if (!types.includes('null')) {
-                  types.push('null');
+            if (Array.isArray(prop.type)) {
+              const types = [...prop.type];
+              if (!types.includes('null')) {
+                types.push('null');
+              }
+
+              delete prop.anyOf;
+              delete prop.type;
+
+              if ('const' in prop) {
+                const constValue = prop.const as JSONSchema7Type;
+                const enumAllowsConst =
+                  !prop.enum || prop.enum.some(value => JSON.stringify(value) === JSON.stringify(constValue));
+                prop.enum = enumAllowsConst ? [constValue, null] : [null];
+                delete prop.const;
+              } else if (prop.enum && !prop.enum.includes(null)) {
+                prop.enum = [...prop.enum, null];
+              }
+
+              const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
+              const arrayKeywords = ['items'] as const;
+              prop.anyOf = types.map(type => {
+                if (type === 'null') {
+                  return { type: 'null' } as JSONSchema7;
                 }
 
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
-                delete prop.type;
+                const branch = { type } as JSONSchema7;
+                const keywords = type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
+                for (const keyword of keywords) {
+                  if (keyword in prop) {
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    branch[keyword] = prop[keyword];
+                  }
+                }
 
-                prop.anyOf = types.map(type =>
-                  type === 'null'
-                    ? { type: 'null' }
-                    : {
-                        ...propSchema,
-                        type,
-                      },
-                );
-              } else if (prop.type !== 'null') {
-                const originalType = prop.type;
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
-                delete prop.type;
-                prop.anyOf = [
-                  {
-                    ...propSchema,
-                    type: originalType,
-                  },
-                  { type: 'null' },
-                ];
+                return branch;
+              });
+
+              for (const keyword of [...objectKeywords, ...arrayKeywords]) {
+                // @ts-expect-error - keyword is a valid property for JSON Schema
+                delete prop[keyword];
               }
+            } else if (prop.type && prop.type !== 'null') {
+              const originalType = prop.type;
+              const propSchema = { ...prop } as JSONSchema7;
+              delete propSchema.anyOf;
+              delete propSchema.type;
+              delete prop.type;
+              prop.anyOf = [
+                {
+                  ...propSchema,
+                  type: originalType,
+                },
+                { type: 'null' },
+              ];
             }
           }
         }
@@ -299,8 +323,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   #traverse(value: unknown, schema: Record<string, unknown>): unknown {
-    // If schema uses anyOf, find the non-null variant for traversal
-    const resolved = this.#resolveAnyOf(schema);
+    // If schema uses anyOf, find the variant matching the value for traversal
+    const resolved = this.#resolveAnyOf(schema, value);
 
     if ((isDateFormat(resolved) || resolved['x-date'] === true) && typeof value === 'string') {
       return new Date(value);
@@ -340,14 +364,42 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   /**
-   * If schema has anyOf, return the first non-null variant for traversal.
+   * If schema has anyOf, return the variant whose type matches the value's shape
+   * (branches are type-specific), falling back to the first non-null variant.
    * Otherwise return the schema itself.
    */
-  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+  #resolveAnyOf(schema: Record<string, unknown>, value?: unknown): Record<string, unknown> {
     if (Array.isArray(schema.anyOf)) {
-      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
-      if (nonNull) {
-        return nonNull;
+      const nonNullVariants = (schema.anyOf as Record<string, unknown>[]).filter(s => s && s.type !== 'null');
+
+      const valueType = Array.isArray(value)
+        ? 'array'
+        : value !== null && typeof value === 'object'
+          ? 'object'
+          : typeof value === 'number'
+            ? Number.isInteger(value)
+              ? 'integer'
+              : 'number'
+            : typeof value === 'string' || typeof value === 'boolean'
+              ? typeof value
+              : undefined;
+      if (valueType) {
+        const hasType = (variant: Record<string, unknown>, type: string) =>
+          (Array.isArray(variant.type) ? (variant.type as string[]) : [variant.type]).includes(type);
+        const exactMatch = nonNullVariants.find(variant => hasType(variant, valueType));
+        if (exactMatch) {
+          return { ...schema, ...exactMatch };
+        }
+        if (valueType === 'integer') {
+          const numberMatch = nonNullVariants.find(variant => hasType(variant, 'number'));
+          if (numberMatch) {
+            return { ...schema, ...numberMatch };
+          }
+        }
+      }
+
+      if (nonNullVariants[0]) {
+        return { ...schema, ...nonNullVariants[0] };
       }
     }
 

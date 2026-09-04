@@ -27,7 +27,78 @@ export interface IntakeRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   /** Intake selection domain handle. */
   intake: IntakeStorage;
+  /** Factory project domain handle, used to validate binding targets. */
+  projects?: { get(input: { orgId: string; id: string }): Promise<unknown | null> };
   integrations?: IntakeIntegration[];
+}
+
+/** One integration that failed while the rest of the aggregation succeeded. */
+export interface IntakeIntegrationFailure {
+  integrationId: string;
+  message: string;
+}
+
+type SettledIntegration<T> = { integrationId: string; value: T } | IntakeIntegrationFailure;
+
+const PROVIDER_READ_TIMEOUT_MS = 15_000;
+
+/** The Intake contract takes no abort signal, so a slow read is abandoned, not cancelled. */
+function withTimeout<T>(integrationId: string, read: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${integrationId} did not answer within ${PROVIDER_READ_TIMEOUT_MS / 1000}s`)),
+      PROVIDER_READ_TIMEOUT_MS,
+    );
+    read()
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timer));
+  });
+}
+
+/**
+ * Read every integration concurrently and isolate the ones that throw or hang, so a single
+ * unreachable provider degrades to a per-source error instead of failing the listing.
+ */
+async function settleByIntegration<T>(
+  requests: Array<{ integrationId: string; read: () => Promise<T> }>,
+): Promise<{ pages: Array<{ integrationId: string; value: T }>; failures: IntakeIntegrationFailure[] }> {
+  const settled = await Promise.all(
+    requests.map(async ({ integrationId, read }): Promise<SettledIntegration<T>> => {
+      try {
+        return { integrationId, value: await withTimeout(integrationId, read) };
+      } catch (error) {
+        console.error(`[factory] intake integration ${integrationId} is unavailable:`, error);
+        return { integrationId, message: error instanceof Error ? error.message : String(error) };
+      }
+    }),
+  );
+  const pages: Array<{ integrationId: string; value: T }> = [];
+  const failures: IntakeIntegrationFailure[] = [];
+  for (const entry of settled) {
+    if ('value' in entry) pages.push(entry);
+    else failures.push(entry);
+  }
+  return { pages, failures };
+}
+
+interface ParsedBinding {
+  integrationId: string;
+  sourceId: string;
+  factoryProjectId: string | null;
+}
+
+/** Validate a binding request body, rejecting unknown shapes. */
+export function parseIntakeBinding(body: unknown): ParsedBinding | null {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+  const { integrationId, sourceId, factoryProjectId } = body as Record<string, unknown>;
+  const isId = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 256;
+  if (!isId(integrationId) || !isId(sourceId)) return null;
+  if (factoryProjectId !== null && !isId(factoryProjectId)) return null;
+  return {
+    integrationId: integrationId as string,
+    sourceId: sourceId as string,
+    factoryProjectId: factoryProjectId as string | null,
+  };
 }
 
 function loose(c: unknown): Context {
@@ -47,7 +118,9 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   const entries = Object.entries(body);
   if (entries.length > 50) return null;
 
-  const config: IntakeConfig = {};
+  // Null-prototype so an `__proto__` key lands as a real entry instead of silently
+  // reassigning the prototype and disappearing from the validation below.
+  const config: IntakeConfig = Object.create(null);
   for (const [integrationId, value] of entries) {
     if (
       !integrationId ||
@@ -101,7 +174,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
   }
 
   routes(): ApiRoute[] {
-    const { audit, intake, integrations = [] } = this.deps;
+    const { audit, intake, projects, integrations = [] } = this.deps;
     const integrationIds = integrations.map(integration => integration.id);
 
     return [
@@ -130,26 +203,99 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const config = parseIntakeConfig(body);
-          if (!config || Object.keys(config).some(integrationId => !integrationIds.includes(integrationId))) {
+          if (!config) {
             return c.json({ error: 'invalid_config' }, 400);
           }
 
+          const registeredConfig: IntakeConfig = Object.create(null);
+          for (const [integrationId, selection] of Object.entries(config)) {
+            if (integrationIds.includes(integrationId)) {
+              registeredConfig[integrationId] = selection;
+              continue;
+            }
+            if (selection.enabled || selection.sourceIds?.length) {
+              return c.json({ error: 'invalid_config' }, 400);
+            }
+          }
+
           await intake.ensureReady();
-          await intake.saveConfig({ ...tenant, config });
+          await intake.saveConfig({ ...tenant, config: registeredConfig });
           await audit.emit({
             context: loose(c),
             input: {
               action: 'factory.intake.config_updated',
               targets: [{ type: 'intake_config', id: tenant.orgId }],
               metadata: Object.fromEntries(
-                Object.entries(config).map(([integrationId, selection]) => [
+                Object.entries(registeredConfig).map(([integrationId, selection]) => [
                   integrationId,
                   { enabled: selection.enabled, sources: selection.sourceIds?.length ?? null },
                 ]),
               ),
             },
           });
-          return c.json({ config });
+          return c.json({ config: registeredConfig });
+        },
+      }),
+      registerApiRoute('/web/intake/bindings', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const tenant = await this.#resolveTenant(loose(c));
+          if ('response' in tenant) return tenant.response;
+          await intake.ensureReady();
+          return c.json({ bindings: await intake.listBindings({ orgId: tenant.orgId }) });
+        },
+      }),
+      registerApiRoute('/web/intake/bindings', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const tenant = await this.#resolveTenant(loose(c));
+          if ('response' in tenant) return tenant.response;
+
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const binding = parseIntakeBinding(body);
+          if (!binding || !integrationIds.includes(binding.integrationId)) {
+            return c.json({ error: 'invalid_binding' }, 400);
+          }
+          if (binding.factoryProjectId && projects) {
+            const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
+            if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
+          }
+
+          await intake.ensureReady();
+          let auditFactoryProjectId = binding.factoryProjectId;
+          if (binding.factoryProjectId === null) {
+            const previousBinding = await intake.clearBinding({
+              orgId: tenant.orgId,
+              integrationId: binding.integrationId,
+              sourceId: binding.sourceId,
+            });
+            auditFactoryProjectId = previousBinding?.factoryProjectId ?? null;
+          } else {
+            await intake.setBinding({
+              orgId: tenant.orgId,
+              userId: tenant.userId,
+              integrationId: binding.integrationId,
+              sourceId: binding.sourceId,
+              factoryProjectId: binding.factoryProjectId,
+            });
+          }
+          await audit.emit({
+            context: loose(c),
+            input: {
+              action: 'factory.intake.binding_updated',
+              ...(auditFactoryProjectId ? { factoryProjectId: auditFactoryProjectId } : {}),
+              targets: [{ type: 'intake_source', id: `${binding.integrationId}:${binding.sourceId}` }],
+              metadata: { factoryProjectId: binding.factoryProjectId },
+            },
+          });
+          return c.json({ bindings: await intake.listBindings({ orgId: tenant.orgId }) });
         },
       }),
       registerApiRoute('/web/intake/sources', {
@@ -158,16 +304,15 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
-          const pages = await Promise.all(
-            integrations.map(async integration => ({
+          const { pages, failures } = await settleByIntegration(
+            integrations.map(integration => ({
               integrationId: integration.id,
-              sources: await integration.intake.listSources(tenant),
+              read: () => integration.intake.listSources(tenant),
             })),
           );
           return c.json({
-            sources: pages.flatMap(page =>
-              page.sources.map(source => ({ integrationId: page.integrationId, ...source })),
-            ),
+            sources: pages.flatMap(({ integrationId, value }) => value.map(source => ({ integrationId, ...source }))),
+            failures,
           });
         },
       }),
@@ -182,29 +327,38 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
 
           await intake.ensureReady();
           const config = await intake.getConfig({ ...tenant, integrationIds });
+          const { pages, failures } = await settleByIntegration(
+            integrations.flatMap(integration => {
+              const selection = config[integration.id];
+              if (!selection?.enabled || !selection.sourceIds?.length) return [];
+              const sourceIds = selection.sourceIds;
+              const cursor = cursors[integration.id];
+              return [
+                {
+                  integrationId: integration.id,
+                  read: () => integration.intake.listItems({ ...tenant, sourceIds, ...(cursor ? { cursor } : {}) }),
+                },
+              ];
+            }),
+          );
+
           const items: AggregatedIntakeItem[] = [];
           const nextCursors: Record<string, string> = {};
-          for (const integration of integrations) {
-            const selection = config[integration.id];
-            if (!selection?.enabled || !selection.sourceIds?.length) continue;
-            const page = await integration.intake.listItems({
-              ...tenant,
-              sourceIds: selection.sourceIds,
-              ...(cursors[integration.id] ? { cursor: cursors[integration.id] } : {}),
-            });
+          for (const { integrationId, value } of pages) {
             items.push(
-              ...page.items.map(item => {
+              ...value.items.map(item => {
                 const { source, ...candidate } = item;
-                return {
-                  ...candidate,
-                  integrationId: integration.id,
-                  externalSource: { integrationId: integration.id, ...source },
-                };
+                return { ...candidate, integrationId, externalSource: { integrationId, ...source } };
               }),
             );
-            if (page.nextCursor) nextCursors[integration.id] = page.nextCursor;
+            if (value.nextCursor) nextCursors[integrationId] = value.nextCursor;
           }
-          return c.json({ items, nextCursor: encodeCursor(nextCursors) });
+          // Keep the cursor an unavailable integration came in with, so the next page resumes there instead of replaying it.
+          for (const { integrationId } of failures) {
+            const cursor = cursors[integrationId];
+            if (cursor) nextCursors[integrationId] = cursor;
+          }
+          return c.json({ items, nextCursor: encodeCursor(nextCursors), failures });
         },
       }),
     ];

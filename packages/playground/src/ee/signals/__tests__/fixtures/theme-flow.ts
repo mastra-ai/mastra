@@ -1,5 +1,6 @@
 import type {
   EntityLearningProgressResponse,
+  SignalCatalogEntry,
   ThemeEntitiesResponse,
   ThemeFlowResponse,
   ThemeNode,
@@ -7,6 +8,93 @@ import type {
 } from '@mastra/client-js';
 
 export const emptyThemeEntitiesResponse: ThemeEntitiesResponse = { entities: [] };
+
+export const customSignalCatalog: SignalCatalogEntry[] = [
+  {
+    name: 'goal',
+    label: 'Goal',
+    description: 'What the user wanted from the interaction.',
+    order: 0,
+    builtIn: true,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'tool_usage',
+    label: 'Tool Operations',
+    description: 'How the agent uses tools.',
+    order: 1,
+    builtIn: false,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'outcome',
+    label: 'Outcome',
+    description: 'How the interaction ended.',
+    order: 2,
+    builtIn: true,
+    enabled: true,
+    status: 'ready',
+  },
+  {
+    name: 'handoff_quality',
+    label: 'Handoff Quality',
+    description: 'Whether context survives a handoff.',
+    order: 3,
+    builtIn: false,
+    enabled: true,
+    status: 'collecting',
+  },
+  {
+    name: 'resolution_detail',
+    label: 'Resolution Detail',
+    description: 'How completely the resolution is explained.',
+    order: 4,
+    builtIn: false,
+    enabled: true,
+    status: 'processing',
+  },
+  {
+    name: 'legacy_risk',
+    label: 'Legacy Risk',
+    description: 'Historical risk themes.',
+    order: 5,
+    builtIn: false,
+    enabled: false,
+    status: 'ready',
+  },
+];
+
+export const customThemeEntitiesResponse: ThemeEntitiesResponse = {
+  entities: [
+    {
+      entityId: 'support-agent',
+      entityType: 'agent',
+      availableSignals: ['outcome', 'tool_usage', 'goal'],
+      signalCatalog: customSignalCatalog,
+      latestWindow: {
+        startedAt: '2026-07-01T00:00:00.000Z',
+        endedAt: '2026-07-08T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
+export const customSignalProgressResponse: EntityLearningProgressResponse = {
+  status: 'processing',
+  traceCount: 87,
+  signals: {
+    goal: { generated: 87, embedded: 84 },
+    tool_usage: { generated: 87, embedded: 80 },
+    outcome: { generated: 87, embedded: 75 },
+    handoff_quality: { generated: 0, embedded: 0 },
+    resolution_detail: { generated: 31, embedded: 19 },
+    legacy_risk: { generated: 50, embedded: 50 },
+  },
+  availableSignals: ['goal', 'tool_usage', 'outcome'],
+  signalCatalog: customSignalCatalog,
+};
 
 export const processingProgressResponse: EntityLearningProgressResponse = {
   status: 'processing',
@@ -93,6 +181,15 @@ export const themeSnapshotsResponse: ThemeSnapshotsResponse = {
   ],
 };
 
+export const customThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  ...themeSnapshotsResponse,
+  snapshots: themeSnapshotsResponse.snapshots.map(snapshot => ({
+    ...snapshot,
+    availableSignals: ['goal', 'tool_usage', 'outcome'],
+  })),
+  signalCatalog: customSignalCatalog,
+};
+
 export const billingThemeSnapshotsResponse: ThemeSnapshotsResponse = {
   snapshots: [
     {
@@ -155,6 +252,83 @@ export const reorderedMultiThemeSnapshotsResponse: ThemeSnapshotsResponse = {
 
 export const emptyThemeSnapshotsResponse: ThemeSnapshotsResponse = { snapshots: [] };
 
+export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'landmark-1',
+      ordinal: 1,
+      total: 230,
+      cutoffAt: '2026-07-01T04:00:00.000Z',
+      startedAt: '2026-06-10T00:00:00.000Z',
+      endedAt: '2026-07-01T04:00:00.000Z',
+      traceCount: 30,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'range_start',
+    },
+    {
+      snapshotId: 'landmark-2',
+      ordinal: 58,
+      total: 230,
+      cutoffAt: '2026-07-02T18:00:00.000Z',
+      startedAt: '2026-06-12T00:00:00.000Z',
+      endedAt: '2026-07-02T18:00:00.000Z',
+      traceCount: 34,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-3',
+      ordinal: 117,
+      total: 230,
+      cutoffAt: '2026-07-04T09:00:00.000Z',
+      startedAt: '2026-06-14T00:00:00.000Z',
+      endedAt: '2026-07-04T09:00:00.000Z',
+      traceCount: 41,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-4',
+      ordinal: 171,
+      total: 230,
+      // Bursty cutoffs: landmarks 4 and 5 arrive close together after a gap.
+      cutoffAt: '2026-07-07T18:00:00.000Z',
+      startedAt: '2026-06-16T00:00:00.000Z',
+      endedAt: '2026-07-06T15:00:00.000Z',
+      traceCount: 46,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'time_sample',
+    },
+    {
+      snapshotId: 'landmark-5',
+      ordinal: 230,
+      total: 230,
+      cutoffAt: '2026-07-08T00:00:00.000Z',
+      startedAt: '2026-06-18T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+      reason: 'range_end',
+    },
+  ],
+  totalSnapshots: 230,
+};
+
+export const rangeScopedThemeSnapshotsResponse: ThemeSnapshotsResponse = {
+  snapshots: [
+    {
+      snapshotId: 'snapshot-range-scoped',
+      ordinal: 273,
+      total: 303,
+      startedAt: '2026-07-01T00:00:00.000Z',
+      endedAt: '2026-07-08T00:00:00.000Z',
+      traceCount: 50,
+      availableSignals: ['goal', 'outcome', 'behavior', 'sentiment'],
+    },
+  ],
+  totalSnapshots: 303,
+};
+
 export const themeFlowResponse: ThemeFlowResponse = {
   snapshot: themeSnapshotsResponse.snapshots[0],
   stages: [
@@ -194,6 +368,45 @@ export const themeFlowResponse: ThemeFlowResponse = {
       traceCount: 3,
       sourceShare: 0.06,
       targetShare: 0.06,
+    },
+  ],
+};
+
+export const customThemeFlowResponse: ThemeFlowResponse = {
+  ...themeFlowResponse,
+  snapshot: customThemeSnapshotsResponse.snapshots[0],
+  stages: [
+    themeFlowResponse.stages[0],
+    {
+      signalName: 'tool_usage',
+      traceCount: 50,
+      nodes: [
+        {
+          nodeId: 'tool-usage-search',
+          kind: 'theme',
+          themeId: 'theme-tool-usage-search',
+          label: 'Searches documentation',
+          traceCount: 50,
+          stageShare: 1,
+        },
+      ],
+    },
+    themeFlowResponse.stages[1],
+  ],
+  links: [
+    {
+      sourceNodeId: 'goal-support',
+      targetNodeId: 'tool-usage-search',
+      traceCount: 50,
+      sourceShare: 1,
+      targetShare: 1,
+    },
+    {
+      sourceNodeId: 'tool-usage-search',
+      targetNodeId: 'outcome-resolved',
+      traceCount: 50,
+      sourceShare: 1,
+      targetShare: 1,
     },
   ],
 };
@@ -516,6 +729,17 @@ export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
       targetShare: 8 / 21,
     },
   ],
+};
+
+/**
+ * Mirrors prod frames where the goal stage has themes but no goal→outcome
+ * links exist yet: only outcome→behavior→sentiment connect.
+ */
+export const unlinkedGoalStageThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  links: fourStageThemeFlowResponse.links.filter(
+    link => !link.sourceNodeId.startsWith('goal-') && !link.targetNodeId.startsWith('goal-'),
+  ),
 };
 
 const metadataOnlyGoalNode: ThemeNode = {

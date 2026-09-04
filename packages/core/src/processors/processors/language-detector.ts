@@ -7,6 +7,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { InternalSpans, resolveObservabilityContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
@@ -94,10 +95,12 @@ export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   includeDetectionDetails?: boolean;
 
   /**
-   * Translation quality preference:
-   * - 'speed': Prioritize fast translation
-   * - 'quality': Prioritize translation accuracy (default)
-   * - 'balanced': Balance between speed and quality
+   * @deprecated Previously selected prompt-level "Quality Level" guidance, but that behavior was
+   * removed when the detection and translation prompts were streamlined. This option now has no
+   * effect, but existing configurations keep type-checking.
+   *
+   * For model-specific speed and quality controls, use `providerOptions` when supported by your
+   * provider, for example `{ openai: { reasoningEffort: 'low' } }`.
    */
   translationQuality?: 'speed' | 'quality' | 'balanced';
 
@@ -133,7 +136,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private preserveOriginal: boolean;
   private minTextLength: number;
   private includeDetectionDetails: boolean;
-  private translationQuality: 'speed' | 'quality' | 'balanced';
   private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
 
@@ -188,7 +190,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.preserveOriginal = options.preserveOriginal ?? true;
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
-    this.translationQuality = options.translationQuality || 'quality';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
 
@@ -208,10 +209,11 @@ export class LanguageDetector implements Processor<'language-detector'> {
     args: {
       messages: MastraDBMessage[];
       abort: (reason?: string) => never;
+      requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, ...rest } = args;
+      const { messages, abort, requestContext, ...rest } = args;
       const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
@@ -235,7 +237,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent, observabilityContext);
+        const detectionResult = await this.detectLanguage(textContent, observabilityContext, requestContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -287,11 +289,12 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private async detectLanguage(
     content: string,
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
   ): Promise<LanguageDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
-      const model = await this.detectionAgent.getModel();
+      const model = await this.detectionAgent.getModel({ requestContext });
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -315,6 +318,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
+          requestContext,
           ...observabilityContext,
         });
 
@@ -324,6 +328,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           output: standardSchemaToJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          requestContext,
           ...observabilityContext,
         });
 

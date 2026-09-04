@@ -4,7 +4,7 @@ import {
   convertArrayToReadableStream as convertArrayToReadableStreamV3,
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError } from '../../error';
 import { RequestContext } from '../../request-context';
@@ -16,6 +16,50 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyModel = getSingleDummyResponseModel(version);
 
   describe(`${version} - agent tool handling`, () => {
+    describe('dynamic model resolution', () => {
+      it('resolves the model once for all assigned tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-agent',
+          name: 'dynamic-model-agent',
+          instructions: 'Use the assigned tools.',
+          model: resolveModel,
+          tools: {
+            firstTool: createTool({
+              id: 'first-tool',
+              description: 'First test tool.',
+              inputSchema: z.object({}),
+              execute: async () => 'first',
+            }),
+            secondTool: createTool({
+              id: 'second-tool',
+              description: 'Second test tool.',
+              inputSchema: z.object({}),
+              execute: async () => 'second',
+            }),
+          },
+        });
+
+        await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+        expect(resolveModel).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not resolve the model when there are no assigned tools', async () => {
+        const resolveModel = vi.fn(() => dummyModel);
+        const agent = new Agent({
+          id: 'dynamic-model-agent-without-tools',
+          name: 'dynamic-model-agent-without-tools',
+          instructions: 'No tools are assigned.',
+          model: resolveModel,
+        });
+
+        await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+        expect(resolveModel).not.toHaveBeenCalled();
+      });
+    });
+
     it('should handle tool name collisions caused by formatting', async () => {
       // Create two tool names that will collide after truncation to 63 chars
       const base = 'a'.repeat(63);

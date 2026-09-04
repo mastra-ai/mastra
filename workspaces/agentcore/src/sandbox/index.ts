@@ -23,7 +23,7 @@ import type {
   ProviderStatus,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox, ProcessHandle } from '@mastra/core/workspace';
+import { MastraSandbox, ProcessHandle, UnsupportedStdinCloseError } from '@mastra/core/workspace';
 
 const LOG_PREFIX = '[AgentCoreRuntimeSandbox]';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
@@ -72,6 +72,10 @@ class CommandOutputAccumulator extends ProcessHandle {
     throw new Error('AgentCore Runtime command execution does not support stdin');
   }
 
+  async closeStdin(): Promise<void> {
+    throw new UnsupportedStdinCloseError('AgentCore Runtime command execution does not support closing stdin');
+  }
+
   async wait(): Promise<CommandResult> {
     return {
       success: this.exitCode === 0,
@@ -92,12 +96,20 @@ function safeEnvName(name: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
 }
 
-function buildCommand(command: string, args: string[] | undefined, options: ExecuteCommandOptions | undefined): string {
+function buildCommand(
+  command: string,
+  args: string[] | undefined,
+  options: ExecuteCommandOptions | undefined,
+  workingDirectory?: string,
+): string {
   const baseCommand = args?.length ? `${command} ${args.map(arg => shellQuote(arg)).join(' ')}` : command;
   const parts: string[] = [];
 
-  if (options?.cwd) {
-    parts.push(`cd ${shellQuote(options.cwd)}`);
+  // The cd target is shell-quoted, which defeats `~` expansion — the sandbox's
+  // workingDirectory option must be an absolute path on this provider.
+  const cwd = options?.cwd ?? workingDirectory;
+  if (cwd) {
+    parts.push(`cd ${shellQuote(cwd)}`);
   }
 
   const env = options?.env ?? {};
@@ -293,7 +305,13 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     await this.ensureRunning();
 
-    const fullCommand = buildCommand(command, args, options);
+    // Merge the sandbox env under per-call env — this exec path bypasses the process manager
+    const fullCommand = buildCommand(
+      command,
+      args,
+      { ...options, env: { ...this.getEnv(), ...options?.env } },
+      this.workingDirectory,
+    );
     const timeoutMs = options?.timeout ?? this._commandTimeout;
     const timeoutSeconds = toAgentCoreTimeoutSeconds(timeoutMs);
     const startTime = Date.now();

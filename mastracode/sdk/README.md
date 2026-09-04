@@ -24,47 +24,14 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
-To construct the `Mastra` instance yourself (e.g. in a deployable `mastra` entry file), use `prepareAgentControllerMount`:
+## Documentation
 
-```ts
-import { Mastra } from '@mastra/core/mastra';
-import { prepareAgentControllerMount } from '@mastra/code-sdk';
+- [@mastra/code-sdk documentation](https://mastra.ai/reference/code-sdk/mount-agent-controller)
 
-const prepared = await prepareAgentControllerMount({ cwd: process.cwd() });
+## Changelog
 
-export const mastra = new Mastra(prepared.mastraArgs);
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/mastracode/sdk/CHANGELOG.md) for version history and release notes.
 
-await prepared.finalize();
-```
+## Support
 
-### Add input processors
-
-Embedding surfaces can prepend stateless input processors without replacing Mastra Code's required policy and compatibility processors:
-
-```ts
-const phaseProcessor = {
-  id: 'current-phase',
-  async processInputStep({ messages }) {
-    await reconcileCompletedTools(messages);
-  },
-};
-
-const prepared = await prepareAgentControllerMount({
-  cwd: process.cwd(),
-  inputProcessors: [phaseProcessor],
-});
-```
-
-Configured processors run before Mastra Code's built-in input processors. Keep processor instances stateless because the mounted agent shares them across sessions and runs.
-
-Deep modules are available as subpath imports, e.g.:
-
-```ts
-import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
-```
-
-> The subpath API surface is still evolving and may change between minor releases while the package is pre-1.0.
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

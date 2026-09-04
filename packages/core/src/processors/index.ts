@@ -10,7 +10,7 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
@@ -509,6 +509,38 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 }
 
 /**
+ * Arguments for processToolResult method.
+ * Called after each tool's execute() returns successfully and before the
+ * result is appended to the message list / fed to the next LLM call.
+ * Symmetric with processOutputStep, which fires before tool execution.
+ */
+export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** Name of the tool that was executed */
+  toolName: string;
+  /** Unique identifier for this specific tool call */
+  toolCallId: string;
+  /** Arguments the LLM passed to the tool */
+  args: unknown;
+  /**
+   * Value returned by the tool. For client-executed tools this is the output of
+   * `tool.execute()` after it has passed through `ensureSerializable`. For
+   * provider-executed tools (e.g. Anthropic `web_search`) it is the raw result
+   * from the provider stream, which is not run through `ensureSerializable`.
+   */
+  result: unknown;
+  /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
+  providerExecuted?: boolean;
+  /** All system messages */
+  systemMessages: CoreMessageV4[];
+  /** All completed steps so far */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
+
+/**
  * Arguments for processAPIError method.
  * Called when the LLM API call fails with a non-retryable error (API rejection).
  * This is distinct from network errors or retryable server errors (which are handled by p-retry).
@@ -557,6 +589,21 @@ export interface ProcessorViolation<TDetail = unknown> {
   detail: TDetail;
 }
 
+/**
+ * Pipeline phase a processor span is created for. One value per site where the
+ * processor runner creates a span, so a processor that runs in more than one
+ * phase can name and describe each of them differently.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
@@ -566,6 +613,49 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Agents use this to avoid adding eager skill context and overlapping skill tools.
    */
   readonly providesSkillDiscovery?: 'on-demand';
+  /**
+   * Span type the runner should use for this processor's span, instead of the
+   * default `PROCESSOR_RUN`.
+   *
+   * Processors Mastra derives from agent config (skills, workspace
+   * instructions, memory, task state) are an implementation detail of how a
+   * subsystem injects context — the user never wrote the word "processor". A
+   * declared span type labels the span with the subsystem it came from, so the
+   * trace shows where it originated instead of an anonymous processor entry.
+   *
+   * The runner keeps setting `entityType` (which phase the processor ran in)
+   * and the `ProcessorPipelineAttributes` fields either way, so retyping never
+   * loses the processor's position in the chain or its mutation log.
+   */
+  readonly spanType?: ProcessorSpanType;
+  /**
+   * Span name for this processor's span, instead of the runner's default
+   * `<phase> processor: <id>`. Pair this with `spanType` so the name matches
+   * the subsystem the span is labelled as.
+   *
+   * Pass a function to name each phase separately. A processor that runs in
+   * more than one phase usually does something different in each — the
+   * observational memory processor recalls context on the input step and
+   * persists observations on the output result — and one static name would
+   * describe both wrongly.
+   */
+  readonly spanName?: string | ((phase: ProcessorSpanPhase) => string);
+  /**
+   * Attributes the runner sets when it creates this processor's span.
+   *
+   * Needed because a declared `spanType` may have required attributes of its
+   * own — `WORKSPACE_ACTION.category`, `SKILL_ACTION.operation` — that only the
+   * processor knows. Setting them here means the span carries them from
+   * creation rather than being patched in later by the processor body.
+   *
+   * Note the pairing with `spanType` is not enforced by the type system: this
+   * accepts a partial of any processor-declarable attributes, so declaring
+   * `WORKSPACE_ACTION` alongside a `SKILL_ACTION` field will not be caught at
+   * compile time.
+   */
+  readonly spanAttributes?:
+    | Partial<SpanTypeMap[ProcessorSpanType]>
+    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -706,6 +796,32 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
 
   /**
+   * Process a tool's result after tool.execute() returns successfully and before
+   * the result is added to the message list or fed to the next LLM call.
+   *
+   * Symmetric with processOutputStep (which runs before tool execution). Use this
+   * hook to scan tool output for prompt injection / sensitive data, redact fields,
+   * or abort the run with abort({ retry: true }).
+   *
+   * To replace the tool's result, mutate messageList in place via
+   * messageList.updateToolInvocation. The runtime re-reads the post-processor
+   * result from the message list and overwrites the downstream tool-result
+   * stream chunk before it's enqueued, so streaming clients see the processed
+   * value, not the raw one.
+   *
+   * Note: this hook does not fire when tool.execute() throws — it is called only
+   * for successful tool executions where a result is available.
+   *
+   * @returns Either:
+   *  - MessageList: The same messageList instance passed in (indicates you've mutated it)
+   *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
+   *  - undefined/void: No changes (passthrough)
+   */
+  processToolResult?(
+    args: ProcessToolResultArgs<TTripwireMetadata>,
+  ): Promise<MessageList | MastraDBMessage[] | undefined | void> | MessageList | MastraDBMessage[] | void | undefined;
+
+  /**
    * Process an LLM API rejection error before it's surfaced as a final error.
    * Only called for non-retryable API rejections (e.g., 400/422 status codes),
    * NOT for network errors or retryable server errors (which are handled by p-retry).
@@ -783,13 +899,16 @@ export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMResponse'> &
       Processor<string, TTripwireMetadata>);
 
-// OutputProcessor requires either processOutputStream OR processOutputResult OR processOutputStep (or any combination)
+// OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
+// OR processToolResult (or any combination)
 export type OutputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStream'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputResult'> &
       Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processOutputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processToolResult'> &
       Processor<string, TTripwireMetadata>);
 
 // ErrorProcessor requires processAPIError

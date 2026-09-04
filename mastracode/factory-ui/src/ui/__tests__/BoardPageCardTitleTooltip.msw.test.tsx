@@ -1,11 +1,5 @@
-/**
- * Board cards clip their title to one line, so long issue titles are
- * unreadable at rest. Hovering a card reveals the untruncated title in a
- * tooltip. The tooltip anchors to the whole card because a work-item card's
- * click target is a full-bleed overlay that paints over the title span — a
- * trigger on the title itself would never receive the pointer.
- */
-import { screen, waitFor } from '@testing-library/react';
+// A failed rule effect keeps its raw error one hover away instead of costing the card a row.
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -13,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -22,6 +17,7 @@ const LONG_ITEM_TITLE =
   'Login fails with a 500 when the session cookie is rotated mid-request on the staging environment';
 const LONG_CANDIDATE_TITLE =
   'Crash on logout when the refresh token has already been revoked by another tab in the same browser';
+const DECISION_ERROR = 'Project source-control connection not found for this organization and integration.';
 
 const issueWorkItem = {
   id: 'item-1',
@@ -56,8 +52,26 @@ const issueCandidate = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const failedDecision: FactoryDecisionSummary = {
+  id: 'decision-1',
+  evaluationId: 'evaluation-1',
+  workItemId: issueWorkItem.id,
+  type: 'invokeSkill',
+  role: null,
+  status: 'failed',
+  attempts: 1,
+  failureOccurrence: 1,
+  source: null,
+  failureCode: 'repository_clone_failed',
+  canRetry: true,
+  lastError: DECISION_ERROR,
+  createdAt: '2026-07-18T00:00:00.000Z',
+  updatedAt: '2026-07-18T00:01:00.000Z',
+  completedAt: '2026-07-18T00:01:00.000Z',
+};
+
 /** Stubs the board's data endpoints with one work item and one candidate. */
-function stubBoardEndpoints() {
+function stubBoardEndpoints(decisions: FactoryDecisionSummary[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -86,9 +100,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [issueWorkItem] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-      HttpResponse.json({ decisions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () => HttpResponse.json({ decisions })),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {
@@ -107,7 +119,6 @@ function stubBoardEndpoints() {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
 
@@ -116,44 +127,18 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Board card title tooltip', () => {
-  it('reveals the full work-item title on hover', async () => {
-    stubBoardEndpoints();
+describe('Board card error tooltip', () => {
+  it('names what the failed rule effect was doing and keeps its raw error one hover away', async () => {
+    stubBoardEndpoints([failedDecision]);
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const card = await screen.findByTestId('work-item-card');
-    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent('Automated run could not start');
+    expect(screen.queryByText(DECISION_ERROR)).not.toBeInTheDocument();
 
-    await user.hover(card);
+    await user.hover(failure);
 
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_ITEM_TITLE);
-  });
-
-  it('reveals the full candidate title on hover', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('candidate-card');
-    await user.hover(card);
-
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_CANDIDATE_TITLE);
-  });
-
-  it('hides the tooltip once the pointer leaves the card', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('work-item-card');
-    await user.hover(card);
-    await screen.findByRole('tooltip', {}, { timeout: 3000 });
-
-    await user.unhover(card);
-
-    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
 });

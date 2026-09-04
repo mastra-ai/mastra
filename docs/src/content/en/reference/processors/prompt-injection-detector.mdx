@@ -1,6 +1,6 @@
 ---
 title: "Reference: PromptInjectionDetector | Processors"
-description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
+description: "Use PromptInjectionDetector to block prompt injection, jailbreak, and system-manipulation attempts before messages reach the language model."
 packages:
   - "@mastra/core"
 ---
@@ -94,6 +94,14 @@ const processor = new PromptInjectionDetector({
             type: 'ProviderOptions',
             description:
               "Provider-specific options passed to the internal detection agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'onDetection',
+            type: '(event: PromptInjectionDetectionEvent) => void | Promise<void>',
+            description:
+              'Called for every analyzed message with `detectionResult`, the analyzed `input`, whether it was `flagged`, and the `strategyApplied` (the configured strategy when flagged, otherwise `none`). Use it to emit custom metrics. Errors thrown by the callback are logged and ignored',
             isOptional: true,
             default: 'undefined',
           },

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validatePrefix } from './types';
+import { LOG_PREFIX, validateGCSBucketName, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -37,7 +37,7 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateGCSBucketName(config.bucket);
 
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');

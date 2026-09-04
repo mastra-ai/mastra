@@ -1,6 +1,6 @@
 ---
 title: "Reference: SkillSearchProcessor | Processors"
-description: "Documentation for the SkillSearchProcessor in Mastra, which enables on-demand skill discovery and loading for agents with many skills."
+description: "The SkillSearchProcessor is an input processor that enables on-demand skill discovery and loading."
 packages:
   - "@mastra/core"
 ---
@@ -78,6 +78,14 @@ const skillSearch = new SkillSearchProcessor({
               'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
             isOptional: true,
             default: '3600000',
+          },
+          {
+            name: 'blockingRefresh',
+            type: 'boolean',
+            description:
+              'When true, awaits the skills staleness check before the first step of each request so skill changes appear in the same turn. When false, the cached catalog is served and revalidated in the background, so skill changes can lag by one turn plus the staleness cooldown (up to 30 seconds).',
+            isOptional: true,
+            default: 'false',
           },
         ],
       },
@@ -179,4 +187,4 @@ Reserve workspace file tools such as `mastra_workspace_read_file` for explicit f
 
 - [ToolSearchProcessor](/reference/processors/tool-search-processor)
 - [Processors](/docs/agents/processors)
-- [Workspace Skills](/docs/workspace/overview)
+- [Workspace Skills](/docs/sandbox/skills)

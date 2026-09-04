@@ -1,25 +1,32 @@
-import type { ReactNode } from 'react';
+import { useRef, type ComponentProps } from 'react';
 
 import { cn } from '@/lib/utils';
 
-export interface ShimmerProps {
-  children: ReactNode;
-  className?: string;
+import './shimmer.css';
+
+export interface ShimmerProps extends ComponentProps<'span'> {
+  /** Sweeping while true; when it turns false the sweep settles where it stands. */
+  active?: boolean;
 }
 
-export const Shimmer = ({ children, className }: ShimmerProps) => {
+/**
+ * Text that says it is still being produced. One element whatever the state: swapping
+ * it for a plain span once the work lands would remount everything it wraps, replaying
+ * the entrance of every row and detail inside it.
+ */
+export const Shimmer = ({ active = true, className, ...props }: ShimmerProps) => {
+  const swept = useRef(active);
+  if (active) swept.current = true;
+
   return (
     <span
-      className={cn('inline-block text-transparent', className)}
-      style={{
-        backgroundImage: 'linear-gradient(to right, var(--neutral3), var(--neutral6), var(--neutral3))',
-        backgroundSize: '200% 100%',
-        backgroundClip: 'text',
-        WebkitBackgroundClip: 'text',
-        animation: 'shimmer-text 2s linear infinite',
-      }}
-    >
-      {children}
-    </span>
+      className={cn(
+        'inline-block',
+        swept.current && 'shimmer-text',
+        swept.current && !active && 'shimmer-settled',
+        className,
+      )}
+      {...props}
+    />
   );
 };

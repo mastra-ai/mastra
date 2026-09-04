@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     name: 'unit:packages/playground-ui',
     environment: 'node',
+    setupFiles: ['./src/test/vitest-setup.ts'],
     env: { TZ: 'UTC' },
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**'],

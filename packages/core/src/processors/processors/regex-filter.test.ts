@@ -3,6 +3,7 @@ import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type { ProcessInputArgs, ProcessOutputResultArgs, ProcessOutputStreamArgs } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { RegexFilterProcessor } from './regex-filter';
 
 function createMessage(text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
@@ -41,7 +42,7 @@ function createOutputResultArgs(messages: MastraDBMessage[]): ProcessOutputResul
   };
 }
 
-function createStreamArgs(part: ChunkType): ProcessOutputStreamArgs {
+function createStreamArgs(part: ChunkType, state: Record<string, unknown> = {}): ProcessOutputStreamArgs {
   return {
     part,
     streamParts: [],
@@ -50,8 +51,60 @@ function createStreamArgs(part: ChunkType): ProcessOutputStreamArgs {
     }) as any,
     retryCount: 0,
     model: { modelId: 'test', provider: 'test', specificationVersion: 'v2' } as any,
-    state: {},
+    state,
   };
+}
+
+function textDelta(text: string): ChunkType {
+  return {
+    type: 'text-delta',
+    runId: 'r',
+    from: 'AGENT',
+    payload: { id: 't1', text },
+  } as unknown as ChunkType;
+}
+
+function textEnd(): ChunkType {
+  return { type: 'text-end', runId: 'r', from: 'AGENT', payload: { id: 't1' } } as unknown as ChunkType;
+}
+
+function finishPart(): ChunkType {
+  return { type: 'finish', runId: 'r', from: 'AGENT', payload: {} } as unknown as ChunkType;
+}
+
+function textChunks(text: string, size: number): ChunkType[] {
+  const parts: ChunkType[] = [];
+  for (let i = 0; i < text.length; i += size) parts.push(textDelta(text.slice(i, i + size)));
+  return parts;
+}
+
+/**
+ * Drives a sequence of stream parts through the processor with a shared state,
+ * the way the ProcessorRunner does, and returns every part it emitted.
+ *
+ * The helper invokes the processor directly without a writer, so a flush can
+ * defer the non-text part that triggered it to the next call. Once the stream
+ * has ended there is no next call, so the helper drains the deferred part from
+ * the state — what a direct caller must do, and what the runner does via
+ * REPROCESS_PART_KEY when a writer is present.
+ */
+async function runStream(filter: RegexFilterProcessor, parts: ChunkType[]): Promise<ChunkType[]> {
+  const state: Record<string, unknown> = {};
+  const emitted: ChunkType[] = [];
+  for (const part of parts) {
+    const result = await filter.processOutputStream(createStreamArgs(part, state));
+    if (result) emitted.push(result);
+  }
+  const deferred = state._regexFilterPendingNonText as ChunkType | undefined;
+  if (deferred) emitted.push(deferred);
+  return emitted;
+}
+
+function streamedText(emitted: ChunkType[]): string {
+  return emitted
+    .filter(part => part.type === 'text-delta')
+    .map(part => (part as any).payload.text)
+    .join('');
 }
 
 describe('RegexFilterProcessor', () => {
@@ -82,6 +135,19 @@ describe('RegexFilterProcessor', () => {
         presets: ['pii'],
         rules: [{ name: 'custom', pattern: /custom/g }],
       });
+      expect(filter.id).toBe('regex-filter');
+    });
+
+    it('throws for a non-positive or non-integer streamCarryoverSize', () => {
+      for (const bad of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(() => new RegexFilterProcessor({ presets: ['pii'], streamCarryoverSize: bad })).toThrow(
+          'streamCarryoverSize must be a positive safe integer',
+        );
+      }
+    });
+
+    it('accepts a custom streamCarryoverSize', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], streamCarryoverSize: 256 });
       expect(filter.id).toBe('regex-filter');
     });
   });
@@ -246,15 +312,9 @@ describe('RegexFilterProcessor', () => {
 
     it('redacts overlapping matches in streaming chunks', async () => {
       const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'card 4111111111111111' },
-      } as unknown as ChunkType;
-      const result = await filter.processOutputStream(createStreamArgs(part));
+      const emitted = await runStream(filter, [textDelta('card 4111111111111111'), textEnd()]);
 
-      expect((result as any).payload.text).toBe('card [CREDIT_CARD]');
+      expect(streamedText(emitted)).toBe('card [CREDIT_CARD]');
     });
 
     it('keeps capture groups in custom replacements', () => {
@@ -513,13 +573,7 @@ describe('RegexFilterProcessor', () => {
     it('reports stream chunks without a message or part', async () => {
       const { filter, violations } = createFilter();
 
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'mail a@b.com' },
-      } as unknown as ChunkType;
-      await filter.processOutputStream(createStreamArgs(part));
+      await runStream(filter, [textDelta('mail a@b.com'), textEnd()]);
 
       expect(violations[0].detail.phase).toBe('processOutputStream');
       expect(violations[0].detail).not.toHaveProperty('messageId');
@@ -690,17 +744,144 @@ describe('RegexFilterProcessor', () => {
         strategy: 'redact',
       });
 
-      const part = {
-        type: 'text-delta',
-        runId: 'r',
-        from: 'AGENT',
-        payload: { id: 't1', text: 'Email: test@test.com' },
-      } as unknown as ChunkType;
-      const args = createStreamArgs(part);
-      const result = await filter.processOutputStream(args);
+      const emitted = await runStream(filter, [textDelta('Email: test@test.com'), textEnd()]);
 
-      expect(result).toBeDefined();
-      expect((result as any).payload.text).toContain('[EMAIL]');
+      expect(streamedText(emitted)).toContain('[EMAIL]');
+    });
+
+    it('redacts a secret split across two streaming chunks', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('Here is the key: sk-ant-'),
+        textDelta('api03-abcdef1234567890 done'),
+        textEnd(),
+      ]);
+
+      const streamed = streamedText(emitted);
+      expect(streamed).not.toContain('sk-ant-api03-abcdef1234567890');
+      expect(streamed).toBe('Here is the key: [ANTHROPIC_KEY] done');
+    });
+
+    it('redacts a secret contained in a single streaming chunk', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('Here is the key: sk-ant-api03-abcdef1234567890 done'),
+        textEnd(),
+      ]);
+
+      expect(streamedText(emitted)).toBe('Here is the key: [ANTHROPIC_KEY] done');
+    });
+
+    it('passes clean chunks through unchanged once the held-back tail flushes', async () => {
+      const filter = new RegexFilterProcessor({
+        presets: ['pii'],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [textDelta('Hello, '), textDelta('world!'), textEnd()]);
+
+      expect(streamedText(emitted)).toBe('Hello, world!');
+    });
+
+    it('redacts a match that crosses the emission boundary of a long stream', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'anthropic-key', pattern: /sk-ant-[a-zA-Z0-9-]{10,}/g, replacement: '[ANTHROPIC_KEY]' }],
+        strategy: 'redact',
+      });
+
+      const emitted = await runStream(filter, [
+        textDelta('x'.repeat(200) + 'sk-ant-'),
+        textDelta('api03-abcdef1234567890' + '!'.repeat(100)),
+        textDelta('!'.repeat(50)),
+        textEnd(),
+      ]);
+
+      expect(streamedText(emitted)).toBe('x'.repeat(200) + '[ANTHROPIC_KEY]' + '!'.repeat(150));
+    });
+
+    it('redacts an unbounded match longer than the carryover window whole', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'bearer', pattern: /Bearer\s+[a-zA-Z0-9]+/g, replacement: '[TOKEN]' }],
+        strategy: 'redact',
+      });
+
+      const text = `Authorization: Bearer ${'T'.repeat(300)} end`;
+      const emitted = await runStream(filter, [...textChunks(text, 20), textEnd()]);
+
+      expect(streamedText(emitted)).toBe('Authorization: [TOKEN] end');
+    });
+
+    it('redacts a terminator-delimited match longer than the window when the carryover is raised', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'armored-key', pattern: /-----BEGIN KEY-----[A-Z]+-----END KEY-----/g, replacement: '[KEY]' }],
+        strategy: 'redact',
+        streamCarryoverSize: 256,
+      });
+
+      const text = `${'x'.repeat(200)} -----BEGIN KEY-----${'A'.repeat(200)}-----END KEY----- done`;
+      const emitted = await runStream(filter, [...textChunks(text, 25), textEnd()]);
+
+      expect(streamedText(emitted)).toBe(`${'x'.repeat(200)} [KEY] done`);
+    });
+
+    it('redacts a fixed-length match longer than the default window when the carryover is raised', async () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'blob', pattern: /BLOB-[0-9]{200}/g, replacement: '[BLOB]' }],
+        strategy: 'redact',
+        streamCarryoverSize: 256,
+      });
+
+      const text = `${'x'.repeat(200)} BLOB-${'7'.repeat(200)} ok`;
+      const emitted = await runStream(filter, [...textChunks(text, 25), textEnd()]);
+
+      expect(streamedText(emitted)).toBe(`${'x'.repeat(200)} [BLOB] ok`);
+    });
+
+    it('delivers the flush-triggering text-end to direct callers once drained', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+
+      const emitted = await runStream(filter, [textDelta('mail a@b.com'), textEnd()]);
+
+      expect(emitted.map(part => part.type)).toEqual(['text-delta', 'text-end']);
+      expect(streamedText(emitted)).toBe('mail [EMAIL]');
+    });
+
+    it('hands a flush-deferred non-text part to the next call when invoked without a writer', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const state: Record<string, unknown> = {};
+      const drive = (part: ChunkType) => filter.processOutputStream(createStreamArgs(part, state));
+
+      expect(await drive(textDelta('mail a@b.com'))).toBeNull();
+      expect((await drive(textEnd()))?.type).toBe('text-delta');
+
+      const finish = finishPart();
+      const deferred = await drive(finish);
+      expect(deferred?.type).toBe('text-end');
+      expect(state._regexFilterPendingNonText).toBe(finish);
+    });
+
+    it('stashes the flush-triggering part for the runner to re-drive when a writer is present', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const state: Record<string, unknown> = {};
+      const writer = { custom: vi.fn(async () => {}) };
+      const drive = (part: ChunkType) => filter.processOutputStream({ ...createStreamArgs(part, state), writer });
+
+      await drive(textDelta('mail a@b.com'));
+      const end = textEnd();
+      const flushed = await drive(end);
+
+      expect(flushed?.type).toBe('text-delta');
+      expect((flushed as any).payload.text).toBe('mail [EMAIL]');
+      expect(state[REPROCESS_PART_KEY]).toBe(end);
+      expect(state._regexFilterPendingNonText).toBeUndefined();
     });
 
     it('passes through non-text chunks', async () => {

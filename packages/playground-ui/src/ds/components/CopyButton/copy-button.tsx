@@ -9,6 +9,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 export type CopyButtonProps = {
   content: string;
   copyMessage?: string;
+  showToast?: boolean;
   tooltip?: string;
   className?: string;
   size?: ButtonProps['size'];
@@ -18,6 +19,7 @@ export type CopyButtonProps = {
 export function CopyButton({
   content,
   copyMessage,
+  showToast,
   tooltip = 'Copy to clipboard',
   size = 'sm',
   variant,
@@ -27,6 +29,7 @@ export function CopyButton({
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
     text: content,
     copyMessage,
+    showToast,
   });
 
   const handleCopy = () => {

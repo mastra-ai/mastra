@@ -1,0 +1,17 @@
+packages:
+  - '.'
+
+# pnpm 11 reads overrides from here, not package.json. They are duplicated in
+# package.json `pnpm.overrides` because the example validator
+# (.github/scripts/validate-examples.js) checks for them there.
+overrides:
+  '@mastra/core': 'link:../../packages/core'
+  '@mastra/loggers': 'link:../../packages/loggers'
+  '@mastra/memory': 'link:../../packages/memory'
+  '@mastra/oracledb': 'link:../../stores/oracledb'
+  mastra: 'link:../../packages/cli'
+
+# esbuild ships a prebuilt binary via its platform optionalDependency; the
+# postinstall script is unnecessary (matches the monorepo root's setting).
+allowBuilds:
+  esbuild: false
