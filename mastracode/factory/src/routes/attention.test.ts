@@ -129,6 +129,58 @@ beforeEach(async () => {
   PROJECT_ID = project.id;
 });
 
+describe('supervisor finding attention items', () => {
+  it('surfaces persisted findings in the badge and supports receipt actions', async () => {
+    const item = await seedWorkItem('Repair stuck card');
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [
+        {
+          id: `decision-stuck:${item.id}`,
+          kind: 'decision-stuck',
+          workItemId: item.id,
+          workItemNumber: null,
+          title: 'A decision is stuck',
+          evidence: 'decision-1 has been retrying past its backoff.',
+          ageMs: 600_000,
+          suggestedRepair: { action: 'retry-decision', decisionId: 'decision-1' },
+        },
+      ],
+      now: new Date('2030-01-01T00:00:00.000Z'),
+    });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'supervisor-finding',
+          findingKey: `decision-stuck:${item.id}`,
+          findingTitle: 'A decision is stuck',
+          evidence: 'decision-1 has been retrying past its backoff.',
+          workItemId: item.id,
+          read: false,
+        },
+      ],
+      openCount: 1,
+      unreadCount: 1,
+      badgeCount: 1,
+      latestOccurrenceUnread: true,
+    });
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
+    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
+    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+
+    expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0 },
+    );
+  });
+});
+
 describe('mention attention items', () => {
   it('lists a mention in every view with per-kind read and archive receipts', async () => {
     const item = await seedWorkItem();

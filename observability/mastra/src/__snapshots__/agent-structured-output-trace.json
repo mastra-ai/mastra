@@ -273,7 +273,7 @@
             "isRootSpan": false,
             "parentId": "<span-1>",
             "entityType": "output_processor",
-            "entityId": "test-agent",
+            "entityId": "structured-output",
             "attributes": {
               "processorExecutor": "legacy",
               "processorIndex": 0,

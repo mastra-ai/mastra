@@ -1,28 +1,36 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import type { ReviewItem } from '../components/review-item-card';
-import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+
+type ReviewStatus = 'needs-review' | 'complete';
+
+export interface ReviewItemsOptions {
+  /** When set, only this experiment's results are loaded; otherwise every experiment in the project. */
+  experimentId?: string;
+}
 
 /**
- * Loads persisted review items (status='needs-review') across ALL experiments for a dataset.
+ * Loads experiment results with the given review status, across the project or scoped to one experiment.
  */
-export const useDatasetReviewItems = (datasetId: string) => {
+const useReviewItemsByStatus = (status: ReviewStatus, experimentId: string | undefined) => {
   const client = useMastraClient();
-  const { data: experimentsData, isLoading: isLoadingExperiments } = useDatasetExperiments(datasetId);
+  const { data: experimentsData, isLoading: isLoadingExperiments } = useExperimentsForDatasetFilter(undefined);
   const experiments = experimentsData?.experiments;
+  const scopedExperiments = experimentId ? experiments?.filter(exp => exp.id === experimentId) : experiments;
 
   const query = useQuery({
-    queryKey: ['dataset-review-items', datasetId, experiments?.map(e => e.id)],
+    queryKey: ['review-items', status, experimentId ?? 'all', scopedExperiments?.map(e => e.id)],
     queryFn: async () => {
-      if (!experiments || experiments.length === 0) return [] as ReviewItem[];
+      if (!scopedExperiments || scopedExperiments.length === 0) return [] as ReviewItem[];
 
       const allResults = await Promise.all(
-        experiments.map(async exp => {
+        scopedExperiments.map(async exp => {
           if (!exp.datasetId) return [];
           try {
             const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
             return results
-              .filter(r => r.status === 'needs-review')
+              .filter(r => r.status === status)
               .map(r => ({
                 id: r.id,
                 input: r.input,
@@ -44,7 +52,7 @@ export const useDatasetReviewItems = (datasetId: string) => {
 
       return allResults.flat() as ReviewItem[];
     },
-    enabled: Boolean(datasetId) && Boolean(experiments) && experiments!.length > 0,
+    enabled: Boolean(experiments),
     refetchOnWindowFocus: false,
   });
 
@@ -53,52 +61,10 @@ export const useDatasetReviewItems = (datasetId: string) => {
   return { ...query, isLoading: query.isLoading || isLoadingExperiments };
 };
 
-/**
- * Loads completed review items (status='complete') across ALL experiments for a dataset.
- */
-export const useDatasetCompletedItems = (datasetId: string) => {
-  const client = useMastraClient();
-  const { data: experimentsData, isLoading: isLoadingExperiments } = useDatasetExperiments(datasetId);
-  const experiments = experimentsData?.experiments;
+/** Loads persisted review items (status='needs-review'), project-wide or for one experiment. */
+export const useReviewItems = ({ experimentId }: ReviewItemsOptions = {}) =>
+  useReviewItemsByStatus('needs-review', experimentId);
 
-  const query = useQuery({
-    queryKey: ['dataset-completed-items', datasetId, experiments?.map(e => e.id)],
-    queryFn: async () => {
-      if (!experiments || experiments.length === 0) return [] as ReviewItem[];
-
-      const allResults = await Promise.all(
-        experiments.map(async exp => {
-          if (!exp.datasetId) return [];
-          try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
-            return results
-              .filter(r => r.status === 'complete')
-              .map(r => ({
-                id: r.id,
-                input: r.input,
-                output: r.output,
-                error: r.error,
-                itemId: r.itemId,
-                experimentId: r.experimentId,
-                datasetId: exp.datasetId ?? undefined,
-                traceId: r.traceId ?? undefined,
-                scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
-                tags: r.tags ?? [],
-                comment: r.comment ?? '',
-              }));
-          } catch {
-            return [];
-          }
-        }),
-      );
-
-      return allResults.flat() as ReviewItem[];
-    },
-    enabled: Boolean(datasetId) && Boolean(experiments) && experiments!.length > 0,
-    refetchOnWindowFocus: false,
-  });
-
-  // The results query is disabled until experiments arrive, so its own `isLoading`
-  // is false during that window; surface the upstream load to avoid an empty flash.
-  return { ...query, isLoading: query.isLoading || isLoadingExperiments };
-};
+/** Loads completed review items (status='complete'), project-wide or for one experiment. */
+export const useCompletedItems = ({ experimentId }: ReviewItemsOptions = {}) =>
+  useReviewItemsByStatus('complete', experimentId);

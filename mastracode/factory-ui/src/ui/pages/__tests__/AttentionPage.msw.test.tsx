@@ -148,6 +148,7 @@ describe('AttentionPage', () => {
 
     expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.getByText('Repair auth')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Ask supervisor about Fix the loader' })).toBeVisible();
     const [goTo] = screen.getAllByRole('link', { name: /View card for/ });
     if (!goTo) throw new Error('Expected a work-item destination');
     expect(goTo).toHaveAttribute('href', `/factories/${FACTORY_ID}/work?item=item-decision-1`);

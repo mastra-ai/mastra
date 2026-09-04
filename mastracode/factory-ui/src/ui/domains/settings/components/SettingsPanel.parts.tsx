@@ -1,39 +1,21 @@
 import type {
-  AgentControllerAvailableModel,
   AgentControllerSessionSettings,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import { useState } from 'react';
 
-import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
+import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { Segmented, SoundPicker, ThinkingLevelPicker } from './SettingsFields';
 
-type ThinkingLevel = NonNullable<AgentControllerSessionSettings['thinkingLevel']>;
 type NotificationMode = AgentControllerSessionSettings['notifications'];
-
-export const THINKING_LEVELS: { value: ThinkingLevel; label: string }[] = [
-  { value: 'off', label: 'Off' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-  { value: 'max', label: 'Max' },
-];
 const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'bell', label: 'Bell' },
@@ -41,12 +23,7 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralSettingsProps {
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
-}
-
-export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
+export function GeneralSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
   const changeDoneSound = (next: DoneSound) => {
     setDoneSound(next);
@@ -55,31 +32,17 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <SettingsSubsection title="General">
+    <SettingsSubsection scope="personal" title="General" description="Stored in this browser.">
       <SettingsCard>
         <SettingsRow variant="factory" label="Theme" description="Color scheme for the interface">
-          <Segmented
-            ariaLabel="Theme"
-            value={theme}
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            onChange={onThemeChange}
-          />
+          <ThemeToggle />
         </SettingsRow>
         <SettingsRow
           variant="factory"
           label="Completion sound"
           description="Played when an agent run finishes in a workspace"
         >
-          <Segmented
-            ariaLabel="Completion sound"
-            value={doneSound}
-            options={DONE_SOUND_OPTIONS}
-            onChange={changeDoneSound}
-          />
+          <SoundPicker value={doneSound} onChange={changeDoneSound} />
         </SettingsRow>
       </SettingsCard>
     </SettingsSubsection>
@@ -88,39 +51,29 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
 
 interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  updating: boolean;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
 }
 
-export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
+export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <SettingsRow variant="factory" label="Thinking level" description="Extended-reasoning budget for the agent">
-      <div className="w-full lg:hidden">
-        <SegmentedSelect
-          ariaLabel="Thinking level"
-          value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings || updating}
-          options={THINKING_LEVELS}
-          onChange={v => onBehaviorChange({ thinkingLevel: v })}
-        />
-      </div>
-      <div className="hidden lg:block">
-        <Segmented
-          ariaLabel="Thinking level"
-          value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings || updating}
-          options={THINKING_LEVELS}
-          onChange={v => onBehaviorChange({ thinkingLevel: v })}
-        />
-      </div>
+    <SettingsRow
+      variant="factory"
+      label="Thinking level"
+      description="Reasoning budget for your chats — overrides the Factory defaults"
+    >
+      <ThinkingLevelPicker
+        ariaLabel="Thinking level"
+        value={settings?.thinkingLevel ?? 'off'}
+        disabled={!settings}
+        onChange={level => onBehaviorChange({ thinkingLevel: level ?? 'off' })}
+      />
     </SettingsRow>
   );
 }
 
 interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  updating: boolean;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
   permissions: PermissionRules | null;
   pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
@@ -128,7 +81,6 @@ interface BehaviorSettingsProps {
 
 export function BehaviorSettings({
   settings,
-  updating,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
@@ -137,13 +89,17 @@ export function BehaviorSettings({
   const notificationMode = settings?.notifications ?? 'off';
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection title="General">
+      <SettingsSubsection
+        scope="factory"
+        title="General"
+        description="Shared by everyone working in this Factory. Auto-approve and smart editing reset when the server restarts."
+      >
         <SettingsCard>
           <SettingsRow variant="factory" label="Auto-approve tools" description="Run tool calls without asking (YOLO)">
             <Toggle
               ariaLabel="Auto-approve tools"
               checked={!!settings?.yolo}
-              disabled={!settings || updating}
+              disabled={!settings}
               onChange={v => onBehaviorChange({ yolo: v })}
             />
           </SettingsRow>
@@ -151,7 +107,7 @@ export function BehaviorSettings({
             <Toggle
               ariaLabel="Smart editing"
               checked={!!settings?.smartEditing}
-              disabled={!settings || updating}
+              disabled={!settings}
               onChange={v => onBehaviorChange({ smartEditing: v })}
             />
           </SettingsRow>
@@ -159,7 +115,7 @@ export function BehaviorSettings({
             <Segmented
               ariaLabel="Notifications"
               value={notificationMode}
-              disabled={!settings || updating}
+              disabled={!settings}
               options={NOTIFICATION_MODES}
               onChange={v => onBehaviorChange({ notifications: v })}
             />
@@ -193,14 +149,11 @@ function PermissionsSection({
   pendingPermissionCategory,
   setPermissionForCategory,
 }: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
-  const update = async (category: ToolCategory, policy: PermissionPolicy) => {
-    await setPermissionForCategory(category, policy);
-  };
-
   return (
     <SettingsSubsection
+      scope="factory"
       title="Tool permissions"
-      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow. Shared by everyone working in this Factory, and reset when the server restarts."
     >
       <SettingsCard>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
@@ -210,221 +163,12 @@ function PermissionsSection({
               value={permissions?.categories?.[value] ?? 'ask'}
               disabled={!permissions || pendingPermissionCategory === value}
               options={PERMISSION_POLICIES}
-              onChange={policy => void update(value, policy)}
+              onChange={policy => void setPermissionForCategory(value, policy)}
             />
           </SettingsRow>
         ))}
       </SettingsCard>
     </SettingsSubsection>
-  );
-}
-
-function ModelPicker({
-  models,
-  currentModelId,
-  onModelChange,
-}: {
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
-  onModelChange: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const current = models.find(m => m.id === currentModelId);
-  const currentLabel = current ? `${current.provider} / ${current.modelName}` : (currentModelId ?? 'Select a model');
-
-  const q = query.trim().toLowerCase();
-  const matched = q
-    ? models.filter(
-        m =>
-          m.provider.toLowerCase().includes(q) ||
-          m.modelName.toLowerCase().includes(q) ||
-          m.id.toLowerCase().includes(q),
-      )
-    : models;
-  const filtered = [...matched].sort((a, b) => {
-    if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
-    return a.id.localeCompare(b.id);
-  });
-
-  // Open/close is an event, not a synchronization: reset search state in the
-  // handlers that trigger it instead of reacting via effects.
-  const openPicker = () => {
-    setQuery('');
-    setActive(0);
-    setOpen(true);
-    requestAnimationFrame(() => inputRef.current?.focus());
-  };
-
-  const updateQuery = (next: string) => {
-    setQuery(next);
-    setActive(0);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  const choose = (m: AgentControllerAvailableModel) => {
-    if (!m.hasApiKey) return;
-    onModelChange(m.id);
-    setOpen(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActive(a => Math.min(a + 1, filtered.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActive(a => Math.max(a - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const m = filtered[active];
-      if (m) choose(m);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      setOpen(false);
-    }
-  };
-
-  if (models.length === 0) {
-    return (
-      <Txt variant="ui-sm" className="text-icon3">
-        No models available.
-      </Txt>
-    );
-  }
-
-  return (
-    <div className="relative" ref={rootRef}>
-      <Button
-        variant="outline"
-        size="md"
-        className="w-full justify-between"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => (open ? setOpen(false) : openPicker())}
-      >
-        <span className="truncate">{currentLabel}</span>
-        <span aria-hidden>▾</span>
-      </Button>
-
-      {open && (
-        <div
-          className="border-border1/60 bg-surface3 shadow-dialog absolute z-50 mt-1 w-full rounded-lg border"
-          role="dialog"
-          aria-label="Choose a model"
-        >
-          <div className="border-border1/40 border-b p-2">
-            <Input
-              ref={inputRef}
-              placeholder="Search models or providers…"
-              value={query}
-              onChange={e => updateQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              aria-label="Search models"
-            />
-          </div>
-          <ul className="max-h-72 overflow-y-auto p-1" role="listbox" aria-label="Models">
-            {filtered.length === 0 && (
-              <li className="px-3 py-2">
-                <Txt variant="ui-sm" className="text-icon3">
-                  No models match “{query}”.
-                </Txt>
-              </li>
-            )}
-            {filtered.slice(0, 100).map((m, i) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={m.id === currentModelId}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left',
-                    i === active && 'bg-surface4',
-                    m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
-                  )}
-                  disabled={!m.hasApiKey}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(m)}
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <Txt variant="ui-md" className="text-icon6 truncate">
-                      {m.modelName}
-                    </Txt>
-                    <Txt variant="ui-sm" className="text-icon3 truncate">
-                      {m.provider}
-                    </Txt>
-                  </span>
-                  {m.id === currentModelId ? <Check size={14} /> : m.hasApiKey ? null : <Badge>no key</Badge>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface SegmentedProps<T extends string> {
-  value: T;
-  options: { value: T; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-}
-
-export function Segmented<T extends string>({ value, options, ariaLabel, disabled, onChange }: SegmentedProps<T>) {
-  return (
-    <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
-      {options.map(o => (
-        <Button
-          key={o.value}
-          variant={value === o.value ? 'primary' : 'outline'}
-          size="sm"
-          aria-pressed={value === o.value}
-          disabled={disabled}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </ButtonsGroup>
-  );
-}
-
-/** Select rendering of the same choice — callers decide which variant shows at which breakpoint. */
-export function SegmentedSelect<T extends string>({
-  value,
-  options,
-  ariaLabel,
-  disabled,
-  onChange,
-}: SegmentedProps<T>) {
-  return (
-    <Select value={value} disabled={disabled} onValueChange={v => onChange(v as T)}>
-      <SelectTrigger variant="outline" size="sm" aria-label={ariaLabel} className="w-full">
-        {options.find(o => o.value === value)?.label ?? value}
-      </SelectTrigger>
-      <SelectContent>
-        {options.map(o => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

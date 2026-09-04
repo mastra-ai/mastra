@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,6 +74,8 @@ afterAll(() => {
 });
 
 const resultRequests: string[] = [];
+// The review and completed queues each fetch results, so dedupe before asserting scope.
+const requestedExperiments = () => [...new Set(resultRequests)].sort();
 
 beforeEach(() => {
   resultRequests.length = 0;
@@ -82,7 +84,6 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
     ),
-    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments`, () => HttpResponse.json(experimentsResponse)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) => {
       resultRequests.push(String(params.experimentId));
       const list = params.experimentId === EXPERIMENT_ID ? results : otherResults;
@@ -113,14 +114,16 @@ const renderPage = (search = '') => {
 
 describe('Review Queue page', () => {
   describe('when no experiment is selected', () => {
-    it('shows an empty state with the experiment picker as its call to action', async () => {
+    it('lists items awaiting review across every experiment', async () => {
       renderPage();
 
-      const emptyState = (await screen.findByText('Select an experiment to review its queue')).closest('div')!;
-      await screen.findByRole('option', { name: 'entity-extraction / model-a' });
-      expect(screen.getAllByRole('combobox')).toHaveLength(1);
-      expect(within(emptyState).getByRole('combobox')).toBeDefined();
-      expect(resultRequests).toEqual([]);
+      const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+      await screen.findByRole('option', { name: 'All experiments' });
+      expect(select.value).toBe('all');
+
+      await screen.findByText(/third question/);
+      await screen.findByText(/other question/);
+      expect(requestedExperiments()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID]);
     });
   });
 
@@ -133,16 +136,30 @@ describe('Review Queue page', () => {
 
       await screen.findByText(/third question/);
       expect(screen.queryByText(/other question/)).toBeNull();
-      expect(screen.getAllByRole('combobox')).toHaveLength(1);
-      expect(screen.queryByText('Select an experiment to review its queue')).toBeNull();
+      expect(requestedExperiments()).toEqual([EXPERIMENT_ID]);
     });
   });
 
   describe('when ?experiment does not match any experiment', () => {
-    it('falls back to the empty state', async () => {
+    it('shows an empty queue without fetching results', async () => {
       renderPage('?experiment=unknown');
 
-      await screen.findByText('Select an experiment to review its queue');
+      await screen.findByText('No items to review');
+      expect(resultRequests).toEqual([]);
+    });
+  });
+
+  describe('when the user picks "All experiments"', () => {
+    it('clears ?experiment and shows every queue', async () => {
+      const { router } = renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      const select = await screen.findByRole('combobox');
+      await screen.findByRole('option', { name: 'All experiments' });
+      fireEvent.change(select, { target: { value: 'all' } });
+
+      await waitFor(() => expect(router.state.location.search).toBe(''));
+      await screen.findByText(/third question/);
+      await screen.findByText(/other question/);
     });
   });
 

@@ -30,10 +30,11 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { truncateString } from '@/lib/truncate-string';
+import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
-export type TraceDataPanelTab = 'details' | 'partial-thread' | 'scores' | 'feedback';
+export type TraceDataPanelTab = 'details' | 'scores' | 'feedback';
 
 export interface TraceDataPanelViewProps {
   traceId: string;
@@ -89,13 +90,16 @@ export interface TraceDataPanelViewProps {
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
   /** Optional count shown in the "Feedback" tab label. */
   feedbackTabBadge?: ReactNode;
-  /** When provided, a "Messages" tab renders the trace as one reconstructed agent turn. */
-  partialThreadTabSlot?: (args: { traceId: string }) => ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
   /**
-   * When provided, the panel splits into two columns inside the same card: the
-   * trace content on the left, this slot (typically the span detail) on the right.
+   * Rendered as a column to the left of the timeline inside the same card;
+   * typically the reconstructed agent turn ("Messages").
+   */
+  messagesPanelSlot?: ReactNode;
+  /**
+   * Rendered as a column to the right of the timeline inside the same card;
+   * typically the span detail.
    */
   spanPanelSlot?: ReactNode;
   /** Extra classes applied to the panel root (e.g. `h-full` on the trace page). */
@@ -128,9 +132,9 @@ export function TraceDataPanelView({
   scoresTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
-  partialThreadTabSlot,
   activeTab,
   onTabChange,
+  messagesPanelSlot,
   spanPanelSlot,
   className,
 }: TraceDataPanelViewProps) {
@@ -287,76 +291,79 @@ export function TraceDataPanelView({
       </DataPanel.Header>
 
       {!collapsed && (
-        <SplitWithSpanPanel spanPanelSlot={spanPanelSlot} highlightQuery={query} spanPanelKey={selectedSpanId}>
+        <TracePanelColumns
+          messagesPanelSlot={messagesPanelSlot}
+          spanPanelSlot={spanPanelSlot}
+          highlightQuery={query}
+          spanPanelKey={selectedSpanId}
+        >
           {isLoading ? (
             <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
           ) : !spans?.length ? (
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
-            <DataPanel.Content>
-              {(() => {
-                const detailsBody = (
-                  <>
-                    {!isOnTracePage &&
-                      !onEvaluateTrace &&
-                      !onSaveAsDatasetItem &&
-                      !onAddTraceMocksToItem &&
-                      showUnavailableFeaturesMsg && (
-                        <Notice variant="info" className="mb-6">
-                          <Notice.Message>
-                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                            deployed).
-                          </Notice.Message>
-                        </Notice>
-                      )}
+            (() => {
+              const detailsBody = (
+                <DataPanel.Content>
+                  {!isOnTracePage &&
+                    !onEvaluateTrace &&
+                    !onSaveAsDatasetItem &&
+                    !onAddTraceMocksToItem &&
+                    showUnavailableFeaturesMsg && (
+                      <Notice variant="info" className="mb-6">
+                        <Notice.Message>
+                          Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                          deployed).
+                        </Notice.Message>
+                      </Notice>
+                    )}
 
-                    {/* The timeline stays mounted even with no results, because it
+                  {/* The timeline stays mounted even with no results, because it
                         hosts the search field: unmounting it would strand the user
                         with a query they can no longer clear. */}
-                    <TraceTimeline
-                      hierarchicalSpans={hierarchicalSpans}
-                      onSpanClick={handleSpanClick}
-                      selectedSpanId={selectedSpanId}
-                      expandedSpanIds={expandedSpanIds}
-                      setExpandedSpanIds={setExpandedSpanIds}
-                      chartWidth={timelineChartWidth}
-                      leadingSlot={
-                        <SearchFieldBlock
-                          name={searchFieldName}
-                          label="Search spans"
-                          labelIsHidden
-                          placeholder="Search spans..."
-                          value={query}
-                          onChange={e => setQuery(e.target.value)}
-                          onReset={() => setQuery('')}
-                          size="sm"
-                          variant="outline"
-                          className="w-full"
-                        />
-                      }
-                    />
-
-                    {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
-                  </>
-                );
-
-                // No extra tab slots → render details directly without the Tabs wrapper.
-                if (!partialThreadTabSlot && !scoresTabSlot && !feedbackTabSlot) return detailsBody;
-
-                return (
-                  <Tabs<TraceDataPanelTab>
-                    defaultTab="details"
-                    value={activeTab}
-                    onValueChange={onTabChange}
-                    className={
-                      activeTab === 'partial-thread' || activeTab === 'scores' || activeTab === 'feedback'
-                        ? 'grid h-full min-h-0 grid-rows-[auto_1fr]'
-                        : undefined
+                  <TraceTimeline
+                    hierarchicalSpans={hierarchicalSpans}
+                    onSpanClick={handleSpanClick}
+                    selectedSpanId={selectedSpanId}
+                    expandedSpanIds={expandedSpanIds}
+                    setExpandedSpanIds={setExpandedSpanIds}
+                    chartWidth={timelineChartWidth}
+                    leadingSlot={
+                      <SearchFieldBlock
+                        name={searchFieldName}
+                        label="Search spans"
+                        labelIsHidden
+                        placeholder="Search spans..."
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        onReset={() => setQuery('')}
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                      />
                     }
-                  >
+                  />
+
+                  {hierarchicalSpans.length === 0 && <DataPanel.NoData>No spans match your search.</DataPanel.NoData>}
+                </DataPanel.Content>
+              );
+
+              // No extra tab slots → render details directly without the Tabs wrapper.
+              if (!scoresTabSlot && !feedbackTabSlot) return detailsBody;
+
+              // The tab list sits in a header row so it lines up with the Messages and
+              // span-detail headers in the neighbouring columns.
+              return (
+                <Tabs<TraceDataPanelTab>
+                  defaultTab="details"
+                  value={activeTab}
+                  onValueChange={onTabChange}
+                  className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+                >
+                  {/* Pill tabs carry their own p-1, so shrink the header padding to keep min-h-14. */}
+                  <DataPanel.Header className="py-2">
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
-                      {partialThreadTabSlot && <Tab value="partial-thread">Messages</Tab>}
                       {feedbackTabSlot && (
                         <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
                       )}
@@ -364,46 +371,47 @@ export function TraceDataPanelView({
                         <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                       )}
                     </TabList>
+                  </DataPanel.Header>
 
-                    <TabContent value="details">{detailsBody}</TabContent>
-                    {partialThreadTabSlot && (
-                      <TabContent value="partial-thread" className="h-full min-h-0">
-                        {partialThreadTabSlot({ traceId })}
-                      </TabContent>
-                    )}
-                    {feedbackTabSlot && (
-                      <TabContent value="feedback" className="h-full min-h-0">
-                        {feedbackTabSlot({ traceId })}
-                      </TabContent>
-                    )}
-                    {scoresTabSlot && (
-                      <TabContent value="scores" className="h-full min-h-0">
-                        {scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}
-                      </TabContent>
-                    )}
-                  </Tabs>
-                );
-              })()}
-            </DataPanel.Content>
+                  <TabContent value="details" className="min-h-0 py-0">
+                    {detailsBody}
+                  </TabContent>
+                  {feedbackTabSlot && (
+                    <TabContent value="feedback" className="h-full min-h-0 py-0">
+                      <DataPanel.Content>{feedbackTabSlot({ traceId })}</DataPanel.Content>
+                    </TabContent>
+                  )}
+                  {scoresTabSlot && (
+                    <TabContent value="scores" className="h-full min-h-0 py-0">
+                      <DataPanel.Content>{scoresTabSlot({ traceId, rootSpanId: rootSpan?.spanId })}</DataPanel.Content>
+                    </TabContent>
+                  )}
+                </Tabs>
+              );
+            })()
           )}
-        </SplitWithSpanPanel>
+        </TracePanelColumns>
       )}
     </DataPanel>
   );
 }
 
 /**
- * Renders the trace content as-is, or — when a span panel is provided — as a
- * two-column split inside the same card, with the span detail on the right.
+ * Lays out the card body as three columns — `[messages] [trace] [span]` — inside the
+ * same card. Both side cells always exist and collapse to `0fr` when their slot is
+ * absent, so opening/closing a column animates via `grid-template-columns` rather
+ * than mounting/unmounting a DOM column (which cannot be transitioned).
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
-function SplitWithSpanPanel({
+function TracePanelColumns({
+  messagesPanelSlot,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
+  messagesPanelSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
   highlightQuery: string;
   /** Identity of the span shown in the panel; changing it re-triggers the match scroll. */
@@ -419,22 +427,37 @@ function SplitWithSpanPanel({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
-  if (!spanPanelSlot) {
-    return (
-      <div ref={highlightRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {children}
-      </div>
-    );
-  }
+  const columns = messagesPanelSlot
+    ? spanPanelSlot
+      ? 'grid-cols-[1fr_1fr_1fr]'
+      : 'grid-cols-[1fr_1fr_0fr]'
+    : spanPanelSlot
+      ? 'grid-cols-[0fr_1fr_1fr]'
+      : 'grid-cols-[0fr_1fr_0fr]';
 
   return (
-    <div ref={highlightRef} className="grid min-h-0 flex-1 grid-cols-[1fr_1fr]">
-      <div className="flex min-h-0 flex-col overflow-hidden">{children}</div>
+    <div
+      ref={highlightRef}
+      data-trace-columns
+      className={cn('grid min-h-0 flex-1 transition-[grid-template-columns] duration-300 ease-in-out', columns)}
+    >
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 flex-col overflow-hidden',
+          messagesPanelSlot && 'animate-in border-r border-border1 duration-300 fade-in-0',
+        )}
+      >
+        {messagesPanelSlot}
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{children}</div>
       {/* Searchable: the span detail is where a match hides inside a large payload. */}
       <div
         ref={scrollToMatchRef}
         data-highlight
-        className="animate-in border-border1 fade-in-0 flex min-h-0 flex-col overflow-hidden border-l duration-300"
+        className={cn(
+          'flex min-h-0 min-w-0 flex-col overflow-hidden',
+          spanPanelSlot && 'animate-in border-l border-border1 duration-300 fade-in-0',
+        )}
       >
         {spanPanelSlot}
       </div>

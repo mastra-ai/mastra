@@ -107,6 +107,15 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   /** When true, processOutputStream also receives `data-*` chunks. Default: false. */
   processDataParts?: boolean
 
+  /** Span type to trace this processor as. Defaults to `PROCESSOR_RUN`. */
+  readonly spanType?: ProcessorSpanType
+  /** Span name, or a function returning one per pipeline phase. */
+  readonly spanName?: string | ((phase: ProcessorSpanPhase) => string)
+  /** Attributes set when the span is created, or a function returning them per phase. */
+  readonly spanAttributes?:
+    | Partial<SpanTypeMap[ProcessorSpanType]>
+    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>)
+
   /** Callback invoked when this processor detects a violation, regardless of strategy. */
   onViolation?: (violation: ProcessorViolation) => void | Promise<void>
 
@@ -185,6 +194,27 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     isOptional: true,
   },
   {
+    name: 'spanType',
+    type: 'ProcessorSpanType',
+    description:
+      'Span type to trace this processor as, instead of the default PROCESSOR_RUN. Use it when a processor belongs to a subsystem the user configured directly, so the trace names that subsystem rather than a pipeline phase. Restricted to span types whose attributes extend ProcessorPipelineAttributes, so the runtime can always record the processor position and message-list mutations on the span.',
+    isOptional: true,
+  },
+  {
+    name: 'spanName',
+    type: 'string | ((phase: ProcessorSpanPhase) => string)',
+    description:
+      'Span name, instead of the default `<phase> processor: <id>`. Pass a function to name each phase separately, which a processor that runs in more than one phase usually needs.',
+    isOptional: true,
+  },
+  {
+    name: 'spanAttributes',
+    type: 'Partial<SpanTypeMap[ProcessorSpanType]> | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>)',
+    description:
+      'Attributes set when the span is created. Needed when the declared span type has required attributes of its own, such as WORKSPACE_ACTION.category. The pairing with spanType is not enforced by the type system.',
+    isOptional: true,
+  },
+  {
     name: 'onViolation',
     type: '(violation: ProcessorViolation) => void | Promise<void>',
     description:
@@ -193,6 +223,43 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   },
 ]}
 />
+
+## Tracing
+
+Each processor gets a span named for the pipeline phase it ran in, such as `input step processor: my-processor`. That name describes how Mastra ran the processor rather than what it does, which is unhelpful for a processor a user didn't configure as one. Mastra's own built-ins declare their subsystem instead: workspace skills trace as `skill:inject`, message history as `memory: recall` and `memory: save`.
+
+Declare `spanType` to do the same in your own processor. A processor that runs in more than one phase usually does something different in each, so `spanName` and `spanAttributes` also accept a function of the phase:
+
+```typescript title="src/mastra/processors/session-cache.ts"
+import { SpanType } from '@mastra/core/observability'
+import type { Processor, ProcessorSpanPhase } from '@mastra/core/processors'
+
+const OPERATION: Partial<Record<ProcessorSpanPhase, 'recall' | 'save'>> = {
+  inputStep: 'recall',
+  output: 'save',
+}
+
+export class SessionCacheProcessor implements Processor<'session-cache'> {
+  readonly id = 'session-cache' as const
+
+  readonly spanType = SpanType.MEMORY_OPERATION
+  readonly spanName = (phase: ProcessorSpanPhase) => `memory: ${OPERATION[phase] ?? 'recall'}`
+  readonly spanAttributes = (phase: ProcessorSpanPhase) => ({
+    operationType: OPERATION[phase] ?? 'recall',
+  })
+}
+```
+
+A declared span type replaces `PROCESSOR_RUN`, but the span keeps its entity type and the runtime's own attributes, so it still records which phase the processor ran in, its position in the chain, and the changes it made to the message list. Processors that declare nothing are unaffected.
+
+To record values only known at runtime, update the processor's own span from inside a method:
+
+```typescript oxfmt:false
+async processInputStep({ messageList, tracingContext }: ProcessInputStepArgs) {
+  tracingContext?.currentSpan?.update({ attributes: { messageCount: messageList.get.all.db().length } });
+  return { messageList };
+}
+```
 
 ## Message arguments
 

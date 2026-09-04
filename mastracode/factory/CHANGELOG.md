@@ -1,5 +1,81 @@
 # @mastra/factory
 
+## 0.13.0-alpha.4
+
+### Patch Changes
+
+- Settings controls now match what they set instead of every choice being the same row of buttons. ([#22983](https://github.com/mastra-ai/mastra/pull/22983))
+
+  **Thinking level** is a slider, not six buttons. Six buttons said "pick one of these"; a slider says what is actually true — the level is a ramp, so you drag the thumb along it. The track carries a dot per stop and fills up to the handle, and the colour turns to warning on the top two steps where the bill turns. The level is named to the left of the track in a fixed column, so "Off" and "Extra high" leave the track in the same place and nothing on the page shifts as you drag. The save only fires when you let go, so crossing the whole scale is one write, not five, and the write is optimistic: the thumb stays where you dropped it instead of the row greying out and snapping back. A per-mode row that follows the base level reads "Follows base" and grows a "Reset to base" button only once it has an override of its own. A refusal from the server puts the slider back and says why under the row that asked for it, rather than as a banner over the whole section. Arrow keys move it, and screen readers hear the level name rather than a number. One control at every width — the phone and desktop renderings are no longer two separate components.
+
+  The per-mode rows moved next to the level they follow. They set deployment defaults, but they sat in your personal card beside the session thinking level, so "Follows base" pointed at a row that was neither the base nor on the same screen. Base and modes are now one group of their own, and the session-level row that used to sit beside them is labelled for what it really is: the level for chats opened from this factory, shared with everyone working in it. Saving no longer raises a toast per change — the control already shows the new value, and it holds the stop you dropped it on until the write lands instead of flicking back and forth once.
+
+  On a deployment that refuses these writes — the defaults live in one settings file shared by everyone, so an authenticated deployment keeps them fixed — the rows now say so and render read-only, instead of letting you drag a slider that fails on release.
+
+  **Theme** uses the shared theme toggle instead of a picker built here, so System, Light and Dark read and behave the same in the Factory as everywhere else in the product.
+
+  **Completion sound** is a one-line select with a mute button tucked under its left edge, not four buttons: whether a run makes a sound and which sound it makes are two different questions. Muting swaps the icon and greys the select's label while keeping your sound, so unmuting returns to what you had. Nothing moves as you toggle, and the greyed-out select keeps its own background rather than turning translucent over the button behind it. Each pick plays, since a sound can only be judged by ear.
+
+  **Observe attachments** was a hand-rolled copy of the shared button group; it now uses the shared one, so Auto/On/Off, Notifications and the tool-permission rows stay identical — those are alternatives, not a ramp, and keep the control that says so.
+
+- Settings now say who each block applies to. Every section heading carries a scope label: **Personal** for your own account, chats and credentials, **Factory-wide** for what everyone working in this factory shares, **Org-wide** for what the whole organization shares such as custom providers and GitHub CLI tokens, and **Deployment-wide** for the handful of settings that live in the server's own settings file and reach every factory on it. ([#22983](https://github.com/mastra-ai/mastra/pull/22983))
+
+  Writing the labels turned up blocks that claimed the wrong owner, and those moved to where they belong:
+
+  - **Thinking level, auto-approve tools, smart editing, notifications and the tool-permission rows** sat under Personal, but a settings page has no chat session of its own, so they all write the factory-level session that every member of the factory shares. They now read Factory-wide, and say plainly that auto-approve, smart editing and permissions reset when the server restarts.
+  - **Base and per-mode thinking defaults** claimed Factory-wide while writing one settings file shared by every factory on the server. They are their own Deployment-wide block now, sitting together so a mode row that follows the base level shows the row it follows.
+  - **GitHub and Linear issue syncing** claimed Factory-wide while storing one row per person. They read Personal, and say that teammates choose their own.
+  - **Linear routing** is org-level config that happens to name a factory, so it reads Org-wide.
+  - **"Create work items for new Slack threads"** sat in a Personal block on the Slack page while flipping a switch on the factory itself. It has its own Factory-wide block now, next to the per-account routing that really is personal.
+  - **Model packs**: choosing your default pack is personal, but creating or removing one changes the list for the whole org, which the block now says.
+  - **Factory skills** ship with the server and are identical on every factory, so they read Deployment-wide rather than implying this factory has its own.
+
+  Where the same form exists at two scopes, the label becomes a switch instead of a second copy of the form, and switching slides the old content out and the new content in from the picked side, so the change is visible even when both scopes are configured alike:
+
+  - **Provider access** switches between your own credentials and the org-wide ones (org admins only). The sign-in and API-key tabs moved up next to the heading, so the section leads with one row of controls instead of two. Each row shows one status and one action for the picked scope; from the personal view a provider you have no credential for reads "Covered by org" when the org already has one. Signing in or adding a key no longer asks who it is for; the switch already decided.
+  - **Observational memory** switches between your interactive chats and Factory runs instead of stacking two identical forms.
+
+## 0.13.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`c107c7e`](https://github.com/mastra-ai/mastra/commit/c107c7ee6ed85ac42577bc5b28865f3a7fbc569a)]:
+  - @mastra/core@1.65.0-alpha.2
+  - @mastra/code-sdk@1.7.0-alpha.3
+
+## 0.13.0-alpha.2
+
+### Minor Changes
+
+- Added a factory Supervisor that explains unhealthy work items, highlights actionable findings, and provides a dedicated factory-scoped chat without requiring a repository workspace. ([#23001](https://github.com/mastra-ai/mastra/pull/23001))
+
+  Create or reconnect the factory-scoped session with `POST /web/factory/projects/:id/supervisor/session`, and read the current deterministic findings with `GET /web/factory/projects/:id/supervisor/health`.
+
+### Patch Changes
+
+- Added trusted pull request comment commands to start or re-run Factory reviews. ([#22986](https://github.com/mastra-ai/mastra/pull/22986))
+
+- Fixed autonomous Factory runs so they retain the selected session model. ([#22986](https://github.com/mastra-ai/mastra/pull/22986))
+
+- Updated dependencies [[`72c889d`](https://github.com/mastra-ai/mastra/commit/72c889d139b797a65320b64495efc5cbb7e934f4)]:
+  - @mastra/code-sdk@1.7.0-alpha.2
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- Improved Factory repository search by persisting only the repository selected for a project. ([#22982](https://github.com/mastra-ai/mastra/pull/22982))
+
+- Fixed Factory-authored pull requests to resume their original session for inline reviewer feedback while leaving regular pull requests out of autonomous fixes. Factory now also creates and starts an initial Review session, or re-review session after completion, when a trusted maintainer requests the configured GitHub App as a reviewer. ([#22959](https://github.com/mastra-ai/mastra/pull/22959))
+
+- Fixed Factory triage to preserve existing workflow status labels during initial issue handling. ([#22988](https://github.com/mastra-ai/mastra/pull/22988))
+
+- Fix automated runs falsely failing when a plan agent handed a card straight on to Build. Decisions whose role was replaced on the session by the next role now complete instead of failing or retrying. ([#22942](https://github.com/mastra-ai/mastra/pull/22942))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+  - @mastra/code-sdk@1.6.1-alpha.1
+
 ## 0.12.1-alpha.0
 
 ### Patch Changes

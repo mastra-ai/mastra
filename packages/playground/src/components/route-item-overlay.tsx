@@ -5,7 +5,7 @@ export type RouteItemOverlayProps = {
   label: string;
   /**
    * Widens the panel column (e.g. when a detail split is shown inside),
-   * mirroring the `sidePanelWide` behavior of `TracesLayout` on the traces page.
+   * mirroring the `sidePanelWidth="wide"` behavior of `TracesLayout` on the traces page.
    */
   wide?: boolean;
   children: React.ReactNode;
