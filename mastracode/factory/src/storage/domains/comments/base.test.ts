@@ -21,6 +21,18 @@ const alice: FactoryActorRef = {
 const bob: FactoryActorRef = { kind: 'user', id: 'user-bob', displayName: 'Bob' };
 
 describe('WorkItemCommentsStorage', () => {
+  it('round-trips Slack mention labels without creating notification recipients', async () => {
+    const seed = await createFactoryStorageForTests();
+    const created = await seed.comments.create({
+      ...scope,
+      author: alice,
+      body: 'Ask @Eric (he/him)',
+      mentions: [{ kind: 'slack-user', id: 'U1', label: '@Eric (he/him)' }],
+    });
+    const fetched = await seed.comments.get({ orgId: scope.orgId, commentId: created.id });
+    expect(fetched?.mentions).toEqual([{ kind: 'slack-user', id: 'U1', label: '@Eric (he/him)' }]);
+    expect(await seed.comments.listMentionsForComment(created.id)).toEqual([]);
+  });
   it('round-trips a comment including the flattened author and reply columns', async () => {
     const seed = await createFactoryStorageForTests();
     const parent = await seed.comments.create({ ...scope, author: bob, body: 'original take' });

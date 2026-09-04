@@ -1,3 +1,5 @@
+export { resolveSlackMentions } from './slack-mentions';
+export type { SlackMention } from './slack-mentions';
 export { AgentChannels } from './agent-channels';
 export { AgentControllerChannels } from './agent-controller-channels';
 export type {

@@ -1043,6 +1043,20 @@ describe('Slack aside ingest', () => {
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves the full mentioned Slack display name on imported comments', async () => {
+    const { thread, deps } = makeAsideDeps();
+    thread.adapter.getUser = vi.fn().mockResolvedValue({
+      userId: 'U123', userName: 'Eric (he/him)', fullName: 'Eric', isBot: false,
+    });
+    const message = makeAside('aside: ask @Eric (he/him)');
+    message.raw.text = 'aside: ask <@U123>';
+    await createHandlers(deps).onSubscribedMessage!(thread, message, vi.fn(), handlerCtx());
+    expect(deps.feed.createComment.mock.calls[0][0]).toMatchObject({
+      body: 'ask @Eric (he/him)',
+      mentions: [{ kind: 'slack-user', id: 'U123', label: '@Eric (he/him)' }],
+    });
+  });
+
   it('stores an unlinked sender aside under their Slack identity, silently (no Connect card)', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const { thread, deps } = makeAsideDeps({ link: null });

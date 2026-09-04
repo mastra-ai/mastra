@@ -1,3 +1,6 @@
+import { defaultEmojiResolver } from 'chat';
+import { emojify } from 'node-emoji';
+
 import type { FactoryActorKind, FactoryActorRef } from './actor.js';
 import type { FactoryMentionRef, WorkItemCommentReplyRef, WorkItemCommentRow } from './base.js';
 
@@ -38,6 +41,14 @@ export interface WireCommentPage {
 
 const LOCAL_SOURCE_KEY_PREFIX = 'local:comment:';
 
+function slackEmojiFallback(name: string): string {
+  const tone = /^skin-tone-([2-6])$/.exec(name);
+  if (tone) return String.fromCodePoint(0x1f3f9 + Number(tone[1]));
+
+  const emoji = defaultEmojiResolver.toGChat(defaultEmojiResolver.fromSlack(name));
+  return emoji === name ? `:${name}:` : emoji;
+}
+
 function toWireAuthor({ kind, id, displayName, avatarUrl }: FactoryActorRef): WireCommentAuthor {
   return {
     kind,
@@ -56,7 +67,10 @@ export function toWireComment(comment: WorkItemCommentRow, viewerId: string): Wi
     id: comment.id,
     workItemId: comment.workItemId,
     kind: comment.kind,
-    body: comment.body,
+    body:
+      comment.externalSource?.integrationId === 'slack'
+        ? emojify(comment.body, { fallback: slackEmojiFallback })
+        : comment.body,
     bodyFormat: comment.bodyFormat,
     author: toWireAuthor(comment.author),
     ...(comment.replyTo ? { replyTo: comment.replyTo } : {}),

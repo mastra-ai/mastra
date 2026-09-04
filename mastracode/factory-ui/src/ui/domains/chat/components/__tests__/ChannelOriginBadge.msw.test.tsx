@@ -9,7 +9,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry } from '../../services/transcript';
-import { channelOrigin, ChannelOriginBadge } from '../MessageBubble';
+import { channelOrigin, ChannelOriginBadge, MessageBubble } from '../MessageBubble';
 
 function userEntry(providerMetadata?: Record<string, unknown>): MessageEntry {
   return {
@@ -56,6 +56,24 @@ describe('channelOrigin', () => {
 });
 
 describe('ChannelOriginBadge', () => {
+  it('renders the complete Slack mention label in a thread message', () => {
+    const entry = userEntry({
+      mastra: {
+        channels: {
+          slack: {
+            author: { userId: 'U1', fullName: 'Daniel Lew' },
+            mentions: [{ id: 'U2', label: '@Eric (he/him)' }],
+          },
+        },
+      },
+    });
+    entry.message.content.parts = [{ type: 'text', text: 'Ask @Eric (he/him) about German' }];
+    const { container } = render(
+      <MessageBubble entry={entry} suspensions={new Map()} isSubmitting={false} onRespond={() => {}} />,
+    );
+    expect(screen.getByText('@Eric (he/him)').tagName).toBe('SPAN');
+    expect(container.textContent).toContain('Ask @Eric (he/him) about German');
+  });
   it('renders the Slack label with the author', () => {
     render(<ChannelOriginBadge origin={{ platform: 'slack', authorName: 'Caleb Barnes' }} />);
 

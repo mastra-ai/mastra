@@ -106,6 +106,64 @@ describe('MarkdownRenderer', () => {
     expect(container.querySelector('del')).toBeTruthy();
   });
 
+  it('wraps mention text only when highlighting is enabled', () => {
+    const { rerender, container } = render(<MarkdownRenderer>{'Hello @Abhi, thanks @ana-maria!'}</MarkdownRenderer>);
+    expect(container.querySelector('p span')).toBeNull();
+
+    rerender(
+      <MarkdownRenderer mentionLabels={['@Abhi', '@ana-maria', '@Zoë']}>
+        {'Hello @Abhi, thanks @ana-maria!'}
+      </MarkdownRenderer>,
+    );
+    expect([...container.querySelectorAll('p span')].map(node => node.textContent)).toEqual(['@Abhi', '@ana-maria']);
+    expect(container.textContent).toBe('Hello @Abhi, thanks @ana-maria!');
+  });
+
+  it('leaves email addresses, links, and code untouched when highlighting mentions', () => {
+    const { container } = render(
+      <MarkdownRenderer mentionLabels={['@Abhi', '@ana-maria', '@Zoë']}>
+        {'hello@example.com [@Abhi](https://example.com) `@Abhi` and @Zoë'}
+      </MarkdownRenderer>,
+    );
+    expect(container.querySelector('a span')).toBeNull();
+    expect(container.querySelector('code span')).toBeNull();
+    expect([...container.querySelectorAll('p > span')].map(node => node.textContent)).toEqual(['@Zoë']);
+  });
+
+  it('highlights full labels with spaces and pronouns without guessing historical mentions', () => {
+    const { container } = render(
+      <MarkdownRenderer mentionLabels={['@Eric', '@Eric (he/him)', '@Yujohn Nattrass']}>
+        {'Ask @Eric (he/him) and @Yujohn Nattrass, not @Yujohn or @Erica. mail@Eric stays plain.'}
+      </MarkdownRenderer>,
+    );
+    expect([...container.querySelectorAll('p > span')].map(node => node.textContent)).toEqual([
+      '@Eric (he/him)',
+      '@Yujohn Nattrass',
+    ]);
+    expect(container.textContent).toBe(
+      'Ask @Eric (he/him) and @Yujohn Nattrass, not @Yujohn or @Erica. mail@Eric stays plain.',
+    );
+  });
+
+  it('highlights a leading full name and ignores invalid labels and nested matches', () => {
+    const { container } = render(
+      <MarkdownRenderer mentionLabels={['', '@', 'plain', '@A @B', '@B']}>
+        {'@A @B says @ plain'}
+      </MarkdownRenderer>,
+    );
+    expect([...container.querySelectorAll('p > span')].map(node => node.textContent)).toEqual(['@A @B']);
+    expect(container.textContent).toBe('@A @B says @ plain');
+  });
+
+  it('does not highlight mentions inside fenced code', () => {
+    const { container } = render(
+      <TooltipProvider>
+        <MarkdownRenderer mentionLabels={['@Eric']}>{'```text\n@Eric\n```'}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+    expect(container.querySelector('pre .text-accent1')).toBeNull();
+  });
+
   it('names itself so a host stylesheet can reach its markup', () => {
     const { container } = render(<MarkdownRenderer>{'Hello'}</MarkdownRenderer>);
 

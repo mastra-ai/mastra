@@ -25,10 +25,7 @@ export { WORK_ITEM_ACTIVITY_SCHEMA, WORK_ITEM_COMMENT_MENTIONS_SCHEMA, WORK_ITEM
 
 export type WorkItemCommentKind = 'comment';
 
-export interface FactoryMentionRef {
-  kind: 'user';
-  id: string;
-}
+export type FactoryMentionRef = { kind: 'user'; id: string } | { kind: 'slack-user'; id: string; label: string };
 
 export interface WorkItemCommentReplyRef {
   commentId: string;
@@ -628,7 +625,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     // must not report as "added" either — they would re-report on every edit.
     const skippedIds = new Set([comment.author.id, ...(input.editorId ? [input.editorId] : [])]);
     const addedMentions = comment.mentions.filter(
-      mention => !existingKeys.has(mentionKey(mention)) && !skippedIds.has(mention.id),
+      mention => mention.kind === 'user' && !existingKeys.has(mentionKey(mention)) && !skippedIds.has(mention.id),
     );
     const removedMentions = existing.map(toMentionRef).filter(mention => !nextKeys.has(mentionKey(mention)));
 
@@ -815,7 +812,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     occurredAt = comment.occurredAt,
   ): Promise<void> {
     for (const mention of mentions) {
-      if (mention.id === comment.author.id) continue;
+      if (mention.kind !== 'user' || mention.id === comment.author.id) continue;
       await this.ops.upsertOne<WorkItemMentionDbRow>(
         'work_item_comment_mentions',
         ['comment_id', 'mentioned_kind', 'mentioned_id'],

@@ -21,6 +21,8 @@ import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { resolveSlackMentions } from './slack-mentions';
+import type { SlackMention } from './slack-mentions';
 import { ChannelSessionRejectedError } from './errors';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
@@ -1006,6 +1008,7 @@ export class AgentChannels {
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
+    mentions?: SlackMention[];
   }): {
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
@@ -1048,6 +1051,7 @@ export class AgentChannels {
         channels: {
           [platform]: {
             ...(messageId !== undefined ? { messageId } : {}),
+            ...(params.mentions?.length ? { mentions: params.mentions.map(({ id, label }) => ({ id, label })) } : {}),
             author: {
               userId: actor.userId,
               ...(actor.userName !== undefined ? { userName: actor.userName } : {}),
@@ -1312,6 +1316,7 @@ export class AgentChannels {
       eventType: chatThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
+      mentions: await resolveSlackMentions(chatThread.adapter, message.raw),
     });
 
     // NOTE: `requestContext` is constructed per message at the handler boundary

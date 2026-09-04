@@ -7,6 +7,7 @@ import remend from 'remend';
 
 import { rehypeArriving } from './arriving';
 import { splitBlocks } from './blocks';
+import { rehypeMentions } from './mentions';
 import { useSettledWords } from './use-settled';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,7 @@ export interface MarkdownRendererProps {
   children: string;
   className?: string;
   externalLinkTarget?: MarkdownExternalLinkTarget;
+  mentionLabels?: string[];
   /** The text is a prefix of one still being written: close the markers the stream has not reached. */
   streaming?: boolean;
 }
@@ -46,6 +48,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   children,
   className,
   externalLinkTarget = 'tab',
+  mentionLabels,
   streaming = false,
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
@@ -72,6 +75,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           content={index === last ? mended : block}
           settledWords={settledWords(spans[index])}
           components={components}
+          mentionLabels={mentionLabels}
         />
       ))}
     </div>
@@ -83,15 +87,15 @@ const MarkdownBlock = memo(function MarkdownBlock({
   components,
   content,
   settledWords,
+  mentionLabels,
 }: {
   components: Components;
   content: string;
   settledWords?: number;
+  mentionLabels?: string[];
 }) {
-  const rehypePlugins = useMemo(
-    () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
-    [settledWords],
-  );
+  const rehypePlugins: Options['rehypePlugins'] = mentionLabels?.length ? [[rehypeMentions, mentionLabels]] : [];
+  if (settledWords !== undefined) rehypePlugins.push(rehypeArriving(settledWords));
 
   return (
     <Markdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
@@ -99,8 +103,6 @@ const MarkdownBlock = memo(function MarkdownBlock({
     </Markdown>
   );
 });
-
-const SETTLED: Options['rehypePlugins'] = [];
 
 interface WordSpan {
   start: number;

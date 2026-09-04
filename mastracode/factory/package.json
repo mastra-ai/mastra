@@ -62,6 +62,7 @@
     "chat": "^4.34.0",
     "@octokit/rest": "^22.0.1",
     "hono": "^4.12.8",
+    "node-emoji": "2.2.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

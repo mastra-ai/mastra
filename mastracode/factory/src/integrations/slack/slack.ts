@@ -8,6 +8,7 @@ import type {
   ResolveResourceId,
   ResolveThreadId,
 } from '@mastra/core/channels';
+import { resolveSlackMentions } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
@@ -733,6 +734,10 @@ async function ingestAside(
       workItemId: workItem.id,
       author: actorFromChannelAuthor(external, link),
       body,
+      mentions: (await resolveSlackMentions(thread.adapter, message.raw)).map(mention => ({
+        kind: 'slack-user',
+        ...mention,
+      })),
       occurredAt: message.metadata.dateSent,
       externalSource: slackCommentSource(thread.id, message.id, teamId),
     });

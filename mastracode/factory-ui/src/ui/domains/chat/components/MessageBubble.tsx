@@ -58,6 +58,15 @@ export function channelOrigin(entry: MessageEntry): { platform: string; authorNa
   return { platform, authorName };
 }
 
+function channelMentionLabels(entry: MessageEntry): string[] {
+  const mastra = entry.message.content.providerMetadata?.mastra;
+  const channels = isRecord(mastra) ? mastra.channels : undefined;
+  const slack = isRecord(channels) && isRecord(channels.slack) ? channels.slack : undefined;
+  return Array.isArray(slack?.mentions)
+    ? slack.mentions.flatMap(mention => (isRecord(mention) && typeof mention.label === 'string' ? [mention.label] : []))
+    : [];
+}
+
 export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
@@ -173,7 +182,11 @@ export function MessageBubble({
       if (!part.text.trim()) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return activation ? (
+          <SkillMessage activation={activation} />
+        ) : (
+          <MarkdownRenderer mentionLabels={channelMentionLabels(entry)}>{part.text}</MarkdownRenderer>
+        );
       }
 
       return (

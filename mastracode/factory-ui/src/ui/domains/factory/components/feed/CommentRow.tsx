@@ -215,7 +215,13 @@ export function CommentRow({
           />
         ) : (
           <div ref={bodyRef} className="text-ui-sm">
-            <MarkdownRenderer>{comment.body}</MarkdownRenderer>
+            <MarkdownRenderer
+              mentionLabels={comment.mentions.flatMap(mention =>
+                mention.kind === 'slack-user' ? [mention.label] : [],
+              )}
+            >
+              {comment.body}
+            </MarkdownRenderer>
             {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
           </div>
         )}
