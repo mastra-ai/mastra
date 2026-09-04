@@ -68,7 +68,30 @@ describe('parseError', () => {
       expect(parsed.type).toBe('provider_unavailable');
       expect(parsed.detail).toBe(`HTTP ${status}: Not Found`);
       expect(parsed.requestUrl).toBe('https://api.openai.com/v1/responses');
+      expect(parsed.retryable).toBe(true);
+      expect(parsed.retryDelay).toBe(5000);
     }
+  });
+
+  it('reads gateway status codes from a wrapped cause', () => {
+    const parsed = parseError(
+      new Error('fetch failed', { cause: { status: 503, url: 'https://api.openai.com/v1/responses' } }),
+    );
+
+    expect(parsed.type).toBe('provider_unavailable');
+    expect(parsed.detail).toBe('HTTP 503: fetch failed');
+    expect(parsed.requestUrl).toBe('https://api.openai.com/v1/responses');
+  });
+
+  it('does not treat a descriptive 404 as a provider outage', () => {
+    const modelMissing = parseError(Object.assign(new Error('The model was not found'), { statusCode: 404 }));
+    expect(modelMissing.type).toBe('model_not_found');
+    expect(modelMissing.retryable).toBe(false);
+
+    const routeMissing = parseError(Object.assign(new Error('No route for /v1/foo'), { statusCode: 404 }));
+    expect(routeMissing.type).toBe('unknown');
+    expect(routeMissing.retryable).toBe(false);
+    expect(routeMissing.detail).toBe('HTTP 404');
   });
 
   it('treats overloaded and gateway failures as provider unavailable', () => {
@@ -84,11 +107,14 @@ describe('parseError', () => {
   });
 
   it('adds HTTP status detail to unknown errors', () => {
-    const parsed = parseError(Object.assign(new Error('Teapot'), { statusCode: 418 }));
+    const parsed = parseError(
+      Object.assign(new Error('Teapot'), { statusCode: 418, url: 'https://api.openai.com/v1/responses' }),
+    );
 
     expect(parsed.type).toBe('unknown');
     expect(parsed.message).toBe('Teapot');
     expect(parsed.detail).toBe('HTTP 418');
+    expect(parsed.requestUrl).toBe('https://api.openai.com/v1/responses');
   });
 
   it('includes the request URL for access denied errors', () => {

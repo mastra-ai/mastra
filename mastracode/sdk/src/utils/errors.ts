@@ -97,10 +97,22 @@ function extractRequestUrl(error: unknown): string | undefined {
 function extractStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const errorObj = error as Record<string, unknown>;
-  for (const candidate of [errorObj['statusCode'], errorObj['status']]) {
+  const candidates: unknown[] = [errorObj['statusCode'], errorObj['status']];
+
+  if (errorObj['cause'] && typeof errorObj['cause'] === 'object') {
+    const causeObj = errorObj['cause'] as Record<string, unknown>;
+    candidates.push(causeObj['statusCode'], causeObj['status']);
+  }
+
+  for (const candidate of candidates) {
     if (typeof candidate === 'number') return candidate;
   }
   return undefined;
+}
+
+/** An edge/gateway "Not Found" page served in place of the API, as seen during provider outages. */
+function isBareNotFound(message: string): boolean {
+  return /^(404\s*)?not found\.?$/.test(message.trim());
 }
 
 /** Combine the HTTP status and the raw provider response into a single diagnostic line. */
@@ -194,6 +206,21 @@ export function parseError(error: unknown): ParsedError {
     };
   }
 
+  const providerUnavailable = (): ParsedError => ({
+    message: 'Model provider unavailable. The provider may be down or unreachable right now.',
+    detail: describeHttpFailure(statusCode, detail),
+    requestUrl,
+    type: 'provider_unavailable',
+    retryable: true,
+    retryDelay: 5000,
+    originalError: err,
+  });
+
+  // Gateway/overload statuses win over the wrapping message (e.g. "fetch failed" with a 503 cause).
+  if (statusCode === 502 || statusCode === 503 || statusCode === 504 || statusCode === 529) {
+    return providerUnavailable();
+  }
+
   // Check for network errors
   if (
     message.includes('network') ||
@@ -229,7 +256,8 @@ export function parseError(error: unknown): ParsedError {
     message.includes('model not found') ||
     message.includes('model_not_found') ||
     message.includes('does not exist') ||
-    message.includes('invalid model')
+    message.includes('invalid model') ||
+    (statusCode === 404 && message.includes('model'))
   ) {
     return {
       message: 'Model not found. Please select a different model with /models.',
@@ -274,26 +302,13 @@ export function parseError(error: unknown): ParsedError {
   // Check for a provider that is down or unreachable: gateway errors, overload,
   // or an edge "Not Found" page served instead of the API during an outage.
   if (
-    statusCode === 404 ||
-    statusCode === 502 ||
-    statusCode === 503 ||
-    statusCode === 504 ||
-    statusCode === 529 ||
-    /^not found\.?$/.test(message.trim()) ||
+    isBareNotFound(message) ||
     message.includes('bad gateway') ||
     message.includes('service unavailable') ||
     message.includes('gateway timeout') ||
     message.includes('overloaded')
   ) {
-    return {
-      message: 'Model provider unavailable. The provider may be down or unreachable right now.',
-      detail: describeHttpFailure(statusCode, detail),
-      requestUrl,
-      type: 'provider_unavailable',
-      retryable: true,
-      retryDelay: 5000,
-      originalError: err,
-    };
+    return providerUnavailable();
   }
 
   // Check for server errors
