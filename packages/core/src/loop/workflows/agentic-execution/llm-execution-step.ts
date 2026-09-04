@@ -1713,6 +1713,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
+          const inferenceStartedAt = new Date();
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1771,6 +1772,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       request: request || {},
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
+                      startedAt: inferenceStartedAt,
                     },
                   };
                 },

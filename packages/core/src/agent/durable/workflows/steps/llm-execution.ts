@@ -932,6 +932,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
+            const inferenceStartedAt = new Date();
 
             // Collect chunks for post-stream message building (via
             // buildMessagesFromChunks) and for the processLLMResponse hook
@@ -1115,6 +1116,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
+                    startedAt: inferenceStartedAt,
                     warnings,
                   });
                 }

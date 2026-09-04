@@ -293,6 +293,7 @@ interface StartPayload {
 
 export interface StepStartPayload {
   messageId?: string;
+  startedAt?: Date;
   request: {
     body?: string;
     [key: string]: unknown;
