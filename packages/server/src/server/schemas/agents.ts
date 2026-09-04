@@ -22,13 +22,6 @@ import { z } from 'zod/v4';
  */
 type StopConditionArg = (event: unknown) => boolean | PromiseLike<boolean>;
 
-/**
- * Structural mirror of the ai-sdk JSONValue type, which is not publicly
- * exported from @mastra/core. Used to keep providerOptions assignable to
- * ProviderOptions (Record<string, JSONObject>) with portable declaration emit.
- */
-type JSONValue = null | string | number | boolean | { [key: string]: JSONValue } | JSONValue[];
-
 type ModelSettings = {
   maxOutputTokens?: number;
   temperature?: number;
@@ -403,14 +396,10 @@ export const agentExecutionBodySchema = z
 
     // Model Configuration
     model: z.string().optional(),
-    providerOptions: typedPermissive<Record<string, Record<string, JSONValue>>>(
-      z.object({
-        anthropic: z.record(z.string(), z.unknown()).optional(),
-        google: z.record(z.string(), z.unknown()).optional(),
-        openai: z.record(z.string(), z.unknown()).optional(),
-        xai: z.record(z.string(), z.unknown()).optional(),
-      }),
-    ).optional(),
+    // Open record: an allowlist here silently strips every other provider's
+    // namespace (deepseek, bedrock, ...) because nested objects drop unknown
+    // keys regardless of the outer passthrough(). See #22617.
+    providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
     modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
 
     // Tool Configuration
