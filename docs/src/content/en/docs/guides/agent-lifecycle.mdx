@@ -7,7 +7,7 @@ packages:
 
 # Agent lifecycle
 
-When you call `generate()` or `stream()`, Mastra starts an agent run. It prepares the agent and its input before calling the model. If the model requests a tool, Mastra runs it and may call the model again. When the work is complete, Mastra finalizes and returns the result.
+When you call [`generate()`](/reference/agents/generate) or [`stream()`](/reference/streaming/agents/stream), Mastra starts an agent run. It prepares the agent and its input before calling the model. If the model requests a tool, Mastra runs it and may call the model again. When the work is complete, Mastra finalizes and returns the result.
 
 This guide breaks that work into preparation, loop execution, and finalization. It explains where [processors](/docs/agents/processors) run, what can cause another model call, and how regular and durable runs differ.
 
@@ -52,15 +52,15 @@ By the end of preparation, the run has the messages, tools, and processor config
 
 | Preparation work | Timing | What this means for `RequestContext` |
 | - | - | - |
-| Validation, workspace, model, and instructions | Before `processInput` | Required values must already exist when the run starts. |
+| Validation, workspace, model, and instructions | Before [`processInput`](/reference/processors/processor-interface#processinput) | Required values must already exist when the run starts. |
 | Memory-, workspace-, and skills-derived processor instances used for `processInput` | Resolved before `processInput` | A context change inside `processInput` can't change how these instances were selected. |
 | Dynamic skill resolution | Before `processInput` | Skill selection can't depend on a value first added by `processInput`. |
-| Tool conversion in a regular run | In parallel with memory and input preparation | A dynamic `tools` callback has no guaranteed ordering relative to `processInput`. |
+| Tool conversion in a regular run | In parallel with memory and input preparation | A dynamic [`tools` callback](/reference/agents/agent) has no guaranteed ordering relative to `processInput`. |
 | `processInput` | Once during initial input preparation | It can transform messages and establish state for later loop callbacks and tool execution. |
 | Effective input, LLM-request, and error processor factories used by the loop | After the regular preparation branches join | These factories can observe earlier context changes, but `processInput` isn't a safe setup point for every resolver. |
 | Durable preparation | Before durable loop execution | Its placement differs from the regular path, and resumed work may skip initial input processing. |
 
-`generate()` and `stream()` validate `RequestContext` before resolving dynamic default options. A default-options callback therefore can't add a missing required value in time for validation.
+`generate()` and `stream()` validate `RequestContext` before calling [`getDefaultOptions()`](/reference/agents/getDefaultOptions). A function-based default option therefore can't add a missing required value in time for validation.
 
 In a regular run, Mastra reuses the caller's `RequestContext` instance throughout execution. Dynamic configuration, processors, and tool execution receive that live instance rather than separate copies. Whether a change is visible depends on whether the consumer has already resolved.
 
@@ -102,13 +102,13 @@ The loop works with the messages accumulated so far. Each iteration gives those 
 
 Processor callbacks run in this public sequence:
 
-1. `processInputStep` receives the accumulated message list before the next model call.
-1. `processLLMRequest` receives the provider-facing prompt after message conversion.
-1. The provider streams its response, and `processOutputStream` can inspect or transform each chunk.
-1. `processLLMResponse` runs after the provider stream for that step completes.
-1. `processOutputStep` runs after the model step, before locally executed tools.
+1. [`processInputStep`](/reference/processors/processor-interface#processinputstep) receives the accumulated message list before the next model call.
+1. [`processLLMRequest`](/reference/processors/processor-interface#processllmrequest) receives the provider-facing prompt after message conversion.
+1. The provider streams its response, and [`processOutputStream`](/reference/processors/processor-interface#processoutputstream) can inspect or transform each chunk.
+1. [`processLLMResponse`](/reference/processors/processor-interface#processllmresponse) runs after the provider stream for that step completes.
+1. [`processOutputStep`](/reference/processors/processor-interface#processoutputstep) runs after the model step, before locally executed tools.
 1. If the model requested local or client tools, Mastra processes their input and handles any configured approval. It then executes the tool or waits for its result.
-1. `processToolResult` receives each local or client tool result before the raw result enters the message list.
+1. [`processToolResult`](/reference/processors/processor-interface#processtoolresult) receives each local or client tool result before the raw result enters the message list.
 
 Provider-executed tools can return results differently. If a deferred provider result arrives during a later model stream, `processToolResult` runs when that result arrives. It doesn't have one universal position after every model step.
 
@@ -124,15 +124,15 @@ The [Processor interface](/reference/processors/processor-interface) documents c
 | `processOutputStream` | Per streamed chunk | Runs while model output arrives. Data chunks are included when the processor opts in. |
 | `processLLMResponse` | Once per completed provider stream | Receives the completed response for the current model step. |
 | `processOutputStep` | Once per model step | Runs after the model response and before locally executed tools. |
-| Tool `onInputStart` | When streamed tool input begins | Runs before complete tool arguments are available. |
-| Tool `onInputDelta` | Per streamed tool-input chunk | Observes incremental tool arguments. |
-| Tool `onInputAvailable` | Once when tool input is complete | Runs after arguments are parsed and validated, before execution. |
+| Tool [`onInputStart`](/reference/tools/create-tool#oninputstart) | When streamed tool input begins | Runs before complete tool arguments are available. |
+| Tool [`onInputDelta`](/reference/tools/create-tool#oninputdelta) | Per streamed tool-input chunk | Observes incremental tool arguments. |
+| Tool [`onInputAvailable`](/reference/tools/create-tool#oninputavailable) | Once when tool input is complete | Runs after arguments are parsed and validated, before execution. |
 | Tool execution | Once per local tool call | Receives the live `RequestContext`. Approval or suspension can delay execution. |
-| Tool `onOutput` | Once after successful local execution | Receives the tool output. |
+| Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
 | `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
-| `processAPIError` | On eligible provider API errors | Can update request state and request another provider attempt. |
-| `onIterationComplete` | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
-| `processOutputResult` | Once at finalization | Post-processes the completed agent result before it's returned. |
+| [`processAPIError`](/reference/processors/processor-interface#processapierror) | On eligible provider API errors | Can update request state and request another provider attempt. |
+| [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
+| [`processOutputResult`](/reference/processors/processor-interface#processoutputresult) | Once at finalization | Post-processes the completed agent result before it's returned. |
 
 ### What changes persist
 
@@ -151,8 +151,8 @@ After the model step and any requested tool work, Mastra decides whether the run
 The loop stops when a configured or terminal condition is reached. These conditions can include:
 
 - A final model response that doesn't request another tool.
-- A custom `stopWhen` condition evaluated against accumulated steps.
-- The `maxSteps` limit.
+- A custom [`stopWhen`](/reference/agents/generate#parameters) condition evaluated against accumulated steps.
+- The [`maxSteps`](/reference/agents/generate#using-maxsteps) limit.
 - Task-completion, goal, or [subagent](/docs/subagents) delegation outcomes.
 - A terminal provider finish reason, error, processor tripwire, or abort.
 
@@ -166,9 +166,9 @@ Finalization is separate from a model step. It operates on the result of the who
 
 ## Errors, retries, and aborts
 
-A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same `maxProcessorRetries` bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default error-retry budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
+A provider API rejection can reach `processAPIError`. An error processor may change the request or messages and request another provider attempt. `processAPIError` retries and tripwire retries share the same [`maxProcessorRetries`](/reference/agents/generate#parameters) bound on the request. When error processors are configured and `maxProcessorRetries` is omitted, Mastra applies a default error-retry budget. Set `maxProcessorRetries` explicitly when you need a specific limit.
 
-Calling `abort()` from an input or output processor raises a tripwire. Set `retry: true` to let an eligible input-step or output-step check replay the model step with feedback. `maxProcessorRetries` bounds replay attempts. A tripwire without a retry stops normal execution and is included in the result or stream.
+Calling [`abort()`](/reference/processors/processor-interface#aborting-and-tripwire-chunks) from an input or output processor raises a tripwire. Set `retry: true` to let an eligible input-step or output-step check replay the model step with feedback. `maxProcessorRetries` bounds replay attempts. A tripwire without a retry stops normal execution and is included in the result or stream.
 
 An external abort signal passes through provider calls and tool lifecycle work. When triggered, it stops further loop execution and terminates the stream while preserving the partial result where supported. Errors that no processor recovers propagate to the caller.
 
@@ -176,7 +176,7 @@ See [Processors](/docs/agents/processors#retry-mechanism) for retry configuratio
 
 ## Regular and durable runs
 
-A regular `Agent` run keeps the loop in the current process. If that process ends, the in-memory execution ends with it.
+A regular [`Agent`](/reference/agents/agent) run keeps the loop in the current process. If that process ends, the in-memory execution ends with it.
 
 A [durable agent](/docs/harness/durable-agents) wraps the same agent loop in a workflow. It persists run state and publishes events through PubSub so supported runtimes can recover work and clients can reconnect. Persistent production backends are required when that state and event history must survive process restarts.
 
