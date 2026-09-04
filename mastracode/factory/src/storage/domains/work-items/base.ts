@@ -1141,7 +1141,7 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
  */
 async function upsertSupervisorFinding(
   ops: FactoryStorageOps,
-  scope: { orgId: string; factoryProjectId: string; now: Date },
+  scope: { orgId: string; factoryProjectId: string; now: Date; renotify?: boolean },
   finding: FactoryHealthFinding,
   row: GovernanceDbRow | null | undefined,
 ): Promise<boolean> {
@@ -1164,7 +1164,7 @@ async function upsertSupervisorFinding(
   }
   const reopening = row.resolved_at !== null;
   const findingChanged = stableJson(row.finding) !== stableJson(finding);
-  if (!reopening && !findingChanged) return false;
+  if (!reopening && !findingChanged && !scope.renotify) return false;
   await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
     finding,
     occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
@@ -1172,8 +1172,10 @@ async function upsertSupervisorFinding(
     updated_at: scope.now,
     resolved_at: null,
     // A reopened incident re-rings the doorbell: clear the notification
-    // stamp so the next sweep emits for it again.
-    last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
+    // stamp so the next sweep emits for it again. A caller that is about to
+    // ring for new content (`renotify`) clears it too, so a ring that never
+    // lands is retried by the sweep rather than lost.
+    last_notified_at: current.resolved_at !== null || scope.renotify ? null : current.last_notified_at,
     // A reopened incident is a new incident: stale escalation state
     // must never keep it visible (or hidden) on the old terms.
     status: current.resolved_at !== null ? 'open' : current.status,
@@ -1348,6 +1350,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     finding: FactoryHealthFinding;
     now: Date;
+    /** The caller will ring for this content itself: clear the notification stamp so an unsent ring is swept up. */
+    renotify?: boolean;
   }): Promise<FactorySupervisorFindingRecord> {
     const { changed, row } = await this.#withProjectRelationTransaction(
       input.orgId,

@@ -59,6 +59,7 @@ interface SupervisorActionDependencies {
     | 'resolveAnsweredDecision'
     | 'reparkDecision'
     | 'openSupervisorFinding'
+    | 'markSupervisorFindingNotified'
     | 'get'
   >;
   audit: Pick<AuditStorage, 'record'>;
@@ -117,6 +118,28 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
     }
   };
 
+  /** Rings the supervisor; a failed ring is logged, never thrown. Returns whether it landed. */
+  const ring = async (input: { findingKey: string; summary: string; failureCode: string | null }): Promise<boolean> => {
+    if (!deps.notifySupervisor) return false;
+    try {
+      await deps.notifySupervisor({
+        projectId: deps.scope.factoryProjectId,
+        findingKey: input.findingKey,
+        kind: 'decision-failed',
+        summary: input.summary,
+        ...(input.failureCode ? { failureCode: input.failureCode } : {}),
+        priority: 'high',
+      });
+      return true;
+    } catch (error) {
+      deps.logger?.warn('Factory supervisor could not ring for a re-parked run', {
+        findingKey: input.findingKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  };
+
   /**
    * What an answered run did next, recorded on its decision so the finding
    * keeps telling the truth: completed → the decision succeeded and the next
@@ -156,21 +179,37 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         now: now(),
       });
       if (!reparked) {
-        // The decision moved on underneath (superseded, dismissed): the parked
-        // run is not this decision's to track any more. Say so, ring nothing.
+        // The decision moved on underneath (superseded, dismissed) while the
+        // worker parked again. If its seat is gone the run is obsolete with
+        // it; if the seat is still live, a real question now sits in a
+        // session nothing tracks, so ring the supervisor about it.
+        const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
+        const live = bindings.find(candidate => candidate.id === binding.id)?.status === 'active';
         deps.logger?.warn('Factory supervisor answered run parked again, but its decision is no longer failed', {
           decisionId: decision.id,
+          liveBinding: live,
         });
+        if (live) {
+          await ring({
+            findingKey: `decision-failed:${decision.id}`,
+            summary: `A worker asked another question but its decision is no longer open, so nothing tracks the run. It is parked in session ${binding.resourceId} (thread ${binding.threadId}) on ${next.toolName}: ${next.question}`,
+            failureCode: decision.failureCode,
+          });
+        }
         return {
           run: 'parked-again',
           recorded: false,
+          orphaned: live,
           nextQuestion: next.question,
-          note: 'The worker asked another question, but its decision is no longer open, so the question was not recorded.',
+          note: live
+            ? 'The worker asked another question, but its decision is no longer open, so the question could not be recorded on it; the run is still parked and needs a person (or the session) to answer.'
+            : 'The worker asked another question, but its decision and its seat are both gone; the run is obsolete.',
         };
       }
       // The finding is what a woken supervisor reads: refresh it with the
       // new question BEFORE ringing, through the same derivation the sweep
-      // and the dispatcher use, so all three agree byte for byte.
+      // and the dispatcher use (same key, same evidence shape), with the
+      // notification stamp cleared so a ring that never lands is swept up.
       const item = reparked.workItemId
         ? await deps.workItems.get({ orgId: deps.scope.orgId, id: reparked.workItemId })
         : null;
@@ -179,20 +218,20 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         factoryProjectId: deps.scope.factoryProjectId,
         finding: decisionFailedFinding(reparked, factoryHealthSubject(reparked.workItemId, item ?? undefined), now()),
         now: now(),
+        renotify: true,
       });
-      try {
-        await deps.notifySupervisor?.({
-          projectId: deps.scope.factoryProjectId,
+      const rung = await ring({
+        findingKey: finding.findingKey,
+        summary: String(finding.finding.evidence ?? finding.findingKey),
+        failureCode: reparked.failureCode,
+      });
+      if (rung) {
+        await deps.workItems.markSupervisorFindingNotified({
+          orgId: deps.scope.orgId,
+          factoryProjectId: deps.scope.factoryProjectId,
           findingKey: finding.findingKey,
-          kind: 'decision-failed',
-          summary: String(finding.finding.evidence ?? finding.findingKey),
-          ...(reparked.failureCode ? { failureCode: reparked.failureCode } : {}),
-          priority: 'high',
-        });
-      } catch (error) {
-        deps.logger?.warn('Factory supervisor could not ring for a re-parked run', {
-          decisionId: decision.id,
-          error: error instanceof Error ? error.message : String(error),
+          occurrence: finding.occurrence,
+          notifiedAt: now(),
         });
       }
       return {

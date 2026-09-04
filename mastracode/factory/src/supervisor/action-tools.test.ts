@@ -709,36 +709,58 @@ describe('factory_answer_suspension', () => {
     ).resolves.toMatchObject({ error: true });
   });
 
-  it('does not claim a transition the storage refused (decision moved on underneath)', async () => {
+  it('does not claim a transition the storage refused, and rings for a live run nothing tracks any more', async () => {
     const second = {
       type: 'tool_suspended' as const,
       toolCallId: 'call-2',
       toolName: 'ask_user',
       suspendPayload: { question: 'Again?' },
     };
-    for (const [boundary, expected] of [
-      [second, { run: 'parked-again', recorded: false }],
-      [
-        { type: 'agent_end' as const, reason: 'complete' as const },
-        { run: 'completed', decisionStatus: 'unchanged' },
-      ],
-    ] as const) {
+    const cases = [
+      {
+        boundary: second,
+        revoke: false,
+        expected: { run: 'parked-again', recorded: false, orphaned: true },
+        rings: true,
+      },
+      {
+        boundary: second,
+        revoke: true,
+        expected: { run: 'parked-again', recorded: false, orphaned: false },
+        rings: false,
+      },
+      {
+        boundary: { type: 'agent_end' as const, reason: 'complete' as const },
+        revoke: false,
+        expected: { run: 'completed', decisionStatus: 'unchanged' },
+        rings: false,
+      },
+    ];
+    for (const { boundary, revoke, expected, rings } of cases) {
       const seed = await createFactoryStorageForTests();
-      const { decision } = await parkDecision(seed);
+      const { decision, binding } = await parkDecision(seed);
       const notify = vi.fn(async () => {});
       const session = fakeSession(['call-1'], boundary);
+      // The binding check happens before the resume, so pull the seat only once the run parks again.
+      const listRunBindings = async (...args: Parameters<typeof seed.workItems.listRunBindings>) => {
+        const rows = await seed.workItems.listRunBindings(...args);
+        return revoke && session.respondToToolSuspension.mock.calls.length > 0
+          ? rows.map(row => (row.id === binding.id ? { ...row, status: 'revoked' as const } : row))
+          : rows;
+      };
       const tools = createFactorySupervisorActionTools({
         scope: SCOPE,
         actor: { type: 'agent', id: 'agent:thread-1' },
         workItems: {
           getDeferredDecision: (...args: Parameters<typeof seed.workItems.getDeferredDecision>) =>
             seed.workItems.getDeferredDecision(...args),
-          listRunBindings: (...args: Parameters<typeof seed.workItems.listRunBindings>) =>
-            seed.workItems.listRunBindings(...args),
+          listRunBindings,
           escalateSupervisorFinding: (...args: Parameters<typeof seed.workItems.escalateSupervisorFinding>) =>
             seed.workItems.escalateSupervisorFinding(...args),
           openSupervisorFinding: (...args: Parameters<typeof seed.workItems.openSupervisorFinding>) =>
             seed.workItems.openSupervisorFinding(...args),
+          markSupervisorFindingNotified: (...args: Parameters<typeof seed.workItems.markSupervisorFindingNotified>) =>
+            seed.workItems.markSupervisorFindingNotified(...args),
           get: (...args: Parameters<typeof seed.workItems.get>) => seed.workItems.get(...args),
           // Both compare-and-set writes lose: the decision is no longer failed.
           resolveAnsweredDecision: async () => null,
@@ -752,8 +774,45 @@ describe('factory_answer_suspension', () => {
       });
       const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
       expect(result).toMatchObject({ outcome: 'answered', ...expected });
-      expect(notify).not.toHaveBeenCalled();
+      if (rings) {
+        expect(notify).toHaveBeenCalledWith(
+          expect.objectContaining({ summary: expect.stringContaining('nothing tracks the run') }),
+        );
+      } else {
+        expect(notify).not.toHaveBeenCalled();
+      }
     }
+  });
+
+  it('leaves a re-parked finding un-stamped when the ring fails, so the sweep re-rings it', async () => {
+    const second = {
+      type: 'tool_suspended' as const,
+      toolCallId: 'call-2',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'And which port?' },
+    };
+    const warn = vi.fn();
+    const { tools, decision, workItems, notify } = await answerSetup({}, fakeSession(['call-1'], second), { warn });
+    notify.mockRejectedValueOnce(new Error('notifications down'));
+    const key = `decision-failed:${decision.id}`;
+
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+
+    expect(result).toMatchObject({ run: 'parked-again', recorded: true });
+    const unnotified = await workItems.listUnnotifiedSupervisorFindings({ ...SCOPE, limit: 10 });
+    const row = unnotified.find(r => r.findingKey === key)!;
+    expect(row).toBeDefined();
+    expect(row.lastNotifiedAt).toBeNull();
+    expect(row.finding.evidence).toContain('And which port?');
+    expect(warn).toHaveBeenCalledWith('Factory supervisor could not ring for a re-parked run', expect.anything());
+
+    // A ring that lands stamps the row, occurrence-safe.
+    const again = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+    expect(again).toMatchObject({ run: 'parked-again', recorded: true });
+    const stamped = (await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 10 })).rows.find(
+      r => r.findingKey === key,
+    )!;
+    expect(stamped.lastNotifiedAt).toBeInstanceOf(Date);
   });
 
   it('keeps the answer audit and the escalation audit apart on a fast failure', async () => {
