@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.65.0-alpha.2
+
+### Minor Changes
+
+- Added an authenticated advanced trace-query endpoint with strict validation, a 256 KiB request-body limit, stable structured query errors including database timeouts, and matching OpenAPI response schemas. ([#22728](https://github.com/mastra-ai/mastra/pull/22728))
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.65.0-alpha.1
 
 ### Minor Changes
