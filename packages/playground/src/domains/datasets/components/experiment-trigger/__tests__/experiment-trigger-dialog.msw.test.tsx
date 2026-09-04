@@ -338,9 +338,12 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 2' })).toBeDefined());
       selectOption('Select a dataset...', 'dataset-2');
 
-      // dataset-2 has a requestContextSchema: schema-driven form replaces the JSON editor
+      // dataset-2 has a requestContextSchema: disclosure switches to the schema-driven form, still collapsed
+      expect(screen.queryByText('Request Context')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /Request Context \(JSON, optional\)/ }));
       expect(await screen.findByText('Request Context')).toBeDefined();
-      await waitFor(() => expect(screen.queryByText('Request Context (JSON, optional)')).toBeNull());
+      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
     });
 
     it('keeps the raw JSON editor collapsed until the disclosure is opened', async () => {

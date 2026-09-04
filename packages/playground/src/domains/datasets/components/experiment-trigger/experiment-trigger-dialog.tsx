@@ -315,8 +315,9 @@ export function ExperimentTriggerDialog({
               )}
             </PipelineStep>
 
-            <PipelineStep index={3} title="Scorers" done={selectedScorers.length > 0} isLast>
+            <PipelineStep index={3} title="Scorers (Optional)" done={selectedScorers.length > 0} isLast>
               <ScorerSelector
+                label=""
                 selectedScorers={selectedScorers}
                 setSelectedScorers={setSelectedScorers}
                 disabled={isRunning}
@@ -326,29 +327,30 @@ export function ExperimentTriggerDialog({
             </PipelineStep>
           </ol>
 
-          {hasSchema ? (
-            <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
-          ) : (
-            <Collapsible>
-              <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
-                <ChevronRight className="size-4" />
-                Request Context (JSON, optional)
-                {hasRequestContext && (
-                  <Badge size="xs" variant="blue">
-                    set
-                  </Badge>
-                )}
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3">
+          <Collapsible>
+            <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
+              <ChevronRight className="size-4" />
+              Request Context (JSON, optional)
+              {hasRequestContext && (
+                <Badge size="xs" variant="blue">
+                  set
+                </Badge>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              {hasSchema ? (
+                <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
+              ) : (
                 <CodeEditor
                   value={requestContextRaw}
                   onChange={setRequestContextRaw}
                   showCopyButton={false}
+                  aria-label="Request context JSON"
                   className="min-h-[160px]"
                 />
-              </CollapsibleContent>
-            </Collapsible>
-          )}
+              )}
+            </CollapsibleContent>
+          </Collapsible>
         </DialogBody>
 
         <DialogFooter className="border-border1 items-center border-t px-6 py-4 sm:justify-between">
@@ -359,8 +361,7 @@ export function ExperimentTriggerDialog({
                   Ready
                 </Badge>
                 <span className="text-ui-xs text-neutral3">
-                  {itemCount !== undefined ? `${itemCount} items · ` : ''}
-                  {targetType} · {selectedScorers.length} {selectedScorers.length === 1 ? 'scorer' : 'scorers'}
+                  {itemCount ?? 0} items · {targetType} · {selectedScorers.length} scorers
                 </span>
               </>
             ) : (
