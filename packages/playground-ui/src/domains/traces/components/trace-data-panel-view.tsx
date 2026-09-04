@@ -92,6 +92,8 @@ export interface TraceDataPanelViewProps {
   feedbackTabBadge?: ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
+  /** Span ids to feature in the timeline; every other span is faded. */
+  featuredSpanIds?: string[];
   /**
    * Rendered as a column to the left of the timeline inside the same card;
    * typically the reconstructed agent turn ("Messages").
@@ -134,6 +136,7 @@ export function TraceDataPanelView({
   feedbackTabBadge,
   activeTab,
   onTabChange,
+  featuredSpanIds,
   messagesPanelSlot,
   spanPanelSlot,
   className,
@@ -327,6 +330,7 @@ export function TraceDataPanelView({
                     selectedSpanId={selectedSpanId}
                     expandedSpanIds={expandedSpanIds}
                     setExpandedSpanIds={setExpandedSpanIds}
+                    featuredSpanIds={featuredSpanIds}
                     chartWidth={timelineChartWidth}
                     leadingSlot={
                       <SearchFieldBlock
