@@ -31,3 +31,11 @@ export { resolveCurrentOrg, OrgSelectionCancelledError } from '../commands/auth/
 
 export { fetchOrgs } from '../commands/auth/api.js';
 export type { Org } from '../commands/auth/api.js';
+
+export {
+  PROJECT_CONFIG_FILE,
+  getProjectConfigToSave,
+  loadProjectConfig,
+  saveProjectConfig,
+} from '../commands/studio/project-config.js';
+export type { ProjectConfig } from '../commands/studio/project-config.js';

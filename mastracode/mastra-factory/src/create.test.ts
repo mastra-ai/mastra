@@ -42,6 +42,7 @@ const cliAuth = vi.hoisted(() => ({
   LoginCancelledError: class LoginCancelledError extends Error {},
   resolveCurrentOrg: vi.fn(),
   fetchOrgs: vi.fn(),
+  saveProjectConfig: vi.fn(),
   MASTRA_PLATFORM_API_URL: 'https://platform.example.test',
 }));
 
@@ -55,6 +56,16 @@ import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
 const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
+const DEFAULT_PROJECT_CONFIG = `${JSON.stringify(
+  {
+    projectId: 'proj_abc',
+    projectName: 'my-factory',
+    projectSlug: 'my-factory',
+    organizationId: 'org_123',
+  },
+  null,
+  2,
+)}\n`;
 
 const ENV_EXAMPLE = `# Mastra Factory environment.
 
@@ -90,6 +101,14 @@ beforeEach(() => {
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
+  cliAuth.saveProjectConfig.mockImplementation(
+    async (
+      dir: string,
+      config: { projectId: string; projectName: string; projectSlug?: string; organizationId: string },
+    ) => {
+      await fs.promises.writeFile(path.join(dir, '.mastra-project.json'), `${JSON.stringify(config, null, 2)}\n`);
+    },
+  );
   clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
@@ -160,6 +179,8 @@ describe('create --no-platform', () => {
     // Platform helpers never called with --no-platform.
     expect(cliAuth.getToken).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();
+    expect(cliAuth.saveProjectConfig).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(projectPath, '.mastra-project.json'))).toBe(false);
 
     // Next steps show the integrated Factory UI on the Mastra server port.
     expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Your Mastra Factory is ready!'), 'Next steps');
@@ -215,11 +236,35 @@ describe('create --no-platform', () => {
 });
 
 describe('create (platform provisioning)', () => {
-  it('writes platform credentials to .env and shows the "Platform connected" outro', async () => {
+  it('writes platform credentials and canonical project discovery metadata', async () => {
+    platform.createServerProject.mockResolvedValue({
+      id: 'proj_abc',
+      slug: 'canonical-factory',
+      name: 'Canonical Factory',
+    });
+
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    expect(fs.readFileSync(path.join(projectPath, '.mastra-project.json'), 'utf8')).toBe(
+      `${JSON.stringify(
+        {
+          projectId: 'proj_abc',
+          projectName: 'Canonical Factory',
+          projectSlug: 'canonical-factory',
+          organizationId: 'org_123',
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    expect(cliAuth.saveProjectConfig).toHaveBeenCalledWith(projectPath, {
+      projectId: 'proj_abc',
+      projectName: 'Canonical Factory',
+      projectSlug: 'canonical-factory',
+      organizationId: 'org_123',
+    });
 
     // All four platform keys present with real values; the shared API URL is
     // no longer written (consumers default to the production platform URL).
@@ -261,17 +306,71 @@ describe('create (platform provisioning)', () => {
       name: 'my-factory',
       regionId: 'aws-eu-central-1',
     });
+    expect(cliAuth.saveProjectConfig.mock.invocationCallOrder[0]!).toBeLessThan(
+      platform.mintOrgApiKey.mock.invocationCallOrder[0]!,
+    );
 
     // Success outro summarizes the provisioned infra so the user isn't
     // surprised by what now exists in their platform org.
     const note = clack.note.mock.calls[0]![0] as string;
     expect(note).toContain('Provisioned on Mastra platform');
-    expect(note).toContain('my-factory');
+    expect(note).toContain('Canonical Factory');
     expect(note).toContain('Acme');
     expect(note).toContain('Postgres database');
     expect(note).toContain('Sandboxes (code agent sessions run here)');
     expect(note).toContain('Manage your project at');
     expect(note).toContain('https://projects.mastra.ai');
+  });
+
+  it('preserves project metadata when API-key creation fails', async () => {
+    platform.mintOrgApiKey.mockRejectedValue(new platform.PlatformApiError(500, 'API key unavailable.'));
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    const projectPath = path.join(workDir, 'my-factory');
+    expect(fs.readFileSync(path.join(projectPath, '.mastra-project.json'), 'utf8')).toBe(DEFAULT_PROJECT_CONFIG);
+    const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
+    expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(platform.attachNeonDatabase).not.toHaveBeenCalled();
+
+    const note = clack.note.mock.calls[0]![0] as string;
+    expect(note).toContain('Platform provisioning failed');
+    expect(note).toContain('API key unavailable');
+  });
+
+  it('surfaces project-config write failures while preserving acquired identifiers in .env', async () => {
+    cliAuth.saveProjectConfig.mockRejectedValueOnce(new Error('project config disk full'));
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    const projectPath = path.join(workDir, 'my-factory');
+    expect(fs.existsSync(path.join(projectPath, '.mastra-project.json'))).toBe(false);
+    const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
+    expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(platform.mintOrgApiKey).not.toHaveBeenCalled();
+
+    const warns = clack.log.warn.mock.calls.flat().join('\n');
+    expect(warns).toContain('project config disk full');
+    const note = clack.note.mock.calls[0]![0] as string;
+    expect(note).toContain('Platform provisioning failed');
+    expect(note).toContain('project config disk full');
+  });
+
+  it('does not write project metadata when project creation fails', async () => {
+    platform.createServerProject.mockRejectedValue(new platform.PlatformApiError(500, 'Project create unavailable.'));
+
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    const projectPath = path.join(workDir, 'my-factory');
+    expect(cliAuth.saveProjectConfig).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(projectPath, '.mastra-project.json'))).toBe(false);
+    const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
+    expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
+    expect(env).not.toMatch(/^MASTRA_PROJECT_ID=/m);
   });
 
   it('surfaces a Neon 403 as a "need admin role" hint without failing the run', async () => {
@@ -287,10 +386,12 @@ describe('create (platform provisioning)', () => {
 
     // Everything minted before the 403 should still be persisted so the
     // one-time `sk_` secret isn't lost. Only DATABASE_URL is missing.
-    const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
+    const projectPath = path.join(workDir, 'my-factory');
+    const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
+    expect(fs.readFileSync(path.join(projectPath, '.mastra-project.json'), 'utf8')).toBe(DEFAULT_PROJECT_CONFIG);
   });
 
   it('persists the sk_ secret to .env when Neon provisioning fails after the key is minted', async () => {
@@ -302,12 +403,14 @@ describe('create (platform provisioning)', () => {
 
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
-    const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
+    const projectPath = path.join(workDir, 'my-factory');
+    const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
     expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
+    expect(fs.readFileSync(path.join(projectPath, '.mastra-project.json'), 'utf8')).toBe(DEFAULT_PROJECT_CONFIG);
 
     const note = clack.note.mock.calls[0]![0] as string;
     expect(note).toContain('Platform provisioning failed');
@@ -445,6 +548,11 @@ describe('create — .env safety before git commit', () => {
     const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
     const gitAddIndex = runCalls.findIndex(call => call[0] === 'git' && call[1][0] === 'add');
     expect(gitAddIndex).toBeGreaterThanOrEqual(0);
+    expect(fs.readFileSync(path.join(projectPath, '.mastra-project.json'), 'utf8')).toBe(DEFAULT_PROJECT_CONFIG);
+    expect(gitignore).not.toMatch(/^\.mastra-project\.json$/m);
+    expect(cliAuth.saveProjectConfig.mock.invocationCallOrder[0]!).toBeLessThan(
+      tinyexec.x.mock.invocationCallOrder[gitAddIndex]!,
+    );
     // Sanity: gitignore has the .env line at commit time (we already asserted
     // the file contents above, and no subsequent write happens between the
     // .gitignore edit and `git add -A`).
