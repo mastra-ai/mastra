@@ -91,6 +91,40 @@ beforeEach(async () => {
 });
 
 describe('FactorySupervisorHealthWorker emit call site', () => {
+  it('does not stamp a row whose content changed while its send was in flight', async () => {
+    await seedFailure(await seedWorkItem(), new Date());
+    // The sweep opens the row and rings; while that ring is in flight the run
+    // parks on a new question and the row is refreshed as new content.
+    const notify = vi.fn(async (input: NotifySupervisorInput) => {
+      const row = (await openFindings()).rows.find(r => r.findingKey === input.findingKey)!;
+      await seed.workItems.openSupervisorFinding({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        finding: { ...(row.finding as any), evidence: 'Parked on ask_user: "a newer question"' },
+        now: new Date(),
+        newContent: true,
+      });
+    });
+    const worker = new FactorySupervisorHealthWorker({ projects: seed.projects, workItems: seed.workItems, notify });
+    await worker.init(createDeps());
+
+    await sweep(worker);
+
+    // The older ring landed but must not mark the newer question notified:
+    // the row stays un-stamped so the next sweep rings for the new content.
+    const { rows } = await openFindings();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.finding.evidence).toBe('Parked on ask_user: "a newer question"');
+    expect(rows[0]?.lastNotifiedAt).toBeNull();
+    expect(notify).toHaveBeenCalledTimes(1);
+
+    // The next sweep rings again (with whatever the row says then) and stamps.
+    notify.mockImplementation(async () => {});
+    await sweep(worker);
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect((await openFindings()).rows[0]?.lastNotifiedAt).toBeInstanceOf(Date);
+  });
+
   it('emits once for a newly opened finding and stamps last_notified_at', async () => {
     await seedFailure(await seedWorkItem(), new Date());
     const notify = vi.fn(async (_input: NotifySupervisorInput) => {});

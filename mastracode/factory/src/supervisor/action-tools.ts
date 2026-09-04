@@ -233,8 +233,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           findingKey: finding.findingKey,
           occurrence: finding.occurrence,
           notifiedAt: now(),
-          // Not if yet another question replaced this one while the ring was in flight.
-          ifFinding: finding.finding,
+          finding: finding.finding,
         });
       }
       return {

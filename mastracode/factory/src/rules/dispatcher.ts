@@ -723,6 +723,7 @@ export class FactoryDecisionDispatcher {
         findingKey: finding.findingKey,
         occurrence: finding.occurrence,
         notifiedAt: new Date(),
+        finding: finding.finding,
       });
     } catch (error) {
       // Row is open and un-stamped: the next sweep re-rings for it.

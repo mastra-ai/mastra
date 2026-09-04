@@ -1438,17 +1438,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     findingKey: string;
     occurrence: number;
     notifiedAt: Date;
-    /** Stamp only if the row still carries exactly this finding content (the content that was rung). */
-    ifFinding?: Record<string, unknown>;
+    /** The exact finding content that was rung: the stamp lands only while the row still carries it. */
+    finding: Record<string, unknown>;
   }): Promise<void> {
-    // Occurrence-safe conditional stamp: a resolve/reopen between send and
-    // stamp must not suppress the new occurrence's notification, so the stamp
-    // only lands on the exact occurrence that was emitted, while it is still
-    // open and still un-stamped. Content-safe too, when asked: a refresh with
-    // new content between send and stamp (a run that parked on yet another
-    // question) must not be marked notified by the older ring. No matching row
-    // is a silent no-op.
-    const expected = input.ifFinding ? stableJson(input.ifFinding) : undefined;
+    // Occurrence- and content-safe conditional stamp: a resolve/reopen between
+    // send and stamp must not suppress the new occurrence's notification, and
+    // a refresh with new content in that window (a run that parked on yet
+    // another question) must not be marked notified by the older ring. So the
+    // stamp lands only on the exact occurrence and content that were emitted,
+    // while still open and still un-stamped. No matching row is a silent no-op.
+    const expected = stableJson(input.finding);
     await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_supervisor_findings',
       {
