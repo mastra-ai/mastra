@@ -20,6 +20,8 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -47,6 +49,7 @@ import {
   resolveFactoryPullRequestParentWorkItemId,
 } from './integrations/github/provenance.js';
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
+import { isValidGitRef } from './integrations/github/sandbox.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -99,6 +102,11 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
+import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
+import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
+import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
+import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -595,6 +603,31 @@ export class MastraFactory {
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
+      ...(githubIntegration
+        ? {
+            resolveRepository: async ({ integrationId, orgId, installationId, externalId, slug }) => {
+              if (integrationId !== githubIntegration.id) return null;
+              const installation = await githubIntegration.sourceControlStorage.installations.get({
+                orgId,
+                id: installationId,
+              });
+              if (!installation) return null;
+              const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
+              const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
+              if (!selected) return null;
+              return githubIntegration.sourceControlStorage.repositories.upsert({
+                orgId,
+                input: {
+                  installationId,
+                  externalId,
+                  slug: selected.fullName,
+                  defaultBranch: isValidGitRef(selected.defaultBranch) ? selected.defaultBranch : 'main',
+                  providerMetadata: { private: selected.private, owner: selected.owner },
+                },
+              });
+            },
+          }
+        : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady ? { workItems: workItemsStorage } : {}),
     });
@@ -667,6 +700,7 @@ export class MastraFactory {
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           ...(githubIntegration ? { github: githubIntegration } : {}),
+          ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
         }),
@@ -674,6 +708,12 @@ export class MastraFactory {
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
         disableSettingsOmSeed: true,
+        hostInstructions: ({ requestContext }) => {
+          const context = requestContext.get('controller') as
+            | AgentControllerRequestContext<MastraCodeState>
+            | undefined;
+          return parseSupervisorResourceId(context?.resourceId) ? SUPERVISOR_INSTRUCTIONS : undefined;
+        },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
         // rather than per session, so webhook-recreated sessions keep it too.
@@ -731,6 +771,65 @@ export class MastraFactory {
                         : {}),
                     }),
                   );
+                  // The supervisor session has no seat, so it never gets the
+                  // transition tool above; it gets the read surface instead,
+                  // and only once the caller's org is shown to own the project.
+                  const supervisorScope = await resolveSupervisorScope({
+                    requestContext,
+                    projects: factoryProjectsStorage,
+                  });
+                  if (supervisorScope) {
+                    const userId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+                    mergeTools(
+                      'factory-supervisor',
+                      createFactorySupervisorReadTools({
+                        scope: supervisorScope,
+                        workItems: workItemsStorage,
+                        comments: workItemCommentsStorage,
+                        audit: auditStorage,
+                        messageReader: {
+                          listMessages: async input => {
+                            const memory = await storage.getMastraStorage().getStore('memory');
+                            return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
+                          },
+                        },
+                      }),
+                    );
+                    if (userId) {
+                      mergeTools(
+                        'factory-supervisor-write',
+                        createFactorySupervisorWriteTools({
+                          scope: supervisorScope,
+                          userId,
+                          workItems: workItemsStorage,
+                          audit: auditStorage,
+                          transitionService,
+                          ...(githubIntegration
+                            ? {
+                                reconcileAcceptanceLabels: (args: {
+                                  orgId: string;
+                                  factoryProjectId: string;
+                                  item: WorkItemRow;
+                                }) =>
+                                  reconcileGithubAcceptanceLabels(
+                                    githubIntegration,
+                                    sourceControlStorage.forIntegration(githubIntegration.id),
+                                    args,
+                                  ),
+                              }
+                            : {}),
+                          signalSession: async ({ sessionId, message }) => {
+                            const session = await prepared.base.controller.getSessionByResource(sessionId);
+                            if (!session) throw new Error('The worker session is not currently available.');
+                            await session.sendMessage({
+                              content: message,
+                              ...(requestContext ? { requestContext } : {}),
+                            });
+                          },
+                        }),
+                      );
+                    }
+                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -821,7 +920,7 @@ export class MastraFactory {
                 prepareBinding,
                 feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-                resolveLinkedWorkItemParentId: async ({ orgId, decision }) => {
+                resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
                   const pullRequestNumber = decision.metadata?.githubPullRequestNumber;
@@ -832,7 +931,7 @@ export class MastraFactory {
                       Record<string, unknown>,
                       FactoryPullRequestProvenanceData
                     >('github'),
-                    { orgId, repositoryId, pullRequestNumber },
+                    { orgId, factoryProjectId, repositoryId, pullRequestNumber },
                   );
                 },
               });
@@ -912,6 +1011,22 @@ export class MastraFactory {
       });
     });
 
+    // Supervisor sessions carry their project in the resourceId; re-stamp
+    // scope, instructions and factory defaults on every (re)creation so a
+    // restarted server heals the in-memory state.
+    prepared.base.controller.onSessionCreated(
+      session =>
+        hydrateSupervisorSession(session, {
+          projects: factoryProjectsStorage,
+          memorySettings: memorySettingsStorage,
+        }).catch(error => {
+          console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }),
+      { blocking: true },
+    );
+
     // Blocking: `createSession` awaits this seed, so when hydration succeeds
     // a session's first run starts with the owner's stored OM settings.
     // Best-effort — failures are logged inside the helper, never thrown, and
@@ -990,30 +1105,35 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              rules,
-              factoryReady,
-              domains,
-              feed: commentsDomain,
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
+    const integrationWorkers = [
+      ...(factoryReady
+        ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
+        : []),
+      ...integrationRegistrations
+        .filter(({ integration, ready }) => ready && integration.workers)
+        .flatMap(({ integration }) =>
+          integration.workers!(
+            buildIntegrationContext(
+              {
+                controller: prepared.base.controller,
+                publicOrigin,
+                auth: routeAuth,
+                stateSigner,
+                sandbox: sandboxConfig,
+                factoryStorage: storage,
+                integrationStorage,
+                sourceControlStorage,
+                rules,
+                factoryReady,
+                domains,
+                feed: commentsDomain,
+                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+              },
+              integration.id,
+            ),
           ),
         ),
-      );
+    ];
 
     return {
       ...prepared.mastraArgs,

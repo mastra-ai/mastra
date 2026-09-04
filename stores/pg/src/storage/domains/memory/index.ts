@@ -2797,16 +2797,23 @@ export class MemoryPG extends MemoryStorage {
         extractionFailures: input.chunk.extractionFailures,
       };
 
-      // Append chunk to existing array using JSONB concatenation
+      // Append the chunk only if this cycle has not already been persisted by a previous attempt.
       const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET
-          "bufferedObservationChunks" = COALESCE("bufferedObservationChunks", '[]'::jsonb) || $1::jsonb,
-          "lastBufferedAtTime" = COALESCE($2, "lastBufferedAtTime"),
-          "updatedAt" = $3,
-          "updatedAtZ" = $4
-        WHERE id = $5`,
-        [JSON.stringify([newChunk]), lastBufferedAtTime, nowStr, nowStr, input.id],
+          "bufferedObservationChunks" = CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(COALESCE("bufferedObservationChunks", '[]'::jsonb)) AS chunk
+              WHERE chunk->>'cycleId' = $2
+            ) THEN COALESCE("bufferedObservationChunks", '[]'::jsonb)
+            ELSE COALESCE("bufferedObservationChunks", '[]'::jsonb) || $1::jsonb
+          END,
+          "lastBufferedAtTime" = COALESCE($3, "lastBufferedAtTime"),
+          "updatedAt" = $4,
+          "updatedAtZ" = $5
+        WHERE id = $6`,
+        [JSON.stringify([newChunk]), input.chunk.cycleId, lastBufferedAtTime, nowStr, nowStr, input.id],
       );
 
       if (result.rowCount === 0) {

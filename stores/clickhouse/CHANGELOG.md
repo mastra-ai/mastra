@@ -1,5 +1,18 @@
 # @mastra/clickhouse
 
+## 1.17.0-alpha.0
+
+### Minor Changes
+
+- Added schema-neutral advanced trace-query execution over ClickHouse's existing completion-only observability tables. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+  Trace queries read from the historical-complete root table, deduplicate completed deliveries by the existing `dedupeKey`, reconstruct each referenced relation once within the bounded root scope, fail closed on unsupported order fields, and enforce a configurable 15-second execution timeout. This feature requires no schema, table-engine, or data migration.
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.16.1
 
 ### Patch Changes

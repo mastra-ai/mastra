@@ -29,6 +29,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SlackConnectionPage } from './pages/SlackConnectionPage';
 import { RulesPage } from './pages/RulesPage';
 import { SignInPage } from './pages/SignInPage';
+import { SupervisorPage } from './pages/SupervisorPage';
 import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
@@ -161,6 +162,11 @@ export function createAppRoutes(): RouteObject[] {
               path: 'user/threads/:threadId',
               element: <Chat />,
               children: [{ index: true, element: <ThreadPage /> }],
+            },
+            {
+              path: 'supervisor',
+              element: <Chat />,
+              children: [{ index: true, element: <SupervisorPage /> }],
             },
             {
               element: <Chat />,

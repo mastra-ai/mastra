@@ -2,7 +2,7 @@
 title: "Reference: Observability API | Client SDK"
 description: "The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans."
 packages:
-  - "@mastra/client-js"
+  - '@mastra/client-js'
 ---
 
 # Observability API
@@ -67,6 +67,34 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 ```
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
+
+## Querying traces with recursive predicates
+
+`queryTraces()` finds completed logical traces using trace fields and conditions over related spans or scores. Every query requires an ISO timestamp range of at most 31 days.
+
+```typescript
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    scores: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+          { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+        ],
+      },
+    },
+  },
+})
+```
+
+The API limits predicate depth, nodes, related clauses, set members, literal bytes, and the total literal budget before storage execution. Cursor pages are deterministic but aren't a database snapshot, so signals written between requests can change later pages. PostgreSQL and ClickHouse queries have a configurable 15-second execution timeout.
+
+See [Advanced trace queries](/reference/observability/tracing/trace-query) for the complete limits, request fields, predicates, grouping, cursor pagination, response shapes, and errors.
 
 ## Scoring traces
 
@@ -182,6 +210,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
 
 ## Related
 
+- [Advanced trace queries](/reference/observability/tracing/trace-query): Query completed traces with recursive predicates
 - [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
 - [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
 - [Agents API](./agents): Learn about agent interactions that generate traces

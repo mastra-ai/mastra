@@ -5,6 +5,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -69,12 +70,7 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
-/**
- * The organization rung local (TUI/studio) knowledge is curated under. A fixed
- * literal on purpose: deriving it from a hostname or path would fragment local
- * knowledge per checkout into scopes nothing ever reads.
- */
-export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
+export { LOCAL_KNOWLEDGE_ORG_ID };
 
 // One error per session, not per memory resolution. Keyed on the session id
 // rather than the controller object: the controller is read off the request
@@ -88,6 +84,7 @@ const reportedOrgUnresolved = new Set<string>();
 function reportOrgUnresolved(
   controller: AgentControllerRequestContext<MastraCodeState> | undefined,
   factoryProjectId: string | undefined,
+  reason?: string,
 ) {
   const sessionId = controller?.session?.id;
   if (sessionId) {
@@ -99,7 +96,7 @@ function reportOrgUnresolved(
   }
   const session = controller?.session;
   console.error(
-    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
   );
 }
 
@@ -127,23 +124,15 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state. There is no
-      // fallback: a session owner is a USER id, never an organization.
-      const factoryOrgId = state?.factoryOrgId;
-      const factoryOwned = isFactory || state?.factoryOrgUnresolved === true;
-      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
-        requestContext.set('organizationId', factoryOrgId);
-      } else if (factoryOwned) {
-        orgUnresolvedRefusal = true;
-        reportOrgUnresolved(controller, factoryProjectId);
+      const identity = resolveKnowledgeScopeIdentity(state);
+      if (identity.resolved) {
+        requestContext.set('organizationId', identity.organizationId);
       } else {
-        // TUI/studio: an explicit, named scope rather than a cascaded identity.
-        requestContext.set('organizationId', LOCAL_KNOWLEDGE_ORG_ID);
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
-      // Factory runs share one knowledge graph per project: anchor the
-      // subconscious knowledge scope's resource rung on the project id.
-      if (isFactory) {
-        requestContext.set('knowledgeResourceId', factoryProjectId);
+      if (identity.knowledgeResourceId) {
+        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
       }
     }
 

@@ -461,11 +461,9 @@ const stateSigner = {
   },
 };
 
-const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void }) => {
-    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-  },
-);
+const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
+  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+});
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
@@ -1097,8 +1095,13 @@ describe('repos route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
-    expect(json.repos[0].fullName).toBe('octo/hello');
-    expect(tables.repositories).toHaveLength(1);
+    expect(json.repos[0]).toMatchObject({
+      fullName: 'octo/hello',
+      installationStorageId: tables.installations[0]!.id,
+      sandboxWorkdir: '~/hello',
+    });
+    expect(json.repos[0]).not.toHaveProperty('repositoryStorageId');
+    expect(tables.repositories).toHaveLength(0);
   });
 
   it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
@@ -2117,12 +2120,9 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    expect(runTeardownCommand).toHaveBeenCalledWith(
-      live,
-      '/workspace/hello',
-      'docker compose down --remove-orphans',
-      { timeoutMs: 15 * 60_000 },
-    );
+    expect(runTeardownCommand).toHaveBeenCalledWith(live, '/workspace/hello', 'docker compose down --remove-orphans', {
+      timeoutMs: 15 * 60_000,
+    });
     expect(invalidateSession).toHaveBeenCalledWith(sessionId);
     expect(tables.sessions).toHaveLength(0);
     // Deleted sessions destroy their VM — nothing resolves this id again.

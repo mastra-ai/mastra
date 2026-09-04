@@ -347,6 +347,17 @@ describe('bundled Factory skill assets', () => {
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
   });
 
+  it('guards the initial triage label when any status label is present', async () => {
+    const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
+    const triage = await fs.readFile(path.join(assetRoot, 'factory-triage', 'SKILL.md'), 'utf8');
+    const phase1 = triage.slice(triage.indexOf('## Phase 1'), triage.indexOf('## Phase 2'));
+
+    expect(phase1).toContain('add `status: needs triage` only if no `status:` label is present');
+    expect(phase1).toContain('gh issue edit "$ISSUE" --add-label "status: needs triage"');
+    expect(phase1).toContain('For Linear issues, skip this GitHub-only label mutation.');
+    expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
+  });
+
   it('keeps the autonomous Factory skills on the terminal-handoff contract', async () => {
     const assetRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'factory-skills');
     const read = (skillName: string) => fs.readFile(path.join(assetRoot, skillName, 'SKILL.md'), 'utf8');
@@ -870,6 +881,28 @@ describe('GitHub session workspace preparation', () => {
       warnSpy.mockRestore();
     }
     expect(sandbox.executeCommand).toHaveBeenCalled();
+  });
+
+  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
+    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+
+    await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
+  });
+
+  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
+    const projects = { get: vi.fn().mockResolvedValue(null) };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
+      organizationId: 'org-2',
+      workosId: 'user-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).rejects.toThrow(
+      'Factory supervisor project-1 is not available to the current user',
+    );
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {

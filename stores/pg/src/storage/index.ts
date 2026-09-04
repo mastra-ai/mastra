@@ -456,6 +456,7 @@ export type PostgresStoreVNextObservabilityConfig = (
   schemaName?: string;
   partitioning?: VNextPostgresObservabilityConfig['partitioning'];
   discovery?: VNextPostgresObservabilityConfig['discovery'];
+  traceQueryTimeoutMs?: VNextPostgresObservabilityConfig['traceQueryTimeoutMs'];
 };
 
 /**
@@ -579,6 +580,7 @@ export class PostgresStoreVNext extends PostgresStore {
       schemaName: obsConfig.schemaName ?? config.schemaName,
       partitioning: obsConfig.partitioning,
       discovery: obsConfig.discovery,
+      traceQueryTimeoutMs: obsConfig.traceQueryTimeoutMs,
     });
 
     this.stores = {
