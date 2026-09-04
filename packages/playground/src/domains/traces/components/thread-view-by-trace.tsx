@@ -1,4 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { buildThreadRailTurns, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatHierarchicalSpans } from '@mastra/playground-ui/domains/traces/components/format-hierarchical-spans';
 import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
@@ -11,10 +13,14 @@ import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-tr
 import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMastraClient } from '@mastra/react';
+import { useQueries } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { Link } from 'react-router';
 
+import { formatTraceThreadMessages } from '@/domains/traces/components/format-trace-thread-messages';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 
@@ -38,6 +44,20 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
 
   // The list comes back newest-first; a conversation reads oldest-first.
   const traces = useMemo(() => [...(tracesData?.spans ?? [])].reverse(), [tracesData]);
+
+  const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
+  const railTurns = useThreadRailTurns(traceIds);
+  const listRef = useRef<HTMLDivElement>(null);
+  const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
+  const jumpToTrace = useCallback((turn: ThreadRailTurn) => {
+    const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-trace-id]') ?? [];
+    for (const row of rows) {
+      if (row.dataset.traceId === turn.messageId) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+  }, []);
 
   const [selected, setSelected] = useState<SelectedSpan | null>(null);
   // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
@@ -96,18 +116,30 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
         selected ? 'grid-cols-[minmax(0,1fr)_minmax(0,40%)]' : 'grid-cols-[minmax(0,1fr)]',
       )}
     >
-      <div className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
-        {traces.map(trace => (
-          <TraceThreadRow
-            key={trace.traceId}
-            traceId={trace.traceId}
-            selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
-            featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
-            onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
-            onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
-          />
-        ))}
-        <div ref={setEndOfListElement} />
+      <div ref={listRef} className="min-h-0 overflow-y-auto" data-testid="thread-view-by-trace">
+        <div className="relative min-h-full">
+          {/* Same rail as the chat page: one stop per turn, pinned mid-height while the page scrolls. */}
+          <div className="pointer-events-none absolute inset-y-0 left-4 z-20">
+            <ThreadRail
+              turns={railTurns}
+              currentAnchorId={currentTraceId}
+              visibleMessageIds={visibleTraceIds}
+              onSelect={jumpToTrace}
+              className="pointer-events-auto sticky top-1/2 -translate-y-1/2"
+            />
+          </div>
+          {traces.map(trace => (
+            <TraceThreadRow
+              key={trace.traceId}
+              traceId={trace.traceId}
+              selectedSpanId={selected?.traceId === trace.traceId ? selected.spanId : undefined}
+              featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
+              onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
+              onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
+            />
+          ))}
+          <div ref={setEndOfListElement} />
+        </div>
       </div>
       {selected && (
         <ThreadSpanPanel
@@ -119,6 +151,67 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
       )}
     </div>
   );
+}
+
+const FALLBACK_TURN = (traceId: string): ThreadRailTurn => ({
+  key: traceId,
+  messageId: traceId,
+  prompt: 'Agent turn',
+  files: [],
+  hiddenFileCount: 0,
+});
+
+/**
+ * One rail stop per trace, summarised from the turn its spans reconstruct. Shares the
+ * `trace-spans` cache with the rows, so no extra request is made; the stop is keyed by the
+ * trace id so the rail can track rows rather than message ids.
+ */
+function useThreadRailTurns(traceIds: string[]): ThreadRailTurn[] {
+  const client = useMastraClient();
+
+  return useQueries({
+    queries: traceIds.map(traceId => ({
+      queryKey: ['trace-spans', traceId],
+      queryFn: () => client.getTrace(traceId),
+      select: (data: Awaited<ReturnType<typeof client.getTrace>>): ThreadRailTurn => {
+        const [turn] = buildThreadRailTurns(formatTraceThreadMessages(data?.spans ?? []));
+        return turn ? { ...turn, key: traceId, messageId: traceId } : FALLBACK_TURN(traceId);
+      },
+    })),
+    combine: results => results.map((result, index) => result.data ?? FALLBACK_TURN(traceIds[index]!)),
+  });
+}
+
+/** Which rows are on screen, and the topmost one, so the rail can mark them like the chat page does. */
+function useVisibleTraceRows(listRef: RefObject<HTMLDivElement | null>, traceIds: string[]) {
+  const [visibleSet, setVisibleSet] = useState<ReadonlySet<string>>(() => new Set());
+
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        setVisibleSet(current => {
+          const next = new Set(current);
+          for (const entry of entries) {
+            const id = (entry.target as HTMLElement).dataset.traceId;
+            if (!id) continue;
+            if (entry.isIntersecting) next.add(id);
+            else next.delete(id);
+          }
+          return next;
+        });
+      },
+      { root, threshold: 0.1 },
+    );
+
+    root.querySelectorAll<HTMLElement>('[data-trace-id]').forEach(row => observer.observe(row));
+    return () => observer.disconnect();
+  }, [listRef, traceIds]);
+
+  const visibleTraceIds = useMemo(() => traceIds.filter(id => visibleSet.has(id)), [traceIds, visibleSet]);
+  return { visibleTraceIds, currentTraceId: visibleTraceIds[0] };
 }
 
 interface TraceThreadRowProps {
@@ -157,7 +250,7 @@ function TraceThreadRow({
   return (
     <div
       className={cn(
-        'group grid grid-cols-[1fr_1fr] px-4 transition-opacity hover:opacity-100',
+        'group grid grid-cols-[1fr_1fr] pr-4 pl-14 transition-opacity hover:opacity-100',
         isActive || showFeedback ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}

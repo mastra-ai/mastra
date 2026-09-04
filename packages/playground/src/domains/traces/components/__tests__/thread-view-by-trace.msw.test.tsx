@@ -104,6 +104,22 @@ describe('ThreadViewByTrace', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
   });
 
+  it('shows a rail with one stop per turn that jumps to the matching row', async () => {
+    installHandlers();
+    const { queryClient } = renderView();
+
+    // trace-a reconstructs a user turn, so its stop carries the prompt.
+    const stop = await screen.findByRole('button', { name: 'Jump to cook pasta' });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(screen.getByTestId('thread-rail').querySelectorAll('button')).toHaveLength(2);
+
+    scrollIntoView.mockClear();
+    fireEvent.click(stop);
+    const row = screen.getByTestId('thread-view-by-trace').querySelector('[data-trace-id="trace-a"]');
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView.mock.instances[0]).toBe(row);
+  });
+
   it('links each turn to its trace on the traces page', async () => {
     installHandlers();
     const { queryClient } = renderView();
