@@ -1,9 +1,9 @@
 /**
- * Where the database lives — resolved absolutely, on purpose.
+ * Where the persistent data lives — resolved absolutely, on purpose.
  *
  * This looks like over-engineering until it bites you. `mastra dev` does not
  * run with the project root as its working directory: it runs from
- * `<project>/src/mastra/public`. A script you launch yourself (`pnpm seed`)
+ * `<project>/studio/src/mastra/public`. A script you launch yourself (`pnpm seed`)
  * runs from `<project>`. So a relative URL like `file:./eval.db` silently
  * resolves to two different files, and you get the most confusing possible
  * symptom — the seed reports success, the dashboard shows nothing, and both
@@ -17,17 +17,16 @@
  * The fallback alone is not enough: `mastra start` runs the built `index.mjs`
  * with `<project>/.mastra/output` as its cwd, and the build writes a
  * package.json *there*. Walking up would stop at the output directory and put
- * the databases and the workspace inside build output.
+ * the databases and workspace inside build output.
  */
 import { existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 function findProjectRoot(start: string = process.cwd()): string {
-  // `mastra start` sets this to the project root. `mastra dev` sets it one level
-  // too deep — it derives the value from the bundle directory and steps back only
-  // once, landing on `<project>/.mastra` — so step the rest of the way out rather
-  // than writing the databases and the workspace inside build output.
+  // Current CLI commands set this to the project root. Keep accepting a
+  // `.mastra` path as well so older or alternate launchers do not write the
+  // databases and workspace inside build output.
   const fromCli = process.env.MASTRA_PROJECT_ROOT;
   if (fromCli) return basename(fromCli) === '.mastra' ? dirname(fromCli) : fromCli;
 
@@ -61,12 +60,13 @@ export const DATABASE_URL = process.env.DATABASE_URL ?? pathToFileURL(join(findP
 export const DUCKDB_PATH = process.env.DUCKDB_PATH ?? join(findProjectRoot(), 'observability.duckdb');
 
 /**
- * Absolute path to the workspace root — the directory Studio's Workspaces
- * page browses, and the one the skills under `skills/` are read from.
+ * Absolute path to Studio's workspace root — the directory its Workspaces page
+ * browses, and the one the skills under `skills/` are read from. Unlike the
+ * generated databases, this is authored content and stays under `studio/`.
  *
  * Same trap as above, and worse here: a relative `basePath` would resolve
- * against `<project>/src/mastra/public` under `mastra dev`, so the Files tab
- * would show an empty directory and the Skills tab would find nothing, with
- * no error to explain either.
+ * against `<project>/studio/src/mastra/public` under `mastra dev`, so the Files
+ * tab would show an empty directory and the Skills tab would find nothing,
+ * with no error to explain either.
  */
-export const WORKSPACE_PATH = process.env.WORKSPACE_PATH ?? join(findProjectRoot(), 'workspace');
+export const WORKSPACE_PATH = process.env.WORKSPACE_PATH ?? join(findProjectRoot(), 'studio', 'workspace');

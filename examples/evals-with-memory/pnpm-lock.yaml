@@ -32,105 +32,28 @@ overrides:
 importers:
 
   .:
-    devDependencies:
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-
-  headless:
     dependencies:
       '@mastra/core':
-        specifier: link:../../../packages/core
-        version: link:../../../packages/core
+        specifier: link:../../packages/core
+        version: link:../../packages/core
       '@mastra/duckdb':
-        specifier: link:../../../stores/duckdb
-        version: link:../../../stores/duckdb
+        specifier: link:../../stores/duckdb
+        version: link:../../stores/duckdb
       '@mastra/editor':
-        specifier: link:../../../packages/editor
-        version: link:../../../packages/editor
+        specifier: link:../../packages/editor
+        version: link:../../packages/editor
       '@mastra/evals':
-        specifier: link:../../../packages/evals
-        version: link:../../../packages/evals
+        specifier: link:../../packages/evals
+        version: link:../../packages/evals
       '@mastra/libsql':
-        specifier: link:../../../stores/libsql
-        version: link:../../../stores/libsql
+        specifier: link:../../stores/libsql
+        version: link:../../stores/libsql
       '@mastra/memory':
-        specifier: link:../../../packages/memory
-        version: link:../../../packages/memory
+        specifier: link:../../packages/memory
+        version: link:../../packages/memory
       '@mastra/observability':
-        specifier: link:../../../observability/mastra
-        version: link:../../../observability/mastra
-      '@workshop/shared':
-        specifier: workspace:*
-        version: link:../shared
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^20.12.7
-        version: 20.19.43
-      tsx:
-        specifier: 'catalog:'
-        version: 4.23.11
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-
-  shared:
-    dependencies:
-      '@mastra/core':
-        specifier: link:../../../packages/core
-        version: link:../../../packages/core
-      '@mastra/editor':
-        specifier: link:../../../packages/editor
-        version: link:../../../packages/editor
-      '@mastra/evals':
-        specifier: link:../../../packages/evals
-        version: link:../../../packages/evals
-      '@mastra/libsql':
-        specifier: link:../../../stores/libsql
-        version: link:../../../stores/libsql
-      '@mastra/memory':
-        specifier: link:../../../packages/memory
-        version: link:../../../packages/memory
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 22.19.15
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-
-  studio:
-    dependencies:
-      '@mastra/core':
-        specifier: link:../../../packages/core
-        version: link:../../../packages/core
-      '@mastra/duckdb':
-        specifier: link:../../../stores/duckdb
-        version: link:../../../stores/duckdb
-      '@mastra/editor':
-        specifier: link:../../../packages/editor
-        version: link:../../../packages/editor
-      '@mastra/evals':
-        specifier: link:../../../packages/evals
-        version: link:../../../packages/evals
-      '@mastra/libsql':
-        specifier: link:../../../stores/libsql
-        version: link:../../../stores/libsql
-      '@mastra/memory':
-        specifier: link:../../../packages/memory
-        version: link:../../../packages/memory
-      '@mastra/observability':
-        specifier: link:../../../observability/mastra
-        version: link:../../../observability/mastra
-      '@workshop/shared':
-        specifier: workspace:*
-        version: link:../shared
+        specifier: link:../../observability/mastra
+        version: link:../../observability/mastra
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -139,8 +62,8 @@ importers:
         specifier: 'catalog:'
         version: 22.19.15
       mastra:
-        specifier: link:../../../packages/cli
-        version: link:../../../packages/cli
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
       tsx:
         specifier: 'catalog:'
         version: 4.23.11
@@ -306,9 +229,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@types/node@20.19.43':
-    resolution: {integrity: sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA==}
-
   '@types/node@22.19.15':
     resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
 
@@ -417,10 +337,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
-
-  '@types/node@20.19.43':
-    dependencies:
-      undici-types: 6.21.0
 
   '@types/node@22.19.15':
     dependencies:

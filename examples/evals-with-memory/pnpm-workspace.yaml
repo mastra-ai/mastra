@@ -1,7 +1,5 @@
 packages:
-  - 'shared'
-  - 'headless'
-  - 'studio'
+  - '.'
 
 catalog:
   '@types/node': 22.19.15

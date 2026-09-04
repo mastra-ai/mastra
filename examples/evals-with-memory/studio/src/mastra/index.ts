@@ -395,8 +395,8 @@ export const editor = new MastraEditor({
  * agent picks up the skills without needing its own copy.
  *
  * `basePath` is absolute deliberately — see db-path.ts. Under `mastra dev` the
- * process runs from `src/mastra/public`, so a relative path would browse an
- * empty directory and find no skills, with nothing logged to explain it.
+ * process runs from `studio/src/mastra/public`, so a relative path would browse
+ * an empty directory and find no skills, with nothing logged to explain it.
  */
 export const workspace = new Workspace({
   id: 'workshop-workspace',

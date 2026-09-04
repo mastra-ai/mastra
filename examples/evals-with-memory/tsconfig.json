@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "paths": {
+      "@workshop/shared/agent": ["./shared/src/agent.ts"],
+      "@workshop/shared/models": ["./shared/src/models.ts"],
+      "@workshop/shared/tools": ["./shared/src/tools.ts"],
+      "@workshop/shared/workflow": ["./shared/src/workflow.ts"],
+      "@workshop/shared/scorers": ["./shared/src/scorers/index.ts"],
+      "@workshop/shared/data": ["./shared/src/data/support-qa.ts"],
+      "@workshop/shared/support-tools": ["./shared/src/support-tools.ts"],
+      "@workshop/shared/web-tools": ["./shared/src/web-tools.ts"]
+    }
+  },
+  "include": ["headless/src", "shared/src", "studio/src"]
+}

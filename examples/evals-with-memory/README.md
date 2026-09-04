@@ -9,11 +9,12 @@ into a permanent test case, and add knowledge as a markdown file. None of that
 needs a pull request. All of it needs someone who knows the subject better than
 the engineer does.
 
-Everything here runs on one small support agent for a fictional file-sync
-company, so the domain never gets in the way of the mechanics.
+The main workshop runs from one package and uses one small support agent for a
+fictional file-sync company, so the domain never gets in the way of the mechanics.
 
 ```text
-studio/           persistent DB + seeded dashboard   ← the browser half
+package.json      one install and command surface
+studio/           Studio source + seeded dashboard   ← the browser half
   src/mastra/case-file.ts   working memory: the schema, and the rules that fill it
   workspace/skills/   6 markdown skills every agent inherits
 headless/         12 runnable exercises, CI-safe     ← the same story in code
@@ -696,7 +697,7 @@ batches; a script that generates traffic and exits takes the pending batch with
 it. `await observability.shutdown()` first. Exercises 10 and 11.
 
 **Paths must be absolute — for the database and the workspace.** Under
-`mastra dev` the process runs from `src/mastra/public`, not the project root,
+`mastra dev` the process runs from `studio/src/mastra/public`, not the project root,
 so a relative `file:./x.db` gives scripts and server two different databases,
 and a relative workspace `basePath` browses an empty directory and finds no
 skills. Nothing is logged either way. See `studio/src/mastra/db-path.ts`.
@@ -770,7 +771,7 @@ throws.
 
 **Killing `mastra dev` can strand a lock file.** `.mastra/dev.lock` records the
 pid, and a hard kill leaves it behind; the next `pnpm dev` refuses to start,
-naming a pid that is no longer alive. Delete `studio/.mastra/dev.lock` and
+naming a pid that is no longer alive. Delete `.mastra/dev.lock` and
 start again. A fresh clone never sees this — `.mastra/` is gitignored.
 
 ## What is covered
