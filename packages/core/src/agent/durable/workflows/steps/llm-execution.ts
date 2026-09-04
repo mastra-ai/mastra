@@ -507,14 +507,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                   currentTools = convertedTools as unknown as ToolSet;
                   if (registryEntry) {
-                    // Store the exact per-step snapshot rather than merging onto the
-                    // previous step's set. `currentTools` already starts from the full
-                    // toolset resolved at the top of this step, so a snapshot keeps the
-                    // static tools while dropping processor-injected tools the current
-                    // step no longer exposes (e.g. a ToolSearchProcessor entry that hit
-                    // its TTL). Merging would leave those stale tools executable by the
-                    // tool-call step even though the model was never shown them.
-                    registryEntry.tools = convertedTools;
+                    // Keep the full resolved catalog for the next processor iteration,
+                    // and separately store the exact per-step snapshot for tool-call
+                    // execution. This prevents a narrowed ToolSearchProcessor result
+                    // from deleting tools that may be loaded on a later iteration while
+                    // still ensuring stale processor-injected tools are not executable.
+                    registryEntry.stepTools = convertedTools;
                   }
                 }
               } catch (error) {

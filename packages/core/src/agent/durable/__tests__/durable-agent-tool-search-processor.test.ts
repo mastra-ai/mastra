@@ -16,7 +16,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -25,6 +25,7 @@ import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 type ScriptedCall = { toolName: string; args: Record<string, unknown> };
 
@@ -115,6 +116,31 @@ function makeAgent(id: string, script: ScriptedCall[]) {
   });
 }
 
+function makeAutoLoadAgent(id: string, script: ScriptedCall[]) {
+  const echo = createTool({
+    id: 'echo',
+    description: 'Echo the supplied text',
+    inputSchema: z.object({ text: z.string() }),
+    execute: async ({ text }) => ({ text }),
+  });
+
+  return new Agent({
+    id,
+    name: id,
+    instructions: 'Find and invoke the echo tool.',
+    model: createScriptedToolCallModel(script) as LanguageModelV2,
+    tools: { echo },
+    inputProcessors: [
+      new ToolSearchProcessor({
+        tools: {},
+        includeResolvedTools: true,
+        storage: 'context',
+        search: { autoLoad: true, topK: 1, minScore: 0 },
+      }),
+    ],
+  });
+}
+
 /** Tool-result payloads keyed by tool name, for cross-path comparison. */
 function resultsByTool(chunks: any[]) {
   return chunks
@@ -195,5 +221,62 @@ describe('DurableAgent ToolSearchProcessor meta-tool resolution (#19571)', () =>
     expect(durableResults.map(r => r.toolName)).toEqual(['search_tools', 'load_tool']);
     // ...and returned identical payloads.
     expect(durableResults).toEqual(regularResults);
+  });
+
+  it('preserves the full resolved-tool catalog across durable steps when a processor narrows per-step tools', async () => {
+    // Reproduces #22933: ToolSearchProcessor auto-load rewrites per-step tools
+    // down to just `search_tools` on step 1. Before the fix, the durable loop
+    // wrote that narrowed set back into registryEntry.tools, so step 2's
+    // registry no longer contained `echo`. This test asserts on the registry
+    // snapshot directly so it cannot pass via the tool-call.ts rebuild fallback.
+    const id = 'durable-auto-load';
+    const durableAgent = createDurableAgent({
+      agent: makeAutoLoadAgent(id, [
+        { toolName: 'search_tools', args: { query: 'echo' } },
+        { toolName: 'echo', args: { text: 'hello' } },
+      ]),
+      pubsub,
+    });
+    new Mastra({
+      agents: { [id]: durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    // Poll the run registry while the durable stream runs and record every
+    // distinct tool-set the entry ever holds. Pre-fix, `registryEntry.tools`
+    // is mutated in-place down to just the processor-injected `search_tools`
+    // between steps, so `echo` disappears from the catalog even though the
+    // tool-call fallback can still resolve it.
+    const seen = new Set<string>();
+    const snapshots: string[][] = [];
+    let polling = true;
+    const pollPromise = (async () => {
+      while (polling) {
+        for (const [, entry] of globalRunRegistry.entries()) {
+          const keys = Object.keys((entry as any)?.tools ?? {}).sort();
+          const sig = keys.join('|');
+          if (!seen.has(sig)) {
+            seen.add(sig);
+            snapshots.push(keys);
+          }
+        }
+        await new Promise(r => setTimeout(r, 1));
+      }
+    })();
+
+    const result = await durableAgent.stream('Echo hello', { maxSteps: 4 });
+    const chunks = await drain(result.fullStream);
+    polling = false;
+    await pollPromise;
+
+    expect(toolErrors(chunks)).toHaveLength(0);
+    expect(resultsByTool(chunks).map(r => r.toolName)).toEqual(['search_tools', 'echo']);
+
+    // Every non-empty catalog snapshot must retain `echo`. Pre-fix, one of the
+    // observed snapshots is ['search_tools'] only, which is regression #22933.
+    const narrowed = snapshots.find(keys => keys.length > 0 && !keys.includes('echo'));
+    expect(narrowed, `registry catalog lost 'echo' between steps: ${JSON.stringify(snapshots)}`).toBeUndefined();
   });
 });
