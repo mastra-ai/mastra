@@ -2314,6 +2314,11 @@ export class MemoryLibSQL extends MemoryStorage {
             }
           }
 
+          if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
+            await tx.commit();
+            return;
+          }
+
           // Create new chunk with ID and timestamp
           const newChunk: BufferedObservationChunk = {
             id: `ombuf-${randomUUID()}`,

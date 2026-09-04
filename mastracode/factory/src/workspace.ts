@@ -15,7 +15,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -40,13 +40,16 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-
+import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { parseSupervisorResourceId } from './supervisor/session.js';
+import { timedPhase } from './timing.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
-export const FACTORY_SKILLS_SOURCE_PATH =
+export const BUNDLED_FACTORY_SKILLS_PATH =
   [
     // Deploy bundle: the consumer copies `factory-skills/` next to the built
     // server module (e.g. via its public/ dir).
@@ -54,9 +57,25 @@ export const FACTORY_SKILLS_SOURCE_PATH =
     // Package layout: `dist/../factory-skills` (also `src/../factory-skills`
     // when running tests against sources).
     join(bundleDirectory, '..', 'factory-skills'),
-    // Consumer repo running from its package root before a build.
-    join(process.cwd(), 'src', 'mastra', 'public', 'factory-skills'),
   ].find(existsSync) ?? bundledFactorySkillsPath;
+
+/**
+ * Resolve the consumer repo's local Factory skills root, if any. Checked in
+ * addition to the bundled skills so projects can add (or override) Factory
+ * skills without patching the installed package. Candidates cover the cwd
+ * variants the dev server runs with (`repo root`, `--dir src/mastra` which
+ * runs with cwd `src/mastra/public`).
+ */
+export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
+  const candidates = [
+    join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    join(cwd, 'public', 'factory-skills'),
+    join(cwd, 'factory-skills'),
+  ];
+  return candidates.find(
+    candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
+  );
+}
 const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
@@ -67,14 +86,17 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
-class FactorySkillSource implements SkillSource {
-  readonly #factorySource = new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH });
+export class FactorySkillSource implements SkillSource {
+  readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
+  readonly #localSource: LocalSkillSource | undefined;
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
     readonly fallback: SkillSource,
     fallbackSkillRoots: string[],
+    localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
   ) {
+    this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
   }
 
@@ -87,27 +109,48 @@ class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
-  exists(skillPath: string): Promise<boolean> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.exists(this.#factoryPath(skillPath))
-      : this.fallback.exists(skillPath);
+  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
+  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+    if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
+    return this.#bundledSource;
   }
 
-  stat(skillPath: string): Promise<SkillSourceStat> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.stat(this.#factoryPath(skillPath))
-      : this.fallback.stat(skillPath);
+  async exists(skillPath: string): Promise<boolean> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    if (this.#localSource && (await this.#localSource.exists(relative))) return true;
+    return this.#bundledSource.exists(relative);
   }
 
-  readFile(skillPath: string): Promise<string | Buffer> {
-    return this.#isFactoryPath(skillPath)
-      ? this.#factorySource.readFile(this.#factoryPath(skillPath))
-      : this.fallback.readFile(skillPath);
+  async stat(skillPath: string): Promise<SkillSourceStat> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    return (await this.#layerFor(relative)).stat(relative);
+  }
+
+  async readFile(skillPath: string): Promise<string | Buffer> {
+    if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
+    const relative = this.#factoryPath(skillPath);
+    return (await this.#layerFor(relative)).readFile(relative);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     if (this.#isFactoryPath(skillPath)) {
-      return this.#factorySource.readdir(this.#factoryPath(skillPath));
+      const relative = this.#factoryPath(skillPath);
+      const [bundledExists, localExists] = await Promise.all([
+        this.#bundledSource.exists(relative),
+        this.#localSource?.exists(relative) ?? Promise.resolve(false),
+      ]);
+      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
+      const [bundledEntries, localEntries] = await Promise.all([
+        bundledExists ? this.#bundledSource.readdir(relative) : [],
+        localExists ? this.#localSource!.readdir(relative) : [],
+      ]);
+      const merged = new Map<string, SkillSourceEntry>();
+      for (const entry of bundledEntries) merged.set(entry.name, entry);
+      // Local entries override bundled names.
+      for (const entry of localEntries) merged.set(entry.name, entry);
+      return [...merged.values()];
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
@@ -122,6 +165,7 @@ class FactorySkillSource implements SkillSource {
   }
 }
 
+/** Build a Node-style ENOENT error so callers can treat missing skills like fs misses. */
 function skillSourceEnoent(skillPath: string): Error {
   const error = new Error(`ENOENT: no such file or directory, '${skillPath}'`) as Error & { code: string };
   error.code = 'ENOENT';
@@ -176,15 +220,26 @@ const factorySkillExtension: WorkspaceSkillExtension = {
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
+/**
+ * When a session's sandbox boots: on the agent's first command (`'lazy'`, the
+ * default) or as soon as the session's workspace is first resolved (`'eager'`).
+ * An eager start is fire-and-forget; if it fails, the lazy path still runs.
+ */
+export type FactorySandboxStart = 'lazy' | 'eager';
+
 export interface CreateWorkspaceFactoryOptions {
   /** Factory sandbox runtime config (session sandbox callback). */
   sandbox?: MastraFactorySandboxConfig;
+  /** Defaults to `'lazy'`. */
+  sandboxStart?: FactorySandboxStart;
   /** GitHub integration used to resolve Factory sessions and mint repo tokens. */
   github?: GithubIntegration;
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -228,7 +283,8 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
     inject: (token: string) => void;
@@ -252,6 +308,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
+    if (supervisorProjectId) {
+      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
+      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
+      return undefined;
+    }
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
@@ -307,9 +370,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown, workdir: string) =>
-      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
-    const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
+    const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
+      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir, gate);
+    const guardedSetup = createSessionSetupHook(
+      runSetupOn,
+      session.id,
+      repoFullName,
+      projectRepository.setupCommand ?? undefined,
+    );
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -383,11 +451,27 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // stack a wrapper per call. Factory's setup runs first: a hook the
         // callback installed itself expects a prepared workspace.
         sandbox.setOnStart(previous => async args => {
-          await setupHook(args);
+          await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+            await setupHook(args);
+          });
           await previous?.(args);
         });
+        // Only a freshly constructed instance starts eagerly; the start itself
+        // waits for this resolver to finish because the start hook reads
+        // bindings declared further down.
+        startEagerly = eagerSandboxStart;
         return sandbox;
       });
+    let startEagerly = false;
+    const fireEagerStart = () => {
+      if (!startEagerly) return;
+      startEagerly = false;
+      Promise.resolve()
+        .then(() => sessionEntry.sandbox.start?.())
+        .catch(error => {
+          console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+        });
+    };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
@@ -545,7 +629,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
-    const runSessionSetup = async (target: SessionSandbox, workdir: string): Promise<void> => {
+    const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
       const token = await getRepositoryToken();
       // The configured setup command may shell out to `gh`/https fetches, so
       // GH_TOKEN must exist before setup runs — and it must be the same
@@ -568,7 +652,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
-      if (projectRepository.setupCommand) {
+      if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
         // tool result that triggered it, and a permanently failing onStart
@@ -584,7 +668,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await runSetupCommand(target, workdir, projectRepository.setupCommand);
+          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
             try {
@@ -682,10 +767,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    // Fully lazy: nothing provisions until the first real sandbox operation
-    // (`ensureRunning()` inside the provider). A background warm-up at session
-    // start was considered and dropped — it speculatively created a VM for
-    // every session, including ones whose agent never touches the workspace.
+    fireEagerStart();
     return workspace;
   };
 }

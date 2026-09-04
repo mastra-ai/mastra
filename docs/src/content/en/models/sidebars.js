@@ -661,6 +661,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nan',
+          label: 'NaN',
+        },
+        {
+          type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
         },
@@ -838,6 +843,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/scx-ai',
           label: 'SCX.ai',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
         },
         {
           type: 'doc',

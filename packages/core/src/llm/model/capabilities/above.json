@@ -1,11 +1,12 @@
 {
-  "attachment": ["deepseek-v4-flash-vision-exp"],
+  "attachment": ["deepseek-v4-flash-vision-exp", "glm-5.3-flash"],
   "temperature": [
     "deepseek-v4-flash",
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
     "glm-5.2",
     "glm-5.2-fast",
+    "glm-5.3-flash",
     "mimo-v2.5-pro",
     "mimo-v2.5-pro-ultraspeed",
     "qwen3.8-max"
@@ -15,6 +16,7 @@
     "deepseek-v4-flash-vision-exp",
     "deepseek-v4-pro",
     "glm-5.2",
-    "glm-5.2-fast"
+    "glm-5.2-fast",
+    "glm-5.3-flash"
   ]
 }

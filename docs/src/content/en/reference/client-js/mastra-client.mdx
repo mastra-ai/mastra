@@ -1,6 +1,6 @@
 ---
 title: "Reference: Mastra client SDK | Client SDK"
-description: Learn how to interact with Mastra using the client-js SDK.
+description: "The Mastra Client SDK provides a type-safe interface for interacting with your Mastra Server from your client environment."
 packages:
   - "@mastra/client-js"
 ---
@@ -103,6 +103,17 @@ You can also pass `requestContext` as a `Record<string, any>`.
     name: 'getAgent(agentId)',
     type: 'Agent',
     description: 'Retrieves a specific agent instance by ID.',
+  },
+  {
+    name: 'listAgentControllers()',
+    type: 'Promise<AgentControllerInfo[]>',
+    description: 'Returns the agent controllers hosted on the connected Mastra instance.',
+  },
+  {
+    name: 'getAgentController(controllerId)',
+    type: 'AgentController',
+    description:
+      'Retrieves a specific agent controller by ID. `.session(resourceId)` returns a session client; call `await session.create()` to create or resume the server session.',
   },
   {
     name: 'listMemoryThreads(params)',

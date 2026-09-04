@@ -37,6 +37,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import { listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -658,37 +659,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           }
         }
 
-        // Mirror matches into storage with bounded concurrency instead of one
-        // awaited upsert per repository.
-        const repos = new Array(matches.length);
-        const upsertConcurrency = 10;
-        for (let start = 0; start < matches.length; start += upsertConcurrency) {
-          await Promise.all(
-            matches.slice(start, start + upsertConcurrency).map(async ({ inst, repo }, offset) => {
-              const repository = await github.sourceControlStorage.repositories.upsert({
-                orgId,
-                input: {
-                  installationId: inst.id,
-                  externalId: repo.id.toString(),
-                  slug: repo.fullName,
-                  defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
-                  providerMetadata: { private: repo.private, owner: repo.owner },
-                },
-              });
-              repos[start + offset] = {
-                ...repo,
-                installationStorageId: inst.id,
-                repositoryStorageId: repository.id,
-                sandboxProvider: sandbox ? 'custom' : 'none',
-                // Display only — the runtime workdir is resolved from the
-                // live sandbox at open time, never read from this row. Repos
-                // clone into the VM's home; `~/<repo>` is the honest
-                // listing-time guess.
-                sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
-              };
-            }),
-          );
-        }
+        const repos = matches.map(({ inst, repo }) => ({
+          ...repo,
+          installationStorageId: inst.id,
+          sandboxProvider: sandbox ? 'custom' : 'none',
+          // Display only — the runtime workdir is resolved from the
+          // live sandbox at open time. Repositories are persisted only after
+          // selection, so `~/<repo>` is the honest listing-time guess.
+          sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
+        }));
         return c.json({ repos });
       },
     }),
@@ -1040,7 +1019,7 @@ async function loadOrgProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
   c: RouteContext;
-}): Promise<{ project: ResolvedProjectRepository; userId: string } | { response: Response }> {
+}): Promise<{ project: ResolvedProjectRepository; orgId: string; userId: string } | { response: Response }> {
   const { github, auth, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1054,7 +1033,7 @@ async function loadOrgProject(options: {
   if (!project) {
     return { response: c.json({ error: 'Project repository not found' }, 404) };
   }
-  return { project, userId };
+  return { project, orgId, userId };
 }
 
 /** Derive a commit/author identity from the authenticated host user. */
@@ -1085,9 +1064,7 @@ async function loadOwnedProject(options: {
   auth: RouteAuth;
   sandbox?: MastraFactorySandboxConfig;
   c: RouteContext;
-}): Promise<
-  { orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }
-> {
+}): Promise<{ orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }> {
   const { github, auth, sandbox, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1142,6 +1119,10 @@ interface SessionOwnerProfile {
 }
 
 type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IUserProvider, 'getUsers'>>;
+
+/** A screenful of history; GitHub caps its own page at 100. */
+const DEFAULT_COMMIT_PAGE = 20;
+const MAX_COMMIT_PAGE = 100;
 
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -1517,6 +1498,32 @@ function buildProjectGitRoutes({
       },
     }),
 
+    // ── Recent commits on a repository branch ───────────────────────────────
+    registerApiRoute('/web/github/projects/:id/commits', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject({ github, auth, c: loose(c) });
+        if ('response' in loaded) return loaded.response;
+        const { orgId, project } = loaded;
+
+        const branch = c.req.query('branch') ?? project.defaultBranch;
+        if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
+        // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
+        const limit = Math.min(
+          Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
+          MAX_COMMIT_PAGE,
+        );
+
+        try {
+          const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });
+          return c.json({ commits, branch });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+
     // ── Push a branch back to GitHub ────────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/push', {
       method: 'POST',
@@ -1670,7 +1677,6 @@ function buildProjectGitRoutes({
         }
       },
     }),
-
   ];
 }
 

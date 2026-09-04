@@ -10,6 +10,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   ObservabilityStorageStrategy,
@@ -67,6 +68,8 @@ import type {
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -85,6 +88,8 @@ import type {
   GetEnvironmentsResponse,
   GetTagsArgs,
   GetTagsResponse,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import { resolveClickhouseConfig } from '../../../db';
@@ -120,6 +125,8 @@ export type { RetentionConfig } from './ddl';
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
   /** @internal Test-only override for the ClickHouse delta cursor strategy. */
   deltaCursorStrategy?: ClickHouseDeltaCursorStrategy;
 };
@@ -137,6 +144,7 @@ import {
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { deltaPollingSupported } from './polling';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
@@ -444,6 +452,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #retention?: RetentionConfig;
   readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
+  readonly #traceQueryTimeoutMs: number;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
@@ -453,6 +462,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
   }
 
   // -------------------------------------------------------------------------
@@ -675,10 +685,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingSupported(this.#deltaCursorStrategy)) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   // -------------------------------------------------------------------------
@@ -816,6 +826,22 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    try {
+      return await traceQueryOps.queryTraces(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -1015,6 +1041,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: args.feedbacks.length },
+        },
+        error,
+      );
+    }
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    try {
+      return await feedbackOps.updateFeedbackReviewStatus(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_FEEDBACK_REVIEW_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { feedbackId: args.feedbackId },
         },
         error,
       );

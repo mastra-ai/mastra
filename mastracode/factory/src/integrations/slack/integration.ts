@@ -22,9 +22,11 @@ import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
+import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
+import { SlackFeedPublisher } from './feed-publisher.js';
 import { createSlackChannelsConfig } from './slack.js';
 
 /**
@@ -140,12 +142,17 @@ export class SlackIntegration implements FactoryIntegration {
       sourceControl: sourceControlOwner,
       memorySettings: ctx.storage.memorySettings,
       workItems: ctx.rules?.workItems,
+      feed: ctx.feed,
       adapterOptions: {
         toolDisplay: 'hidden',
         typingStatus: factoryTypingStatus,
         ...adapterOverrides(this.#config.adapterOptions),
       },
     });
+  }
+
+  feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {
+    return new SlackFeedPublisher({ controller: ctx.controller });
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

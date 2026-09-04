@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { isAbortError } from '@ai-sdk/provider-utils-v5';
+import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
@@ -1529,6 +1529,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       workspace: currentStep.workspace,
                       requireApproval: (tool as any).requireApproval,
                       backgroundConfig: (tool as any).background,
+                      agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
                     },
                     undefined,
                     autoResumeSuspendedTools,

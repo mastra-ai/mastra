@@ -544,6 +544,39 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ armAutonomy: true }));
   });
 
+  it('parses preapprovePlans from the body, and only a literal true', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const handsOff = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...startBody(workItem.id), preapprovePlans: true }),
+    });
+    expect(handsOff.status).toBe(202);
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ preapprovePlans: true }));
+
+    const coerced = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...startBody(workItem.id), preapprovePlans: 'yes' }),
+    });
+    expect(coerced.status).toBe(202);
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ preapprovePlans: false }));
+  });
+
   it('rejects a non-UUID kickoff identity before coordination', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });
@@ -705,6 +738,52 @@ describe('work item relations', () => {
     await json('PATCH', `/web/factory/work-items/${child.workItem.id}`, { parentWorkItemId: parent.workItem.id });
     expect((await json('DELETE', `/web/factory/work-items/${parent.workItem.id}`)).status).toBe(200);
     expect((await listItems())[0]?.parentWorkItemId).toBeNull();
+  });
+});
+
+describe('GET /web/factory/projects/:id/decisions', () => {
+  it('names the linked-card source on the summary and leaves it null for other effects', async () => {
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: 'decision-source', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'decision-source-linked',
+          board: 'review',
+          source: 'github-pr',
+          sourceKey: 'github-pr:7',
+          title: 'Fix the login flow',
+          url: null,
+          stage: 'intake',
+          metadata: {},
+        },
+        {
+          type: 'sendMessage',
+          role: 'work',
+          message: 'Notify the session.',
+          idempotencyKey: 'decision-source-message',
+        },
+      ],
+      causalChain: [],
+      now,
+    });
+
+    const body = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json();
+    expect(body.decisions).toHaveLength(2);
+    expect(body.decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
+        expect.objectContaining({ type: 'sendMessage', source: null }),
+      ]),
+    );
   });
 });
 

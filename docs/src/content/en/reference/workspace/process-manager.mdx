@@ -1,6 +1,6 @@
 ---
 title: "Reference: SandboxProcessManager | Workspace"
-description: "API reference for SandboxProcessManager and ProcessHandle, the base classes for background process management in sandboxes."
+description: "Abstract base class for managing background processes in sandboxes. Provides methods to spawn processes, list them, get handles by PID, and kill them."
 packages:
   - "@mastra/core"
 ---
@@ -86,7 +86,8 @@ const handle = await sandbox.processes.spawn('npm run dev', {
           {
             name: 'cwd',
             type: 'string',
-            description: 'Working directory for the process.',
+            description:
+              "Working directory for the process. Defaults to the sandbox's configured `workingDirectory`, then the provider default.",
             isOptional: true,
           },
           {

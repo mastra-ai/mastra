@@ -369,6 +369,7 @@ describe('record-builders', () => {
 
       expect(buildFeedbackRecord(event)).toEqual({
         feedbackId: 'feedback-builder-1',
+        reviewStatus: 'needs-review',
         timestamp,
         traceId: 'trace-1',
         spanId: 'span-1',
@@ -836,6 +837,7 @@ describe('record-builders', () => {
 
       expect(buildFeedbackRecord(event)).toEqual({
         feedbackId: 'feedback-builder-derived',
+        reviewStatus: 'needs-review',
         timestamp,
         traceId: 'trace-1',
         spanId: 'span-1',

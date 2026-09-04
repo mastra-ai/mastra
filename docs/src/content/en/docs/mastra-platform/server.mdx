@@ -1,6 +1,6 @@
 ---
 title: "Server | Mastra platform"
-description: Deploy and host your Mastra application as a production API server on Mastra platform.
+description: "Deploy and host a Mastra application as a production API server with managed builds, environment variables, custom domains, scaling, and observability."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -42,7 +42,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
     If you're not already authenticated, the CLI prompts you to log in. It stores your credentials locally and any subsequent CLI commands use these credentials.
 
-    The command runs `mastra build`, uploads the artifact, builds a Docker image, and deploys it. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
+    The command runs `mastra build` and uploads its artifact, then builds and deploys a Docker image. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
 
     :::note
     Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
@@ -63,7 +63,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 ## Deploy lifecycle
 
-A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). A project runs one build at a time. When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+Each project runs one build at a time as its deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
 
 ## Idle behavior
 
@@ -155,11 +155,11 @@ If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/git
     mastra auth tokens create ci-deploy
     ```
 
-    The CLI prints the token once. Copy it immediately — it cannot be retrieved again.
+    The CLI prints the token once. Copy it immediately because it can't be retrieved again.
   </StepItem>
 
   <StepItem>
-    Add the token as a secret in your CI provider. In GitHub Actions, go to **Settings → Secrets and variables → Actions** and create a secret named `MASTRA_API_TOKEN`.
+    Add the token as a secret in your CI provider. In GitHub Actions, go to **Settings → Secrets and variables → Actions** and create the `MASTRA_API_TOKEN` secret.
   </StepItem>
 
   <StepItem>

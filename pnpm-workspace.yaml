@@ -43,6 +43,7 @@ catalog:
   '@vitest/coverage-v8': 4.1.10
   '@vitest/ui': 4.1.10
   date-fns: 4.4.0
+  lucide-react: ^1.37.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^7.0.2
@@ -73,6 +74,11 @@ patchedDependencies:
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
+  # server-filesystem imports zod at runtime without declaring it (it relies on
+  # npm hoisting). packages/mcp spawns it in tests, so make the dep explicit.
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    dependencies:
+      zod: ^3.25.0 || ^4.0.0
   # Stryker core dynamically imports TypeScript without declaring it. The
   # global virtual store has no fallback hoist, so make that dependency explicit.
   '@stryker-mutator/core@10.0.0':
@@ -299,6 +305,7 @@ overrides:
   postcss@<8.5.23: 8.5.23
   ip-address@<10.3.1: 10.3.1
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
+  sharp@<0.35.0: 0.35.3
   valibot@<1.4.2: 1.4.2
   find-my-way@<9.7.0: 9.9.0
   adm-zip@<0.6.0: 0.6.0

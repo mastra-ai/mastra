@@ -1,6 +1,6 @@
 ---
 title: "Daytona | Sandbox"
-description: "Documentation for the DaytonaSandbox provider for isolated cloud code execution."
+description: "Run Mastra workspace commands in Daytona cloud sandboxes with custom images, resources, volumes, snapshots, streaming output, and lifecycle controls."
 packages:
   - "@mastra/daytona"
 ---
@@ -290,7 +290,7 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
 
 ### Computer use (desktop)
 
-Enable the [computer capability](/docs/sandbox/overview#computer-use-tools) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
+Enable the [computer capability](/docs/sandbox/computer) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
 
 Computer use is disabled by default. Set `computerUse: true` to start the desktop processes (Xvfb, xfce4, x11vnc, noVNC) lazily on the first computer operation:
 
@@ -388,6 +388,13 @@ For Daytona-specific desktop APIs (regions, compressed screenshots, screen recor
     description: 'Environment variables to set in the sandbox.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When set, the sandbox skips its automatic working-directory probe; when omitted, the probe fills the `workingDirectory` getter after start.',
+    isOptional: true,
   },
   {
     name: 'labels',

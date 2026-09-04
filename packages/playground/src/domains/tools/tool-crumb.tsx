@@ -5,5 +5,5 @@ export function ToolCrumb() {
   const { toolId } = useParams<{ toolId: string }>();
   if (!toolId) return null;
 
-  return <ToolCombobox value={toolId} variant="ghost" />;
+  return <ToolCombobox value={toolId} variant="ghost" size="sm" />;
 }

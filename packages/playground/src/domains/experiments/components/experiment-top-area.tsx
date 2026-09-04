@@ -1,17 +1,15 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLinkIcon } from 'lucide-react';
-import { useMemo } from 'react';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { ClipboardCheck } from 'lucide-react';
+import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { RenameExperimentButton } from '@/domains/experiments/components/rename-experiment-button';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
@@ -25,48 +23,6 @@ export interface ExperimentTopAreaProps {
  */
 export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
-
-  const overallAverage = useMemo(() => {
-    if (!scoresByItemId) return undefined;
-
-    const scores = Object.values(scoresByItemId).flat();
-    if (scores.length === 0) return undefined;
-
-    return scores.reduce((sum, score) => sum + score.score, 0) / scores.length;
-  }, [scoresByItemId]);
-
-  const targetPath = () => {
-    if (!experiment.targetId) return null;
-    switch (experiment.targetType) {
-      case 'agent':
-        return paths.agentLink(experiment.targetId);
-      case 'workflow':
-        return paths.workflowLink(experiment.targetId);
-      case 'scorer':
-        return paths.scorerLink(experiment.targetId);
-      default:
-        return '#';
-    }
-  };
-
-  const targetName = () => {
-    const targetId = experiment.targetId;
-    if (!targetId) return 'External (caller-run)';
-    switch (experiment.targetType) {
-      case 'agent':
-        return agents?.[targetId]?.name ?? targetId;
-      case 'workflow':
-        return workflows?.[targetId]?.name ?? targetId;
-      case 'scorer':
-        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
-      default:
-        return targetId;
-    }
-  };
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId
@@ -78,37 +34,27 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
       <PageLayout.Row>
         <PageLayout.Column className="justify-items-start gap-3">
           <div className="flex items-start gap-3">
-            {/* mt-4 skips the eyebrow line (1rem), h-7 matches the title line-height so the icon centers on the title. */}
-            <ExperimentStatusIcon status={experiment.status} className="mt-4 h-7" />
+            {/* h-7 matches the title line-height so the icon centers on the title. */}
+            <ExperimentStatusIcon status={experiment.status} className="h-7" />
             <PageHeader>
-              <p className="text-ui-xs text-neutral3 tracking-wider uppercase">Evaluation target</p>
-              <PageHeader.Title>
-                {(() => {
-                  const href = targetPath();
-                  return href ? (
-                    <LinkComponent
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(
-                        'flex items-center gap-2 transition-colors',
-                        'hover:text-neutral4 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-neutral3',
-                      )}
-                    >
-                      {targetName()}
-                      <ExternalLinkIcon />
-                    </LinkComponent>
-                  ) : (
-                    targetName()
-                  );
-                })()}
-                {overallAverage !== undefined && <Badge size="sm">Avg {overallAverage.toFixed(3)}</Badge>}
-              </PageHeader.Title>
+              {/* The run is the subject of the page; what it ran on is spelled out by the chain below. */}
+              <div className="flex items-center gap-1">
+                <PageHeader.Title>{experiment.name || `Experiment #${experiment.id.slice(0, 8)}`}</PageHeader.Title>
+                <RenameExperimentButton experiment={experiment} />
+              </div>
               {experiment.description && <PageHeader.Description>{experiment.description}</PageHeader.Description>}
+              <ExperimentFlowChain experiment={experiment} className="mt-2" />
             </PageHeader>
           </div>
         </PageLayout.Column>
         <PageLayout.Column className="justify-items-end gap-3">
+          <div className="flex items-center gap-2">
+            <Button as={LinkComponent} to={experimentReviewQueueLink(experiment.id)}>
+              <ClipboardCheck />
+              View items to review
+            </Button>
+            <RerunExperimentButton experiment={experiment} />
+          </div>
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>
               <DataKeysAndValues.Key>Version</DataKeysAndValues.Key>

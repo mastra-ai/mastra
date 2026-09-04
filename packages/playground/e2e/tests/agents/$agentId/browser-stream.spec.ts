@@ -45,7 +45,7 @@ test.describe('Browser stream WebSocket gating', () => {
       await page.goto('/agents/weather-agent/chat/1234');
 
       // Wait for the agent page to settle.
-      await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('Weather Agent');
       await expect(page.locator('a:has-text("New Chat")')).toBeVisible();
 
       // Negative assertion: poll for any browser traffic and fail fast if it appears.
@@ -75,7 +75,7 @@ test.describe('Browser stream WebSocket gating', () => {
         const body = await response.json();
         await route.fulfill({
           response,
-          json: { ...body, browserTools: ['browser_goto', 'browser_snapshot'] },
+          json: { ...body, hasBrowser: true, browserTools: ['browser_goto', 'browser_snapshot'] },
         });
       });
 
@@ -89,7 +89,7 @@ test.describe('Browser stream WebSocket gating', () => {
 
       await page.goto('/agents/weather-agent/chat/1234');
 
-      await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('Weather Agent');
 
       // The probe should fire once the agent details resolve and the gate flips on.
       await expect

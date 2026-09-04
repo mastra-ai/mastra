@@ -461,11 +461,9 @@ const stateSigner = {
   },
 };
 
-const materializeRepo = vi.fn(
-  async (opts: { onProgress?: (e: any) => void }) => {
-    opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
-  },
-);
+const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) => {
+  opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+});
 const runSetupCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const runTeardownCommand = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
@@ -1097,8 +1095,13 @@ describe('repos route', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.repos).toHaveLength(1);
-    expect(json.repos[0].fullName).toBe('octo/hello');
-    expect(tables.repositories).toHaveLength(1);
+    expect(json.repos[0]).toMatchObject({
+      fullName: 'octo/hello',
+      installationStorageId: tables.installations[0]!.id,
+      sandboxWorkdir: '~/hello',
+    });
+    expect(json.repos[0]).not.toHaveProperty('repositoryStorageId');
+    expect(tables.repositories).toHaveLength(0);
   });
 
   it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
@@ -1594,6 +1597,50 @@ describe('pr detail route', () => {
   });
 });
 
+describe('commits route', () => {
+  function stubCommitFetch() {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads history on a host with no sandbox provider configured', async () => {
+    seedMaterializedProject();
+    sandboxEnabled = false;
+    const fetchMock = stubCommitFetch();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ commits: [], branch: 'main' });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('asks GitHub for a whole number of commits', async () => {
+    seedMaterializedProject();
+    const fetchMock = stubCommitFetch();
+
+    await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?limit=1.5');
+
+    const asked = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
+
+    expect(asked.get('per_page')).toBe('1');
+  });
+
+  it('defaults to the branch the project selected, not the repository default', async () => {
+    seedMaterializedProject();
+    tables.projectRepositories[0].branch = 'release/v2';
+    const fetchMock = stubCommitFetch();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits');
+
+    expect(await res.json()).toMatchObject({ branch: 'release/v2' });
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('sha')).toBe('release/v2');
+  });
+});
+
 describe('project settings routes', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -2073,12 +2120,9 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(controller.deleteSession).toHaveBeenCalledWith({ resourceId: sessionId });
-    expect(runTeardownCommand).toHaveBeenCalledWith(
-      live,
-      '/workspace/hello',
-      'docker compose down --remove-orphans',
-      { timeoutMs: 15 * 60_000 },
-    );
+    expect(runTeardownCommand).toHaveBeenCalledWith(live, '/workspace/hello', 'docker compose down --remove-orphans', {
+      timeoutMs: 15 * 60_000,
+    });
     expect(invalidateSession).toHaveBeenCalledWith(sessionId);
     expect(tables.sessions).toHaveLength(0);
     // Deleted sessions destroy their VM — nothing resolves this id again.

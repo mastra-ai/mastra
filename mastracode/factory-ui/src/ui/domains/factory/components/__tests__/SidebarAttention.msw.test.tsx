@@ -15,18 +15,23 @@ import {
   type FactoryActivityAttentionItem,
   type FactoryAutomationFailedAttentionItem,
   type FactoryMentionAttentionItem,
+  type FactorySupervisorFindingAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
-import { SidebarAttention } from '../SidebarAttention';
+import { ATTENTION_PREVIEW_LIMIT, SidebarAttention } from '../SidebarAttention';
 
 const FACTORY_ID = 'factory-1';
 const DECISION_ID = 'decision-1';
 const SOUND_STORAGE_KEY = 'mastracode.attentionNotified.v2';
 const oscillatorStart = vi.fn();
 
+// The default done sound is the chime, which reaches for the whole node graph —
+// a stub short of one of these throws inside playDoneSound's silent catch and
+// the sound assertions go quiet without saying why.
 class AudioContextStub {
   state = 'running';
   currentTime = 0;
+  sampleRate = 8000;
   destination = {};
 
   resume = vi.fn();
@@ -44,11 +49,29 @@ class AudioContextStub {
   createGain() {
     return {
       gain: {
+        value: 0,
         setValueAtTime: vi.fn(),
         exponentialRampToValueAtTime: vi.fn(),
       },
       connect: vi.fn(),
     };
+  }
+
+  createWaveShaper() {
+    return { curve: null, oversample: 'none', connect: vi.fn() };
+  }
+
+  createBiquadFilter() {
+    return { type: 'lowpass', frequency: { value: 0 }, connect: vi.fn() };
+  }
+
+  createConvolver() {
+    return { normalize: true, buffer: null, connect: vi.fn() };
+  }
+
+  createBuffer(numberOfChannels: number, length: number) {
+    const channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
+    return { numberOfChannels, getChannelData: (channel: number) => channels[channel]! };
   }
 }
 
@@ -68,6 +91,26 @@ function attentionItem(occurrence = 1): FactoryAutomationFailedAttentionItem {
     read: false,
     target: { kind: 'thread', sessionId: 'session-attention', threadId: 'thread-attention' },
     archived: false,
+  };
+}
+
+function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:supervisor-finding:decision-stuck:${DECISION_ID}:0`,
+    kind: 'supervisor-finding',
+    findingKey: `decision-stuck:${DECISION_ID}`,
+    findingTitle: 'A decision is stuck',
+    evidence: 'The decision has been retrying past its backoff.',
+    ageMs: 15 * 60_000,
+    suggestedRepair: { action: 'retry-decision', decisionId: DECISION_ID },
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'A decision is stuck',
+    detail: 'The decision has been retrying past its backoff.',
+    occurredAt: '2026-09-03T05:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
   };
 }
 
@@ -257,8 +300,10 @@ describe('Sidebar attention', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Needs attention' })).toBeInTheDocument());
   });
 
-  it('does not sound when an old item enters the five-row preview', async () => {
-    const items = Array.from({ length: 6 }, (_, index) => {
+  it('does not sound when an old item enters the preview', async () => {
+    const total = ATTENTION_PREVIEW_LIMIT + 1;
+    const beyond = `Failure ${ATTENTION_PREVIEW_LIMIT}`;
+    const items = Array.from({ length: total }, (_, index) => {
       const decisionId = `decision-${index}`;
       return {
         ...attentionItem(),
@@ -271,16 +316,20 @@ describe('Sidebar attention', () => {
     const user = userEvent.setup();
     renderAttention();
 
-    const trigger = await screen.findByRole('button', { name: 'Needs attention, 6 unread, 6 open' });
+    const trigger = await screen.findByRole('button', {
+      name: `Needs attention, ${total} unread, ${total} open`,
+    });
     await user.click(trigger);
     await screen.findByText('Failure 0');
-    expect(screen.queryByText('Failure 5')).not.toBeInTheDocument();
+    expect(screen.queryByText(beyond)).not.toBeInTheDocument();
     expect(oscillatorStart).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Archive Failure 0' }));
 
-    expect(await screen.findByText('Failure 5')).toBeVisible();
-    await screen.findByRole('button', { name: 'Needs attention, 5 unread, 5 open' });
+    expect(await screen.findByText(beyond)).toBeVisible();
+    await screen.findByRole('button', {
+      name: `Needs attention, ${ATTENTION_PREVIEW_LIMIT} unread, ${ATTENTION_PREVIEW_LIMIT} open`,
+    });
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
   it('plays a new failure occurrence only after the initial baseline', async () => {
@@ -331,7 +380,7 @@ describe('Sidebar attention', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
 
-    expect(await screen.findByText(/Rita mentioned you/)).toBeVisible();
+    expect(await screen.findByText('mention')).toBeVisible();
     expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View card for Fix the loader' })).toHaveAttribute(
       'href',
@@ -343,6 +392,23 @@ describe('Sidebar attention', () => {
 
     expect(api.receipts).toEqual(['mention/comment-1/0/read']);
     await screen.findByRole('button', { name: 'Needs attention, 1 open' });
+  });
+
+  it('surfaces a supervisor finding in the badge and routes its receipt through the finding key', async () => {
+    const api = stubAttention([supervisorFindingItem()]);
+    const user = userEvent.setup();
+    const { client } = renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(await screen.findByText('finding')).toBeVisible();
+    expect(screen.getByText('The decision has been retrying past its backoff.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Mark A decision is stuck as read' }));
+    await waitForMutationsIdle(client);
+
+    expect(api.receipts).toEqual([`supervisor-finding/decision-stuck:${DECISION_ID}/0/read`]);
   });
 
   it('does not offer Retry for a deterministic failure', async () => {
@@ -363,9 +429,11 @@ describe('Sidebar attention', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Needs attention, 12 waiting for approval, 12 open' }));
 
-    expect(screen.getByRole('link', { name: /12 items waiting for approval/i })).toHaveAttribute(
+    expect(screen.getByText('waiting for approval')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /items waiting for approval/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/rules?group=proposed`,
+      `/factories/${FACTORY_ID}/attention`,
     );
     expect(screen.queryByRole('button', { name: /mark/i })).not.toBeInTheDocument();
   });

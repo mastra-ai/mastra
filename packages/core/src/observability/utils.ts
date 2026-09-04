@@ -133,9 +133,11 @@ export function resolveExportedSpanId(
 export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, resumedFromSpanId, ...rest } = options;
 
+  // tracingOptions.metadata takes precedence, but a key it merely names with
+  // an `undefined` value must not erase the span's own metadata value.
   const metadata = {
     ...(rest.metadata ?? {}),
-    ...(tracingOptions?.metadata ?? {}),
+    ...Object.fromEntries(Object.entries(tracingOptions?.metadata ?? {}).filter(([, value]) => value !== undefined)),
   };
 
   // If we have a current span, create a child span
