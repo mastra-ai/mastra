@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { reconcileGithubAcceptanceLabels } from './acceptance-labels.js';
 import type { GithubIntegration } from './integration.js';
 
