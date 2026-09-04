@@ -13,6 +13,8 @@ import type { Context, Hono } from 'hono';
 import type { RouteAuth } from './routes/route.js';
 import { timedAboveThreshold } from './timing.js';
 
+const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
+
 /**
  * Provider-neutral factory auth gating for the MastraCode web server.
  *
@@ -53,6 +55,8 @@ export interface FactoryAuthUser {
    * isolated building instances. Absent for personal (no-org) accounts.
    */
   organizationId?: string;
+  /** Organization ids proven by the provider's authenticated membership response. */
+  organizationMembershipIds?: string[];
 }
 
 /**
@@ -216,10 +220,23 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     name?: unknown;
     avatarUrl?: unknown;
     organizationId?: unknown;
+    memberships?: unknown;
+    memberOrgIds?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
   const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
   if (!id && !workosId) return null;
+  const membershipOrganizationIds = Array.isArray(flat.memberships)
+    ? flat.memberships.flatMap(membership => {
+        if (!membership || typeof membership !== 'object') return [];
+        const organizationId = (membership as { organizationId?: unknown }).organizationId;
+        return typeof organizationId === 'string' ? [organizationId] : [];
+      })
+    : [];
+  const memberOrgIds = Array.isArray(flat.memberOrgIds)
+    ? flat.memberOrgIds.filter((organizationId): organizationId is string => typeof organizationId === 'string')
+    : [];
+  const organizationMembershipIds = [...new Set([...membershipOrganizationIds, ...memberOrgIds])];
   return {
     id,
     workosId,
@@ -227,6 +244,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     name: typeof flat.name === 'string' ? flat.name : undefined,
     avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
+    organizationMembershipIds,
   };
 }
 
@@ -266,6 +284,13 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   } catch {
     // Best-effort: the user stays no-org until a later request succeeds.
   }
+}
+
+function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
+  if (user.organizationId === requestedOrganizationId) return true;
+  if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
+  user.organizationId = requestedOrganizationId;
+  return true;
 }
 
 /**
@@ -793,9 +818,16 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     );
 
     if (user) {
-      // Bootstrap a personal org for no-org accounts so the org id resolves on
-      // this request (see ensureFactoryAuthUser for the rationale).
-      await ensureUserOrg(provider, user);
+      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+      if (requestedOrganizationId) {
+        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+          return c.json({ error: 'organization_forbidden' }, 403);
+        }
+      } else {
+        // Bootstrap a personal org for no-org accounts so the org id resolves on
+        // this request (see ensureFactoryAuthUser for the rationale).
+        await ensureUserOrg(provider, user);
+      }
       c.set(FACTORY_AUTH_USER_KEY, user);
       c.get('requestContext')?.set('user', user);
       return next();

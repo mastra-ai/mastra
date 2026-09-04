@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Added schema-backed Factory route contracts and deterministic CLI metadata generation so Factory automation clients stay aligned with the HTTP API.
+Added schema-backed Factory route contracts, deterministic CLI metadata generation, and validated organization selection for authenticated automation clients.
