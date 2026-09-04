@@ -180,6 +180,13 @@
 
   --wick-phase: 0s;
 
+  /* What a hot spot is made of, and how hard the pools push. On black, light is
+   * whiter than the hue it carries; on white there is no whiter, so the hot
+   * spots deepen instead and every pool has to push harder to be seen. */
+  --wick-hot: white;
+  --wick-lit: 1;
+  --wick-halo: 0.26;
+
   /* Each clock centred on zero and scaled by the drift: at rest every pool sits
    * at its base size in its base place, and the card is lit but still. */
   --wick-ka: calc((var(--wick-a) - 0.5) * var(--wick-drift));
@@ -192,49 +199,81 @@
     radial-gradient(
       ellipse calc(30% * (1 + 0.5 * var(--wick-ka))) calc(11% * (1 + 0.4 * var(--wick-ka))) at
         calc(27% + var(--wick-ka) * 58px) 0%,
-      color-mix(in oklab, color-mix(in oklab, white 62%, var(--belt-hue)) 92%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 62%, var(--belt-hue)) calc(92% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(26% * (1 + 0.5 * var(--wick-kb))) calc(8% * (1 + 0.4 * var(--wick-kb))) at
         calc(72% + var(--wick-kb) * 52px) 0%,
-      color-mix(in oklab, color-mix(in oklab, white 45%, var(--belt-hue)) 62%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 45%, var(--belt-hue)) calc(62% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(26% * (1 + 0.4 * var(--wick-kc))) at 100%
         calc(34% + var(--wick-kc) * 44px),
-      color-mix(in oklab, color-mix(in oklab, white 55%, var(--belt-hue)) 82%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 55%, var(--belt-hue)) calc(82% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(6% * (1 + 0.5 * var(--wick-ka))) calc(20% * (1 + 0.4 * var(--wick-ka))) at 100%
         calc(74% + var(--wick-ka) * 38px),
-      color-mix(in oklab, color-mix(in oklab, white 40%, var(--belt-hue)) 58%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 40%, var(--belt-hue)) calc(58% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(31% * (1 + 0.5 * var(--wick-kb))) calc(9% * (1 + 0.4 * var(--wick-kb))) at
         calc(66% + var(--wick-kb) * 58px) 100%,
-      color-mix(in oklab, color-mix(in oklab, white 58%, var(--belt-hue)) 88%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 58%, var(--belt-hue)) calc(88% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(22% * (1 + 0.5 * var(--wick-kc))) calc(7% * (1 + 0.4 * var(--wick-kc))) at
         calc(24% + var(--wick-kc) * 48px) 100%,
-      color-mix(in oklab, color-mix(in oklab, white 42%, var(--belt-hue)) 55%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 42%, var(--belt-hue)) calc(55% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(7% * (1 + 0.5 * var(--wick-kc))) calc(23% * (1 + 0.4 * var(--wick-kc))) at 0%
         calc(62% + var(--wick-kc) * 42px),
-      color-mix(in oklab, color-mix(in oklab, white 50%, var(--belt-hue)) 78%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 50%, var(--belt-hue)) calc(78% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     ),
     radial-gradient(
       ellipse calc(6% * (1 + 0.5 * var(--wick-kb))) calc(17% * (1 + 0.4 * var(--wick-kb))) at 0%
         calc(28% + var(--wick-kb) * 38px),
-      color-mix(in oklab, color-mix(in oklab, white 38%, var(--belt-hue)) 52%, transparent),
+      color-mix(
+        in oklab,
+        color-mix(in oklab, var(--wick-hot) 38%, var(--belt-hue)) calc(52% * var(--wick-lit)),
+        transparent
+      ),
       transparent
     );
 
@@ -275,7 +314,9 @@
   padding: 1px;
   background:
     var(--wick-beam),
-    linear-gradient(color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62%), transparent) 0 0),
+    linear-gradient(
+      color-mix(in oklab, var(--belt-hue) calc(var(--wick-fill) * 62% * var(--wick-lit)), transparent) 0 0
+    ),
     linear-gradient(color-mix(in oklab, var(--border1) 50%, transparent) 0 0);
   mask:
     linear-gradient(#000 0 0) content-box,
@@ -291,8 +332,17 @@
   inset: -6px;
   border-radius: inherit;
   background: var(--wick-beam);
-  opacity: 0.26;
+  opacity: var(--wick-halo);
   filter: blur(9px);
+}
+
+/* Light mode: the pools deepen into the hue instead of whitening out of it, and
+ * they push about a quarter harder — a tint that reads as light on black reads
+ * as haze on white. */
+html.light .session-wick {
+  --wick-hot: color-mix(in oklab, black 30%, var(--belt-hue));
+  --wick-lit: 1.15;
+  --wick-halo: 0.16;
 }
 
 /* Cards mount together, so a board would breathe in one voice. Four phases dealt
