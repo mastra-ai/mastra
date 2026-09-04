@@ -24,12 +24,14 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
+import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadAside } from '@/domains/conversation/components/thread-aside';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { cleanProviderId } from '@/domains/llm/utils';
 import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
@@ -127,102 +129,113 @@ function AgentThread() {
     }
   };
 
+  // This page lives outside AgentLayout, so it must provide the model selection
+  // context itself or the composer model switcher never renders.
+  const defaultProvider = cleanProviderId(agent.provider ?? '');
+  const defaultModel = agent.modelId ?? '';
+
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
-            <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
-              <BrowserSessionProvider
-                key={`session-${agentId}-${actualThreadId}`}
-                agentId={agentId!}
-                threadId={actualThreadId}
-                enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
-              >
-                <ThreadInputProvider>
-                  <ObservationalMemoryProvider>
-                    <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
-                      <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                        <MainSidebarProvider storageKey="agent-thread">
-                          <div className="bg-surface1 h-full lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
-                            <ThreadSidebar
-                              agentId={agentId!}
-                              agentName={agent.name}
-                              threads={sidebarThreads}
-                              threadId={actualThreadId}
-                              isLoading={isThreadsLoading}
-                            />
-                            <div key={actualThreadId} className="relative min-h-0">
-                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
-                                <Header>
-                                  <HeaderTitle>Thread</HeaderTitle>
-                                  {/* "new" is not a stored thread yet, so there is nothing to trace. */}
-                                  {!isNewThread && (
-                                    <HeaderAction>
-                                      {!isAdvancedVariant && (
-                                        <Button
-                                          variant="outline"
-                                          className="hidden lg:inline-flex"
-                                          onClick={() => setTracesAside(tracesAside === 'open' ? 'closing' : 'open')}
-                                        >
-                                          <ChartNoAxesGantt />
-                                          Traces
-                                        </Button>
-                                      )}
-                                      <Switch
-                                        id="thread-advanced-view"
-                                        checked={isAdvancedVariant}
-                                        onCheckedChange={setAdvancedVariant}
+          <PlaygroundModelProvider
+            key={`${agentId}:${defaultProvider}/${defaultModel}`}
+            defaultProvider={defaultProvider}
+            defaultModel={defaultModel}
+          >
+            <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
+              <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+                <BrowserSessionProvider
+                  key={`session-${agentId}-${actualThreadId}`}
+                  agentId={agentId!}
+                  threadId={actualThreadId}
+                  enabled={Boolean(agent?.hasBrowser ?? agent?.browserTools?.length)}
+                >
+                  <ThreadInputProvider>
+                    <ObservationalMemoryProvider>
+                      <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
+                        <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                          <MainSidebarProvider storageKey="agent-thread">
+                            <div className="bg-surface1 h-full lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]">
+                              <ThreadSidebar
+                                agentId={agentId!}
+                                agentName={agent.name}
+                                threads={sidebarThreads}
+                                threadId={actualThreadId}
+                                isLoading={isThreadsLoading}
+                              />
+                              <div key={actualThreadId} className="relative min-h-0">
+                                <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                                  <Header>
+                                    <HeaderTitle>Thread</HeaderTitle>
+                                    {/* "new" is not a stored thread yet, so there is nothing to trace. */}
+                                    {!isNewThread && (
+                                      <HeaderAction>
+                                        {!isAdvancedVariant && (
+                                          <Button
+                                            variant="outline"
+                                            className="hidden lg:inline-flex"
+                                            onClick={() => setTracesAside(tracesAside === 'open' ? 'closing' : 'open')}
+                                          >
+                                            <ChartNoAxesGantt />
+                                            Traces
+                                          </Button>
+                                        )}
+                                        <Switch
+                                          id="thread-advanced-view"
+                                          checked={isAdvancedVariant}
+                                          onCheckedChange={setAdvancedVariant}
+                                        />
+                                        <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
+                                          Advanced view
+                                        </label>
+                                      </HeaderAction>
+                                    )}
+                                  </Header>
+                                  <div
+                                    className={cn(
+                                      'relative grid min-h-0 flex-1',
+                                      // The advanced view manages its own scroll container.
+                                      !isAdvancedVariant && 'overflow-y-auto pt-6',
+                                    )}
+                                  >
+                                    {isAdvancedVariant ? (
+                                      <ThreadViewByTrace threadId={actualThreadId} />
+                                    ) : (
+                                      <AgentChat
+                                        agentId={agentId!}
+                                        agentName={agent?.name}
+                                        modelVersion={agent?.modelVersion}
+                                        supportsMemory={agent?.supportsMemory}
+                                        threadId={actualThreadId}
+                                        memory={hasMemory}
+                                        refreshThreadList={handleRefreshThreadList}
+                                        modelList={agent?.modelList}
+                                        messageId={messageId}
+                                        suggestedPrompts={suggestedPrompts}
+                                        isNewThread={isNewThread}
                                       />
-                                      <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
-                                        Advanced view
-                                      </label>
-                                    </HeaderAction>
-                                  )}
-                                </Header>
-                                <div
-                                  className={cn(
-                                    'relative grid min-h-0 flex-1',
-                                    // The advanced view manages its own scroll container.
-                                    !isAdvancedVariant && 'overflow-y-auto pt-6',
-                                  )}
-                                >
-                                  {isAdvancedVariant ? (
-                                    <ThreadViewByTrace threadId={actualThreadId} />
-                                  ) : (
-                                    <AgentChat
-                                      agentId={agentId!}
-                                      agentName={agent?.name}
-                                      modelVersion={agent?.modelVersion}
-                                      supportsMemory={agent?.supportsMemory}
-                                      threadId={actualThreadId}
-                                      memory={hasMemory}
-                                      refreshThreadList={handleRefreshThreadList}
-                                      modelList={agent?.modelList}
-                                      messageId={messageId}
-                                      suggestedPrompts={suggestedPrompts}
-                                      isNewThread={isNewThread}
-                                    />
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
+                                {!isNewThread && !isAdvancedVariant && tracesAside !== 'closed' && (
+                                  <ThreadTracesAside
+                                    threadId={actualThreadId}
+                                    state={tracesAside}
+                                    onStateChange={setTracesAside}
+                                  />
+                                )}
                               </div>
-                              {!isNewThread && !isAdvancedVariant && tracesAside !== 'closed' && (
-                                <ThreadTracesAside
-                                  threadId={actualThreadId}
-                                  state={tracesAside}
-                                  onStateChange={setTracesAside}
-                                />
-                              )}
                             </div>
-                          </div>
-                        </MainSidebarProvider>
-                      </ActivatedSkillsProvider>
-                    </MemoryTimelineProvider>
-                  </ObservationalMemoryProvider>
-                </ThreadInputProvider>
-              </BrowserSessionProvider>
-            </BrowserToolCallsProvider>
-          </WorkingMemoryProvider>
+                          </MainSidebarProvider>
+                        </ActivatedSkillsProvider>
+                      </MemoryTimelineProvider>
+                    </ObservationalMemoryProvider>
+                  </ThreadInputProvider>
+                </BrowserSessionProvider>
+              </BrowserToolCallsProvider>
+            </WorkingMemoryProvider>
+          </PlaygroundModelProvider>
         </SchemaRequestContextProvider>
       </AgentSettingsProvider>
     </TracingSettingsProvider>

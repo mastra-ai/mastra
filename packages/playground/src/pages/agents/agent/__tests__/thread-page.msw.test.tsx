@@ -74,7 +74,7 @@ const agentResponse = {
   tools: {},
   workflows: {},
   provider: 'openai',
-  modelId: 'openai/gpt-5-mini',
+  modelId: 'gpt-5-mini',
   modelVersion: 'v2',
   supportsMemory: true,
   defaultOptions: {},
@@ -126,6 +126,17 @@ function installHandlers() {
     ),
     http.get(`${BASE_URL}/api/observability/traces/light`, emptyTraces),
     http.get(`${BASE_URL}/api/observability/traces`, emptyTraces),
+    http.get(`${BASE_URL}/api/agents/providers`, () =>
+      HttpResponse.json({
+        providers: [
+          { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-5-mini'] },
+        ],
+      }),
+    ),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+      HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+    ),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
   );
 }
 
@@ -142,6 +153,17 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     expect(await screen.findByText('Tonight we cook carbonara.')).not.toBeNull();
+  });
+
+  it('renders the composer model switcher with the agent model', async () => {
+    installHandlers();
+    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+    await screen.findByText('Tonight we cook carbonara.');
+    // Provider + model pill (needs PlaygroundModelProvider, which this page must supply itself).
+    expect(await screen.findByText('OpenAI')).not.toBeNull();
+    expect(await screen.findByText('gpt-5-mini')).not.toBeNull();
+    expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
   it('shows the thread list next to the chat', async () => {
