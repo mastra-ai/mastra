@@ -419,6 +419,7 @@ describe('FactoryTransitionService', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       stage: 'done',
+      revision: expect.any(Number),
     });
   });
 

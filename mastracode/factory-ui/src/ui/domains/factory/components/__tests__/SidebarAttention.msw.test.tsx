@@ -16,6 +16,7 @@ import {
   type FactoryAutomationFailedAttentionItem,
   type FactoryAutomationProposedAttentionItem,
   type FactoryMentionAttentionItem,
+  type FactorySupervisorFindingAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
 import { ATTENTION_PREVIEW_LIMIT } from '../../../../../hooks/useFactoryAttention';
@@ -107,6 +108,26 @@ function proposedItem(): FactoryAutomationProposedAttentionItem {
     detail: 'Waiting for approval to run review',
     decisionType: 'invokeSkill',
     occurredAt: '2026-08-20T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
+  };
+}
+
+function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:supervisor-finding:decision-stuck:${DECISION_ID}:0`,
+    kind: 'supervisor-finding',
+    findingKey: `decision-stuck:${DECISION_ID}`,
+    findingTitle: 'A decision is stuck',
+    evidence: 'The decision has been retrying past its backoff.',
+    ageMs: 15 * 60_000,
+    suggestedRepair: { action: 'retry-decision', decisionId: DECISION_ID },
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'A decision is stuck',
+    detail: 'The decision has been retrying past its backoff.',
+    occurredAt: '2026-09-03T05:00:00.000Z',
     read: false,
     archived: false,
     target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
@@ -396,6 +417,23 @@ describe('Sidebar attention', () => {
 
     expect(api.receipts).toEqual(['mention/comment-1/0/read']);
     await screen.findByRole('button', { name: 'Needs attention, 1 open' });
+  });
+
+  it('surfaces a supervisor finding in the badge and routes its receipt through the finding key', async () => {
+    const api = stubAttention([supervisorFindingItem()]);
+    const user = userEvent.setup();
+    const { client } = renderAttention();
+
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+
+    expect(await screen.findByText('finding')).toBeVisible();
+    expect(screen.getByText('The decision has been retrying past its backoff.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Mark A decision is stuck as read' }));
+    await waitForMutationsIdle(client);
+
+    expect(api.receipts).toEqual([`supervisor-finding/decision-stuck:${DECISION_ID}/0/read`]);
   });
 
   it('does not offer Retry for a deterministic failure', async () => {

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
@@ -61,6 +62,20 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+const projectRouteOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof projectRoutesModule.ProjectRoutes>[0]>,
+);
+vi.mock('./routes/projects', async importOriginal => {
+  const actual = await importOriginal<typeof projectRoutesModule>();
+  class TrackedProjectRoutes extends actual.ProjectRoutes {
+    constructor(options: ConstructorParameters<typeof actual.ProjectRoutes>[0]) {
+      super(options);
+      projectRouteOptions.push(options);
+    }
+  }
+  return { ...actual, ProjectRoutes: TrackedProjectRoutes };
+});
 
 // Track what the factory actually wires as the terminal-stage hook: the
 // cleanup must be constructed by production code (not just by its own unit
@@ -836,6 +851,43 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' }), fakeIntegration({ id: 'custom' })],
     });
     await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
+  });
+
+  it('sanitizes an invalid GitHub default branch when resolving a selected repository', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const sourceControlStorage = {
+      installations: { get: vi.fn(async () => installation) },
+      repositories: {
+        upsert: vi.fn(async ({ input }: { input: { defaultBranch: string } }) => input),
+      },
+    };
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage,
+      listInstallationRepos: vi.fn(async () => [
+        {
+          id: 456,
+          fullName: 'acme/api',
+          name: 'api',
+          owner: 'acme',
+          defaultBranch: 'invalid branch',
+          private: false,
+        },
+      ]),
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const repository = await resolveRepository?.({
+      integrationId: 'github',
+      orgId: 'org-1',
+      installationId: installation.id,
+      externalId: '456',
+      slug: 'acme/api',
+    });
+
+    expect(repository?.defaultBranch).toBe('main');
   });
 
   it('initializes version-control capabilities with integration-scoped storage', async () => {

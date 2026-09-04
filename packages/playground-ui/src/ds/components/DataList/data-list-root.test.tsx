@@ -23,8 +23,8 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
-  describe('default variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
-    it('leaves rows untinted and separator-free when no variant is provided', () => {
+  describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+    it('frames the list and separates its uniform rows', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">
           <Header />
@@ -43,28 +43,34 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
+      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('bg-surface4');
+      expect(container.firstElementChild?.className).toContain('self-start');
+      expect(container.firstElementChild?.className).toContain('max-h-full');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).not.toContain('[&_.data-list-row]:after:');
+      expect(grid?.className).toContain('[&_.data-list-subheader+.data-list-row]:rounded-t-lg');
+      expect(grid?.className).toContain('[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg');
+      expect(grid?.className).not.toMatch(/border-|ring-/);
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
     });
 
-    it.each([
-      ['tinted', 'var(--surface-header)', 'var(--surface-header-hover)'],
-      ['surface', 'var(--surface2)', 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)'],
-      ['transparent', 'transparent', 'transparent'],
-    ])('paints a %s sticky header with its own colour', (background, resting, hover) => {
+    it('drops the panel background in the light variant but keeps the header opaque', () => {
       const { container } = render(
-        <DataList columns="1fr 1fr" stickyHeaderBackground={background as 'tinted' | 'surface' | 'transparent'}>
+        <DataList columns="1fr 1fr" variant="light">
           <Header />
         </DataList>,
       );
 
+      const root = container.firstElementChild as HTMLElement;
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(resting);
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(hover);
+      expect(root.className).not.toContain('bg-surface4');
+      expect(root.className).toContain('rounded-xl');
+      expect(root.getAttribute('variant')).toBeNull();
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface1)');
+      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
     });
 
-    it('paints a tinted sticky header unless the caller asks otherwise', () => {
+    it('only defines the background color on the root; sticky parts reuse it', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">
           <Header />
@@ -72,7 +78,14 @@ describe('DataListRoot', () => {
       );
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--surface-header)');
+      expect(grid?.style.getPropertyValue('--data-list-background')).toBe('var(--surface4)');
+      expect(grid?.className).toContain('[&_.data-list-top]:bg-(--data-list-background)');
+      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:bg-surface2');
+      expect(grid?.className).not.toMatch(/hover:bg-|focus-within\]:bg-/);
+      expect(grid?.className).not.toContain('surface-header');
+      expect(grid?.className).not.toContain('surface-overlay');
+      expect(grid?.style.getPropertyValue('--data-list-border')).toBe('');
+      expect(grid?.className).not.toMatch(/border-|ring-|--data-list-border/);
     });
 
     it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
@@ -163,11 +176,21 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('max-h-[inherit]');
+      // The root is a flex column clamped by max-height (flex, unlike grid `1fr`,
+      // shrinks items against the clamped size); the viewport is the shrinkable item
+      // so short lists stay compact and long ones scroll.
+      const root = scrollRef.current?.parentElement;
+      expect(root?.className).toContain('flex-col');
+      // Consumer max-height overrides the default `max-h-full`.
+      expect(root?.className).toContain('max-h-80');
+      expect(root?.className).not.toContain('max-h-full');
+      expect(root?.className).not.toContain('size-full');
+      expect(scrollRef.current?.className).toContain('min-h-0');
+      expect(scrollRef.current?.className).toContain('flex-1');
     });
   });
 
-  describe('variants — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+  describe('ScrollArea ownership', () => {
     it('wraps the grid in a ScrollArea, which owns scrolling', () => {
       const { container } = render(
         <DataList columns="1fr 1fr">
@@ -182,19 +205,6 @@ describe('DataListRoot', () => {
       // the ScrollArea viewport owns scrolling, so the grid doesn't
       expect(grid?.className).not.toContain('overflow-auto');
       expect(grid?.className).toContain('gap-y-px');
-    });
-
-    it('zebra-tints alternating rows in `striped` only', () => {
-      const zebra = '[&_.data-list-row]:even:bg-surface-overlay-soft';
-      const renderGrid = (variant: 'plain' | 'striped') =>
-        render(
-          <DataList columns="1fr 1fr" variant={variant}>
-            <Header />
-          </DataList>,
-        ).container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-
-      expect(renderGrid('striped')?.className).toContain(zebra);
-      expect(renderGrid('plain')?.className).not.toContain(zebra);
     });
   });
 
@@ -277,7 +287,7 @@ describe('DataListRoot', () => {
   });
 
   describe('per-row error variant', () => {
-    it('applies a destructive tint to error rows and nothing to default rows', () => {
+    it('exposes the error tone as data-variant without painting a color', () => {
       const { container } = render(
         <DataList columns="1fr">
           <DataList.RowButton variant="error">
@@ -289,23 +299,27 @@ describe('DataListRoot', () => {
         </DataList>,
       );
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
-      expect(errorRow.className).toContain('bg-notice-destructive/10');
-      expect(defaultRow.className).not.toContain('bg-notice-destructive');
+      expect(errorRow.dataset.variant).toBe('error');
+      expect(errorRow.className).toContain('bg-surface2');
+      expect(errorRow.className).toContain('data-[variant=error]:bg-notice-destructive/10');
+      expect(errorRow.className).toContain('hover:bg-surface3');
+      expect(errorRow.className).toContain('active:bg-surface4');
+      expect(errorRow.className).toContain('focus-visible:ring-accent1');
+      expect(defaultRow.dataset.variant).toBe('default');
     });
 
-    it('applies the selection fill as `!important` so it wins over borderless table styling', () => {
-      // Borderless table styling uses root descendant rules (higher specificity),
-      // so a plain `bg-surface4` would lose. The `!` keeps the selected row
-      // highlighted regardless of the root variant.
+    it('exposes featured rows as data-featured with the featured fill', () => {
       const { container } = render(
-        <DataList columns="1fr" variant="striped">
+        <DataList columns="1fr">
           <DataList.RowButton featured>
             <DataList.Cell>selected</DataList.Cell>
           </DataList.RowButton>
         </DataList>,
       );
       const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-      expect(row?.className).toContain('bg-surface-row-featured!');
+      expect(row?.dataset.featured).toBe('true');
+      expect(row?.className).toContain('bg-surface2');
+      expect(row?.className).toContain('data-featured:bg-surface3');
     });
 
     it('does not leak the variant prop onto the DOM element', () => {

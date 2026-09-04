@@ -154,7 +154,7 @@ export default function Experiments() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <ExperimentsToolbar
           search={search}

@@ -25,6 +25,7 @@ import {
 } from './fixtures/experiment-item-route';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ExperimentItemPage from '@/pages/experiments/experiment/item';
+import ReviewQueuePage from '@/pages/experiments/review-queue';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -56,6 +57,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
         element: <ExperimentPage />,
         children: [{ path: 'items/:itemId', element: <ExperimentItemPage /> }],
       },
+      { path: '/experiments/review-queue', element: <ReviewQueuePage /> },
     ],
     { initialEntries: [initialPath] },
   );
@@ -105,16 +107,20 @@ beforeEach(() => {
   );
 });
 
-const openResultsTab = async () => {
-  fireEvent.click(await screen.findByRole('tab', { name: 'Results' }));
-};
-
 describe('experiment item sub-route', () => {
+  describe('when the experiment page renders', () => {
+    it('shows results directly with no tabs', async () => {
+      renderExperimentRoute();
+
+      await screen.findByText('item-2');
+      expect(screen.queryByRole('tab')).toBeNull();
+    });
+  });
+
   describe('when the user clicks a dataset item in the results list', () => {
     it('navigates to /experiments/{experimentId}/items/{itemId}', async () => {
       const { router } = renderExperimentRoute();
 
-      await openResultsTab();
       fireEvent.click(await screen.findByText('item-2'));
 
       await waitFor(() => {
@@ -125,7 +131,6 @@ describe('experiment item sub-route', () => {
     it('opens the item detail panel as a dialog', async () => {
       renderExperimentRoute();
 
-      await openResultsTab();
       fireEvent.click(await screen.findByText('item-2'));
 
       const dialog = await screen.findByRole('dialog');
@@ -135,7 +140,6 @@ describe('experiment item sub-route', () => {
     it('closes the panel when the open item is clicked again', async () => {
       const { router } = renderExperimentRoute();
 
-      await openResultsTab();
       fireEvent.click(await screen.findByText('item-2'));
       await screen.findByRole('dialog');
 
@@ -153,7 +157,6 @@ describe('experiment item sub-route', () => {
     it('shows the selected count in the review action without a separate selection label', async () => {
       renderExperimentRoute();
 
-      await openResultsTab();
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
 
       expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
@@ -163,7 +166,6 @@ describe('experiment item sub-route', () => {
     it('only shows the selection actions once something is selected', async () => {
       renderExperimentRoute();
 
-      await openResultsTab();
       // Selecting is what reveals the actions, so no bulk-selection affordance is needed beforehand.
       expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
@@ -181,16 +183,6 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByText('item-1')).toBeDefined();
     });
 
-    it('shows the Results tab as active without user interaction', async () => {
-      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
-
-      await screen.findByRole('dialog');
-      const resultsTab = await screen.findByRole('tab', { name: 'Results' });
-      await waitFor(() => {
-        expect(resultsTab.getAttribute('aria-selected')).toBe('true');
-      });
-    });
-
     it('shows a not-found state for an unknown item id', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/does-not-exist`);
 
@@ -202,16 +194,16 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user opens a result trace and selects a span', () => {
-    it('shows trace feedback and anchor-span evaluations with badge counts', async () => {
+    it('shows trace feedback and anchor-span scores with badge counts', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
 
-      const evaluationsTab = await screen.findByRole('tab', { name: /evaluations \(1\)/i });
+      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
       const feedbackTab = screen.getByRole('tab', { name: /feedback \(1\)/i });
 
-      fireEvent.click(evaluationsTab);
+      fireEvent.click(scoresTab);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
 
       fireEvent.click(feedbackTab);
@@ -228,24 +220,24 @@ describe('experiment item sub-route', () => {
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
-      fireEvent.click(await screen.findByRole('tab', { name: /evaluations \(1\)/i }));
+      fireEvent.click(await screen.findByRole('tab', { name: /scores \(1\)/i }));
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
       expect(await screen.findByText('Matches the experiment result score')).toBeDefined();
     });
 
-    it('keeps the trace evaluations open when a trace score has no experiment score match', async () => {
+    it('keeps the trace scores open when a trace score has no experiment score match', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
-      const evaluationsTab = await screen.findByRole('tab', { name: /evaluations \(1\)/i });
-      fireEvent.click(evaluationsTab);
+      const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
+      fireEvent.click(scoresTab);
       fireEvent.click(await screen.findByRole('button', { name: /0\.9Experiment relevance/i }));
 
-      expect(evaluationsTab.getAttribute('aria-selected')).toBe('true');
+      expect(scoresTab.getAttribute('aria-selected')).toBe('true');
       expect(screen.queryByText('Matches the experiment result score')).toBeNull();
-      expect(screen.getByRole('tab', { name: /evaluations \(1\)/i })).toBeDefined();
+      expect(screen.getByRole('tab', { name: /scores \(1\)/i })).toBeDefined();
     });
 
     it('shows selected-span feedback and widens the route overlay', async () => {
@@ -394,7 +386,7 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user opens a needs-review result in review', () => {
-    it('closes the panel and shows the Reviews tab with the result featured via the URL', async () => {
+    it('closes the panel and lands on the Review Queue page with the result featured via the URL', async () => {
       const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
 
       const dialog = await screen.findByRole('dialog');
@@ -403,16 +395,11 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: /review/i }));
 
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe(`/experiments/${EXPERIMENT_ID}`);
-        expect(router.state.location.search).toBe('?review=res-3');
+        expect(router.state.location.pathname).toBe('/experiments/review-queue');
+        expect(router.state.location.search).toBe(`?experiment=${EXPERIMENT_ID}&review=res-3`);
       });
       const reviewDialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
       expect(reviewDialog.textContent).toContain('third question');
-
-      const reviewsTab = await screen.findByRole('tab', { name: /reviews/i });
-      await waitFor(() => {
-        expect(reviewsTab.getAttribute('aria-selected')).toBe('true');
-      });
     });
   });
 });

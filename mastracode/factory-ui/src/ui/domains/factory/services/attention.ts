@@ -1,3 +1,4 @@
+import type { FactoryHealthRepair } from '@mastra/factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
 import { requestJson } from './request';
@@ -52,13 +53,23 @@ export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
+export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionItemBase {
+  kind: 'supervisor-finding';
+  findingKey: string;
+  findingTitle: string;
+  evidence: string;
+  ageMs: number | null;
+  suggestedRepair: FactoryHealthRepair | null;
+}
+
 export type FactoryAttentionItem =
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
-  | FactoryActivityAttentionItem;
+  | FactoryActivityAttentionItem
+  | FactorySupervisorFindingAttentionItem;
 
-/** Only a comment carries an author; an automated run is nobody's message. */
+/** Automated attention items have no author; comment-driven tiers carry the person who wrote the comment. */
 export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
   return item.kind === 'mention' || item.kind === 'activity' ? item.authorName : undefined;
 }
@@ -72,6 +83,8 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
     case 'automation-failed':
     case 'automation-proposed':
       return item.decisionId;
+    case 'supervisor-finding':
+      return item.findingKey;
   }
 }
 

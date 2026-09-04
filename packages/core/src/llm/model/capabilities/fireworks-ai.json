@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
     "accounts/fireworks/models/glm-5p3-flash",
     "accounts/fireworks/models/inkling",
     "accounts/fireworks/models/kimi-k2p6",
@@ -12,6 +13,7 @@
   ],
   "temperature": [
     "accounts/fireworks/models/deepseek-v4-flash-0731",
+    "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
     "accounts/fireworks/models/deepseek-v4-pro-0813",
     "accounts/fireworks/models/glm-5p2",
     "accounts/fireworks/models/glm-5p3",
@@ -30,6 +32,7 @@
   ],
   "structuredOutput": [
     "accounts/fireworks/models/deepseek-v4-flash-0731",
+    "accounts/fireworks/models/deepseek-v4-flash-vision-exp",
     "accounts/fireworks/models/deepseek-v4-pro-0813",
     "accounts/fireworks/models/glm-5p3",
     "accounts/fireworks/models/glm-5p3-flash",

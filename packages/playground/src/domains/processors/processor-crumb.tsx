@@ -5,5 +5,5 @@ export function ProcessorCrumb() {
   const { processorId } = useParams<{ processorId: string }>();
   if (!processorId) return null;
 
-  return <ProcessorCombobox value={processorId} variant="ghost" />;
+  return <ProcessorCombobox value={processorId} variant="ghost" size="sm" />;
 }

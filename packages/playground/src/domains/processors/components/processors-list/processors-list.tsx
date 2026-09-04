@@ -37,7 +37,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto auto auto auto" variant="striped" scrollRef={containerRef}>
+    <EntityList columns="auto 1fr auto auto auto auto auto auto" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
