@@ -138,7 +138,7 @@ Processor methods don't all modify the same representation:
 - `processLLMRequest` changes only the prompt sent for that provider call. Use it for temporary provider-facing changes that shouldn't alter stored conversation history.
 - `processOutputStream` changes streamed chunks. Processor state can carry data across chunks and later output callbacks for the same request.
 - `processToolResult` runs before a raw tool result enters the message list, allowing validation or redaction before later model steps or persistence.
-- `processOutputResult` can change the final returned messages or metadata during finalization.
+- [`processOutputResult`](/reference/processors/processor-interface#processoutputresult) can change returned messages or metadata during finalization.
 
 ## How the loop decides to continue
 
@@ -156,7 +156,9 @@ These checks work together rather than forming a public, exhaustive internal ord
 
 ## Finalization
 
-A stop moves the run into finalization. `processOutputResult` runs once per request on the final assistant message, whether the run completes normally or the provider throws. Configured output processors run first, then auto-attached memory output processors run after them so message history can persist the final form. Observational Memory persists on its own hooks instead of relying on that auto-attached memory output processor. When finalization completes, `generate()` resolves or the stream closes.
+A stop moves the run into finalization. `processOutputResult` runs once per request on the completed result and messages, whether the run completes normally or the provider throws. Those messages may not include a final assistant response, such as when `maxSteps` ends on a tool call.
+
+Configured output processors run first, then auto-attached memory output processors run after them so message history can persist the final form. Observational Memory persists on its own hooks instead of relying on that auto-attached memory output processor. When finalization completes, `generate()` resolves or the stream closes.
 
 Finalization is separate from a model step. It operates on the result of the whole run rather than the response from one provider call.
 
