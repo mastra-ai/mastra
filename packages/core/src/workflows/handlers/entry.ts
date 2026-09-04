@@ -304,11 +304,16 @@ export async function executeEntry(
     // off the entry id and is shared across all single-step kinds.
     const stepId = getSingleStepEntryId(entry);
     const isResumedStep = resume?.steps?.includes(stepId) ?? false;
+    // On crash-restart the running snapshot preserved this step's own payload
+    // (pruneRunningHistory exempts active steps), while terminal predecessors may
+    // have had fields like messageListState pruned. Prefer the step's recorded
+    // payload over the predecessor's pruned output. See #22636.
+    const isRestartedActiveStep = Boolean(restart?.activeStepsPath?.[stepId]);
     if (!isResumedStep) {
       executionContext.stepExecutionPath?.push(stepId);
     }
     const stepPrevOutput = getResumeStepPrevOutput({
-      isResumedStep,
+      isResumedStep: isResumedStep || isRestartedActiveStep,
       stepId,
       stepResults,
       prevOutput,
