@@ -8,7 +8,12 @@ import type {
   WorkItemRow,
 } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { computeFactoryHealth, DEFAULT_HEALTH_THRESHOLDS, runFactoryHealthCheck } from './health.js';
+import {
+  computeFactoryHealth,
+  DEFAULT_HEALTH_THRESHOLDS,
+  decisionFailureCodeFromEvidence,
+  runFactoryHealthCheck,
+} from './health.js';
 
 const NOW = new Date('2026-09-03T12:00:00.000Z');
 const HOUR = 60 * 60_000;
@@ -158,6 +163,26 @@ describe('computeFactoryHealth', () => {
     expect(report.findings[0]!.evidence).toContain('invokeSkill (plan)');
     expect(report.findings[0]!.evidence).toContain('[session_unavailable]');
     expect(report.findings[0]!.evidence).toContain('No active Factory binding');
+    // The code reads back out of the evidence the same helper wrote, even
+    // when the error text itself contains a bracketed lookalike.
+    expect(decisionFailureCodeFromEvidence(report.findings[0]!.evidence)).toBe('session_unavailable');
+    const lookalike = computeFactoryHealth(
+      {
+        ...empty,
+        decisions: [
+          decision({
+            id: 'd-2',
+            status: 'failed',
+            attempts: 1,
+            failureCode: 'run_awaiting_input',
+            lastError: 'worker said [not_a_code]: nope',
+          }),
+        ],
+      },
+      NOW,
+    );
+    expect(decisionFailureCodeFromEvidence(lookalike.findings[0]!.evidence)).toBe('run_awaiting_input');
+    expect(decisionFailureCodeFromEvidence('Decision d (x) failed after 1 attempt(s) at t: boom')).toBeUndefined();
   });
 
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {

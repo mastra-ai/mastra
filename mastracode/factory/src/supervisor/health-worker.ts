@@ -2,7 +2,7 @@ import { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { FactorySupervisorFindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { runFactoryHealthCheck } from './health.js';
+import { decisionFailureCodeFromEvidence, runFactoryHealthCheck } from './health.js';
 import type { NotifySupervisorInput } from './notify.js';
 import { isSupervisorFindingVisibleToHumans } from './visibility.js';
 
@@ -145,7 +145,11 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
         ...(after ? { after } : {}),
       });
       for (const row of rows) {
-        const failureCode = findingText(row, 'failureCode');
+        const evidence = findingText(row, 'evidence');
+        const failureCode =
+          findingText(row, 'kind') === 'decision-failed' && evidence
+            ? decisionFailureCodeFromEvidence(evidence)
+            : undefined;
         try {
           await this.#notify({
             projectId: scope.factoryProjectId,
