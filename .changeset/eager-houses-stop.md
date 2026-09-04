@@ -2,8 +2,8 @@
 '@mastra/duckdb': minor
 ---
 
-Added DuckDB support for strictly typed feedback values and related feedback trace predicates.
+Added DuckDB support for filtering traces by related feedback.
 
 ```typescript
-where: { feedback: { some: { op: "eq", left: { path: "value" }, right: { literal: 3 } } } }
+where: { feedback: { some: { op: "eq", left: { path: "feedbackType" }, right: { literal: "rating" } } } }
 ```

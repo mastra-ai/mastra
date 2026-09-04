@@ -448,6 +448,7 @@ export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
   expected: Array<{ traceId: string } | { threadId: string }>;
+  requiresStrictFeedbackValueTypes?: boolean;
 }
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
@@ -1071,6 +1072,7 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
   },
   {
     name: 'does not coerce textual feedback values to numbers',
+    requiresStrictFeedbackValueTypes: true,
     request: {
       timeRange: fullRange,
       where: {

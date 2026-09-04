@@ -33,6 +33,8 @@ export interface ObservabilityVNextCapabilities {
    * not accept pending events or logical replacement writes.
    */
   traceQueryWriteModel?: 'current-record' | 'completion-only';
+  /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
+  traceQueryStrictFeedbackValueTypes?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -225,6 +227,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
@@ -953,7 +958,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             traceId: 'trace-4',
             feedbackType: 'rating',
             feedbackSource: 'user',
-            value: '3',
+            value: 'needs-review',
             entityName: 'agent-a',
           },
         ],

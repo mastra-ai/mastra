@@ -192,11 +192,10 @@ function compileFeedbackScalarPredicate(predicate: TrustedTraceQueryScalarPredic
   }
   if (predicate.field !== 'value') return compileScalarPredicate(predicate, FEEDBACK_FIELDS);
   if (predicate.type === 'presence') {
-    const present = `(s.valueString IS NOT NULL OR s.valueNumber IS NOT NULL OR s.value IS NOT NULL)`;
-    return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
+    return { sql: `s.value IS ${predicate.operator === 'exists' ? 'NOT ' : ''}NULL`, values: [] };
   }
   const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
-  const field = typeof sample === 'number' ? 's.valueNumber' : 's.valueString';
+  const field = typeof sample === 'number' ? 'TRY_CAST(s.value AS DOUBLE)' : 's.value';
   return compileScalarPredicate(predicate, { value: { sql: field, parameterType: 'scalar' } });
 }
 

@@ -177,7 +177,7 @@ describe('DuckDB advanced trace query', () => {
     expect(repeatedSpans.sql.match(/current_spans AS/g)).toHaveLength(1);
   });
 
-  it('compiles strict typed feedback relations and preserves legacy value presence', () => {
+  it('compiles feedback relations against the existing string value representation', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({
         where: {
@@ -206,9 +206,9 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql.match(/FROM current_feedback s/g)).toHaveLength(2);
     expect(compiled.sql).toContain('s.traceId IS NOT NULL');
     expect(compiled.sql).toContain('s.traceId = r.traceId');
-    expect(compiled.sql).toContain('s.valueNumber IS NOT NULL AND s.valueNumber < ?');
-    expect(compiled.sql).toContain('s.valueString IS NOT NULL AND s.valueString IN (?, ?)');
-    expect(compiled.sql).toContain('(s.valueString IS NOT NULL OR s.valueNumber IS NOT NULL OR s.value IS NOT NULL)');
+    expect(compiled.sql).toContain('TRY_CAST(s.value AS DOUBLE) IS NOT NULL AND TRY_CAST(s.value AS DOUBLE) < ?');
+    expect(compiled.sql).toContain('s.value IS NOT NULL AND s.value IN (?, ?)');
+    expect(compiled.sql).toContain('s.value IS NOT NULL');
     expect(compiled.sql).not.toContain("rating' OR TRUE --");
     expect(compiled.values).toContain("rating' OR TRUE --");
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
