@@ -604,9 +604,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             error &&
             typeof error === 'object' &&
             'res' in error &&
-            (error as { res?: unknown }).res instanceof Response
+            (error as { res?: unknown }).res instanceof globalThis.Response
           ) {
-            const structured = (error as { res: Response }).res;
+            const structured = (error as { res: globalThis.Response }).res;
             res.status(structured.status);
             structured.headers.forEach((value, key) => res.setHeader(key, value));
             res.send(Buffer.from(await structured.arrayBuffer()));
