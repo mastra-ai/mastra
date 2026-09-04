@@ -155,13 +155,15 @@ function TraceThreadRow({
   return (
     <div
       className={cn(
-        'group border-border1 grid grid-cols-[1fr_1fr] gap-4 border-b border-dashed px-4 py-4 transition-opacity hover:opacity-100',
+        'group grid grid-cols-[1fr_1fr] px-4 transition-opacity hover:opacity-100',
         isActive || showFeedback ? 'opacity-100' : 'opacity-50',
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
     >
-      <div className="relative flex min-h-[240px] min-w-0 flex-col gap-2">
+      {/* The messages column has no bottom border so consecutive turns read as one
+          continuous conversation; the vertical border separates it from the trace. */}
+      <div className="border-border1 relative flex min-h-[240px] min-w-0 flex-col gap-2 border-r py-4 pr-4">
         <div className="z-30 flex justify-end">
           <Button
             size="icon-sm"
@@ -185,8 +187,8 @@ function TraceThreadRow({
       </div>
       {/* The row height is driven by the messages column; the timeline is absolutely
           positioned so it fills that height and scrolls instead of stretching the row. */}
-      <div className="relative min-w-0">
-        <div className="absolute inset-0 overflow-y-auto">
+      <div className="border-border1 relative min-w-0 border-b border-dashed">
+        <div className="absolute inset-0 overflow-y-auto py-4 pl-4">
           <TraceTimeline
             hierarchicalSpans={hierarchicalSpans}
             selectedSpanId={selectedSpanId}
