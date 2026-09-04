@@ -1610,6 +1610,28 @@ export class DurableAgent<
   }
 
   /**
+   * Which workflow execution engine the durable agentic loop runs on.
+   * Subclasses override this (EventedAgent → 'evented').
+   * @internal
+   */
+  protected get workflowEngine(): 'default' | 'evented' {
+    return 'default';
+  }
+
+  /**
+   * Evented-engine runs execute via pubsub events consumed by in-process
+   * workers — without them `run.start()`/`resume()`/`restart()` never
+   * resolve (they wait on the `workflows-finish` topic). No-op on the
+   * default engine; idempotent on Mastra's side.
+   * @internal
+   */
+  protected async ensureEngineWorkersStarted(): Promise<void> {
+    if (this.workflowEngine === 'evented') {
+      await this.#mastra?.__ensureExecutionWorkersStarted();
+    }
+  }
+
+  /**
    * Execute the durable workflow.
    *
    * Subclasses override this method to customize how the workflow is executed:
@@ -1667,6 +1689,7 @@ export class DurableAgent<
   protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
     return createDurableAgenticWorkflow({
       maxSteps: this.#maxSteps,
+      engine: this.workflowEngine,
     });
   }
 
@@ -2371,6 +2394,7 @@ export class DurableAgent<
           });
         }
 
+        await this.ensureEngineWorkersStarted();
         const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
@@ -2615,6 +2639,7 @@ export class DurableAgent<
     const workflowExecution = this.#raceRecoveryLease(ready, recoveryLease)
       .then(async () => {
         recoveryLease.assertOwned();
+        await this.ensureEngineWorkersStarted();
         const run = await this.#raceRecoveryLease(
           workflow.createRun({ runId, resourceId, pubsub: recoveryPubsub }),
           recoveryLease,
@@ -3473,6 +3498,14 @@ export class DurableAgent<
           logger: this.#mastra.getLogger(),
           storage: this.#mastra.getStorage(),
         });
+        // Evented engine: the WorkflowEventProcessor resolves workflows by id
+        // from Mastra's registries, so the loop workflow must be discoverable
+        // there. Register it as an (unscoped) internal workflow — it's a
+        // per-agent singleton. Without this, every run's events would be
+        // unresolvable and the run would hang.
+        if (this.workflowEngine === 'evented') {
+          this.#mastra.__registerInternalWorkflow(this.#workflow);
+        }
       }
     }
     return this.#workflow;

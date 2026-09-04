@@ -52,11 +52,14 @@ createDurableAgentTestSuite({
       pubsub: sharedPubSub,
     });
 
-    // Wire up Mastra with storage for snapshot persistence (needed for resume)
+    // Wire up Mastra with storage for snapshot persistence (needed for resume).
+    // Pass the shared pubsub so the evented engine (which publishes via
+    // mastra.pubsub) and the agent/test listeners share one transport.
     if (config.needsStorage) {
       new Mastra({
         logger: false,
         storage: new MockStore(),
+        pubsub: sharedPubSub,
         agents: { [`${config.id}-${testId}`]: eventedAgent as any },
       });
     }

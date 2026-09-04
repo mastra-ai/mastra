@@ -70,6 +70,16 @@ export class EventedAgent<
   }
 
   /**
+   * EventedAgent runs the durable agentic loop on the evented execution
+   * engine (pubsub + WorkflowEventProcessor) instead of the default
+   * in-process engine.
+   * @internal
+   */
+  protected override get workflowEngine(): 'default' | 'evented' {
+    return 'evented';
+  }
+
+  /**
    * Execute the durable workflow using fire-and-forget pattern.
    *
    * Unlike DurableAgent which runs the workflow synchronously, EventedAgent starts
@@ -83,6 +93,11 @@ export class EventedAgent<
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     try {
       const workflow = this.getWorkflow();
+      // The evented engine executes via pubsub events consumed by in-process
+      // workers — without them `run.start()` never resolves (it waits on the
+      // `workflows-finish` topic). Idempotent; a no-op when the server has
+      // already booted the workers.
+      await this.ensureEngineWorkersStarted();
       // Populate the run row's resourceId column so storage-level resource
       // filters (listSuspendedRuns / listActiveRuns) can narrow the query.
       const memoryInfo = (

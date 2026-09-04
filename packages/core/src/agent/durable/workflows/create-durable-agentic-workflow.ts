@@ -6,7 +6,7 @@ import { createObservabilityContext, InternalSpans } from '../../../observabilit
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
-import { createWorkflow } from '../../../workflows/create';
+import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -44,6 +44,13 @@ import {
 export interface DurableAgenticWorkflowOptions {
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
+  /**
+   * Which workflow execution engine runs the loop. `'evented'` builds both
+   * the outer loop and the inner single-iteration workflow on the evented
+   * execution engine (pubsub + WorkflowEventProcessor); `'default'` (the
+   * default) uses the in-process default engine.
+   */
+  engine?: 'default' | 'evented';
 }
 
 /**
@@ -101,6 +108,11 @@ type IterationState = z.infer<typeof iterationStateSchema>;
 export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOptions) {
   const maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
 
+  // Engine selection: EventedAgent opts into the evented execution engine;
+  // DurableAgent stays on the default in-process engine.
+  const createEngineWorkflow: typeof createWorkflow =
+    options?.engine === 'evented' ? createEventedWorkflow : createWorkflow;
+
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
   const llmExecutionStep = createDurableLLMExecutionStep();
 
@@ -132,7 +144,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // (see resolveDurableToolCallConcurrency) — approval/suspend flows force
   // sequential execution; otherwise the run's `toolCallConcurrency` applies.
   // The workflow is created once at startup and reused for all runs.
-  const singleIterationWorkflow = createWorkflow({
+  const singleIterationWorkflow = createEngineWorkflow({
     id: DurableStepIds.AGENTIC_EXECUTION,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
@@ -283,7 +295,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
   // Create the main agentic loop workflow with dowhile
   return (
-    createWorkflow({
+    createEngineWorkflow({
       id: DurableStepIds.AGENTIC_LOOP,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
