@@ -183,7 +183,9 @@ export function decisionFailedFinding(
  * later re-ring from the stored row; the finding shape itself stays as is.
  */
 export function decisionFailureCodeFromEvidence(evidence: string): string | undefined {
-  return /\s\[([a-z_]+)\]: /.exec(evidence)?.[1];
+  // Anchored on the writer's fixed `attempt(s) at <ISO timestamp> [code]: `
+  // slot so bracketed text inside the error message can never pass as a code.
+  return /attempt\(s\) at \d{4}-\d{2}-\d{2}T[\d:.]+Z \[([a-z_]+)\]: /.exec(evidence)?.[1];
 }
 
 export function computeFactoryHealth(

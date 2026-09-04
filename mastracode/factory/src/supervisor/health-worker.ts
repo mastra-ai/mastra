@@ -155,7 +155,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
             projectId: scope.factoryProjectId,
             findingKey: row.findingKey,
             kind: findingText(row, 'kind') ?? 'unknown',
-            summary: findingText(row, 'evidence') ?? findingText(row, 'title') ?? row.findingKey,
+            summary: evidence ?? findingText(row, 'title') ?? row.findingKey,
             ...(failureCode ? { failureCode } : {}),
           });
           await this.#workItems.markSupervisorFindingNotified({
