@@ -17,9 +17,11 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
   readonly #workItems: WorkItemsStorage;
   readonly #intervalMs: number;
   readonly #notify: ((input: NotifySupervisorInput) => Promise<void>) | undefined;
-  readonly #attentionChanged: ((scope: { orgId: string; factoryProjectId: string }) => void) | undefined;
+  readonly #attentionChanged:
+    | ((scope: { orgId: string; factoryProjectId: string }) => Promise<void> | void)
+    | undefined;
   #running = false;
-  /** Per project, the instant of its last fully successful sweep: the backstop doorbell compares against it. */
+  /** Per (org, project), the instant of its last fully successful sweep: the backstop doorbell compares against it. */
   readonly #sweptAt = new Map<string, Date>();
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
@@ -34,9 +36,10 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
      * Announces that a project's Attention projection changed without a row
      * write: the force-surface backstop flips a hidden finding visible purely
      * by wall-clock age, and connected Attention streams stop polling, so the
-     * sweep rings the same doorbell storage writes do.
+     * sweep rings the same doorbell storage writes do. Awaited: a rejection
+     * fails the project's sweep so the crossing is announced again next time.
      */
-    attentionChanged?: (scope: { orgId: string; factoryProjectId: string }) => void;
+    attentionChanged?: (scope: { orgId: string; factoryProjectId: string }) => Promise<void> | void;
   }) {
     super();
     this.#projects = input.projects;
@@ -81,6 +84,9 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
   async #tick(): Promise<void> {
     const now = new Date();
     const projects = await this.#projects.listAll();
+    // Forget checkpoints for projects that no longer exist.
+    const live = new Set(projects.map(project => sweepKey(project.orgId, project.id)));
+    for (const key of this.#sweptAt.keys()) if (!live.has(key)) this.#sweptAt.delete(key);
     const concurrency = 4;
     let nextIndex = 0;
     const results = await Promise.allSettled(
@@ -103,12 +109,13 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
           // Rows that crossed the backstop since this project's last SUCCESSFUL
           // sweep are the ones no write announced. The checkpoint only advances
           // once the whole sweep for the project landed, so a crossing during a
-          // failed or abandoned tick still rings on the next good one. Before
-          // the first sweep it is "since forever": already-stale rows get one
-          // refresh after boot.
-          const since = this.#sweptAt.get(project.id) ?? new Date(0);
+          // failed or abandoned tick (including a rejected doorbell publish)
+          // still rings on the next good one. Before the first sweep it is
+          // "since forever": already-stale rows get one refresh after boot.
+          const key = sweepKey(project.orgId, project.id);
+          const since = this.#sweptAt.get(key) ?? new Date(0);
           await this.#announceForceSurfaced({ orgId: project.orgId, factoryProjectId: project.id }, since, now);
-          this.#sweptAt.set(project.id, now);
+          this.#sweptAt.set(key, now);
         }
       }),
     );
@@ -188,7 +195,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
         row => isSupervisorFindingVisibleToHumans(row, now) && !isSupervisorFindingVisibleToHumans(row, since),
       );
       if (crossed) {
-        this.#attentionChanged(scope);
+        await this.#attentionChanged(scope);
         return;
       }
       const last = rows.at(-1);
@@ -196,6 +203,10 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
       before = { occurredAt: last.updatedAt, id: last.id };
     }
   }
+}
+
+function sweepKey(orgId: string, factoryProjectId: string): string {
+  return `${orgId}\0${factoryProjectId}`;
 }
 
 function findingText(row: FactorySupervisorFindingRecord, key: string): string | undefined {

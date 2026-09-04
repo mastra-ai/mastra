@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactorySupervisorActionTools } from './action-tools.js';
@@ -76,24 +76,31 @@ describe('factory_escalate_finding', () => {
   it('reports an escalation that landed even when the audit write fails', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.workItems.syncSupervisorFindings({ ...SCOPE, findings: [finding('decision-failed:d1')], now: NOW });
+    const warn = vi.fn();
     const tools = createFactorySupervisorActionTools({
       scope: SCOPE,
       actor: { type: 'agent', id: 'agent:thread-1' },
       workItems: seed.workItems,
       audit: {
         record: async () => {
-          throw new Error('audit store down');
+          throw new Error('audit store down at postgres://secret');
         },
       },
+      logger: { warn },
       now: () => NOW,
     });
 
     const result = await execute<any>(tools.factory_escalate_finding, { findingKey: 'decision-failed:d1', note: 'n' });
 
     // The row is escalated (the human-visible effect) and the result says the
-    // audit did not land, so the supervisor neither retries nor believes it failed.
-    expect(result).toMatchObject({ status: 'escalated', audited: false });
-    expect(result.auditError).toContain('audit store down');
+    // audit did not land, so the supervisor neither retries nor believes it
+    // failed. The raw storage error goes to the log, not the model.
+    expect(result).toMatchObject({ status: 'escalated', audited: false, auditError: expect.any(String) });
+    expect(result.auditError).not.toContain('postgres');
+    expect(warn).toHaveBeenCalledWith(
+      'Factory supervisor escalation audit failed',
+      expect.objectContaining({ error: expect.stringContaining('postgres://secret') }),
+    );
     expect(await openRow(seed.workItems, 'decision-failed:d1')).toMatchObject({ status: 'escalated' });
   });
 

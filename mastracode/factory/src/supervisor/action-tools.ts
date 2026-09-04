@@ -21,6 +21,7 @@ interface SupervisorActionDependencies {
   actor: SupervisorActor;
   workItems: Pick<WorkItemsStorage, 'escalateSupervisorFinding'>;
   audit: Pick<AuditStorage, 'record'>;
+  logger?: { warn: (message: string, meta?: Record<string, unknown>) => void };
   now?: () => Date;
 }
 
@@ -66,20 +67,25 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         if (!finding) throw new Error('The finding is not open, no longer exists, or belongs to another factory.');
         // The escalation is the user-visible effect and has already landed.
         // An audit failure must not read as "escalation failed" (a retry
-        // would only rewrite the note), so both outcomes are reported.
-        let auditError: string | null = null;
+        // would only rewrite the note), so both outcomes are reported. The
+        // raw storage error stays out of the model-visible result.
+        let audited = true;
         try {
           await audit('factory.supervisor.finding_escalated', { type: 'supervisor_finding', id: findingKey }, { note });
         } catch (error) {
-          auditError = error instanceof Error ? error.message : String(error);
+          audited = false;
+          deps.logger?.warn('Factory supervisor escalation audit failed', {
+            findingKey,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
         return {
           findingKey,
           status: finding.status,
           escalatedAt: escalatedAt.toISOString(),
           note: finding.escalationNote,
-          audited: auditError === null,
-          ...(auditError ? { auditError: `Escalated, but recording the audit entry failed: ${auditError}` } : {}),
+          audited,
+          ...(audited ? {} : { auditError: 'Escalated, but recording the audit entry failed. Do not retry.' }),
         };
       },
     }),

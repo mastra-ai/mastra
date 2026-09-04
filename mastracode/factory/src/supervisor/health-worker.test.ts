@@ -357,5 +357,28 @@ describe('FactorySupervisorHealthWorker force-surface doorbell', () => {
       await fakeSweep(worker);
       expect(attentionChanged).toHaveBeenCalledTimes(1);
     });
+
+    it('rings again on the next sweep when the doorbell publish itself rejected', async () => {
+      await seedFailure(await seedWorkItem(), T0);
+      const attentionChanged = vi.fn().mockRejectedValueOnce(new Error('broker down')).mockResolvedValue(undefined);
+      const worker = new FactorySupervisorHealthWorker({
+        projects: seed.projects,
+        workItems: seed.workItems,
+        attentionChanged,
+      });
+      const deps = createDeps();
+      await worker.init(deps);
+      await fakeSweep(worker);
+      expect(attentionChanged).not.toHaveBeenCalled();
+
+      vi.setSystemTime(new Date(T0.getTime() + SUPERVISOR_ATTENTION_FORCE_SURFACE_MS + 1_000));
+      await fakeSweep(worker); // publish rejects: sweep fails, checkpoint stays
+      expect(attentionChanged).toHaveBeenCalledTimes(1);
+      expect(deps.logger.error).toHaveBeenCalled();
+      await fakeSweep(worker); // retried
+      expect(attentionChanged).toHaveBeenCalledTimes(2);
+      await fakeSweep(worker); // announced: silent from here
+      expect(attentionChanged).toHaveBeenCalledTimes(2);
+    });
   });
 });
