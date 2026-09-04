@@ -1,5 +1,6 @@
 import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from '../instances';
 import { SensitiveDataFilter } from './sensitive-data-filter';
@@ -444,6 +445,39 @@ describe('Tracing', () => {
         expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['problematicObject']).toBeUndefined();
       });
+
+      it('should redact sensitive fields in requestContext', () => {
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['apiToken'] });
+
+        const mockSpan = {
+          id: 'test-span-request-context',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: { agentId: 'agent-123' },
+          requestContext: {
+            apiToken: 'live-token', // Should be redacted
+            tenantId: 'tenant-1', // Should NOT be redacted
+            user: { id: 'user-1', apiToken: 'live-token' }, // Nested key should be redacted
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const requestContext = filtered!.requestContext as any;
+        expect(requestContext?.['apiToken']).toBe('[REDACTED]');
+        expect(requestContext?.['tenantId']).toBe('tenant-1');
+        expect(requestContext?.['user']?.['id']).toBe('user-1');
+        expect(requestContext?.['user']?.['apiToken']).toBe('[REDACTED]');
+      });
     });
 
     describe('indexed redaction style', () => {
@@ -611,6 +645,20 @@ describe('Tracing', () => {
         }
       });
 
+      it('should share tokens between requestContext and the other span fields', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', { attributes: { apiKey: 'sk-first' } });
+        span.requestContext = { apiKey: 'sk-first', user: { apiKey: 'sk-second' } };
+
+        const filtered = processor.process(span)!;
+
+        // The same value maps to the same token no matter which field carries it
+        expect((filtered.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((filtered.requestContext as any).apiKey).toBe('[APIKEY_1]');
+        expect((filtered.requestContext as any).user.apiKey).toBe('[APIKEY_2]');
+      });
+
       it('should fall back to the full redaction token once the per-trace value cap is reached', () => {
         const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
 
@@ -663,6 +711,39 @@ describe('Tracing', () => {
         // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
         expect((updatedSpan.attributes as any)?.['apiKey']).toBe('[REDACTED]');
+      });
+
+      it('should redact the request context snapshot captured on exported spans', () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'test-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter()],
+        });
+
+        const requestContext = new RequestContext();
+        requestContext.set('token', 'live-token');
+        requestContext.set('tenantId', 'tenant-1');
+        requestContext.set('user', { id: 'user-1', password: 'hunter2' });
+
+        const span = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'agent-123' },
+          requestContext,
+        });
+        span.end();
+
+        // The raw values never reach the exporter, on the start or the end event
+        for (const event of testExporter.events) {
+          const exported = event.exportedSpan.requestContext as any;
+          expect(exported?.['token']).toBe('[REDACTED]');
+          expect(exported?.['tenantId']).toBe('tenant-1');
+          expect(exported?.['user']?.['id']).toBe('user-1');
+          expect(exported?.['user']?.['password']).toBe('[REDACTED]');
+        }
+        expect(testExporter.events.length).toBeGreaterThan(0);
       });
     });
   });
