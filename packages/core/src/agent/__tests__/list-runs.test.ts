@@ -2,7 +2,10 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
+import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
+import { DurableStepIds } from '../durable/constants';
 
 function createAgent({ durable = false }: { durable?: boolean } = {}) {
   return new Agent({
@@ -39,8 +42,6 @@ describe('Agent.listRuns', () => {
       resourceId: 'resource-1',
       fromDate: undefined,
       toDate: undefined,
-      perPage: undefined,
-      page: undefined,
     });
     expect(result).toEqual({
       runs: [
@@ -84,8 +85,6 @@ describe('Agent.listRuns', () => {
       resourceId: undefined,
       fromDate,
       toDate,
-      perPage: 10,
-      page: 0,
     });
     expect(listSuspendedRuns).not.toHaveBeenCalled();
     expect(result).toEqual({ runs: [{ runId: 'running-run', status: 'running', updatedAt }], total: 1 });
@@ -188,6 +187,52 @@ describe('Agent.listRuns', () => {
       runs: [{ runId: 'run-3' }, { runId: 'run-2' }, { runId: 'run-1' }],
       total: 3,
     });
+  });
+
+  it('orders stored running rows by updatedAt and runId before pagination for both status selections', async () => {
+    const storage = new InMemoryStore();
+    const originalAgent = createAgent({ durable: true });
+    const mastra = new Mastra({ storage, agents: { testAgent: originalAgent } });
+    const agent = mastra.getAgent('testAgent');
+    const workflows = (await storage.getStore('workflows'))!;
+    for (const [runId, createdAt, updatedAt] of [
+      ['a', '2026-01-01', '2026-01-04'],
+      ['b', '2026-01-03', '2026-01-04'],
+      ['c', '2026-01-02', '2026-01-02'],
+    ] as const) {
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(updatedAt),
+        snapshot: {
+          runId,
+          status: 'running',
+          context: { input: { agentId: agent.id } },
+          value: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState,
+      });
+    }
+    for (const reference of [originalAgent, agent]) {
+      for (const status of ['running', undefined] as const) {
+        expect((await reference.listRuns({ status })).runs.map(run => run.runId)).toEqual(['a', 'b', 'c']);
+        expect(await reference.listRuns({ status, perPage: 1, page: 0 })).toMatchObject({
+          runs: [{ runId: 'a' }],
+          total: 3,
+        });
+        expect(await reference.listRuns({ status, perPage: 1, page: 1 })).toMatchObject({
+          runs: [{ runId: 'b' }],
+          total: 3,
+        });
+      }
+    }
   });
 
   it('validates pagination inputs', async () => {

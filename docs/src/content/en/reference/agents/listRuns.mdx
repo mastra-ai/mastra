@@ -112,7 +112,7 @@ const { runs } = await agent.listRuns({ status: 'running' })
 
 Returns `Promise<AgentListRunsResult>`. Duplicate `runId` values are removed before runs are ordered by `updatedAt` from newest to oldest. Runs with the same timestamp are ordered by `runId`. Pagination is applied last, and `total` is the number of matching runs before pagination.
 
-When `status` is set, pagination is forwarded to that status's storage query. When `status` is omitted, Mastra reads both result sets and removes duplicate run IDs. It then orders the combined results and applies pagination.
+The same ordering and pagination rules apply with or without a `status` filter. Storage reads use batches, but Mastra still scans all matching candidates to compute the total and ordering. Run summaries, including suspended tool payloads, remain in memory until pagination. A small `perPage` limits the response size, not the total query work. Use `resourceId` and date filters to narrow large listings.
 
 ```typescript
 interface AgentListRunsResult {
@@ -149,15 +149,31 @@ The same listing is available through the authenticated server route:
 GET /agents/:agentId/runs
 ```
 
-The route accepts `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` as query parameters. Request-context thread and resource values override client query values. Thread-scoped requests fail with `403` when ownership can't be verified.
+The route accepts `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` as query parameters. Request-context thread values override the query. Thread-scoped requests fail with `403` when ownership can't be verified.
 
-The route requires the `agents:read` permission. Suspended rows can contain model-supplied tool arguments and tool-defined suspend payloads, so when server auth is configured the listing is scoped to the authenticated caller:
+### Access control
 
-- If `mapUserToResourceId` maps the user to a resource, the listing is limited to that resource and any `resourceId` query value is ignored.
-- If the caller holds an admin permission (`*`, `agents:*`, or `agents:admin`), the listing is unrestricted and the `resourceId` query value is honored.
-- Otherwise the request fails with `403` because there is no resource to scope by.
+Both `/runs` and `/suspended-runs` require the `agents:read` permission. Suspended rows include tool arguments and suspend payloads, so authenticated callers follow these resource-scoping rules:
 
-Without server auth, the `resourceId` query value is used as provided.
+- Admin permissions (`*`, `agents:*`, or `agents:admin`) allow cross-resource listings, even if the caller has a mapped resource. The `resourceId` query value is honored. Omitting it lists across resources.
+- Other callers are limited to the resource set by `mapUserToResourceId`. Client-supplied `resourceId` values are ignored.
+- Authenticated callers without a mapped resource or an admin permission receive `403`. If server auth is configured but the request has no authenticated identity, the request is also denied.
+
+Without server auth or an authenticated identity, the request-context resource takes precedence over the query value, if set.
+
+When fine-grained authorization (FGA) is configured, resource ownership alone isn't enough. The server checks `memory:read` access for each stored thread before calculating the total and applying pagination. Admin resource bypass doesn't bypass thread FGA. Runs without a thread, with a missing thread, or with unavailable memory are excluded from resource-wide listings. Authorized runs retain their full payloads.
+
+### Version selection
+
+Use `agentVersionId` to select a stored agent configuration by version ID, or `agentVersionStatus=draft|published` to select its status. These parameters are mutually exclusive and take precedence over the request-context version selection. They don't filter snapshots by the version that created a run: discovery remains scoped to the agent ID and run filters.
+
+```http
+GET /agents/my-agent/runs?agentVersionStatus=draft&status=running
+```
+
+### Existing suspended-run clients
+
+`GET /agents/:agentId/suspended-runs` uses the same access rules. Clients that previously relied on authentication alone must also have `agents:read`. Configure `mapUserToResourceId` for user-facing clients instead of trusting a query-supplied resource. Reserve admin permissions for operators who need cross-resource listings.
 
 ## Client SDK
 

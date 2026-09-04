@@ -142,6 +142,10 @@ Results are scoped to the agent you call `listSuspendedRuns()` on because snapsh
 
 This method only returns runs waiting on input. Use [`listRuns()`](/reference/agents/listRuns) to list both suspended runs and durable runs with `status: 'running'`. Terminal snapshots are deleted when a run finishes. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/storage) configured. With the default in-memory store, snapshots are lost on restart.
 
+## HTTP access
+
+The corresponding `GET /agents/:agentId/suspended-runs` route requires `agents:read` and a server-mapped resource for authenticated non-admin callers. Thread-level authorization also applies when fine-grained authorization (FGA) is configured. These checks apply to the HTTP route, not direct calls to the core method. See [run-list access control](/reference/agents/listRuns#access-control) and [migration guidance for existing clients](/reference/agents/listRuns#existing-suspended-run-clients).
+
 ## Related
 
 - [Agent approval](/docs/agents/human-in-the-loop)

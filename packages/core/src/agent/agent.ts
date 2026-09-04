@@ -8255,56 +8255,57 @@ export class Agent<
     // column was populated carry the resource only in the snapshot. Durable
     // agents persist their agentic loop under a separate workflow name, so
     // query both — otherwise suspended durable runs are never discoverable.
-    const runs: Awaited<ReturnType<typeof workflowsStore.listWorkflowRuns>>['runs'] = [];
-    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
-      const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
-        workflowName,
-        status: 'suspended',
-        resourceId,
-        fromDate,
-        toDate,
-      });
-      runs.push(...workflowRuns);
-    }
-
+    // Keep only run summaries between storage batches, not full execution snapshots.
+    const storageBatchSize = 100;
     const matchedRunsById = new Map<string, AgentRun>();
-    for (const run of runs) {
-      let snapshot = run.snapshot;
-      if (typeof snapshot === 'string') {
-        try {
-          snapshot = JSON.parse(snapshot) as WorkflowRunState;
-        } catch {
-          continue;
+    for (const workflowName of ['agentic-loop', DurableStepIds.AGENTIC_LOOP]) {
+      for (let storagePage = 0; ; storagePage++) {
+        const { runs, total: storageTotal } = await workflowsStore.listWorkflowRuns({
+          workflowName,
+          status: 'suspended',
+          resourceId,
+          fromDate,
+          toDate,
+          perPage: storageBatchSize,
+          page: storagePage,
+        });
+
+        for (const run of runs) {
+          let snapshot = run.snapshot;
+          if (typeof snapshot === 'string') {
+            try {
+              snapshot = JSON.parse(snapshot) as WorkflowRunState;
+            } catch {
+              continue;
+            }
+          }
+          if (snapshot?.status !== 'suspended') continue;
+
+          // Default-deny snapshots without a matching owning agent ID.
+          if (this.#getSnapshotAgentId(snapshot) !== this.id) continue;
+
+          const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
+          const runThreadId = memoryInfo?.threadId;
+          const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+          if (threadId && runThreadId !== threadId) continue;
+          if (resourceId && runResourceId !== resourceId) continue;
+
+          const matchedRun: AgentRun = {
+            runId: run.runId,
+            status: 'suspended',
+            threadId: runThreadId,
+            resourceId: runResourceId,
+            suspendedAt: run.updatedAt,
+            toolCalls: this.#getSuspendedToolCalls(snapshot),
+          };
+          const existingRun = matchedRunsById.get(run.runId);
+          if (!existingRun || matchedRun.suspendedAt.getTime() > existingRun.suspendedAt.getTime()) {
+            matchedRunsById.set(run.runId, matchedRun);
+          }
         }
-      }
-      if (snapshot?.status !== 'suspended') continue;
 
-      // Snapshots persist the owning agent's id, so runs started by other
-      // agents sharing the same agentic-loop snapshot storage are skipped.
-      // Default-deny: a snapshot whose owning agent id is missing or does not
-      // match is not surfaced, so runs cannot leak across agents.
-      const runAgentId = this.#getSnapshotAgentId(snapshot);
-      if (runAgentId !== this.id) continue;
-
-      // thread/resource info travels in the suspended stream state; the run row's
-      // resourceId column is used as the primary source when present.
-      const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
-      const runThreadId = memoryInfo?.threadId;
-      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
-      if (threadId && runThreadId !== threadId) continue;
-      if (resourceId && runResourceId !== resourceId) continue;
-
-      const matchedRun: AgentRun = {
-        runId: run.runId,
-        status: 'suspended',
-        threadId: runThreadId,
-        resourceId: runResourceId,
-        suspendedAt: run.updatedAt,
-        toolCalls: this.#getSuspendedToolCalls(snapshot),
-      };
-      const existingRun = matchedRunsById.get(run.runId);
-      if (!existingRun || matchedRun.suspendedAt.getTime() > existingRun.suspendedAt.getTime()) {
-        matchedRunsById.set(run.runId, matchedRun);
+        // Also stop if an adapter ignores pagination and returns everything.
+        if (runs.length !== storageBatchSize || (storagePage + 1) * storageBatchSize >= storageTotal) break;
       }
     }
 
@@ -8373,23 +8374,11 @@ export class Agent<
 
     const filters = { threadId, resourceId, fromDate, toDate };
 
-    if (status === 'suspended') {
-      const result = await this.listSuspendedRuns({ ...filters, perPage, page });
-      return {
-        runs: result.runs.map(run => ({ ...run, updatedAt: run.suspendedAt })),
-        total: result.total,
-      };
-    }
-
-    if (status === 'running') {
-      return this.#listRunningRuns({ ...filters, perPage, page });
-    }
-
-    // Both sources must be read before pagination so overlapping run IDs can be
-    // deduplicated and the combined result can be ordered consistently.
+    // Normalize ordering before pagination for every status selection; storage
+    // may order running rows by creation time rather than their last update.
     const [suspendedResult, runningResult] = await Promise.all([
-      this.listSuspendedRuns(filters),
-      this.#listRunningRuns(filters),
+      status === 'running' ? Promise.resolve({ runs: [], total: 0 }) : this.listSuspendedRuns(filters),
+      status === 'suspended' ? Promise.resolve({ runs: [], total: 0 }) : this.#listRunningRuns(filters),
     ]);
 
     const runsById = new Map<string, AgentListedRun>();

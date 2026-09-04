@@ -467,6 +467,42 @@ describe('suspended-run discovery', () => {
       expect(result.runs[1]!.suspendedAt).toEqual(middle);
     }, 30000);
 
+    it.each([false, true])(
+      'scans suspended snapshots in batches (adapter ignores pagination: %s)',
+      async ignoresPagination => {
+        const storage = new InMemoryStore();
+        const { agent } = createSuspendedSetup({ storage });
+        const { runId } = await suspendRun(agent, 'thread-batches', 'resource-batches');
+        const workflowsStore = (await storage.getStore('workflows'))!;
+        const storedRun = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+        expect(storedRun).not.toBeNull();
+        const rows = Array.from({ length: 205 }, (_, index) => ({
+          ...storedRun!,
+          runId: `run-${index}`,
+          updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+        }));
+        const list = vi
+          .spyOn(workflowsStore, 'listWorkflowRuns')
+          .mockImplementation(async ({ workflowName, perPage, page }) => {
+            expect(perPage).toBe(100);
+            expect(page).toBeGreaterThanOrEqual(0);
+            if (workflowName !== 'agentic-loop') return { runs: [], total: 0 };
+            return { runs: ignoresPagination ? rows : rows.slice(page! * 100, (page! + 1) * 100), total: rows.length };
+          });
+        expect(
+          await agent.listRuns({ status: 'suspended', resourceId: 'resource-batches', perPage: 1, page: 0 }),
+        ).toMatchObject({
+          runs: [{ runId: 'run-204' }],
+          total: 205,
+        });
+        expect(list).toHaveBeenCalledTimes(ignoresPagination ? 2 : 4);
+        expect(list).toHaveBeenCalledWith(
+          expect.objectContaining({ resourceId: 'resource-batches', perPage: 100, page: 0 }),
+        );
+      },
+      30000,
+    );
+
     it('rejects invalid pagination inputs', async () => {
       const { agent } = createSuspendedSetup();
 
