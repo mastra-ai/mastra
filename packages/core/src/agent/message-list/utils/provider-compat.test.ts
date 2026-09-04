@@ -1,6 +1,7 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
-import { pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
+import type { MastraDBMessage } from '../state/types';
+import { dropCrossProviderExecutedParts, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -264,5 +265,174 @@ describe('pairOrphanedToolCalls', () => {
 
     expect(callIds).toEqual(['A', 'B', 'C']);
     expect(resultIds.sort()).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('dropCrossProviderExecutedParts', () => {
+  const OPENAI = 'openai.responses';
+  const ANTHROPIC = 'anthropic.messages';
+
+  /**
+   * A stored assistant message carrying a provider-executed web_search part, shaped
+   * like the real row captured for #23082: the OpenAI payload is `{action, sources}`,
+   * which Anthropic's converter rejects because its own schema is an array.
+   */
+  const dbAssistant = (options: {
+    provider?: string;
+    toolCallId: string;
+    providerExecuted?: boolean;
+    toolName?: string;
+  }): MastraDBMessage =>
+    ({
+      id: `db-${options.toolCallId}`,
+      role: 'assistant',
+      createdAt: new Date(0),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        ...(options.provider ? { metadata: { provider: options.provider } } : {}),
+        parts: [
+          {
+            type: 'tool-invocation',
+            ...(options.providerExecuted === undefined ? {} : { providerExecuted: options.providerExecuted }),
+            toolInvocation: {
+              state: 'result',
+              toolCallId: options.toolCallId,
+              toolName: options.toolName ?? 'web_search',
+              args: {},
+              result: { action: { type: 'search', query: 'anything' }, sources: [] },
+            },
+          },
+        ],
+      },
+    }) as unknown as MastraDBMessage;
+
+  const promptWithSearch = (toolCallId: string): ModelMessage[] => [
+    { role: 'user', content: 'find something' },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'searching' },
+        { type: 'reasoning', text: 'thinking about it' },
+        { type: 'tool-call', toolCallId, toolName: 'web_search', input: {}, providerExecuted: true },
+      ],
+    } as ModelMessage,
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId,
+          toolName: 'web_search',
+          output: { type: 'json', value: { action: { type: 'search' }, sources: [] } },
+        },
+      ],
+    } as ModelMessage,
+  ];
+
+  it('drops a provider-executed part produced by a different provider', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    const remainingIds = result.flatMap(message =>
+      Array.isArray(message.content)
+        ? message.content.flatMap(part =>
+            part.type === 'tool-call' || part.type === 'tool-result' ? [part.toolCallId] : [],
+          )
+        : [],
+    );
+    expect(remainingIds).toEqual([]);
+  });
+
+  it('preserves text and reasoning parts on the same foreign-origin message', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    const assistant = result.find(message => message.role === 'assistant');
+    expect(Array.isArray(assistant?.content) ? assistant?.content : []).toEqual([
+      { type: 'text', text: 'searching' },
+      { type: 'reasoning', text: 'thinking about it' },
+    ]);
+  });
+
+  it('keeps a provider-executed part produced by the target provider', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      OPENAI,
+    );
+
+    expect(result).toEqual(messages);
+  });
+
+  it('returns the input array by identity when the target provider is unknown', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      undefined,
+    );
+
+    expect(result).toBe(messages);
+  });
+
+  it('returns the input array by identity when the origin message is unstamped', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ toolCallId: 'ws_1', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    expect(result).toBe(messages);
+  });
+
+  it('leaves client-executed tool parts from a foreign provider alone', () => {
+    const messages = promptWithSearch('call_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'call_1', toolName: 'fetch' })],
+      ANTHROPIC,
+    );
+
+    expect(result).toBe(messages);
+  });
+
+  it('leaves an assistant message with an empty content array when every part was dropped', () => {
+    const messages: ModelMessage[] = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search', input: {}, providerExecuted: true }],
+      } as ModelMessage,
+    ];
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    expect(result).toEqual([{ role: 'assistant', content: [] }]);
+  });
+
+  it('does not mutate the messages it was given', () => {
+    const messages = promptWithSearch('ws_1');
+    const snapshot = structuredClone(messages);
+    dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_1', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    expect(messages).toEqual(snapshot);
   });
 });
