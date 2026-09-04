@@ -673,6 +673,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     const { batches } = splitIntoBatches(args.traceIds, { maxRows: DEFAULT_MAX_ROWS_PER_BATCH });
 
     const tableName = getTableName({

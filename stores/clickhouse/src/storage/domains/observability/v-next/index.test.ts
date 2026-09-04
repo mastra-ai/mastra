@@ -1130,6 +1130,27 @@ LIMIT 1`,
         intervalMs: 100,
       });
       expect(disappeared).toBe(true);
+
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      try {
+        const result = await client.query({
+          query: `SELECT signal, predicateType, predicateValues FROM ${TABLE_DELETION_REQUESTS} WHERE signal = 'traces' AND has(predicateValues, 'trace-del') ORDER BY requestedAt DESC LIMIT 1`,
+          format: 'JSONEachRow',
+        });
+        await expect(result.json()).resolves.toEqual([
+          {
+            signal: 'traces',
+            predicateType: 'traceIds',
+            predicateValues: ['trace-del'],
+          },
+        ]);
+      } finally {
+        await client.close();
+      }
     });
   });
 
@@ -4172,34 +4193,31 @@ LIMIT 1`,
       });
       try {
         const result = await client.query({
-          query: `SELECT requestType, organizationId, resourceId, scoreIds, feedbackIds, status FROM ${TABLE_DELETION_REQUESTS} ORDER BY requestType`,
+          query: `SELECT signal, predicateType, predicateValues, organizationId, resourceId FROM ${TABLE_DELETION_REQUESTS} FINAL ORDER BY signal`,
           format: 'JSONEachRow',
         });
         const rows = (await result.json()) as Array<{
-          requestType: string;
-          organizationId: string | null;
-          resourceId: string | null;
-          scoreIds: string[];
-          feedbackIds: string[];
-          status: string;
+          signal: string;
+          predicateType: string;
+          predicateValues: string[];
+          organizationId: string;
+          resourceId: string;
         }>;
 
         expect(rows).toEqual([
           {
-            requestType: 'feedback',
+            signal: 'feedback',
+            predicateType: 'itemIds',
+            predicateValues: ['request-feedback-1'],
             organizationId: 'org-1',
             resourceId: 'resource-1',
-            scoreIds: [],
-            feedbackIds: ['request-feedback-1'],
-            status: 'pending',
           },
           {
-            requestType: 'score',
+            signal: 'scores',
+            predicateType: 'itemIds',
+            predicateValues: ['request-score-1'],
             organizationId: 'org-1',
             resourceId: 'resource-1',
-            scoreIds: ['request-score-1'],
-            feedbackIds: [],
-            status: 'pending',
           },
         ]);
 

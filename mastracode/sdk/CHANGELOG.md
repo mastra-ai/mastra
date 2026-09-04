@@ -1,5 +1,17 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.4
+
+### Patch Changes
+
+- Fixed Windows file references in custom slash commands, including `@src\context.md`, ([#21632](https://github.com/mastra-ai/mastra/pull/21632))
+  `@C:\path\to\file`, and `@C:/path/to/file`. Spaces, quoted paths, and glob patterns
+  are not supported.
+- Updated dependencies [[`abb0263`](https://github.com/mastra-ai/mastra/commit/abb0263bc5740868dd9b3b615312a0b9e040747f), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`e5a8e80`](https://github.com/mastra-ai/mastra/commit/e5a8e80caef6aaa00495de9e00d11f06c4a78bdb)]:
+  - @mastra/observability@1.17.6-alpha.1
+  - @mastra/core@1.65.0-alpha.3
+  - @mastra/mcp@1.17.3
+
 ## 1.7.0-alpha.3
 
 ### Patch Changes

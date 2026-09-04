@@ -1,5 +1,16 @@
 # @mastra/observability
 
+## 1.17.6-alpha.1
+
+### Patch Changes
+
+- Fixed `SensitiveDataFilter` so it also redacts sensitive fields inside a span's `requestContext`. Secrets stored in `RequestContext` (for example a per-request API token that tools use) were exported to every tracing exporter in plain text, even when the key was listed in `sensitiveFields`. The filter now applies the same redaction to `requestContext` as it does to `attributes`, `metadata`, `input`, `output`, and `errorInfo`. Fixes https://github.com/mastra-ai/mastra/issues/23046 ([#23055](https://github.com/mastra-ai/mastra/pull/23055))
+
+- Fixed the `indexed` redaction style of `SensitiveDataFilter` giving the same value a new token every time a span was exported. A span is processed again for each `span_started`, `span_updated`, and `span_ended` event, and the filter treated its own `[APIKEY_1]` token as a new secret and replaced it with `[APIKEY_2]`. Already redacted values now keep their token, so the same secret maps to one token across every span and event of a trace while the trace's mapping is retained (state is kept for the 1000 most recently seen traces). Fixes #23056 ([#23057](https://github.com/mastra-ai/mastra/pull/23057))
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+
 ## 1.17.6-alpha.0
 
 ### Patch Changes

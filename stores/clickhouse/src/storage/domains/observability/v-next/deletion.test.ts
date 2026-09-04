@@ -18,16 +18,15 @@ function queryResult(rows: unknown[]) {
 }
 
 describe('ClickHouse deletion lifecycle', () => {
-  it('defines the shared deletion request table without an OSS retention TTL', () => {
-    expect(DELETION_REQUESTS_DDL).toContain('requestId       UUID');
-    expect(DELETION_REQUESTS_DDL).toContain("requestedAt     DateTime64(3, 'UTC')");
-    expect(DELETION_REQUESTS_DDL).toContain('scoreIds        Array(String)');
-    expect(DELETION_REQUESTS_DDL).toContain('feedbackIds     Array(String)');
-    expect(DELETION_REQUESTS_DDL).not.toContain('TTL requestedAt');
+  it('uses the shared deletion request schema without an OSS retention TTL', () => {
+    expect(DELETION_REQUESTS_DDL).toContain('predicateValues Array(String)');
+    expect(DELETION_REQUESTS_DDL).toContain('ENGINE = ReplacingMergeTree(updatedAt)');
+    expect(DELETION_REQUESTS_DDL).toContain('ORDER BY (organizationId, resourceId, requestId)');
+    expect(DELETION_REQUESTS_DDL).not.toContain('TTL');
     expect(DELETION_REQUESTS_DDL).not.toContain('deletedAt');
   });
 
-  it('records a score-shaped pending request before the scoped lightweight delete', async () => {
+  it('records a score deletion request before the scoped lightweight delete', async () => {
     const { client, insert, command } = createClient();
 
     await deleteScores(
@@ -41,21 +40,16 @@ describe('ClickHouse deletion lifecycle', () => {
       values: [
         {
           requestId: expect.any(String),
-          requestedAt: expect.any(String),
-          completedAt: null,
-          requestType: 'score',
           organizationId: 'org-1',
           resourceId: 'resource-1',
-          traceIds: [],
-          experimentId: null,
-          datasetId: null,
-          datasetItemIds: [],
-          scoreIds: ['score-1', 'score-2'],
-          feedbackIds: [],
-          status: 'pending',
-          lastError: null,
-          attemptCount: 0,
-          nextAttemptAt: null,
+          signal: 'scores',
+          predicateType: 'itemIds',
+          predicateValues: ['score-1', 'score-2'],
+          requestedAt: expect.any(String),
+          requestedBy: '',
+          lastAppliedAt: '1970-01-01T00:00:00.000Z',
+          purgeVerifiedAt: '1970-01-01T00:00:00.000Z',
+          updatedAt: expect.any(String),
         },
       ],
       format: 'JSONEachRow',
@@ -74,7 +68,7 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(insert.mock.invocationCallOrder[0]).toBeLessThan(command.mock.invocationCallOrder[0]!);
   });
 
-  it('records a feedback-shaped pending request before the lightweight delete', async () => {
+  it('records a feedback deletion request before the lightweight delete', async () => {
     const { client, insert, command } = createClient();
 
     await deleteFeedback(client, { feedbackIds: ['feedback-1'] });
@@ -84,12 +78,12 @@ describe('ClickHouse deletion lifecycle', () => {
         table: TABLE_DELETION_REQUESTS,
         values: [
           expect.objectContaining({
-            requestType: 'feedback',
-            organizationId: null,
-            resourceId: null,
-            scoreIds: [],
-            feedbackIds: ['feedback-1'],
-            status: 'pending',
+            organizationId: '',
+            resourceId: '',
+            signal: 'feedback',
+            predicateType: 'itemIds',
+            predicateValues: ['feedback-1'],
+            requestedBy: '',
           }),
         ],
       }),
@@ -110,7 +104,7 @@ describe('ClickHouse deletion lifecycle', () => {
     expect(command).not.toHaveBeenCalled();
   });
 
-  it('propagates delete failures after recording the pending request', async () => {
+  it('propagates delete failures after recording the deletion request', async () => {
     const { client, insert, command } = createClient();
     command.mockRejectedValueOnce(new Error('lightweight delete failed'));
 
@@ -144,6 +138,15 @@ describe('ClickHouse deletion lifecycle', () => {
       ),
     ).rejects.toThrow('Feedback record not found');
 
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        query: expect.stringContaining("WHERE signal = 'feedback'"),
+        query_params: { feedbackId: 'feedback-1', organizationId: 'org-1', resourceId: 'resource-1' },
+      }),
+    );
+    expect(query.mock.calls[1]?.[0].query).toContain("predicateType = 'itemIds'");
+    expect(query.mock.calls[1]?.[0].query).toContain('has(predicateValues, {feedbackId:String})');
     expect(insert).toHaveBeenCalledTimes(2);
     expect(insert).toHaveBeenNthCalledWith(
       2,
@@ -151,11 +154,11 @@ describe('ClickHouse deletion lifecycle', () => {
         table: TABLE_DELETION_REQUESTS,
         values: [
           expect.objectContaining({
-            requestType: 'feedback',
             organizationId: 'org-1',
             resourceId: 'resource-1',
-            feedbackIds: ['feedback-1'],
-            status: 'pending',
+            signal: 'feedback',
+            predicateType: 'itemIds',
+            predicateValues: ['feedback-1'],
           }),
         ],
       }),

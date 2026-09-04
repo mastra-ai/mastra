@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -187,7 +189,7 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A pending deletion request is recorded before the lightweight delete. The
+ * A durable deletion request is recorded before the lightweight delete. The
  * delete is immediately visible to subsequent reads; physical purge depends on
  * the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
@@ -200,10 +202,13 @@ export async function deleteScores(
   if (args.scoreIds.length === 0) return;
 
   await recordDeletionRequest(client, {
-    requestType: 'score',
-    scoreIds: args.scoreIds,
+    requestId: randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
+    signal: 'scores',
+    predicateType: 'itemIds',
+    predicateValues: [...args.scoreIds],
+    requestedAt: new Date().toISOString(),
     replication,
   });
 

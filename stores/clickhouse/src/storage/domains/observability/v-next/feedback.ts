@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { listFeedbackArgsSchema } from '@mastra/core/storage';
@@ -195,7 +197,7 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
  * `organizationId` and `resourceId` values are ANDed into the predicate to
  * restrict deletion to records with matching scope fields.
  *
- * A pending deletion request is recorded before the lightweight delete. The
+ * A durable deletion request is recorded before the lightweight delete. The
  * delete is immediately visible to subsequent reads; physical purge depends on
  * the table's configured retention TTL. The delta table is intentionally not
  * touched and expires through its fixed two-day TTL.
@@ -208,10 +210,13 @@ export async function deleteFeedback(
   if (args.feedbackIds.length === 0) return;
 
   await recordDeletionRequest(client, {
-    requestType: 'feedback',
-    feedbackIds: args.feedbackIds,
+    requestId: randomUUID(),
     organizationId: args.organizationId,
     resourceId: args.resourceId,
+    signal: 'feedback',
+    predicateType: 'itemIds',
+    predicateValues: [...args.feedbackIds],
+    requestedAt: new Date().toISOString(),
     replication,
   });
 
@@ -254,7 +259,7 @@ function feedbackNotFoundError(feedbackId: string): MastraError {
   });
 }
 
-async function hasPendingFeedbackDeletion(
+async function hasFeedbackDeletionRequest(
   client: ClickHouseClient,
   feedbackId: string,
   organizationId: string | null,
@@ -262,14 +267,14 @@ async function hasPendingFeedbackDeletion(
 ): Promise<boolean> {
   const rows = await queryJson<{ found: number }>(
     client,
-    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS}
-     WHERE requestType = 'feedback'
-       AND status = 'pending'
-       AND has(feedbackIds, {feedbackId:String})
-       AND (organizationId IS NULL OR organizationId = {organizationId:Nullable(String)})
-       AND (resourceId IS NULL OR resourceId = {resourceId:Nullable(String)})
+    `SELECT 1 AS found FROM ${TABLE_DELETION_REQUESTS} FINAL
+     WHERE signal = 'feedback'
+       AND predicateType = 'itemIds'
+       AND has(predicateValues, {feedbackId:String})
+       AND (organizationId = '' OR organizationId = {organizationId:String})
+       AND (resourceId = '' OR resourceId = {resourceId:String})
      LIMIT 1`,
-    { feedbackId, organizationId, resourceId },
+    { feedbackId, organizationId: organizationId ?? '', resourceId: resourceId ?? '' },
   );
   return rows.length > 0;
 }
@@ -291,7 +296,7 @@ export async function updateFeedbackReviewStatus(
     throw feedbackNotFoundError(feedbackId);
   }
 
-  if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
     throw feedbackNotFoundError(feedbackId);
   }
 
@@ -308,7 +313,7 @@ export async function updateFeedbackReviewStatus(
     clickhouse_settings: CH_INSERT_SETTINGS,
   });
 
-  if (await hasPendingFeedbackDeletion(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
+  if (await hasFeedbackDeletionRequest(client, feedbackId, existingRow.organizationId, existingRow.resourceId)) {
     await deleteFeedback(
       client,
       {

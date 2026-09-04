@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import type { ClickHouseClient } from '@clickhouse/client';
 
 import { isReplicationConfigured } from '../../../db/replication';
@@ -9,53 +7,48 @@ import { CH_INSERT_SETTINGS } from './helpers';
 
 export interface DeletionRequestRow {
   requestId: string;
+  organizationId: string;
+  resourceId: string;
+  signal: 'traces' | 'feedback' | 'scores';
+  predicateType: 'traceIds' | 'itemIds' | 'experimentId' | 'tenant';
+  predicateValues: string[];
   requestedAt: string;
-  completedAt: null;
-  requestType: 'score' | 'feedback';
-  organizationId: string | null;
-  resourceId: string | null;
-  traceIds: string[];
-  experimentId: null;
-  datasetId: null;
-  datasetItemIds: string[];
-  scoreIds: string[];
-  feedbackIds: string[];
-  status: 'pending';
-  lastError: null;
-  attemptCount: number;
-  nextAttemptAt: null;
+  requestedBy: string;
+  lastAppliedAt: string;
+  purgeVerifiedAt: string;
+  updatedAt: string;
 }
 
 export interface RecordDeletionRequestArgs {
-  requestType: DeletionRequestRow['requestType'];
+  requestId: string;
   organizationId?: string;
   resourceId?: string;
-  scoreIds?: string[];
-  feedbackIds?: string[];
+  signal: DeletionRequestRow['signal'];
+  predicateType: DeletionRequestRow['predicateType'];
+  predicateValues: string[];
+  requestedAt: string;
+  requestedBy?: string;
   replication?: ClickhouseReplicationConfig;
 }
+
+const EPOCH = '1970-01-01T00:00:00.000Z';
 
 export async function recordDeletionRequest(
   client: ClickHouseClient,
   args: RecordDeletionRequestArgs,
 ): Promise<DeletionRequestRow> {
   const row: DeletionRequestRow = {
-    requestId: randomUUID(),
-    requestedAt: new Date().toISOString(),
-    completedAt: null,
-    requestType: args.requestType,
-    organizationId: args.organizationId ?? null,
-    resourceId: args.resourceId ?? null,
-    traceIds: [],
-    experimentId: null,
-    datasetId: null,
-    datasetItemIds: [],
-    scoreIds: args.scoreIds ?? [],
-    feedbackIds: args.feedbackIds ?? [],
-    status: 'pending',
-    lastError: null,
-    attemptCount: 0,
-    nextAttemptAt: null,
+    requestId: args.requestId,
+    organizationId: args.organizationId ?? '',
+    resourceId: args.resourceId ?? '',
+    signal: args.signal,
+    predicateType: args.predicateType,
+    predicateValues: args.predicateValues,
+    requestedAt: args.requestedAt,
+    requestedBy: args.requestedBy ?? '',
+    lastAppliedAt: EPOCH,
+    purgeVerifiedAt: EPOCH,
+    updatedAt: args.requestedAt,
   };
 
   await client.insert({

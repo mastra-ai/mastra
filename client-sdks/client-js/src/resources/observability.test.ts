@@ -99,6 +99,37 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('deleteTraces()', () => {
+    it('should POST trace IDs to the delete endpoint', async () => {
+      const response = new Response(undefined, {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+      response.json = () => Promise.resolve({ success: true });
+      (global.fetch as any).mockResolvedValueOnce(response);
+
+      const result = await client.deleteTraces({ traceIds: ['trace-123', 'trace-456'] });
+
+      expect(result).toEqual({ success: true });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/delete`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ traceIds: ['trace-123', 'trace-456'] }),
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Server Error', { status: 500, statusText: 'Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.deleteTraces({ traceIds: ['trace-123'] })).rejects.toThrow();
+    });
+  });
+
   /**
    * Legacy getTraces() API tests
    * Uses the old parameter structure for backward compatibility:

@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 1.65.0-alpha.3
+
+### Minor Changes
+
+- Added `handlers.onAction` to agent channels so apps can handle button clicks and select changes from their own cards. The built-in tool approval handling is available as `defaultHandler`, and `onAction: false` disables it. Fixes #22629 ([#22927](https://github.com/mastra-ai/mastra/pull/22927))
+
+  ```ts
+  const agent = new Agent({
+    // ...
+    channels: {
+      adapters: { slack: createSlackAdapter() },
+      handlers: {
+        onAction: async (event, defaultHandler) => {
+          if (event.actionId === 'retry') {
+            await event.thread?.post('Retrying...');
+            return;
+          }
+          await defaultHandler();
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed Cloudflare Workers builds by preventing Node-only runtime dependencies from being bundled. ([#20639](https://github.com/mastra-ai/mastra/pull/20639))
+
+- Applied `onDelegationComplete` result text replacements to failed subagent delegations while preserving failed tool result semantics. ([#23000](https://github.com/mastra-ai/mastra/pull/23000))
+
 ## 1.65.0-alpha.2
 
 ### Minor Changes

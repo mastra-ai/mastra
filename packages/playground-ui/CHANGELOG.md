@@ -1,5 +1,44 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.3
+
+### Minor Changes
+
+- Replaced the trace panel's "Messages" tab with a "Messages" column so an agent turn reads left-to-right as Messages → Trace → Span detail. ([#23009](https://github.com/mastra-ai/mastra/pull/23009))
+
+  **`TraceDataPanelView`**: the `partialThreadTabSlot` prop was removed. Pass `messagesPanelSlot` instead; it renders as a column to the left of the timeline inside the same card, and the columns animate open/closed.
+
+  ```tsx
+  // Before
+  <TraceDataPanelView partialThreadTabSlot={({ traceId }) => <ThreadView traceId={traceId} />} />
+
+  // After
+  <TraceDataPanelView messagesPanelSlot={<ThreadView traceId={traceId} />} />
+  ```
+
+  **`TracesLayout`**: `sidePanelWide` (boolean) was replaced by `sidePanelWidth: 'half' | 'wide' | 'full'`. `'full'` lets a three-column panel span the whole frame.
+
+  ```tsx
+  // Before
+  <TracesLayout sidePanelWide={!!spanId} />
+
+  // After
+  <TracesLayout sidePanelWidth={spanId ? 'wide' : 'half'} />
+  ```
+
+### Patch Changes
+
+- On the traces page, an agent trace that belongs to a thread now shows its reconstructed conversation as a "Messages" column to the left of the trace timeline instead of a tab. Opening a span adds the span detail as a third column and the side panel grows to fill the frame, so the layout reads Messages → Trace → Span. ([#23009](https://github.com/mastra-ai/mastra/pull/23009))
+
+- Added a `featuredSpanIds` prop to the trace data panel to fade non-featured spans in the timeline, and `highlightSpanIds` / `handleHighlightSpans` in the trace URL state so consumers can highlight the spans behind a reconstructed message. ([#23045](https://github.com/mastra-ai/mastra/pull/23045))
+
+- Changed the `TracesLayout` side panel to render as an absolute, full-height overlay (`absolute inset-y-0 right-0`) instead of an in-flow grid column. In Studio, the trace side panel on `/traces` and on entity traces tabs now spans the whole app frame height, covering the route header and page toolbar, while the trace list keeps its left column. Consumers must render `TracesLayout` inside a positioned (`relative`) ancestor sized to the area the panel should cover. ([#23009](https://github.com/mastra-ai/mastra/pull/23009))
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+  - @mastra/client-js@1.44.0-alpha.3
+  - @mastra/react@1.4.11-alpha.3
+
 ## 53.0.0-alpha.2
 
 ### Patch Changes
