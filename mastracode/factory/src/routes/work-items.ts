@@ -208,9 +208,10 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 /** Validate an untrusted patch body. Unknown keys are dropped. */
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { title, stages, sessions, metadata, plansPreapproved } = body;
+  const { board, title, stages, sessions, metadata, plansPreapproved } = body;
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   if (
+    board === undefined &&
     title === undefined &&
     stages === undefined &&
     sessions === undefined &&
@@ -219,6 +220,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
     !hasParentWorkItemId
   )
     return null;
+  if (board !== undefined && (typeof board !== 'string' || board.length === 0 || board.length > 128)) return null;
   if (plansPreapproved !== undefined && plansPreapproved !== true) return null;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
   if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
@@ -234,6 +236,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   }
 
   return {
+    ...(board !== undefined ? { board } : {}),
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
@@ -890,14 +893,29 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const patch = parseUpdateWorkItem(body);
           if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
-          if (patch.stages !== undefined) {
+
+          await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: tenant.orgId, id });
+          if (!existing) return c.json({ error: 'Work item not found' }, 404);
+          if (patch.board !== undefined) {
+            const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(patch.board);
+            const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
+            if (existing.board !== null) {
+              return c.json({ error: 'board_already_assigned' }, 409);
+            }
+            if (!board) {
+              return c.json({ error: 'board_not_installed' }, 400);
+            }
+            if (!stage || !Object.prototype.hasOwnProperty.call(board.phases, stage)) {
+              return c.json({ error: 'invalid_board_migration_phase' }, 400);
+            }
+          } else if (patch.stages !== undefined) {
             return c.json(
               { error: 'governed_transition_required', message: 'Use the Factory transition endpoint to move stages.' },
               409,
             );
           }
 
-          await workItems.ensureReady();
           try {
             const updated = await workItems.update({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
             if (!updated) return c.json({ error: 'Work item not found' }, 404);

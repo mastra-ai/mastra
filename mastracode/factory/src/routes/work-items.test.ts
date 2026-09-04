@@ -346,6 +346,37 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect(canonical?.stageHistory).toHaveLength(1);
   });
 
+  it('assigns a legacy item to an installed board and phase', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: { queued: { next: 'shipped' }, shipped: {} },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
+    );
+
+    const response = await app.request(`/web/factory/work-items/${item.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ board: 'release', stages: ['queued'] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
   it('rejects creation outside exclusive intake', async () => {
     const res = await json(
       'POST',

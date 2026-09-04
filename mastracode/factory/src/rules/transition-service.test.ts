@@ -1051,6 +1051,25 @@ describe('FactoryTransitionService', () => {
     expect(await ruleDecisionKeys(storage, 'org-2')).toEqual(['same-effect-key']);
   });
 
+  it('requires legacy items to be assigned before custom-only transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const board = createTestBoard();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-legacy' })),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: expect.stringContaining('Assign an installed board and phase'),
+    });
+  });
+
   it('validates and runs phase behavior from an installed custom board', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { board: 'release', stages: ['queued'] });

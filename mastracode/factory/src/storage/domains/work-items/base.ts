@@ -523,6 +523,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  board?: string;
   parentWorkItemId?: string | null;
   title?: string;
   stages?: WorkItemStage[];
@@ -755,6 +756,7 @@ function applyUpdate({
 }): Partial<WorkItemDbRow> {
   const now = new Date();
   return {
+    ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.stages !== undefined

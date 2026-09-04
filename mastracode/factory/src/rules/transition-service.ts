@@ -260,7 +260,16 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const itemBoard = item.board ?? (source === 'pullRequest' ? 'review' : 'work');
+    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    if (item.board === null && !this.#boards.has(legacyBoard)) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'This legacy work item has no assigned board. Assign an installed board and phase through the work-item PATCH endpoint before transitioning it.',
+      );
+    }
+    const itemBoard = item.board ?? legacyBoard;
     if (request.board !== itemBoard) {
       return this.#commitRejection(
         request,
