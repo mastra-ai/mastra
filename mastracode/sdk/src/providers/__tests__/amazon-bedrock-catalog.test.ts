@@ -41,6 +41,11 @@ describe('getBedrockModelCatalog', () => {
             },
             'xai.grok-4.6': { provider: { npm: '@ai-sdk/amazon-bedrock/mantle', shape: 'responses' } },
             [MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__]: {},
+            // An empty `provider` block is not a transport override, so the
+            // entry stays. Without this case the test would still pass if the
+            // predicate were widened to `Boolean(provider)`, which would drop
+            // every model carrying the key at all.
+            [MODEL_TOKENS.__BEDROCK_MODEL_HAIKU_BARE__]: { provider: {} },
           },
         },
       }),
@@ -50,6 +55,7 @@ describe('getBedrockModelCatalog', () => {
     const models = await getBedrockModelCatalog();
 
     expect(models.map(m => m.id)).toEqual([
+      MODEL_TOKENS.__BEDROCK_MODEL_HAIKU_BARE__,
       MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__,
       MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__,
     ]);
