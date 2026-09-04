@@ -3622,17 +3622,37 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
         expect((await storage.listScores({})).scores).toHaveLength(5);
 
+        await storage.deleteScores({ scoreIds: ['score-del-resource-only'], resourceId: 'res-b' });
+        expect((await storage.listScores({})).scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-org-only',
+          'score-del-resource-b',
+          'score-del-resource-only',
+        ]);
+
         await storage.deleteScores({ scoreIds: ['score-del-org-only'], organizationId: 'org-a' });
-        await waitFor(
+        const afterOrganizationDelete = await waitFor(
           () => storage.listScores({}),
           value => value.scores.length === 4,
         );
+        expect(afterOrganizationDelete.scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-resource-b',
+          'score-del-resource-only',
+        ]);
 
         await storage.deleteScores({ scoreIds: ['score-del-resource-only'], resourceId: 'res-a' });
-        await waitFor(
+        const afterResourceDelete = await waitFor(
           () => storage.listScores({}),
           value => value.scores.length === 3,
         );
+        expect(afterResourceDelete.scores.map(score => score.scoreId).sort()).toEqual([
+          'score-del-org-a',
+          'score-del-org-b',
+          'score-del-resource-b',
+        ]);
 
         await storage.deleteScores({ scoreIds: ['score-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
         const result = await waitFor(
@@ -3710,17 +3730,37 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
         expect((await storage.listFeedback({})).feedback).toHaveLength(5);
 
+        await storage.deleteFeedback({ feedbackIds: ['fb-del-resource-only'], resourceId: 'res-b' });
+        expect((await storage.listFeedback({})).feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-org-only',
+          'fb-del-resource-b',
+          'fb-del-resource-only',
+        ]);
+
         await storage.deleteFeedback({ feedbackIds: ['fb-del-org-only'], organizationId: 'org-a' });
-        await waitFor(
+        const afterOrganizationDelete = await waitFor(
           () => storage.listFeedback({}),
           value => value.feedback.length === 4,
         );
+        expect(afterOrganizationDelete.feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-resource-b',
+          'fb-del-resource-only',
+        ]);
 
         await storage.deleteFeedback({ feedbackIds: ['fb-del-resource-only'], resourceId: 'res-a' });
-        await waitFor(
+        const afterResourceDelete = await waitFor(
           () => storage.listFeedback({}),
           value => value.feedback.length === 3,
         );
+        expect(afterResourceDelete.feedback.map(feedback => feedback.feedbackId).sort()).toEqual([
+          'fb-del-org-a',
+          'fb-del-org-b',
+          'fb-del-resource-b',
+        ]);
 
         await storage.deleteFeedback({ feedbackIds: ['fb-del-org-a'], organizationId: 'org-a', resourceId: 'res-a' });
         const result = await waitFor(
