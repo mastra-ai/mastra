@@ -17535,6 +17535,7 @@ export type GetSystemPackages_Response = {
   }[];
   isDev: boolean;
   cmsEnabled: boolean;
+  liveKitConnectionRouteEnabled: boolean;
   editorSource?: ('code' | 'db') | undefined;
   editorSourceCapabilities?:
     | {
