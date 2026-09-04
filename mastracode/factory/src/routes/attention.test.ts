@@ -319,6 +319,59 @@ describe('supervisor finding attention items', () => {
     expect(await later.counts(attentionScope)).toEqual({ open: 2, unread: 1 });
     await expect(later.latest(attentionScope)).resolves.toMatchObject({ at: t1, unread: true });
   });
+
+  it.each([
+    ['decision-failed', false],
+    ['decision-stuck', false],
+    ['start-stalled', false],
+    ['seat-orphaned', false],
+    ['seat-missing', false],
+    ['proposal-waiting', true],
+    ['held-waiting', true],
+    ['label-drift', true],
+  ] as const)('%s open finding visible to people while open: %s', async (kind, visible) => {
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID };
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.syncSupervisorFindings({
+      ...scope,
+      findings: [{ ...heldFinding(await seedWorkItem(kind)), id: `${kind}:x`, kind }],
+      now,
+    });
+    const provider = new SupervisorFindingAttentionProvider({ workItems: seed.workItems, now: () => now });
+    expect(await provider.counts({ ...scope, userId: 'u1' })).toEqual(
+      visible ? { open: 1, unread: 1 } : { open: 0, unread: 0 },
+    );
+  });
+
+  it('finds a visible finding behind more hidden rows than the receipt-scan budget', async () => {
+    // 4 pages × 50 rows is the receipt-scan budget; hidden rows must not spend it.
+    const scope = { orgId: 'org1', factoryProjectId: PROJECT_ID };
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    const t1 = new Date('2030-01-01T00:05:00.000Z');
+    const visibleItem = await seedWorkItem('Oldest, visible');
+    const hidden = Array.from({ length: 201 }, (_, index) => ({
+      ...stuckFinding(visibleItem),
+      id: `decision-stuck:hidden-${index}`,
+      workItemId: null,
+    }));
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [heldFinding(visibleItem)], now: t0 });
+    await seed.workItems.syncSupervisorFindings({ ...scope, findings: [heldFinding(visibleItem), ...hidden], now: t1 });
+    const provider = new SupervisorFindingAttentionProvider({
+      workItems: seed.workItems,
+      now: () => new Date('2030-01-01T00:06:00.000Z'),
+    });
+    const attentionScope = { ...scope, userId: 'u1' };
+
+    expect(await provider.counts(attentionScope)).toEqual({ open: 1, unread: 1 });
+    await expect(provider.latest(attentionScope)).resolves.toMatchObject({ at: t0, unread: true });
+    const page = await provider.page(attentionScope, { view: 'open', limit: 10 });
+    expect(page).toMatchObject({ hasMore: false });
+    expect(page.entries.map(entry => (entry.item as { findingKey: string }).findingKey)).toEqual([
+      `held-waiting:${visibleItem.id}`,
+    ]);
+    await provider.markAllRead(attentionScope, { now: new Date('2030-01-01T00:07:00.000Z') });
+    expect(await provider.counts(attentionScope)).toEqual({ open: 1, unread: 0 });
+  });
 });
 
 describe('mention attention items', () => {

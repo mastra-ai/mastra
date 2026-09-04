@@ -374,32 +374,48 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   /**
    * Attention is the human's view of finding state, so every path below
    * (counts, latest, page, bulk receipts) sees the same subset: the rows
-   * `isSupervisorFindingVisibleToHumans` admits. The scan cursor still
-   * advances over the raw rows, so hidden rows never stall pagination.
+   * `isSupervisorFindingVisibleToHumans` admits. The visibility predicate
+   * needs the finding's kind (JSON) and wall-clock age, neither of which the
+   * equality-only storage filter can express, so the raw open-row stream is
+   * walked here and filtered in memory. Only batches that carry a visible row
+   * count against the receipt-scan page budget: a run of hidden rows must
+   * never exhaust the budget ahead of an older visible or force-surfaced
+   * finding (the never-lose backstop). The scan cursor still advances over
+   * the raw rows, so hidden rows never stall pagination.
    */
-  #visible(rows: FactorySupervisorFindingRecord[]): FactorySupervisorFindingRecord[] {
+  async *#batches(
+    scope: AttentionScope,
+    before?: AttentionStreamPosition,
+  ): AsyncGenerator<ScanBatch<FactorySupervisorFindingRecord>> {
     const now = this.#now();
-    return rows.filter(row => isSupervisorFindingVisibleToHumans(row, now));
-  }
-
-  #batches(scope: AttentionScope, before?: AttentionStreamPosition) {
-    return scanBatches<FactorySupervisorFindingRecord>(
-      cursor =>
-        this.#workItems.listSupervisorFindingPage({
-          ...scope,
-          ...(cursor ? { before: cursor } : {}),
-          limit: SCAN_PAGE_SIZE,
-        }),
-      row => ({ occurredAt: row.updatedAt, id: row.id }),
-      before,
-    );
+    let cursor = before;
+    let yielded = 0;
+    for (;;) {
+      const { rows, hasMore } = await this.#workItems.listSupervisorFindingPage({
+        ...scope,
+        ...(cursor ? { before: cursor } : {}),
+        limit: SCAN_PAGE_SIZE,
+      });
+      const last = rows.at(-1);
+      if (!last) return;
+      const position = { occurredAt: last.updatedAt, id: last.id };
+      const visible = rows.filter(row => isSupervisorFindingVisibleToHumans(row, now));
+      if (visible.length > 0) {
+        yielded += 1;
+        const budgetSpent = hasMore && yielded === MAX_RECEIPT_SCAN_PAGES;
+        yield { rows: visible, ...(budgetSpent ? { continuation: position } : {}) };
+        if (budgetSpent) return;
+      }
+      if (!hasMore) return;
+      cursor = position;
+    }
   }
 
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
     let open = 0;
     let unread = 0;
     for await (const page of this.#batches(scope)) {
-      const rows = this.#visible(page.rows);
+      const rows = page.rows;
       const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
       const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
       const byIdentity = new Map(
@@ -419,7 +435,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
     // Newest VISIBLE row: a hidden newer finding must not blank the rail.
     let newest: FactorySupervisorFindingRecord | undefined;
     for await (const page of this.#batches(scope)) {
-      newest = this.#visible(page.rows)[0];
+      newest = page.rows[0];
       if (newest) break;
     }
     if (!newest) return null;
@@ -433,8 +449,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
   }
 
   page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult> {
-    return collectPage(this.#batches(scope, args.before), args.limit, async batchRows => {
-      const rows = this.#visible(batchRows);
+    return collectPage(this.#batches(scope, args.before), args.limit, async rows => {
       const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
       const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
       const byIdentity = new Map(
@@ -488,9 +503,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
     return markScanRead(this.#batches(scope, args.before), rows =>
       this.#workItems.markAttentionReceiptsRead({
         ...scope,
-        identities: this.#visible(rows).map(row =>
-          factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
-        ),
+        identities: rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence)),
         now: args.now,
       }),
     );

@@ -3,6 +3,11 @@
  * dedup scoping and the atomic update path.
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { FactoryStorageDomain } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -935,5 +940,73 @@ describe('supervisor finding notification stamps', () => {
     });
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
     expect(await getRow(storage, 'decision-failed:item-1')).toBeUndefined();
+  });
+
+  it('migrates pre-existing finding rows to status open with null escalation fields', async () => {
+    // A row written by the pre-status schema, then the current domain
+    // initializing over the same database: the additive column pass must
+    // give the old row a persisted 'open' (not a mapping-time fallback).
+    const dir = await mkdtemp(join(tmpdir(), 'findings-migration-'));
+    const url = `file:${join(dir, 'db.sqlite')}`;
+    class LegacyFindings extends FactoryStorageDomain {
+      constructor() {
+        super('legacy-findings');
+      }
+      async init() {
+        await this.ensureCollections([
+          {
+            name: 'factory_supervisor_findings',
+            columns: {
+              id: { type: 'uuid-pk' },
+              org_id: { type: 'text' },
+              factory_project_id: { type: 'text' },
+              finding_key: { type: 'text' },
+              occurrence: { type: 'integer' },
+              finding: { type: 'json' },
+              opened_at: { type: 'timestamp' },
+              updated_at: { type: 'timestamp' },
+              resolved_at: { type: 'timestamp', nullable: true },
+              last_notified_at: { type: 'timestamp', nullable: true },
+            },
+          },
+        ]);
+      }
+      async seed() {
+        await this.ops.insertOne('factory_supervisor_findings', {
+          id: 'legacy-row',
+          org_id: scope.orgId,
+          factory_project_id: scope.factoryProjectId,
+          finding_key: 'decision-failed:legacy',
+          occurrence: 0,
+          finding: { id: 'decision-failed:legacy', kind: 'decision-failed', title: 'old', evidence: 'old' },
+          opened_at: new Date('2030-01-01T00:00:00.000Z'),
+          updated_at: new Date('2030-01-01T00:00:00.000Z'),
+          resolved_at: null,
+          last_notified_at: null,
+        });
+      }
+    }
+    const legacyBackend = new LibSQLFactoryStorage({ id: 'findings-legacy', url });
+    const legacy = legacyBackend.registerDomain(new LegacyFindings());
+    await legacyBackend.init();
+    await legacy.seed();
+    await legacyBackend.close();
+
+    const backend = new LibSQLFactoryStorage({ id: 'findings-current', url });
+    const storage = backend.registerDomain(new WorkItemsStorage());
+    await backend.init();
+    const row = await getRow(storage, 'decision-failed:legacy');
+    expect(row).toMatchObject({ status: 'open', escalatedAt: null, escalationNote: null });
+    // Persisted, not defaulted at read time: the row escalates like a new one.
+    await expect(
+      storage.escalateSupervisorFinding({
+        ...scope,
+        findingKey: 'decision-failed:legacy',
+        note: 'after upgrade',
+        escalatedAt: new Date('2030-01-01T00:01:00.000Z'),
+      }),
+    ).resolves.toMatchObject({ status: 'escalated', escalationNote: 'after upgrade' });
+    await backend.close();
+    await rm(dir, { recursive: true, force: true });
   });
 });

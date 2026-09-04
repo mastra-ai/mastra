@@ -49,7 +49,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
     factory_escalate_finding: createTool({
       id: 'factory_escalate_finding',
       description:
-        'Surface one open health finding to the humans on the Attention rail with a short note saying what you found and what you need from them. Use this when a finding needs a decision or information only a person has; it is the only way an open supervisor-actionable finding becomes visible to people before the backstop.',
+        'Surface one open health finding to the humans on the Attention rail with a short note saying what you found and what you need from them. Use this when a finding needs a decision or information only a person has; it is the only way an open supervisor-actionable finding becomes visible to people before the backstop. Escalating the same finding again replaces the earlier note.',
       inputSchema: z.object({
         findingKey: z.string().min(1),
         note: z.string().trim().min(1).max(600),
