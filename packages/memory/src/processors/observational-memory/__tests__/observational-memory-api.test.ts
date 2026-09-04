@@ -909,6 +909,24 @@ describe('buffer()', () => {
     expect(result.buffered).toBe(true);
   });
 
+  it('retries a transient database connection timeout while persisting buffered observations', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    const messages = createBulkMessages(5, threadId);
+    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+      await updateBufferedObservations(input);
+      throw new Error('Connection terminated due to connection timeout');
+    });
+
+    const result = await om.buffer({ threadId, messages });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(updateSpy).toHaveBeenCalledTimes(2);
+    const status = await om.getStatus({ threadId });
+    expect(status.bufferedChunkCount).toBe(1);
+  });
+
   it('should not buffer when no unobserved messages exist', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     // No messages in storage

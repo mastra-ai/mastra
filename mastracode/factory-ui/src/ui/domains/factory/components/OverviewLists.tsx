@@ -1,12 +1,12 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Bot, Brain, CircleAlert, MessageSquare, User, Zap } from 'lucide-react';
+import { Bot, Brain, CircleAlert, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { useFactoryAttention } from '../../../../hooks/useFactoryAttention';
+import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
 import { formatDuration } from '../../../../lib/date';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { boardItemPath } from '../overview';
@@ -224,6 +224,7 @@ export function ActivityFeed({
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
   mention: { Glyph: MessageSquare, tone: 'text-badge-blue-fg', label: 'Mention' },
   'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
+  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning1', label: 'Suggested run' },
   'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-icon3', label: 'Comment' },
 };
@@ -243,7 +244,7 @@ function attentionWhere(item: FactoryAttentionItem): string {
 
 /** Read and archive stay on the attention page — a preview that acts is a second inbox. */
 export function AttentionPreview({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const attention = useFactoryAttention(factoryProjectId, 'open', EXPANDED_ROWS, 'badge');
+  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'badge');
   const items = attention.data?.items ?? [];
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;

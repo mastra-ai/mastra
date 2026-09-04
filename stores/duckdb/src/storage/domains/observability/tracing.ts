@@ -660,11 +660,35 @@ export async function batchCreateSpans(db: DuckDBConnection, args: BatchCreateSp
   await insertSpanEvents(db, rows);
 }
 
-/** Delete all span events for the given trace IDs. */
+/**
+ * Delete all span events for the given trace IDs, cascading to trace-linked
+ * signal events (metrics, logs, scores, feedback). Signal rows with a NULL
+ * traceId are never affected. When the optional tenant scope
+ * (`organizationId` / `resourceId`) is set, every DELETE additionally
+ * requires the row's tenant columns to match.
+ */
 export async function batchDeleteTraces(db: DuckDBConnection, args: BatchDeleteTracesArgs): Promise<void> {
   if (args.traceIds.length === 0) return;
   const placeholders = args.traceIds.map(() => '?').join(', ');
-  await db.execute(`DELETE FROM span_events WHERE traceId IN (${placeholders})`, args.traceIds);
+
+  const params: unknown[] = [...args.traceIds];
+  let scopeCondition = '';
+  if (args.organizationId !== undefined) {
+    scopeCondition += ` AND organizationId = ?`;
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    scopeCondition += ` AND resourceId = ?`;
+    params.push(args.resourceId);
+  }
+
+  const tables = ['span_events', 'metric_events', 'log_events', 'score_events', 'feedback_events'];
+  await db.executeTransaction(
+    tables.map(table => ({
+      sql: `DELETE FROM ${table} WHERE traceId IN (${placeholders})${scopeCondition}`,
+      params,
+    })),
+  );
 }
 
 // ============================================================================

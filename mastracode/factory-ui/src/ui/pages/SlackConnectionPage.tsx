@@ -111,11 +111,11 @@ export function SlackConnectionSettings() {
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
       ) : accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable ? (
-        <SettingsSubsection title="Connection">
+        <SettingsSubsection scope="personal" title="Connection">
           <SlackNotConfigured />
         </SettingsSubsection>
       ) : accounts.length === 0 ? (
-        <SettingsSubsection title="Connection">
+        <SettingsSubsection scope="personal" title="Connection">
           <SettingsCard>
             <button
               type="button"
@@ -138,7 +138,7 @@ export function SlackConnectionSettings() {
         </SettingsSubsection>
       ) : (
         <div className="flex flex-col gap-8">
-          <SettingsSubsection title={accounts.length === 1 ? 'Connection' : 'Connections'}>
+          <SettingsSubsection scope="personal" title={accounts.length === 1 ? 'Connection' : 'Connections'}>
             <div className="flex flex-col gap-4">
               {accounts.map(account => (
                 <SettingsCard key={`${account.externalTeamId}:${account.externalUserId}`}>
@@ -170,7 +170,7 @@ export function SlackConnectionSettings() {
             </div>
           </SettingsSubsection>
 
-          <SettingsSubsection title="Session behavior">
+          <SettingsSubsection scope="personal" title="Session behavior">
             <SettingsCard>
               {accounts.map(account => (
                 <SettingsRow
@@ -209,6 +209,11 @@ export function SlackConnectionSettings() {
                   </Select>
                 </SettingsRow>
               ))}
+            </SettingsCard>
+          </SettingsSubsection>
+
+          <SettingsSubsection scope="factory" title="Work items">
+            <SettingsCard>
               <SettingsRow
                 variant="factory"
                 label="Create work items for new Slack threads"
@@ -230,7 +235,7 @@ export function SlackConnectionSettings() {
             </SettingsCard>
           </SettingsSubsection>
 
-          <SettingsSubsection title="Danger zone">
+          <SettingsSubsection scope="personal" title="Danger zone">
             <SettingsCard>
               {accounts.map(account => (
                 <SettingsRow

@@ -8,6 +8,7 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  getCustomHTTPExceptionResponse,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -686,6 +687,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method: route.method,
           });
         }
+        const customResponse = getCustomHTTPExceptionResponse(error);
+        if (customResponse) {
+          customResponse.headers.forEach((value, name) => reply.header(name, value));
+          await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
+          return;
+        }
+
         // Check if it's an HTTPException or MastraError with a status code
         let status = 500;
         if (error && typeof error === 'object') {
@@ -708,14 +716,22 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit =
-      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+    const isBodyMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
     // Fastify enforces body size limits via the route-level `bodyLimit` option,
     // not `config` (which is arbitrary metadata exposed as request.routeOptions.config
     // and is never read by Fastify's body-parsing pipeline).
-    const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
+    const bodyLimit = isBodyMethod ? maxSize : undefined;
+    const bodyLimitErrorHandler =
+      route.maxBodySize !== undefined
+        ? (error: Error & { code?: string }, _request: FastifyRequest, reply: FastifyReply) => {
+            if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+              return reply.status(413).send({ error: 'Request body too large' });
+            }
+            throw error;
+          }
+        : undefined;
 
     // Handle ALL method by registering for each HTTP method
     // Fastify doesn't support 'ALL' method natively like Express
@@ -730,6 +746,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             url: fastifyPath,
             handler,
             bodyLimit,
+            errorHandler: bodyLimitErrorHandler,
           });
         } catch (err) {
           // Skip duplicate route errors - can happen if route is registered multiple times
@@ -745,6 +762,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         url: fastifyPath,
         handler,
         bodyLimit,
+        errorHandler: bodyLimitErrorHandler,
       });
     }
   }

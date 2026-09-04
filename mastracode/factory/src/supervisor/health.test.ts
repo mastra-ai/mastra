@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { NEEDS_APPROVAL_LABEL } from '../integrations/github/acceptance-labels.js';
+import { NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,

@@ -79,7 +79,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           <PageHeadingContext.Provider value={pageHeading}>
             <div
               className={cn(
-                'ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
+                'relative ml-0 mx-1.5 my-1.5 grid flex-1 min-h-0 overflow-hidden [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:my-2 lg:ml-0',
                 shouldShowSidebar ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr] h-[calc(100%-1.5rem)]',
               )}
             >

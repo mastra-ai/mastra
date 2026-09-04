@@ -8,6 +8,7 @@ import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
 import { DatasetSaveAction } from './dataset-save-action';
@@ -34,6 +35,8 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
+  /** Extra controls rendered under the message; only visible while hovering or focusing the row. */
+  footer?: ReactNode;
 }
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
@@ -206,7 +209,10 @@ const AssistantActionBar = ({
 );
 
 export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
-  ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, readOnly, className, ...rootProps }, ref) => {
+  (
+    { message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, readOnly, footer, className, ...rootProps },
+    ref,
+  ) => {
     const dbMessage = toDisplayMessage(message);
     const metadata = getMessageMetadata(message);
     const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
@@ -259,6 +265,12 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
 
     if (dbMessage === null) return null;
 
+    const footerSlot = footer ? (
+      <div className="opacity-0 transition-opacity group-hover:opacity-100 has-[:focus-visible]:opacity-100">
+        {footer}
+      </div>
+    ) : null;
+
     // Same object once caught up, so the factory keeps the part it is filling in mounted.
     const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
     const displayRole = dbMessage.role;
@@ -269,7 +281,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
       return (
         <div
           ref={ref}
-          className={cn('w-full flex items-end pb-4 pt-2 flex-col', className)}
+          className={cn('group w-full flex items-end pb-4 pt-2 flex-col', className)}
           {...rootProps}
           data-message-id={message.id}
           data-message-pending={isPending ? 'true' : undefined}
@@ -283,6 +295,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           >
             <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
           </div>
+          {footerSlot}
         </div>
       );
     }
@@ -290,19 +303,22 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
     const showActionBar = hasVisibleAssistantText(message, metadata);
 
     return (
-      <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
+      <div ref={ref} className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
         <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
           <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
-        {showActionBar && (
+        {(showActionBar || footerSlot) && (
           <div className="flex h-6 items-center gap-2 pt-4">
-            <AssistantActionBar
-              text={getTextFromParts(message)}
-              modelMetadata={modelMetadata}
-              isSpeaking={isSpeaking}
-              onReadAloud={onReadAloud}
-              onStopSpeaking={onStopSpeaking}
-            />
+            {showActionBar && (
+              <AssistantActionBar
+                text={getTextFromParts(message)}
+                modelMetadata={modelMetadata}
+                isSpeaking={isSpeaking}
+                onReadAloud={onReadAloud}
+                onStopSpeaking={onStopSpeaking}
+              />
+            )}
+            {footerSlot}
           </div>
         )}
       </div>

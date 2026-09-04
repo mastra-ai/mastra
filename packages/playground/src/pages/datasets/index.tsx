@@ -13,7 +13,6 @@ import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 export default function Datasets() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const [targetFilter, setTargetFilter] = useState('all');
   const [experimentFilter, setExperimentFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
 
@@ -67,11 +66,10 @@ export default function Datasets() {
     );
   }
 
-  const hasFilters = targetFilter !== 'all' || experimentFilter !== 'all' || tagFilter !== 'all' || search !== '';
+  const hasFilters = experimentFilter !== 'all' || tagFilter !== 'all' || search !== '';
 
   const resetFilters = () => {
     setSearch('');
-    setTargetFilter('all');
     setExperimentFilter('all');
     setTagFilter('all');
   };
@@ -82,8 +80,6 @@ export default function Datasets() {
         <DatasetsToolbar
           search={search}
           onSearchChange={setSearch}
-          targetFilter={targetFilter}
-          onTargetFilterChange={setTargetFilter}
           experimentFilter={experimentFilter}
           onExperimentFilterChange={setExperimentFilter}
           tagFilter={tagFilter}
@@ -100,7 +96,6 @@ export default function Datasets() {
         experiments={experiments}
         isLoading={isLoading}
         search={search}
-        targetFilter={targetFilter}
         experimentFilter={experimentFilter}
         tagFilter={tagFilter}
         isFetchingNextPage={isFetchingNextPage}

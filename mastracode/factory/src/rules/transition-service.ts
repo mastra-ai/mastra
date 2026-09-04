@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { isReviewBoardPhase, reviewBoard } from '../boards/review.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -130,10 +131,10 @@ interface TransitionConsentOptions {
   accept?: boolean;
 }
 
-// Entering a resting lane disarms whoever rests it; only a person's drag into a working lane arms.
-function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'arm' | 'disarm' | undefined {
+// Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
+function transitionConsent(stage: FactoryRuleStage, humanMove: boolean): 'arm' | 'disarm' | undefined {
   if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
-  return humanBoardDrag ? 'arm' : undefined;
+  return humanMove ? 'arm' : undefined;
 }
 
 // An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues.
@@ -142,8 +143,8 @@ function bearsConsent(actor: FactoryRuleActor): boolean {
 }
 
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
-function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
-  const autonomy = transitionConsent(request.stage, humanBoardDrag);
+function consentEffect(request: FactoryTransitionRequest, humanMove: boolean): TransitionConsentOptions {
+  const autonomy = transitionConsent(request.stage, humanMove);
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 
@@ -272,6 +273,19 @@ export class FactoryTransitionService {
         'The work item does not have one canonical Factory stage.',
       );
     }
+    if (
+      request.board === reviewBoard.id &&
+      (!isReviewBoardPhase(fromStage) ||
+        !isReviewBoardPhase(request.stage) ||
+        !reviewBoard.allowsTransition(fromStage, request.stage))
+    ) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        `The Review board does not allow moving from ${fromStage} to ${request.stage}.`,
+      );
+    }
 
     if (isTriageAgent(request.actor) && request.triageType === undefined) {
       return this.#commitRejection(
@@ -325,8 +339,8 @@ export class FactoryTransitionService {
       );
     }
 
-    const humanBoardDrag =
-      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+    // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
+    const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
 
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
@@ -345,6 +359,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        acceptedAt: item.acceptedAt,
         metadata: item.metadata,
       },
       board: request.board,
@@ -383,7 +398,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (humanBoardDrag) {
+          if (humanMove) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -422,7 +437,7 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, humanBoardDrag), accept: acceptsItem(request) && !item.acceptedAt }
+        ? { ...consentEffect(request, humanMove), accept: acceptsItem(request) && !item.acceptedAt }
         : {},
     );
   }

@@ -5721,6 +5721,7 @@ export class Agent<
             } catch (err) {
               let bailed = false;
               let completeHookError: Error | undefined;
+              let failureResultText: string | undefined;
               // Call onDelegationComplete with error if hook is provided.
               // Skipped when the success path already invoked it — including
               // when that invocation is what threw us into this catch.
@@ -5746,6 +5747,10 @@ export class Agent<
                   };
 
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  if (typeof completeResult?.resultText === 'string') {
+                    failureResultText = completeResult.resultText;
+                  }
 
                   if (bailed) {
                     requestContext.set('__mastra_delegationBailed', true);
@@ -5809,7 +5814,7 @@ export class Agent<
                     resourceId: resourceId || '',
                     ...(completeHookError ? { hookError: completeHookError.message } : {}),
                   },
-                  text: `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
+                  text: failureResultText ?? `[Agent:${this.name}] - Failed agent tool execution for ${agentName}`,
                 },
                 err,
               );
