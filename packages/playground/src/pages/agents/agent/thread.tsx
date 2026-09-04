@@ -1,12 +1,15 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -31,11 +34,12 @@ import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/u
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { ThreadTraces } from '@/domains/traces/components/thread-traces';
+import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 import { useLinkComponent } from '@/lib/framework';
 
 function AgentThread() {
   const { agentId, threadId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
@@ -67,6 +71,22 @@ function AgentThread() {
   );
 
   const messageId = searchParams.get('messageId') ?? undefined;
+  // A new thread has no traces yet, so the advanced (trace-based) view falls back to the chat.
+  const isAdvancedVariant = searchParams.get('variant') === 'advanced' && !isNewThread;
+  const setAdvancedVariant = (enabled: boolean) => {
+    setSearchParams(
+      params => {
+        const next = new URLSearchParams(params);
+        if (enabled) next.set('variant', 'advanced');
+        else next.delete('variant');
+        return next;
+      },
+      // Toggling the view is not a navigation: don't stack history entries.
+      { replace: true },
+    );
+  };
+  // Traces aside (chat view only). The column is keyed by thread, so this resets when switching threads.
+  const [tracesAside, setTracesAside] = useState<TracesAsideState>('closed');
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -132,28 +152,66 @@ function AgentThread() {
                               threadId={actualThreadId}
                               isLoading={isThreadsLoading}
                             />
-                            <div className="relative min-h-0">
-                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 h-[calc(100%-0.75rem)] min-h-0 overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
-                                <div className="relative grid h-full min-h-0 overflow-y-auto pt-6">
-                                  <AgentChat
-                                    key={actualThreadId}
-                                    agentId={agentId!}
-                                    agentName={agent?.name}
-                                    modelVersion={agent?.modelVersion}
-                                    supportsMemory={agent?.supportsMemory}
-                                    threadId={actualThreadId}
-                                    memory={hasMemory}
-                                    refreshThreadList={handleRefreshThreadList}
-                                    modelList={agent?.modelList}
-                                    messageId={messageId}
-                                    suggestedPrompts={suggestedPrompts}
-                                    isNewThread={isNewThread}
-                                  />
+                            <div key={actualThreadId} className="relative min-h-0">
+                              <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                                <Header>
+                                  <HeaderTitle>Thread</HeaderTitle>
+                                  {/* "new" is not a stored thread yet, so there is nothing to trace. */}
+                                  {!isNewThread && (
+                                    <HeaderAction>
+                                      {!isAdvancedVariant && (
+                                        <Button
+                                          variant="outline"
+                                          className="hidden lg:inline-flex"
+                                          onClick={() => setTracesAside(tracesAside === 'open' ? 'closing' : 'open')}
+                                        >
+                                          <ChartNoAxesGantt />
+                                          Traces
+                                        </Button>
+                                      )}
+                                      <Switch
+                                        id="thread-advanced-view"
+                                        checked={isAdvancedVariant}
+                                        onCheckedChange={setAdvancedVariant}
+                                      />
+                                      <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
+                                        Advanced view
+                                      </label>
+                                    </HeaderAction>
+                                  )}
+                                </Header>
+                                <div
+                                  className={cn(
+                                    'relative grid min-h-0 flex-1',
+                                    // The advanced view manages its own scroll container.
+                                    !isAdvancedVariant && 'overflow-y-auto pt-6',
+                                  )}
+                                >
+                                  {isAdvancedVariant ? (
+                                    <ThreadViewByTrace threadId={actualThreadId} />
+                                  ) : (
+                                    <AgentChat
+                                      agentId={agentId!}
+                                      agentName={agent?.name}
+                                      modelVersion={agent?.modelVersion}
+                                      supportsMemory={agent?.supportsMemory}
+                                      threadId={actualThreadId}
+                                      memory={hasMemory}
+                                      refreshThreadList={handleRefreshThreadList}
+                                      modelList={agent?.modelList}
+                                      messageId={messageId}
+                                      suggestedPrompts={suggestedPrompts}
+                                      isNewThread={isNewThread}
+                                    />
+                                  )}
                                 </div>
                               </div>
-                              {!isNewThread && (
-                                // Keyed by thread so the overlay state fully resets when switching threads.
-                                <ThreadTracesOverlay key={actualThreadId} threadId={actualThreadId} />
+                              {!isNewThread && !isAdvancedVariant && tracesAside !== 'closed' && (
+                                <ThreadTracesAside
+                                  threadId={actualThreadId}
+                                  state={tracesAside}
+                                  onStateChange={setTracesAside}
+                                />
                               )}
                             </div>
                           </div>
@@ -173,52 +231,41 @@ function AgentThread() {
 
 export default AgentThread;
 
-/** Top-right "Traces" button + slide-in aside overlay. State is colocated so a remount (via `key`) resets it. */
-const ThreadTracesOverlay = ({ threadId }: { threadId: string }) => {
-  // 'closing' keeps the aside mounted while the exit animation plays.
-  const [asideState, setAsideState] = useState<'closed' | 'open' | 'closing'>('closed');
+type TracesAsideState = 'closed' | 'open' | 'closing';
+
+/** Slide-in aside listing the thread traces. Mounted while `state !== 'closed'` so the exit animation can play. */
+const ThreadTracesAside = ({
+  threadId,
+  state,
+  onStateChange,
+}: {
+  threadId: string;
+  state: Exclude<TracesAsideState, 'closed'>;
+  onStateChange: (state: TracesAsideState) => void;
+}) => {
+  // Mirrored from ThreadTraces to drive the aside title/width; reset naturally when the aside unmounts.
   const [isTraceOpen, setIsTraceOpen] = useState(false);
   const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
 
-  // ThreadTraces unmounts once the aside is closed, so clear the mirrored flags on close
-  // to avoid reopening with a stale title/width.
-  const closeAside = () => {
-    setAsideState('closing');
-    setIsTraceOpen(false);
-    setIsTraceSpanOpen(false);
-  };
-
   return (
-    <>
-      <div className="absolute top-3 right-3 z-10 hidden lg:top-4 lg:right-4 lg:block">
-        <Button variant="outline" onClick={() => (asideState === 'open' ? closeAside() : setAsideState('open'))}>
-          <ChartNoAxesGantt />
-          Traces
-        </Button>
-      </div>
-      {asideState !== 'closed' && (
-        <div
-          onAnimationEnd={e => {
-            if (e.target === e.currentTarget && asideState === 'closing') {
-              setAsideState('closed');
-            }
-          }}
-          className={`absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block ${
-            asideState === 'closing'
-              ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
-              : 'animate-in fade-in-0 slide-in-from-right-full'
-          } ${isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]'}`}
-        >
-          <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={closeAside}>
-            <ThreadTraces
-              threadId={threadId}
-              onTraceOpenChange={setIsTraceOpen}
-              onSpanOpenChange={setIsTraceSpanOpen}
-            />
-          </ThreadAside>
-        </div>
+    <div
+      onAnimationEnd={e => {
+        if (e.target === e.currentTarget && state === 'closing') {
+          onStateChange('closed');
+        }
+      }}
+      className={cn(
+        'absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block',
+        state === 'closing'
+          ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
+          : 'animate-in fade-in-0 slide-in-from-right-full',
+        isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]',
       )}
-    </>
+    >
+      <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={() => onStateChange('closing')}>
+        <ThreadTraces threadId={threadId} onTraceOpenChange={setIsTraceOpen} onSpanOpenChange={setIsTraceSpanOpen} />
+      </ThreadAside>
+    </div>
   );
 };
 
