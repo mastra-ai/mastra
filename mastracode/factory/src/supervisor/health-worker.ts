@@ -6,6 +6,8 @@ import { runFactoryHealthCheck } from './health.js';
 import type { NotifySupervisorInput } from './notify.js';
 
 export const DEFAULT_SUPERVISOR_HEALTH_INTERVAL_MS = 5 * 60_000;
+/** Un-notified findings emitted per storage read during a sweep's drain. */
+export const EMIT_PAGE_SIZE = 100;
 
 export class FactorySupervisorHealthWorker extends MastraWorker {
   readonly name = 'factory-supervisor-health';
@@ -104,28 +106,35 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
    */
   async #emitUnnotified(scope: { orgId: string; factoryProjectId: string }): Promise<void> {
     if (!this.#notify) return;
-    const page = await this.#workItems.listSupervisorFindingPage({ ...scope, limit: 100 });
-    for (const row of page.rows) {
-      if (row.lastNotifiedAt) continue;
-      try {
-        await this.#notify({
-          projectId: scope.factoryProjectId,
-          findingKey: row.findingKey,
-          kind: findingText(row, 'kind') ?? 'unknown',
-          summary: findingText(row, 'evidence') ?? findingText(row, 'title') ?? row.findingKey,
-        });
-        await this.#workItems.markSupervisorFindingNotified({
-          ...scope,
-          findingKey: row.findingKey,
-          occurrence: row.occurrence,
-          notifiedAt: new Date(),
-        });
-      } catch (error) {
-        this.deps?.logger.warn('Factory supervisor notify failed', {
-          findingKey: row.findingKey,
-          error: error instanceof Error ? error.message : String(error),
-        });
+    // Drain page by page: stamped rows drop out of the query, so the next
+    // page is always fresh. A page that stamps nothing (every emit failed)
+    // ends the drain — those rows retry on the next sweep.
+    for (;;) {
+      const rows = await this.#workItems.listUnnotifiedSupervisorFindings({ ...scope, limit: EMIT_PAGE_SIZE });
+      let stamped = 0;
+      for (const row of rows) {
+        try {
+          await this.#notify({
+            projectId: scope.factoryProjectId,
+            findingKey: row.findingKey,
+            kind: findingText(row, 'kind') ?? 'unknown',
+            summary: findingText(row, 'evidence') ?? findingText(row, 'title') ?? row.findingKey,
+          });
+          await this.#workItems.markSupervisorFindingNotified({
+            ...scope,
+            findingKey: row.findingKey,
+            occurrence: row.occurrence,
+            notifiedAt: new Date(),
+          });
+          stamped += 1;
+        } catch (error) {
+          this.deps?.logger.warn('Factory supervisor notify failed', {
+            findingKey: row.findingKey,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
+      if (rows.length < EMIT_PAGE_SIZE || stamped === 0) return;
     }
   }
 }

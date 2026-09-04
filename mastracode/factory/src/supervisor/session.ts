@@ -71,15 +71,23 @@ export async function resolveSupervisorScope(options: {
   const context = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const factoryProjectId = parseSupervisorResourceId(context?.resourceId);
   if (!factoryProjectId) return null;
-  const authOrgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
-  if (authOrgId) {
+  const authUser = getFactoryAuthUserFromContext(requestContext);
+  if (authUser) {
+    // Any authenticated caller is judged on its own org, never on session
+    // state: a user without an org (personal account, partial context) fails
+    // closed rather than borrowing the signal path.
+    const authOrgId = getFactoryAuthOrgId(authUser);
+    if (!authOrgId) return null;
     const project = await options.projects.get({ orgId: authOrgId, id: factoryProjectId });
     if (!project) return null;
     return { orgId: authOrgId, factoryProjectId, via: 'auth' };
   }
   // Signal turn: no factory auth anywhere in the request context. Trust the
-  // state stamped by hydrateSupervisorSession, verified against storage.
-  const state = context?.state as Partial<Pick<MastraCodeState, 'factoryProjectId' | 'factoryOrgId'>> | undefined;
+  // state stamped by hydrateSupervisorSession, verified against storage. Read
+  // live state where the context offers it; the snapshot is the fallback.
+  const state = (context?.getState?.() ?? context?.state) as
+    | Partial<Pick<MastraCodeState, 'factoryProjectId' | 'factoryOrgId'>>
+    | undefined;
   const stateProjectId = typeof state?.factoryProjectId === 'string' ? state.factoryProjectId : null;
   const stateOrgId = typeof state?.factoryOrgId === 'string' ? state.factoryOrgId : null;
   if (!stateProjectId || !stateOrgId) return null;

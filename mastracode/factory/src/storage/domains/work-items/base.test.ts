@@ -747,6 +747,38 @@ describe('supervisor finding notification stamps', () => {
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(notifiedAt.getTime());
   });
 
+  it('lists only open, un-stamped findings oldest first', async () => {
+    const storage = await makeStorage();
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await storage.syncSupervisorFindings({
+      ...scope,
+      findings: [finding('decision-failed:a'), finding('decision-failed:b'), finding('decision-failed:c')],
+      now: t0,
+    });
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: 'decision-failed:b',
+      occurrence: 0,
+      notifiedAt: t0,
+    });
+    // Resolve `c` by syncing a snapshot without it.
+    await storage.syncSupervisorFindings({
+      ...scope,
+      findings: [finding('decision-failed:a'), finding('decision-failed:b')],
+      now: new Date('2030-01-01T00:01:00.000Z'),
+    });
+    // Reopen `c` later: it comes back un-stamped and newer than `a`.
+    await storage.syncSupervisorFindings({
+      ...scope,
+      findings: [finding('decision-failed:a'), finding('decision-failed:b'), finding('decision-failed:c')],
+      now: new Date('2030-01-01T00:02:00.000Z'),
+    });
+
+    const rows = await storage.listUnnotifiedSupervisorFindings({ ...scope, limit: 10 });
+    expect(rows.map(row => row.findingKey)).toEqual(['decision-failed:a', 'decision-failed:c']);
+    expect(await storage.listUnnotifiedSupervisorFindings({ ...scope, limit: 1 })).toHaveLength(1);
+  });
+
   it('is occurrence-safe: a stale stamp after resolve/reopen is a silent no-op', async () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));

@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { FactorySupervisorHealthWorker } from './health-worker.js';
+import { EMIT_PAGE_SIZE, FactorySupervisorHealthWorker } from './health-worker.js';
 import type { NotifySupervisorInput } from './notify.js';
 
 let seed: FactoryStorageTestSeed;
@@ -168,6 +168,27 @@ describe('FactorySupervisorHealthWorker emit call site', () => {
     await sweep(worker);
     expect(notify).toHaveBeenCalledTimes(2);
     expect((await openFindings()).rows[0]?.lastNotifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('drains more than one page of un-notified findings in a single sweep', async () => {
+    const count = EMIT_PAGE_SIZE + 3;
+    const base = Date.now();
+    for (let i = 0; i < count; i += 1) {
+      await seedFailure(await seedWorkItem(), new Date(base + i));
+    }
+    const notify = vi.fn(async (_input: NotifySupervisorInput) => {});
+    const worker = new FactorySupervisorHealthWorker({ projects: seed.projects, workItems: seed.workItems, notify });
+    await worker.init(createDeps());
+
+    await sweep(worker);
+
+    expect(notify).toHaveBeenCalledTimes(count);
+    const unnotified = await seed.workItems.listUnnotifiedSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      limit: 10,
+    });
+    expect(unnotified).toEqual([]);
   });
 
   it('sweeps cleanly with no notify handle wired', async () => {

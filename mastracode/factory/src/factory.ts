@@ -796,7 +796,10 @@ export class MastraFactory {
                         },
                       }),
                     );
-                    if (userId) {
+                    // The approval-gated write tools stamp the human who asked
+                    // (approvedBy, actor.type 'human'); a signal turn has no
+                    // such person, so it never gets them.
+                    if (supervisorScope.via === 'auth' && userId) {
                       mergeTools(
                         'factory-supervisor-write',
                         createFactorySupervisorWriteTools({

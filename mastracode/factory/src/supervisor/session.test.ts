@@ -160,6 +160,38 @@ describe('resolveSupervisorScope on signal turns (no factory auth)', () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it('fails closed for an authenticated caller with no org instead of borrowing session state', async () => {
+    const { projects, project } = await seedProject();
+    const context = new RequestContext();
+    context.set('user', { workosId: 'user-1' });
+    const state = { factoryProjectId: project.id, factoryOrgId: 'org-1' };
+    context.set('controller', {
+      resourceId: supervisorResourceId(project.id),
+      threadId: 'thread-1',
+      scope: '/',
+      state,
+      getState: () => state,
+    });
+    await expect(resolveSupervisorScope({ requestContext: context, projects })).resolves.toBeNull();
+  });
+
+  it('reads live state over the request-time snapshot on a signal turn', async () => {
+    const { projects, project } = await seedProject();
+    const context = new RequestContext();
+    context.set('controller', {
+      resourceId: supervisorResourceId(project.id),
+      threadId: 'thread-1',
+      scope: '/',
+      state: {},
+      getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
+    });
+    await expect(resolveSupervisorScope({ requestContext: context, projects })).resolves.toEqual({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      via: 'session-state',
+    });
+  });
 });
 
 describe('hydrateSupervisorSession', () => {
