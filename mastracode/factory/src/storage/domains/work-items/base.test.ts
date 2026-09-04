@@ -858,4 +858,82 @@ describe('supervisor finding notification stamps', () => {
     // itself (only reopen clears it).
     expect(await getRow(storage, 'decision-failed:item-1')).toBeUndefined();
   });
+
+  it('opens findings with status open and no escalation fields', async () => {
+    const storage = await makeStorage();
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
+    const row = await getRow(storage, 'decision-failed:item-1');
+    expect(row?.status).toBe('open');
+    expect(row?.escalatedAt).toBeNull();
+    expect(row?.escalationNote).toBeNull();
+  });
+
+  it('escalates an open finding and round-trips the note', async () => {
+    const storage = await makeStorage();
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
+    const escalatedAt = new Date('2030-01-01T00:01:00.000Z');
+    const updated = await storage.escalateSupervisorFinding({
+      ...scope,
+      findingKey: 'decision-failed:item-1',
+      note: 'Worker asked which API to target; needs a product call.',
+      escalatedAt,
+    });
+    expect(updated?.status).toBe('escalated');
+    expect(updated?.escalatedAt?.getTime()).toBe(escalatedAt.getTime());
+    const row = await getRow(storage, 'decision-failed:item-1');
+    expect(row?.status).toBe('escalated');
+    expect(row?.escalationNote).toBe('Worker asked which API to target; needs a product call.');
+    // Escalation is a visibility refinement, not a resolution: the row stays open.
+    expect(row?.resolvedAt).toBeNull();
+  });
+
+  it('refuses to escalate unknown or resolved findings', async () => {
+    const storage = await makeStorage();
+    const escalatedAt = new Date('2030-01-01T00:01:00.000Z');
+    expect(
+      await storage.escalateSupervisorFinding({ ...scope, findingKey: 'decision-failed:nope', note: 'x', escalatedAt }),
+    ).toBeNull();
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
+    expect(
+      await storage.escalateSupervisorFinding({
+        ...scope,
+        findingKey: 'decision-failed:item-1',
+        note: 'x',
+        escalatedAt,
+      }),
+    ).toBeNull();
+  });
+
+  it('reopen resets status to open and clears the escalation fields', async () => {
+    const storage = await makeStorage();
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
+    await storage.escalateSupervisorFinding({
+      ...scope,
+      findingKey: 'decision-failed:item-1',
+      note: 'first incident',
+      escalatedAt: new Date('2030-01-01T00:01:00.000Z'),
+    });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:03:00.000Z'));
+
+    const reopened = await getRow(storage, 'decision-failed:item-1');
+    expect(reopened?.occurrence).toBe(1);
+    expect(reopened?.status).toBe('open');
+    expect(reopened?.escalatedAt).toBeNull();
+    expect(reopened?.escalationNote).toBeNull();
+  });
+
+  it('auto-resolves escalated findings like any other open row', async () => {
+    const storage = await makeStorage();
+    await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
+    await storage.escalateSupervisorFinding({
+      ...scope,
+      findingKey: 'decision-failed:item-1',
+      note: 'escalated',
+      escalatedAt: new Date('2030-01-01T00:01:00.000Z'),
+    });
+    await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
+    expect(await getRow(storage, 'decision-failed:item-1')).toBeUndefined();
+  });
 });

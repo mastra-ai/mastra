@@ -102,11 +102,17 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { createFactorySupervisorActionTools } from './supervisor/action-tools.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { notifySupervisor } from './supervisor/notify.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
-import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
+import {
+  hydrateSupervisorSession,
+  parseSupervisorResourceId,
+  resolveSupervisorScope,
+  supervisorResourceId,
+} from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
@@ -803,6 +809,26 @@ export class MastraFactory {
                             return memory ? memory.listMessages(input) : { messages: [], hasMore: false };
                           },
                         },
+                      }),
+                    );
+                    // Approval-free supervisor actions run on every turn,
+                    // attributed to the human when there is one and to the
+                    // agent identity otherwise (the audit trail's convention).
+                    const supervisorThreadId = (requestContext.get('controller') as { threadId?: string } | undefined)
+                      ?.threadId;
+                    mergeTools(
+                      'factory-supervisor-actions',
+                      createFactorySupervisorActionTools({
+                        scope: supervisorScope,
+                        actor:
+                          supervisorScope.via === 'auth' && userId
+                            ? { type: 'human', id: userId }
+                            : {
+                                type: 'agent',
+                                id: `agent:${supervisorThreadId ?? supervisorResourceId(supervisorScope.factoryProjectId)}`,
+                              },
+                        workItems: workItemsStorage,
+                        audit: auditStorage,
                       }),
                     );
                     // The approval-gated write tools stamp the human who asked

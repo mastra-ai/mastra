@@ -120,6 +120,42 @@ describe('createFactorySupervisorReadTools', () => {
     expect(report.findings.map((f: any) => f.kind).sort()).toEqual(['decision-failed', 'seat-missing']);
   });
 
+  it('factory_health_check carries the tracked visibility status of each finding', async () => {
+    const seed = await createFactoryStorageForTests();
+    await queueFailedPlan(seed.workItems, 1);
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed, now: () => NOW });
+
+    // Before any sweep tracks the findings, status is unknown.
+    const untracked = await execute<any>(tools.factory_health_check, {});
+    expect(untracked.findings.every((f: any) => f.status === null)).toBe(true);
+
+    // The sweep persists the same findings; escalate one of them.
+    await seed.workItems.syncSupervisorFindings({ ...SCOPE, findings: untracked.findings, now: NOW });
+    const failed = untracked.findings.find((f: any) => f.kind === 'decision-failed');
+    await seed.workItems.escalateSupervisorFinding({
+      ...SCOPE,
+      findingKey: failed.id,
+      note: 'needs a product call',
+      escalatedAt: NOW,
+    });
+
+    const report = await execute<any>(tools.factory_health_check, {});
+    const byKind = Object.fromEntries(report.findings.map((f: any) => [f.kind, f]));
+    expect(byKind['decision-failed']).toMatchObject({
+      status: 'escalated',
+      escalatedAt: NOW.toISOString(),
+      escalationNote: 'needs a product call',
+    });
+    expect(byKind['seat-missing']).toMatchObject({ status: 'open', escalatedAt: null, escalationNote: null });
+
+    const detail = await execute<any>(tools.factory_inspect_work_item, { number: 1 });
+    expect(detail.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ findingKey: failed.id, status: 'escalated', escalationNote: 'needs a product call' }),
+      ]),
+    );
+  });
+
   it('factory_inspect_work_item resolves a card by number with its seats, decisions, audit and feed', async () => {
     const seed = await createFactoryStorageForTests();
     const { workItems, audit, comments } = seed;
