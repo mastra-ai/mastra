@@ -186,6 +186,39 @@
   --wick-lit: 1;
   --wick-halo: 0.26;
 
+  position: absolute;
+
+  /* The beam sits on the card's border, not on a line inside it: the card turns
+   * its own 1px border transparent and the ring paints that exact strip — same
+   * box, same radius, same width, resting colour included. Reaching the border
+   * box means reaching out of the padding box, so a card carrying a wick drops
+   * `content-visibility`, whose clip stops there. The radius is inherited rather
+   * than named: the card owns it, and a guess is a corner that misses. */
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+
+  /* One clock per group, none a multiple of another, each started mid-phase so
+   * the three are never together on the first frame either. */
+  animation:
+    session-wick-a 5.2s ease-in-out calc(-1.2s + var(--wick-phase)) infinite,
+    session-wick-b 6.8s ease-in-out calc(-4.7s + var(--wick-phase)) infinite,
+    session-wick-c 8.6s ease-in-out calc(-6.3s + var(--wick-phase)) infinite,
+    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out var(--wick-phase) infinite;
+  transition:
+    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --wick-drift 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    --belt-hue 520ms ease;
+}
+
+/* Declared on the pseudo-elements, not on the wick itself: a custom property has
+ * its `var()`s substituted where it is declared, so a beam built on the parent
+ * would reach both pseudos with the parent's drift already baked in and the
+ * halo could never park. Here each one substitutes its own.
+ */
+.session-wick::before,
+.session-wick::after {
   /* Each clock centred on zero and scaled by the drift: at rest every pool sits
    * at its base size in its base place, and the card is lit but still. */
   --wick-ka: calc((var(--wick-a) - 0.5) * var(--wick-drift));
@@ -275,31 +308,6 @@
       ),
       transparent
     );
-
-  position: absolute;
-
-  /* The beam sits on the card's border, not on a line inside it: the card turns
-   * its own 1px border transparent and the ring paints that exact strip — same
-   * box, same radius, same width, resting colour included. Reaching the border
-   * box means reaching out of the padding box, so a card carrying a wick drops
-   * `content-visibility`, whose clip stops there. The radius is inherited rather
-   * than named: the card owns it, and a guess is a corner that misses. */
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-
-  /* One clock per group, none a multiple of another, each started mid-phase so
-   * the three are never together on the first frame either. */
-  animation:
-    session-wick-a 5.2s ease-in-out calc(-1.2s + var(--wick-phase)) infinite,
-    session-wick-b 6.8s ease-in-out calc(-4.7s + var(--wick-phase)) infinite,
-    session-wick-c 8.6s ease-in-out calc(-6.3s + var(--wick-phase)) infinite,
-    session-wick-breathe calc(var(--belt-beat) * 4) ease-in-out var(--wick-phase) infinite;
-  transition:
-    --wick-fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --wick-drift 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --belt-sway 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    --belt-hue 520ms ease;
 }
 
 /* The rim itself: the pools, the fill coming up under them, and the resting
