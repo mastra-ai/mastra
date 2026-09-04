@@ -173,17 +173,21 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         for (const span of records) await storage.createSpan({ span });
 
         const scores = fixture.scores
-          .filter(score => score.traceId !== null && score.score !== null)
+          .filter(score => score.score !== null)
           .map(score => {
-            const timestamp = score.timestamp
-              ? new Date(score.timestamp)
-              : new Date(Date.UTC(2026, 7, 1, 0, 0, 0, score.cursorId));
+            const timestamp = new Date(score.timestamp);
             return {
               id: score.scoreId,
               scoreId: score.scoreId,
-              traceId: score.traceId!,
+              traceId: score.traceId,
+              spanId: score.spanId,
               scorerId: score.scorerId,
+              scorerVersion: score.scorerVersion,
+              scoreSource: score.scoreSource,
               score: score.score!,
+              entityVersionId: score.entityVersionId,
+              parentEntityVersionId: score.parentEntityVersionId,
+              rootEntityVersionId: score.rootEntityVersionId,
               timestamp,
               createdAt: timestamp,
               updatedAt: null,

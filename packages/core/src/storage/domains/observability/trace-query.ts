@@ -23,6 +23,7 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const timestampLiteralSchema = z.string().datetime({ offset: true });
 const predicatePathSchema = z
   .string()
   .min(1)
@@ -215,7 +216,16 @@ export type TraceQueryField =
   | 'environment'
   | 'status';
 export type TraceQuerySpanField = 'spanType' | 'error';
-export type TraceQueryScoreField = 'scorerId' | 'score';
+export type TraceQueryScoreField =
+  | 'scorerId'
+  | 'scorerVersion'
+  | 'scoreSource'
+  | 'score'
+  | 'timestamp'
+  | 'spanId'
+  | 'entityVersionId'
+  | 'parentEntityVersionId'
+  | 'rootEntityVersionId';
 export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
@@ -362,7 +372,14 @@ const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
 
 const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {
   scorerId: { type: 'string', operators: STRING_OPERATORS },
+  scorerVersion: { type: 'string', operators: STRING_OPERATORS },
+  scoreSource: { type: 'string', operators: STRING_OPERATORS },
   score: { type: 'number', operators: ORDERED_OPERATORS },
+  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  spanId: { type: 'presence', operators: PRESENCE_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
 };
 
 type PredicateContext = 'trace' | 'spans' | 'scores';
@@ -722,9 +739,8 @@ function normalizePath(path: string): string {
 function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {
   if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   if (rule.type === 'timestamp') {
-    if (typeof value !== 'string') return undefined;
-    const timestamp = new Date(value);
-    return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+    const timestamp = timestampLiteralSchema.safeParse(value);
+    return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
   if (rule.type === 'string') return typeof value === 'string' ? value : undefined;
   return undefined;

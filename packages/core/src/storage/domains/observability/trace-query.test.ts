@@ -211,6 +211,115 @@ describe('planTraceQuery', () => {
     });
   });
 
+  it('plans richer score fields with their field-specific semantics', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          scores: {
+            some: {
+              op: 'and',
+              args: [
+                { op: 'in', value: { path: 'scorerVersion' }, set: ['v1', 'v2'] },
+                { op: 'eq', left: { path: 'scoreSource' }, right: { literal: 'automated' } },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-08-10T02:00:00+02:00' },
+                },
+                { op: 'exists', path: 'spanId' },
+                { op: 'notExists', path: 'parentEntityVersionId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v1'] },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(plan.where).toMatchObject({
+      type: 'relation',
+      collection: 'scores',
+      quantifier: 'some',
+      predicate: {
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          { type: 'membership', field: 'scorerVersion', operator: 'in', values: ['v1', 'v2'] },
+          { type: 'comparison', field: 'scoreSource', operator: 'eq', value: 'automated' },
+          { type: 'comparison', field: 'timestamp', operator: 'gte', value: '2026-08-10T00:00:00.000Z' },
+          { type: 'presence', field: 'spanId', operator: 'exists' },
+          { type: 'presence', field: 'parentEntityVersionId', operator: 'notExists' },
+          { type: 'comparison', field: 'entityVersionId', operator: 'eq', value: 'entity-v2' },
+          { type: 'membership', field: 'rootEntityVersionId', operator: 'notIn', values: ['root-v1'] },
+        ],
+      },
+    });
+  });
+
+  it('rejects unapproved score fields and invalid score operator/type combinations', () => {
+    for (const field of ['source', 'scorerName']) {
+      const error = validationError(() =>
+        planTraceQuery(
+          parsed({
+            ...baseRequest,
+            where: { scores: { some: { op: 'exists', path: field } } },
+          }),
+        ),
+      );
+      expect(error.issues[0]).toMatchObject({
+        code: 'field_not_allowed',
+        path: ['where', 'scores', 'some', 'path'],
+      });
+    }
+
+    const orderedString = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: {
+            scores: { some: { op: 'lt', left: { path: 'scoreSource' }, right: { literal: 'manual' } } },
+          },
+        }),
+      ),
+    );
+    expect(orderedString.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'scores', 'some', 'op'] }),
+    );
+
+    const comparedSpanId = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: { scores: { some: { op: 'eq', left: { path: 'spanId' }, right: { literal: 'span-1' } } } },
+        }),
+      ),
+    );
+    expect(comparedSpanId.issues).toContainEqual(
+      expect.objectContaining({ code: 'operator_not_allowed', path: ['where', 'scores', 'some', 'op'] }),
+    );
+
+    const malformedTimestamp = validationError(() =>
+      planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: {
+            scores: {
+              some: { op: 'gte', left: { path: 'timestamp' }, right: { literal: 'August 10, 2026' } },
+            },
+          },
+        }),
+      ),
+    );
+    expect(malformedTimestamp.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'invalid_literal',
+        path: ['where', 'scores', 'some', 'right', 'literal'],
+      }),
+    );
+  });
+
   it('enforces field-specific operators and literal types', () => {
     const badErrorOperator = validationError(() =>
       planTraceQuery(

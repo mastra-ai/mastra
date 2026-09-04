@@ -21,7 +21,18 @@ describe('DuckDB advanced trace query', () => {
               op: 'and',
               args: [
                 { op: 'eq', left: { path: 'scorerId' }, right: { literal: "factuality' OR TRUE --" } },
+                { op: 'eq', left: { path: 'scorerVersion' }, right: { literal: 'v2' } },
+                { op: 'in', value: { path: 'scoreSource' }, set: ['automated'] },
+                {
+                  op: 'gte',
+                  left: { path: 'timestamp' },
+                  right: { literal: '2026-01-01T06:00:00-06:00' },
+                },
                 { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } },
+                { op: 'exists', path: 'spanId' },
+                { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+                { op: 'exists', path: 'parentEntityVersionId' },
+                { op: 'notIn', value: { path: 'rootEntityVersionId' }, set: ['root-v2'] },
               ],
             },
           },
@@ -34,6 +45,14 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql.match(/EXISTS \(/g)).toHaveLength(1);
     expect(compiled.sql).toContain('s.traceId = r.traceId');
     expect(compiled.sql).toContain('FROM current_scores s');
+    expect(compiled.sql).toContain('s.scorerVersion IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.scoreSource IS NOT NULL AND s.scoreSource IN (?)');
+    expect(compiled.sql).toContain('s.timestamp IS NOT NULL AND s.timestamp >= CAST(? AS TIMESTAMP)');
+    expect(compiled.sql).toContain('s.spanId IS NOT NULL');
+    expect(compiled.sql).toContain('s.entityVersionId IS NOT DISTINCT FROM ?');
+    expect(compiled.sql).toContain('s.parentEntityVersionId IS NOT NULL');
+    expect(compiled.sql).toContain('s.rootEntityVersionId IS NULL OR s.rootEntityVersionId NOT IN (?)');
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
   });
 
   it('selects the latest logical root before applying completion and time filters', () => {
