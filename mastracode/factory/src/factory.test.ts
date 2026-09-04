@@ -654,6 +654,28 @@ describe('MastraFactory.prepare', () => {
     );
   });
 
+  it('gives a supervisor session no tools when the factory domain is unavailable, even with tool integrations', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+    const integration = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ custom_write: { description: 'writes somewhere' } as never })),
+    });
+    const config = await prepareFactory({ storage, integrations: [integration] });
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    const context = (resourceId: string) => {
+      const requestContext = new RequestContext();
+      const state = { factoryProjectId: 'p-1', factoryOrgId: 'org-1' };
+      requestContext.set('controller', { resourceId, threadId: resourceId, scope: '/', state, getState: () => state });
+      return requestContext;
+    };
+    expect(await extraTools({ requestContext: context('factory-supervisor:p-1') })).toEqual({});
+    // A non-supervisor session keeps its integration tools in the degraded state.
+    expect(Object.keys(await extraTools({ requestContext: context('resource-1') }))).toEqual(['custom_write']);
+  });
+
   /**
    * The sweep's notify handle must route through the mounted controller:
    * ensure-create the supervisor session, then send on it. A never-created

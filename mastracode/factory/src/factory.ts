@@ -755,6 +755,15 @@ export class MastraFactory {
                     tools[name] = tool;
                   }
                 };
+                const isSupervisorSession =
+                  typeof requestContext?.get === 'function' &&
+                  parseSupervisorResourceId(
+                    (requestContext.get('controller') as { resourceId?: string } | undefined)?.resourceId,
+                  ) !== null;
+                // A supervisor session is authorized below through its scope;
+                // with the factory domain unavailable nothing can vouch for it,
+                // so it gets no tools rather than the integration set.
+                if (isSupervisorSession && !(workItemsStorage && transitionService)) return tools;
                 if (workItemsStorage && transitionService) {
                   mergeTools(
                     'factory',
@@ -839,12 +848,7 @@ export class MastraFactory {
                     // tools scope by project, not by person, so they would
                     // otherwise hand an unattributed turn external writes.
                     if (supervisorScope.via === 'session-state') return tools;
-                  } else if (
-                    typeof requestContext?.get === 'function' &&
-                    parseSupervisorResourceId(
-                      (requestContext.get('controller') as { resourceId?: string } | undefined)?.resourceId,
-                    )
-                  ) {
+                  } else if (isSupervisorSession) {
                     // A supervisor session that cannot prove its scope gets
                     // nothing at all, integration tools included.
                     return tools;
