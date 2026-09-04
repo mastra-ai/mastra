@@ -1,5 +1,6 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { IMastraLogger } from '../../../logger';
 import type { MastraDBMessage } from '../state/types';
 import { dropCrossProviderExecutedParts, pairOrphanedToolCalls, sanitizeOrphanedToolPairs } from './provider-compat';
 
@@ -422,6 +423,69 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(result).toEqual([{ role: 'assistant', content: [] }]);
+  });
+
+  it('drops only the foreign turn when two providers are interleaved in one thread', () => {
+    const messages: ModelMessage[] = [...promptWithSearch('ws_openai'), ...promptWithSearch('ws_anthropic')];
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [
+        dbAssistant({ provider: OPENAI, toolCallId: 'ws_openai', providerExecuted: true }),
+        dbAssistant({ provider: ANTHROPIC, toolCallId: 'ws_anthropic', providerExecuted: true }),
+      ],
+      ANTHROPIC,
+    );
+
+    const remainingIds = result.flatMap(message =>
+      Array.isArray(message.content)
+        ? message.content.flatMap(part =>
+            part.type === 'tool-call' || part.type === 'tool-result' ? [part.toolCallId] : [],
+          )
+        : [],
+    );
+    expect(remainingIds).toEqual(['ws_anthropic', 'ws_anthropic']);
+  });
+
+  // Pinned deliberately: provider ids are not a uniform namespace, so a same-vendor switch
+  // is treated like any other provider change rather than guessed to be payload-compatible.
+  it('drops a same-vendor payload when the provider string differs', () => {
+    const messages = promptWithSearch('ws_1');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: 'openai.responses', toolCallId: 'ws_1', providerExecuted: true })],
+      'openai.chat',
+    );
+
+    expect(result).not.toEqual(messages);
+  });
+
+  it('warns only for parts present in this prompt, not for every stored foreign call', () => {
+    const warn = vi.fn();
+    const messages = promptWithSearch('ws_present');
+    dropCrossProviderExecutedParts(
+      messages,
+      [
+        dbAssistant({ provider: OPENAI, toolCallId: 'ws_present', providerExecuted: true }),
+        // Older history that recall did not select for this prompt.
+        dbAssistant({ provider: OPENAI, toolCallId: 'ws_trimmed', providerExecuted: true }),
+      ],
+      ANTHROPIC,
+      { warn } as unknown as IMastraLogger,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[1]).toEqual({ toolCallId: 'ws_present' });
+  });
+
+  it('returns the input array by identity when foreign history is not in this prompt', () => {
+    const messages = promptWithSearch('ws_present');
+    const result = dropCrossProviderExecutedParts(
+      messages,
+      [dbAssistant({ provider: OPENAI, toolCallId: 'ws_trimmed', providerExecuted: true })],
+      ANTHROPIC,
+    );
+
+    expect(result).toBe(messages);
   });
 
   it('does not mutate the messages it was given', () => {
