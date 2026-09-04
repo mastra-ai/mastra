@@ -68,6 +68,10 @@ type ParkedRunPolicy = 'escalate' | 'await';
 
 type ParkedTool = { toolName: string; toolCallId: string; args: unknown; suspendPayload: unknown };
 
+/** Bounds on the captured choices of a parked question (count, and label length). */
+const MAX_PARKED_OPTIONS = 20;
+const MAX_PARKED_OPTION_LENGTH = 120;
+
 const asRecord = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
@@ -90,13 +94,17 @@ function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord
         ? JSON.stringify(parked.args)
         : undefined);
   // `ask_user` offers `{ label, description? }` objects; other tools may offer
-  // plain strings. Either way the answer is submitted as the label text.
+  // plain strings. Either way the answer is submitted as the label text. The
+  // set is bounded: it is persisted, rendered into evidence, and rung out as a
+  // notification summary, and a worker can offer anything.
   const options = [payload.options, args.options]
     .map(value =>
       Array.isArray(value)
         ? value
+            .slice(0, MAX_PARKED_OPTIONS)
             .map(item => (typeof item === 'string' ? item : asRecord(item).label))
             .filter((item): item is string => typeof item === 'string' && item.length > 0)
+            .map(item => truncateText(item, MAX_PARKED_OPTION_LENGTH))
         : [],
     )
     .find(labels => labels.length > 0);

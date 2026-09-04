@@ -12,6 +12,7 @@ import type { SupervisorScope } from './read-tools.js';
 export interface SuspendableSession {
   suspensions: { has(input: { toolCallId: string }): boolean };
   respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
+  subscribe(listener: (event: { type: string; error?: unknown }) => void): () => void;
 }
 
 /**
@@ -55,6 +56,26 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
       metadata: { ...metadata, cause: 'supervisor' },
       occurredAt: now(),
     });
+
+  // Mutations land before their audit row. An audit failure must not read as
+  // "the action failed" (a retry would repeat an irreversible action), so the
+  // outcome is reported alongside; the raw storage error stays in the log.
+  const auditAfter = async (
+    action: string,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown>,
+  ): Promise<{ audited: boolean; auditError?: string }> => {
+    try {
+      await audit(action, target, metadata);
+      return { audited: true };
+    } catch (error) {
+      deps.logger?.warn(`Factory supervisor audit failed: ${action}`, {
+        target,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { audited: false, auditError: 'Done, but recording the audit entry failed. Do not retry.' };
+    }
+  };
 
   return {
     factory_escalate_finding: createTool({
@@ -110,9 +131,14 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         answer: z.union([z.string().trim().min(1), z.array(z.string().trim().min(1)).min(1)]),
       }),
       execute: async ({ decisionId: givenId, findingKey, answer }) => {
-        const decisionId = givenId ?? (findingKey ? decisionIdFromFindingKey(findingKey) : undefined);
+        const fromKey = findingKey ? decisionIdFromFindingKey(findingKey) : undefined;
+        if (givenId && findingKey && fromKey !== givenId) {
+          throw new Error('decisionId and findingKey name different decisions; give one, or make them agree.');
+        }
+        const decisionId = givenId ?? fromKey;
         if (!decisionId) throw new Error('Give a decision id or a decision-failed:<id> finding key.');
         const key = `decision-failed:${decisionId}`;
+        const given = Array.isArray(answer) ? answer.join(', ') : answer;
         // Scoped to this supervisor's own factory: another project's decision is simply not found.
         const decision = await deps.workItems.getDeferredDecision(
           deps.scope.orgId,
@@ -141,12 +167,17 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
             note,
             escalatedAt,
           });
-          await audit(
+          if (!finding) {
+            throw new Error(
+              'Could not answer this, and its finding is not open to escalate; a person needs to look at the decision directly.',
+            );
+          }
+          const audited = await auditAfter(
             'factory.supervisor.suspension_escalated',
             { type: 'deferred_decision', id: decisionId },
-            { note, answer },
+            { findingKey: key, note, answer },
           );
-          return { decisionId, outcome: 'escalated' as const, escalated: Boolean(finding), note };
+          return { decisionId, outcome: 'escalated' as const, findingKey: key, note, ...audited };
         };
 
         const parked = decision.suspension;
@@ -157,22 +188,25 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         }
         if (parked.toolName === 'submit_plan') {
           return escalate(
-            `The worker wrote a plan and it was not approved after ${FACTORY_DISPATCH_CONSTANTS.maxPlanApprovals} automatic approvals; a person should review it. Supervisor's read: ${Array.isArray(answer) ? answer.join(', ') : answer}`,
+            `The worker wrote a plan and it was not approved after ${FACTORY_DISPATCH_CONSTANTS.maxPlanApprovals} automatic approvals; a person should review it. Supervisor's read: ${given}`,
           );
         }
         if (parked.toolName !== 'ask_user') {
           return escalate(
-            `The worker is parked on ${parked.toolName}, which the supervisor cannot answer on its own. Question: ${parked.question}. Supervisor's read: ${Array.isArray(answer) ? answer.join(', ') : answer}`,
+            `The worker is parked on ${parked.toolName}, which the supervisor cannot answer on its own. Question: ${parked.question}. Supervisor's read: ${given}`,
           );
         }
         const resumeData = askUserResumeData(parked, answer);
         if (resumeData === undefined) {
           return escalate(
-            `The worker asked: ${parked.question} Offered: ${(parked.options ?? []).join(' | ')}. The supervisor's answer (${Array.isArray(answer) ? answer.join(', ') : answer}) is not one of the offered options, so nothing was submitted.`,
+            `The worker asked: ${parked.question} Offered: ${(parked.options ?? []).join(' | ')}. The supervisor's answer (${given}) is not one of the offered options, so nothing was submitted.`,
           );
         }
 
-        // Fail closed on a binding that is gone: nothing to resume into.
+        // The persisted correlation must match the binding on record in full:
+        // the binding must be this project's, still active, and the very
+        // session/thread the question was captured in. Anything else is not a
+        // run this answer can safely reach.
         const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
         const binding = bindings.find(candidate => candidate.id === parked.session.bindingId);
         if (!binding || binding.status !== 'active') {
@@ -180,8 +214,13 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
             `The worker asked: ${parked.question} but its run binding is ${binding ? binding.status : 'gone'}; the run cannot be resumed and needs a person to restart it.`,
           );
         }
+        if (binding.resourceId !== parked.session.resourceId || binding.threadId !== parked.session.threadId) {
+          return escalate(
+            `The worker asked: ${parked.question} but the recorded session no longer matches its binding; a person needs to check the run before it is answered.`,
+          );
+        }
 
-        const session = await deps.controller.getSessionByResource(parked.session.resourceId);
+        const session = await deps.controller.getSessionByResource(binding.resourceId);
         // Not parked any more: a person answered from the session, or the
         // process restarted and the in-memory suspension is gone. Either way
         // a resume would be a no-op; say so rather than fail.
@@ -194,18 +233,34 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
               : 'The worker session is not reachable from this process.',
           };
         }
-        await session.respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId });
-        await audit(
+        // No await between the check above and this call: the session resolves
+        // the suspension synchronously on entry, so nothing can take it in
+        // between. A resume that fails inside the run is swallowed by the
+        // session (it emits an error and ends the run), so watch for that.
+        let resumeError: unknown;
+        const unsubscribe = session.subscribe(event => {
+          if (event.type === 'error') resumeError = event.error;
+        });
+        try {
+          await session.respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId });
+        } finally {
+          unsubscribe();
+        }
+        if (resumeError !== undefined) {
+          deps.logger?.warn('Factory supervisor answer did not resume the run', {
+            decisionId,
+            error: resumeError instanceof Error ? resumeError.message : String(resumeError),
+          });
+          return escalate(
+            `The worker asked: ${parked.question} The supervisor answered (${given}) but the run failed while resuming; a person needs to look at the session.`,
+          );
+        }
+        const audited = await auditAfter(
           'factory.supervisor.suspension_answered',
           { type: 'deferred_decision', id: decisionId },
-          {
-            toolName: parked.toolName,
-            toolCallId: parked.toolCallId,
-            question: parked.question,
-            answer: resumeData,
-          },
+          { toolName: parked.toolName, toolCallId: parked.toolCallId, question: parked.question, answer: resumeData },
         );
-        return { decisionId, outcome: 'answered' as const, question: parked.question, answer: resumeData };
+        return { decisionId, outcome: 'answered' as const, question: parked.question, answer: resumeData, ...audited };
       },
     }),
   };

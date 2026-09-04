@@ -4363,6 +4363,19 @@ describe('FactoryDecisionDispatcher', () => {
       expect(record.suspension?.question.endsWith('…')).toBe(true);
     });
 
+    it('bounds the captured options in count and label length', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const options = Array.from({ length: 50 }, (_, index) => ({ label: `${index}-${'x'.repeat(500)}` }));
+      const { record } = await park(storage, { suspendPayload: { question: 'Pick', options } });
+      expect(record.suspension?.options).toHaveLength(20);
+      for (const label of record.suspension?.options ?? []) {
+        expect(label).toHaveLength(120);
+        expect(label.endsWith('…')).toBe(true);
+      }
+      // What the sweep renders and rings stays bounded with it.
+      expect(record.suspension?.options?.[0]?.startsWith('0-')).toBe(true);
+    });
+
     it('falls back to the tool and call id when the suspension carries no text', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { record } = await park(storage, undefined);
