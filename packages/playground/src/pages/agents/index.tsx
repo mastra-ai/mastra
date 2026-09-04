@@ -1,6 +1,6 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useState } from 'react';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
 import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';

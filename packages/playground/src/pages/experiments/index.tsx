@@ -1,5 +1,5 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';

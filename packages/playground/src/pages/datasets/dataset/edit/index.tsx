@@ -1,7 +1,7 @@
 import { Card } from '@mastra/playground-ui/components/Card';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { isAuthError } from '@mastra/playground-ui/utils/errors';
 import { DatabaseIcon } from 'lucide-react';
 import type { ReactNode } from 'react';

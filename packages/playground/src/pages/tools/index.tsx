@@ -1,6 +1,6 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useState } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';

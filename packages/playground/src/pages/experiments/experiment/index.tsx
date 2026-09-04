@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
+import { is404NotFoundError, isAuthError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, Outlet, useParams } from 'react-router';
@@ -49,6 +49,39 @@ function ExperimentPage() {
 
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
+
+  if (experimentError && isAuthError(experimentError)) {
+    return (
+      <ExperimentPageShell>
+        <QueryError error={experimentError} resource="datasets" title="Failed to load experiment" />
+      </ExperimentPageShell>
+    );
+  }
+
+  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
+  // experimentId isn't present in the full experiments listing (so we can't
+  // resolve a datasetId for it).
+  if (
+    (experimentError && is404NotFoundError(experimentError)) ||
+    (!experimentsListLoading && !datasetId) ||
+    (!experimentLoading && !experimentError && !experiment)
+  ) {
+    return (
+      <ExperimentPageShell>
+        <EmptyState
+          iconSlot={<PlayCircle />}
+          titleSlot="Experiment not found"
+          descriptionSlot={`No experiment with id "${experimentId}".`}
+          actionSlot={
+            <Button as={Link} to="/experiments">
+              <ArrowLeft />
+              Back to Experiments
+            </Button>
+          }
+        />
+      </ExperimentPageShell>
+    );
+  }
 
   if (experimentError) {
     return (

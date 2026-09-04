@@ -3,11 +3,11 @@ import { CircleXIcon, LogIn, ShieldX } from 'lucide-react';
 import type * as React from 'react';
 import { useCallback, useState } from 'react';
 
-import { errorFallback, parseError } from '@/lib/errors';
-import { is401UnauthorizedError, is403ForbiddenError } from '@/lib/query-utils';
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
+import { errorFallback, parseError } from '@/lib/errors';
+import { is401UnauthorizedError, is403ForbiddenError } from '@/lib/query-utils';
 
 export interface QueryErrorProps {
   /** The error from a failed query. */

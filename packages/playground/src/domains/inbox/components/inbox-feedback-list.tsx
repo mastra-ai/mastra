@@ -2,8 +2,8 @@ import type { FeedbackRecord } from '@mastra/core/storage';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
 import { useEffect, useState } from 'react';
@@ -63,7 +63,7 @@ export function InboxFeedbackList({
   }
 
   if (error) {
-    return <ErrorState title="Failed to load feedback" message={error.message} />;
+    return <QueryError error={error} resource="feedback" title="Failed to load feedback" />;
   }
 
   return (

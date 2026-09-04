@@ -1,5 +1,5 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
@@ -31,7 +31,6 @@ export default function Datasets() {
   const error = errorDatasets || errorExperiments;
 
   const openCreatePage = () => void navigate('/datasets/new');
-
 
   if (error) {
     return (

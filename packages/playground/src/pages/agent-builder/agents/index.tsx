@@ -1,10 +1,10 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';

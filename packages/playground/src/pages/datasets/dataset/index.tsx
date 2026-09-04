@@ -2,10 +2,10 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
+import { is404NotFoundError, isAuthError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -59,6 +59,32 @@ function DatasetPage() {
   const disableExperimentTrigger = !isUnfilteredLoading && unfilteredItems.length === 0;
 
   if (isDatasetLoading) return null; // Let the DatasetItemsView handle the loading state to avoid layout shift when loading the dataset for the edit dialog
+
+  if (error && isAuthError(error)) {
+    return (
+      <DatasetPageShell>
+        <QueryError error={error} resource="datasets" title="Failed to load dataset" />
+      </DatasetPageShell>
+    );
+  }
+
+  if ((error && is404NotFoundError(error)) || (!isDatasetLoading && !error && !dataset)) {
+    return (
+      <DatasetPageShell>
+        <EmptyState
+          iconSlot={<DatabaseIcon />}
+          titleSlot="Dataset not found"
+          descriptionSlot={`No dataset with id "${datasetId}".`}
+          actionSlot={
+            <Button as={Link} to="/datasets">
+              <ArrowLeft />
+              Back to Datasets
+            </Button>
+          }
+        />
+      </DatasetPageShell>
+    );
+  }
 
   if (error) {
     return (

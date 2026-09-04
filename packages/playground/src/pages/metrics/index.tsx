@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
 import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
 import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';

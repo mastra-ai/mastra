@@ -1,9 +1,9 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { LibraryIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';

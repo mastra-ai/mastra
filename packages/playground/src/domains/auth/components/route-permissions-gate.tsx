@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CircleXIcon } from 'lucide-react';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';

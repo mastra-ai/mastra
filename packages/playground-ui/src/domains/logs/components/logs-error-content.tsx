@@ -6,7 +6,7 @@ import { isObservabilityUnavailableError, isUnsupportedObservabilityOperationErr
 export interface LogsErrorContentProps {
   /** The error from a useLogs query. */
   error: unknown;
-  /** Passed to PermissionDenied (usually 'logs'). */
+  /** Named in the permission-denied copy (usually 'logs'). */
   resource: string;
   /** Title shown on the generic error fallback. */
   errorTitle: string;

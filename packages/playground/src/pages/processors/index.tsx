@@ -1,6 +1,6 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useState } from 'react';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';

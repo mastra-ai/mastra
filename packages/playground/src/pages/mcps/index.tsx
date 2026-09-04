@@ -1,6 +1,6 @@
-import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { useState } from 'react';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';

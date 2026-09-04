@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { QueryError } from '@mastra/playground-ui/components/QueryError';
 import { Inbox } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
@@ -36,7 +36,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
   }
 
   if (error) {
-    return <ErrorState title="Failed to load dataset items" message={error.message} />;
+    return <QueryError error={error} resource="dataset items" title="Failed to load dataset items" />;
   }
 
   if (items.length === 0) {
