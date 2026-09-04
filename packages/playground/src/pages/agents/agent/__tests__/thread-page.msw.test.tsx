@@ -404,6 +404,7 @@ describe('Standalone thread page', () => {
 
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Advanced view' })).toBeNull();
     });
 
     it('is toggled from the "Advanced view" switch in the Thread header', async () => {

@@ -150,17 +150,19 @@ function AgentThread() {
                               <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                 <Header>
                                   <HeaderTitle>Thread</HeaderTitle>
-                                  <HeaderAction>
-                                    <Switch
-                                      id="thread-advanced-view"
-                                      checked={isAdvancedVariant}
-                                      disabled={isNewThread}
-                                      onCheckedChange={setAdvancedVariant}
-                                    />
-                                    <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
-                                      Advanced view
-                                    </label>
-                                  </HeaderAction>
+                                  {/* "new" is not a stored thread yet, so there is nothing to trace. */}
+                                  {!isNewThread && (
+                                    <HeaderAction>
+                                      <Switch
+                                        id="thread-advanced-view"
+                                        checked={isAdvancedVariant}
+                                        onCheckedChange={setAdvancedVariant}
+                                      />
+                                      <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
+                                        Advanced view
+                                      </label>
+                                    </HeaderAction>
+                                  )}
                                 </Header>
                                 <div
                                   className={cn(
