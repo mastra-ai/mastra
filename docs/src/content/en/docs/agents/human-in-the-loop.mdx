@@ -529,7 +529,7 @@ Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `
 
 `sendToolApproval()` automatically uses the same storage-backed discovery. If memory contains no active run for the thread, it searches storage for a suspended run before failing. Pass a `toolCallId` when several suspended runs match the thread.
 
-The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly. When server auth is configured, the route only includes tool `args` and `suspendPayload` for requests scoped by a server-derived `resourceId` or an authorized `threadId`. Agent-wide listings return the identifying fields only.
+The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
 
 :::note
 
