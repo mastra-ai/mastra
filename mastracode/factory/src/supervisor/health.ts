@@ -189,7 +189,11 @@ export const QUESTION_FAILURE_CODES: ReadonlySet<string> = new Set(['run_awaitin
 function parkedQuestion(decision: FactoryDeferredDecisionRecord): string {
   const parked = decision.suspension;
   if (!parked) return '';
-  const choices = parked.options?.length ? ` Options: ${parked.options.join(' | ')}.` : '';
+  const choices = parked.options?.length
+    ? ` Options: ${parked.options.join(' | ')}.`
+    : parked.optionsOmitted
+      ? ' Options: offered, but too many or too long to capture; answer from the session.'
+      : '';
   return ` Parked on ${parked.toolName}: ${JSON.stringify(parked.question)}.${choices}`;
 }
 

@@ -1155,3 +1155,86 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     expect(await rows(storage)).toEqual([]);
   });
 });
+
+describe('answered decisions', () => {
+  const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+  const now = new Date('2030-01-01T00:00:00.000Z');
+  const parked = {
+    toolName: 'ask_user',
+    toolCallId: 'call-1',
+    question: 'Which database?',
+    session: { bindingId: 'b-1', resourceId: 'r-1', threadId: 't-1' },
+  };
+
+  async function parkedDecision(storage: WorkItemsStorage) {
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'answered', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', prompt: 'Go.', idempotencyKey: 'answered' }],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    const failed = await storage.failDeferredDecision({
+      id: claimed!.id,
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Factory run is waiting on ask_user for an answer.',
+      failureCode: 'run_awaiting_input',
+      terminal: true,
+      suspension: parked,
+    });
+    return failed!;
+  }
+
+  it('resolveAnsweredDecision marks a failed decision succeeded, once', async () => {
+    const storage = await makeStorage();
+    const failed = await parkedDecision(storage);
+    const later = new Date(now.getTime() + 60_000);
+    const resolved = await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later });
+    expect(resolved).toMatchObject({ id: failed.id, status: 'succeeded' });
+    expect(await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later })).toBeNull();
+    expect((await storage.getDeferredDecision(scope.orgId, scope.factoryProjectId, failed.id))?.status).toBe(
+      'succeeded',
+    );
+  });
+
+  it('reparkDecision replaces the parked question on a failed decision and nothing else', async () => {
+    const storage = await makeStorage();
+    const failed = await parkedDecision(storage);
+    const later = new Date(now.getTime() + 60_000);
+    const next = { ...parked, toolCallId: 'call-2', question: 'And which port?', options: ['5432', '5433'] };
+    const reparked = await storage.reparkDecision({
+      ...scope,
+      decisionId: failed.id,
+      suspension: next,
+      lastError: 'Factory run is waiting on ask_user for an answer.',
+      now: later,
+    });
+    expect(reparked).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_awaiting_input',
+      failureOccurrence: failed.failureOccurrence,
+      suspension: next,
+    });
+    // Not for decisions in any other state.
+    await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later });
+    expect(
+      await storage.reparkDecision({ ...scope, decisionId: failed.id, suspension: next, lastError: 'x', now: later }),
+    ).toBeNull();
+  });
+});
