@@ -213,6 +213,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: 'true',
           },
           {
+            name: 'autoRestartActiveRuns',
+            type: 'boolean',
+            description:
+              "Whether boot-time generic recovery (Mastra.restartAllActiveWorkflowRuns()) automatically restarts this workflow's active runs. Set to false for workflows whose side effects must not be re-driven by a blanket restart, or whose recovery is owned by another mechanism. Durable agent workflows set this to false because their recovery is owned by the opt-in recovery.durableAgents: 'auto' path.",
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'shouldPersistSnapshot',
             type: '(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean',
             description: 'Optional flag to determine whether to persist the workflow snapshot',

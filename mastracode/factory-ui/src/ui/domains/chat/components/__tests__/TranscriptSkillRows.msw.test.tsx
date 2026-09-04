@@ -158,6 +158,21 @@ describe('TranscriptEntries skill rows', () => {
     expect(screen.queryByText(/&lt;\/skill&gt;/)).not.toBeInTheDocument();
   });
 
+  it('renders a kickoff with the appended work-item feed as a skill row plus a feed row', async () => {
+    const feed = '[Ada · 2026-08-28T10:00:00.000Z]\nLooks off to me';
+    renderEntries([userMessageEntry('msg-1', `${SKILL_WITH_ARGS}\n\n<work-item-feed>\n${feed}\n</work-item-feed>`)]);
+
+    expect(screen.getByRole('group', { name: 'Skill: triage-issue' })).toBeInTheDocument();
+    const feedRow = screen.getByRole('group', { name: 'Signal: Work item feed' });
+
+    await userEvent.click(within(feedRow).getByRole('button'));
+    expect(within(feedRow).getByText(/Looks off to me/, { selector: 'p' })).toBeInTheDocument();
+
+    // Neither envelope leaks as raw text.
+    expect(screen.queryByText(/<skill name=/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/<work-item-feed>/)).not.toBeInTheDocument();
+  });
+
   it('renders the agent activating a skill itself as the same row, not a raw tool card', async () => {
     renderEntries([
       {

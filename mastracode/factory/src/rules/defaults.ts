@@ -1,3 +1,4 @@
+import { workItemNumber } from '../work-item-branch.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
@@ -9,12 +10,14 @@ import type {
   FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
+  FactoryRuleItemContext,
   FactoryRuleSource,
   FactoryRuleStage,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
+import { needsApproval } from './types.js';
 import { assertFactoryRules, FactoryRuleValidationError } from './validation.js';
 
 export const DEFAULT_FACTORY_RULE_VERSION = 'factory-default-v1';
@@ -27,14 +30,49 @@ function githubActorLogin(context: Pick<FactoryStageRuleContext, 'actor'>): stri
   return context.actor.type === 'github' ? context.actor.login : undefined;
 }
 
+// `sourceKey` reaches a rule as `linear:issue:linear:ENG-42`; the intake stamps the bare identifier.
+function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
+  const identifier = item.metadata?.identifier;
+  return typeof identifier === 'string' ? identifier : undefined;
+}
+
+/** How a run names the card it is about: the noun, the provider number when the card carries one, the link. */
+function sourceRef(item: FactoryRuleItemContext): string {
+  const link = item.url ? ` (${item.url})` : '';
+  if (item.source === 'linear-issue') {
+    const identifier = linearIdentifier(item);
+    return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
+  }
+  if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
+  const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
+  const number = workItemNumber(item);
+  if (number === undefined) return item.url ? `${noun}${link}` : item.title;
+  return `${noun} #${number}${link}`;
+}
+
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage`,
     role: 'triage',
     skillName: 'factory-triage',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+    arguments: sourceRef(context.item),
   } as const;
+}
+
+function prepareApproval(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:prepare-approval`,
+    role: 'triage',
+    prompt:
+      `Prepare approval for ${sourceRef(context.item)}. Review the existing triage comment and summarize ` +
+      'the decision needed before implementation or closure.',
+  } as const;
+}
+
+function triageIssueEntry(context: FactoryStageRuleContext) {
+  return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
 }
 
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
@@ -63,15 +101,12 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
 }
 
 function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
-  const identifier = context.item.sourceKey?.startsWith('linear:')
-    ? context.item.sourceKey.slice('linear:'.length)
-    : context.item.title;
   return {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
     role: 'triage',
     skillName: 'factory-triage',
-    arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+    arguments: `${sourceRef(context.item)}\n\n${LINEAR_FETCH_HINT}`,
   } as const;
 }
 
@@ -112,7 +147,11 @@ function reporterCoAuthor(context: FactoryStageRuleContext) {
  * pull request, which arrives as its own event and raises the Review card.
  */
 function buildWorkItem(context: FactoryStageRuleContext) {
-  const subject = context.item.url ? `the approved plan for ${context.item.url}` : 'the approved plan';
+  const ref = sourceRef(context.item);
+  const fromApprovedPlan = context.fromStage === 'planning';
+  const task = fromApprovedPlan
+    ? `Implement the approved plan for ${ref}. Open a pull request when the work is ready for review.`
+    : `Implement a fix for ${ref}: investigate the root cause, make the change with tests, and open a pull request.`;
   const reporter = reporterCoAuthor(context);
   // The trailer needs the reporter's numeric id, which intake does not stamp, so
   // the agent resolves it from the same issue it is already reading.
@@ -125,7 +164,7 @@ function buildWorkItem(context: FactoryStageRuleContext) {
     type: 'invokeSkill',
     idempotencyKey: `${context.ingress.id}:build`,
     role: 'work',
-    prompt: `Implement ${subject}. Open a pull request when the work is ready for review.${credit}`,
+    prompt: `${task}${credit}`,
   } as const;
 }
 
@@ -139,12 +178,27 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
+const LINEAR_FETCH_HINT =
+  "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.";
+
+/** The review agent lands in a bare worktree, so it needs the PR checked out and the branch it should expect. */
+function checkoutHint(item: FactoryRuleItemContext): string {
+  const number = workItemNumber(item);
+  const checkout =
+    number === undefined
+      ? 'Check out the PR in this worktree first.'
+      : `Check out the PR in this worktree first with \`gh pr checkout ${number}\`.`;
+  // Backticked because a branch name is written by whoever opened the PR: it stays a quoted value, not a sentence.
+  const headBranch =
+    typeof item.metadata?.headBranch === 'string' ? ` Expected head branch: \`${item.metadata.headBranch}\`.` : '';
+  return `${checkout}${headBranch}`;
+}
+
 function reviewPullRequest(context: FactoryStageRuleContext) {
-  // A re-entry into Review (from any post-intake stage) supersedes whichever
-  // review pass previously ran on this card: cancel any in-flight run before
-  // dispatching a fresh one so we don't burn tokens on the stale pass and race
-  // two agents on the same card. Cancellation is safe when nothing is in flight.
-  const supersedes = context.fromStage !== 'intake';
+  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // returning from Done has no live review to cancel; aborting its bound session
+  // would instead cancel the fresh re-review kickoff.
+  const supersedes = context.fromStage === 'review';
   // The re-review skill only applies when a prior review pass actually completed
   // (the card is returning from `done`). A cancelled first-time review that
   // re-enters Review from `review` itself still has no prior pass to reconcile —
@@ -156,7 +210,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
     skillName,
-    arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
+    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
     ...(supersedes ? { cancelInFlight: true } : {}),
   } as const;
 }
@@ -223,6 +277,7 @@ function issueOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubIssueNumber: context.issue.number,
+      ...(context.issue.createdAt ? { sourceCreatedAt: context.issue.createdAt } : {}),
       ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
       authorTrusted: trustedGithubActor(context),
       autoStartCandidate:
@@ -256,17 +311,14 @@ function issueClosed(context: FactoryGithubRuleContext) {
   } as const;
 }
 
-function pullRequestOpened(context: FactoryGithubRuleContext) {
+function materializePullRequestIntake(
+  context: FactoryGithubRuleContext,
+  { idempotencyKey, autoStartCandidate }: { idempotencyKey: string; autoStartCandidate: boolean },
+) {
   if (!context.pullRequest) return;
-  // A GitHub App bot is never a collaborator, so Factory's own PRs score
-  // untrusted; their authorship is the trust signal.
-  const factoryAuthored = context.actor.type === 'github' && context.actor.factoryAuthored;
-  const autoStartCandidate =
-    (trustedGithubActor(context) || factoryAuthored) &&
-    createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt);
   return {
     type: 'upsertLinkedWorkItem',
-    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    idempotencyKey,
     board: 'review',
     source: 'github-pr',
     sourceKey: `github-pr:${context.pullRequest.number}`,
@@ -276,7 +328,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
     metadata: {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
-      factoryAuthored,
+      ...(context.pullRequest.createdAt ? { sourceCreatedAt: context.pullRequest.createdAt } : {}),
+      factoryAuthored: context.pullRequest.factoryAuthored,
       authorTrusted: trustedGithubActor(context),
       autoStartCandidate,
       state: context.pullRequest.state,
@@ -287,9 +340,22 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       labels: context.pullRequest.labels ?? [],
       headBranch: context.pullRequest.headBranch,
       baseBranch: context.pullRequest.baseBranch,
-      ...(githubActorLogin(context) ? { author: githubActorLogin(context) } : {}),
+      ...(context.pullRequest.author ? { author: context.pullRequest.author } : {}),
     },
   } as const;
+}
+
+function pullRequestOpened(context: FactoryGithubRuleContext) {
+  if (!context.pullRequest) return;
+  // A GitHub App bot is never a collaborator, so Factory's own PRs score
+  // untrusted; their authorship is the trust signal.
+  const autoStartCandidate =
+    (trustedGithubActor(context) || context.pullRequest.factoryAuthored) &&
+    createdAfterFactory(context.pullRequest.createdAt, context.factory.createdAt);
+  return materializePullRequestIntake(context, {
+    idempotencyKey: `${context.ingress.id}:pull-request-intake`,
+    autoStartCandidate,
+  });
 }
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
@@ -378,6 +444,10 @@ function requestsChangesVerdict(body: string | undefined): boolean {
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
+  // A validated Factory mention is a review-entry request, not feedback for the
+  // authoring Work session. Invalid or unrecognized comments retain the normal
+  // feedback route below.
+  if (context.reviewCommand) return reReviewRequestedPullRequest(context);
   if (!context.item || !context.pullRequest || !context.issueComment) return;
   // Provenance binds the comment to the Work item that authored the PR — the
   // only session that can act on it. A Review card must not react to comments
@@ -428,14 +498,25 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
 }
 
 function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
-  // Only a review re-requested *from Factory's own bot* restarts the review —
-  // requesting a human reviewer is not Factory's signal.
-  if (!context.item || context.board !== 'review' || !context.reviewRequest?.factoryReviewer) return;
+  // GitHub reviewer requests and Factory's exact mention command are both
+  // explicit requests to enter the same Review lifecycle.
+  const factoryReviewEntry = context.reviewRequest?.factoryReviewer || context.reviewCommand !== undefined;
+  if ((context.item && context.board !== 'review') || !factoryReviewEntry) return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
-  // Trusted (write/admin) requesters only: re-entering review checks out and
-  // executes PR code, the same bar pullRequestOpened applies to auto-review.
+  // Trusted (write/admin) requesters only: creating or re-entering review checks
+  // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
   if (!trustedGithubActor(context)) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  if (!context.item) {
+    // On this path the actor is the *requester*, so the materialized
+    // `authorTrusted` stamp records their trust (always true past the gate
+    // above), not the PR author's: a trusted maintainer requesting a Factory
+    // review vouches for the PR.
+    return materializePullRequestIntake(context, {
+      idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
+      autoStartCandidate: true,
+    });
+  }
   // Already in Reviewing: a review pass is pending or running; re-entering
   // would be a same-stage no-op anyway (stage rules only fire on change).
   if (context.item.stages.length === 1 && context.item.stages[0] === 'review') return;
@@ -483,6 +564,7 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,
+      sourceCreatedAt: context.issue.createdAt,
       linearState: context.issue.state,
       linearStateType: context.issue.stateType,
       linearPriority: context.issue.priorityLabel,
@@ -518,9 +600,9 @@ function linearIssueClosed(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
-    intake: { issue: { onEnter: onArrival(invokeIssueInvestigation) } },
+    intake: { issue: { onEnter: onArrival(triageIssueEntry) } },
     triage: {
-      issue: { onEnter: invokeIssueInvestigation },
+      issue: { onEnter: triageIssueEntry },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
     },
     planning: {

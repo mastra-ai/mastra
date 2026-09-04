@@ -41,6 +41,7 @@ import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
@@ -220,11 +221,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const selectedTraceUsesListQuery = listUsageEnabled && traces.some(trace => trace.traceId === url.traceIdParam);
   const selectedTraceUsage = useTraceUsage({
     traceIds: url.traceIdParam ? [url.traceIdParam] : [],
-    enabled:
-      url.listMode === 'traces' &&
-      !observabilityCapabilities.isLoading &&
-      observabilityCapabilities.supportsMetrics &&
-      !selectedTraceUsesListQuery,
+    enabled: listUsageEnabled && !selectedTraceUsesListQuery,
     autoRefetch: autoRefetchTraces,
   });
   const selectedTraceUsageSummary = url.traceIdParam
@@ -273,6 +270,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
+  // The side panel widens per column shown: Messages (agent turn) and/or span detail.
+  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
+  const hasSpanColumn = !!url.spanIdParam;
+  const sidePanelWidth =
+    hasMessagesColumn && hasSpanColumn ? 'full' : hasMessagesColumn || hasSpanColumn ? 'wide' : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -407,7 +409,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       {pageTopArea}
 
       <TracesLayout
-        sidePanelWide={!!url.spanIdParam}
+        sidePanelWidth={sidePanelWidth}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -463,6 +465,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
+              showPartialThread
+              featuredSpanIds={url.highlightSpanIdsParam}
+              onHighlightSpans={url.handleHighlightSpans}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}

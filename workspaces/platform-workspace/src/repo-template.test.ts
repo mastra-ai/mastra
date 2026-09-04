@@ -1,3 +1,4 @@
+import { SETUP_MARKER_PATH, setupMarkerContent } from '@internal/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createRepoTemplate, redactSecrets, resolveDefaultBranchHead } from './repo-template.js';
@@ -12,6 +13,15 @@ function accessFor(cloneUrl: string) {
 
 function headOf(sha: string) {
   return vi.fn().mockResolvedValue(sha);
+}
+
+/** The marker step every repo template ends with, for the commands it ran. */
+function markerStep(...setupCommands: string[]) {
+  const content = setupMarkerContent(setupCommands);
+  return {
+    method: 'runCmd',
+    args: [`mkdir -p "$(dirname "${SETUP_MARKER_PATH}")" && printf '%s' '${content}' > "${SETUP_MARKER_PATH}"`],
+  };
 }
 
 describe('createRepoTemplate', () => {
@@ -34,13 +44,27 @@ describe('createRepoTemplate', () => {
     expect(serializeSandboxTemplate(template!)).toEqual({
       schemaVersion: 1,
       operations: [
-        { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+        { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
         { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
         { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
         { method: 'runCmd', args: ['cd "widgets" && pnpm install --frozen-lockfile'] },
+        markerStep('pnpm install --frozen-lockfile'),
       ],
       family: 'repo:https://github.com/acme/widgets:/widgets',
     });
+  });
+
+  it('always writes the setup marker beside the checkout as the last build step, digesting the commands it ran', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      setupCommand: ['pnpm i', '', 'pnpm build'],
+      resolveHead: headOf(SHA_1),
+    })!();
+    const operations = serializeSandboxTemplate(template!).operations;
+    expect(setupMarkerContent(['pnpm i', 'pnpm build'])).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(operations.at(-1)).toEqual(markerStep('pnpm i', 'pnpm build'));
+    expect(operations.at(-2)).toEqual({ method: 'runCmd', args: ['cd "widgets" && pnpm build'] });
+    expect(setupMarkerContent(['pnpm i'])).not.toBe(setupMarkerContent(['pnpm i', 'pnpm build']));
   });
 
   it('runs each setupCommand array entry as its own build step with its own cd prefix', async () => {
@@ -51,9 +75,10 @@ describe('createRepoTemplate', () => {
     })!();
 
     const operations = serializeSandboxTemplate(template!).operations;
-    expect(operations.slice(-2)).toEqual([
+    expect(operations.slice(-3)).toEqual([
       { method: 'runCmd', args: ['cd "widgets" && pnpm i'] },
       { method: 'runCmd', args: ['cd "widgets" && pnpm build'] },
+      markerStep('pnpm i', 'pnpm build'),
     ]);
   });
 
@@ -77,7 +102,8 @@ describe('createRepoTemplate', () => {
     })!();
 
     const operations = serializeSandboxTemplate(template!).operations;
-    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(3);
+    expect(operations.filter(op => op.method === 'runCmd')).toHaveLength(4);
+    expect(operations.at(-1)).toEqual(markerStep());
   });
 
   it('creates an explicit workingDirectory, sets it as the cwd before cloning, and keys the family on it', async () => {
@@ -95,10 +121,11 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations.slice(0, 3)).toEqual([
       { method: 'runCmd', args: ['mkdir -p "/workspace"'] },
       { method: 'setWorkdir', args: ['/workspace'] },
-      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
     ]);
     const commands = serialized.operations.filter(op => op.method === 'runCmd').map(op => String(op.args[0]));
-    expect(commands.at(-1)).toBe('cd "widgets" && pnpm i');
+    expect(commands.at(-2)).toBe('cd "widgets" && pnpm i');
+    expect(commands.at(-1)).toBe(markerStep('pnpm i').args[0]);
     expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/workspace/widgets');
   });
 
@@ -112,7 +139,7 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations.map(op => op.method)).not.toContain('setWorkdir');
     expect(serialized.operations[0]).toEqual({
       method: 'runCmd',
-      args: ['git clone https://github.com/acme/widgets "widgets"'],
+      args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`],
     });
   });
 
@@ -140,9 +167,10 @@ describe('createRepoTemplate', () => {
     expect(serialized.operations).toEqual([
       { method: 'cpuCount', args: [4] },
       { method: 'memoryMB', args: [8_192] },
-      { method: 'runCmd', args: ['git clone https://github.com/acme/widgets "widgets"'] },
+      { method: 'runCmd', args: [`git clone --depth=1 --single-branch 'https://github.com/acme/widgets' 'widgets'`] },
       { method: 'runCmd', args: [`git -C "widgets" fetch origin ${SHA_1}`] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+      markerStep(),
     ]);
     // Sizing never leaks into the commit-independent family key; the platform
     // namespaces warm fallbacks by size server-side.
@@ -192,7 +220,7 @@ describe('createRepoTemplate', () => {
 
   it('returns undefined when a public head cannot be resolved so sandbox creation can fall back cold', async () => {
     const resolveTemplate = createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/private-repo.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/no-head.git'),
       resolveHead: vi.fn().mockResolvedValue(undefined),
     })!;
 
@@ -201,11 +229,56 @@ describe('createRepoTemplate', () => {
 
   it('rejects a malformed resolved head instead of interpolating it into build commands', async () => {
     const resolveTemplate = createRepoTemplate({
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/malformed-head.git'),
       resolveHead: headOf('main; rm -rf /'),
     })!;
 
     await expect(resolveTemplate()).resolves.toBeUndefined();
+  });
+
+  it('pins to the last known head of the same clone URL when a later lookup fails', async () => {
+    const getRepositoryAccess = accessFor('https://github.com/acme/flaky-head.git');
+    const warm = await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_1) })!();
+    const rateLimited = await createRepoTemplate({
+      getRepositoryAccess,
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+    const malformed = await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf('main; rm -rf /') })!();
+
+    expect(serializeSandboxTemplate(rateLimited!)).toEqual(serializeSandboxTemplate(warm!));
+    expect(serializeSandboxTemplate(malformed!)).toEqual(serializeSandboxTemplate(warm!));
+    expect(serializeSandboxTemplate(warm!).operations).toContainEqual({
+      method: 'runCmd',
+      args: [`git -C "flaky-head" checkout ${SHA_1}`],
+    });
+  });
+
+  it('replaces the remembered head once a lookup succeeds again', async () => {
+    const getRepositoryAccess = accessFor('https://github.com/acme/moving-head.git');
+    await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_1) })!();
+    await createRepoTemplate({ getRepositoryAccess, resolveHead: headOf(SHA_2) })!();
+    const fallback = await createRepoTemplate({
+      getRepositoryAccess,
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+
+    expect(serializeSandboxTemplate(fallback!).operations).toContainEqual({
+      method: 'runCmd',
+      args: [`git -C "moving-head" checkout ${SHA_2}`],
+    });
+  });
+
+  it('does not reuse a head remembered for a different clone URL', async () => {
+    await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/remembered.git'),
+      resolveHead: headOf(SHA_1),
+    })!();
+    const other = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/never-resolved.git'),
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+
+    expect(other).toBeUndefined();
   });
 
   it('keeps the requested resources when the repository template cannot be resolved', async () => {
@@ -220,7 +293,7 @@ describe('createRepoTemplate', () => {
 
     const noHead = await createRepoTemplate({
       ...sized,
-      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      getRepositoryAccess: accessFor('https://github.com/acme/unresolved.git'),
       resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
     })!();
     expect(serializeSandboxTemplate(noHead!)).toEqual(expected);
@@ -294,7 +367,41 @@ describe('createRepoTemplate', () => {
     expect(redactSecrets({ code: 1 })).toBe('[object Object]');
   });
 
-  it('keeps the repository token out of git process arguments while resolving the default branch', async () => {
+  it('resolves github.com heads through the REST API, so no git binary is needed', async () => {
+    const execute = vi.fn();
+    const fetchImpl = vi.fn(async () => new Response(`${SHA_1}\n`, { status: 200 }));
+
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets.git', 'ghs_secret_token', execute, fetchImpl),
+    ).resolves.toBe(SHA_1);
+
+    expect(execute).not.toHaveBeenCalled();
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.github.com/repos/acme/widgets/commits/HEAD');
+    expect(init.headers).toMatchObject({
+      Accept: 'application/vnd.github.sha',
+      Authorization: 'Bearer ghs_secret_token',
+    });
+  });
+
+  it('sends no Authorization header for public repositories without a token', async () => {
+    const fetchImpl = vi.fn(async () => new Response(SHA_1, { status: 200 }));
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets/', undefined, vi.fn(), fetchImpl),
+    ).resolves.toBe(SHA_1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('https://api.github.com/repos/acme/widgets/commits/HEAD');
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).not.toHaveProperty('Authorization');
+  });
+
+  it('surfaces a non-2xx GitHub API response without leaking the token', async () => {
+    const fetchImpl = vi.fn(async () => new Response('rate limited', { status: 403, statusText: 'Forbidden' }));
+    await expect(
+      resolveDefaultBranchHead('https://github.com/acme/widgets', 'ghs_secret_token', vi.fn(), fetchImpl),
+    ).rejects.toThrow('GitHub head lookup failed: 403 Forbidden');
+  });
+
+  it('keeps the repository token out of git process arguments while resolving a non-GitHub head', async () => {
     const execute = vi.fn(
       async (
         _file: string,
@@ -302,14 +409,16 @@ describe('createRepoTemplate', () => {
         _options: { timeout: number; maxBuffer: number; env: Record<string, string | undefined> },
       ) => ({ stdout: `${SHA_1}\tHEAD\n` }),
     );
+    const fetchImpl = vi.fn();
 
     await expect(
-      resolveDefaultBranchHead('https://github.com/acme/widgets', 'ghs_secret_token', execute),
+      resolveDefaultBranchHead('https://gitlab.com/acme/widgets', 'ghs_secret_token', execute, fetchImpl),
     ).resolves.toBe(SHA_1);
+    expect(fetchImpl).not.toHaveBeenCalled();
 
     const [file, args, options] = execute.mock.calls[0]!;
     expect(file).toBe('git');
-    expect(args).toEqual(['ls-remote', '--', 'https://github.com/acme/widgets', 'HEAD']);
+    expect(args).toEqual(['ls-remote', '--', 'https://gitlab.com/acme/widgets', 'HEAD']);
     expect(JSON.stringify(args)).not.toContain('ghs_secret_token');
     expect(options.env).toMatchObject({
       GIT_CONFIG_COUNT: '1',
@@ -324,7 +433,7 @@ describe('createRepoTemplate', () => {
       throw Object.assign(new Error('Command failed'), { stderr: 'fatal: unable to access: 429 Too Many Requests\n' });
     });
 
-    await expect(resolveDefaultBranchHead('https://github.com/acme/widgets', undefined, execute)).rejects.toThrow(
+    await expect(resolveDefaultBranchHead('https://gitlab.com/acme/widgets', undefined, execute)).rejects.toThrow(
       'git ls-remote failed: fatal: unable to access: 429 Too Many Requests',
     );
   });
@@ -350,6 +459,7 @@ describe('createRepoTemplate', () => {
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [expect.stringContaining('$MASTRA_REPOSITORY_ACCESS_TOKEN')] },
       { method: 'runCmd', args: [`git -C "widgets" checkout ${SHA_1}`] },
+      markerStep(),
     ]);
     expect(JSON.stringify(definition)).not.toContain('ghs_secret_token');
   });

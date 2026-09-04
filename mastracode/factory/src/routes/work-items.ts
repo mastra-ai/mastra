@@ -20,7 +20,7 @@ import type {
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard } from '../rules/types.js';
+import type { FactoryRuleBoard, WorkItemSource } from '../rules/types.js';
 import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -49,6 +49,7 @@ import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/wor
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { buildSupervisorRoutes } from './supervisor.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -201,16 +202,18 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
 /** Validate an untrusted patch body. Unknown keys are dropped. */
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { title, stages, sessions, metadata } = body;
+  const { title, stages, sessions, metadata, plansPreapproved } = body;
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   if (
     title === undefined &&
     stages === undefined &&
     sessions === undefined &&
     metadata === undefined &&
+    plansPreapproved === undefined &&
     !hasParentWorkItemId
   )
     return null;
+  if (plansPreapproved !== undefined && plansPreapproved !== true) return null;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
   if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
@@ -230,6 +233,7 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
     ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
+    ...(plansPreapproved === true ? { plansPreapproved: true } : {}),
   };
 }
 
@@ -279,22 +283,8 @@ function parseTransitionBody(
     expectedRevision: Number(body.expectedRevision),
     ingress: { type: 'human', identity: requestId },
     cause,
+    ...(body.reenter === true ? { reenter: true } : {}),
   };
-}
-
-function parseInvocation(value: unknown): FactoryStartRequest['invocation'] | undefined | null {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) return null;
-  if (value.type === 'prompt') {
-    const prompt = boundedText(value.prompt, 16_384);
-    return prompt ? { type: 'prompt', prompt } : null;
-  }
-  if (value.type === 'skill') {
-    const skillName = boundedText(value.skillName, 64);
-    const args = typeof value.arguments === 'string' && value.arguments.length <= 16_384 ? value.arguments : undefined;
-    return skillName && args !== undefined ? { type: 'skill', skillName, arguments: args } : null;
-  }
-  return null;
 }
 
 function parseStartBody(
@@ -307,11 +297,8 @@ function parseStartBody(
   const sessionId = boundedText(body.sessionId, 256);
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
-  const invocation = parseInvocation(body.invocation);
-  const destinationStage = isFactoryRuleStage(body.destinationStage) ? body.destinationStage : undefined;
   const role = boundedText(body.workItem.role, 32);
-  const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
-  if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
+  const id = boundedText(body.workItem.id, 64);
   if (
     !input ||
     !sessionId ||
@@ -319,34 +306,13 @@ function parseStartBody(
     !threadTitle ||
     !kickoffKey ||
     !UUID_RE.test(kickoffKey) ||
-    invocation === null ||
-    !destinationStage ||
+    !id ||
+    !UUID_RE.test(id) ||
     !role
   ) {
     return null;
   }
-  const threadTags = isRecord(body.threadTags)
-    ? Object.fromEntries(
-        Object.entries(body.threadTags)
-          .filter(
-            (entry): entry is [string, string] =>
-              boundedText(entry[0], 64) !== undefined && boundedText(entry[1], 256) !== undefined,
-          )
-          .map(([key, value]) => [key, value.trim()]),
-      )
-    : undefined;
-  return {
-    ...tenant,
-    factoryProjectId,
-    sessionId,
-    threadTitle,
-    threadTags,
-    kickoffKey,
-    preapprovePlans: body.preapprovePlans === true,
-    invocation,
-    destinationStage,
-    workItem: { id, role, input },
-  };
+  return { ...tenant, factoryProjectId, sessionId, threadTitle, kickoffKey, workItem: { id, role, input } };
 }
 
 const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
@@ -410,6 +376,15 @@ function summaryRole(decision: Record<string, unknown>): string | null {
   return roleForStage(board, stage);
 }
 
+/** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
+function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
+  if (decision.type !== 'upsertLinkedWorkItem') return null;
+  const source = decision.source;
+  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
+    ? source
+    : null;
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
@@ -417,6 +392,7 @@ function decisionSummary(decision: FactoryDeferredDecisionRecord) {
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
     role: summaryRole(decision.decision),
+    source: summarySource(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
@@ -677,6 +653,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
+      ...buildSupervisorRoutes({
+        workItems,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
       this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
       this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
 
@@ -854,21 +835,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
-          // This route is only reached by a person pressing a run action, so
-          // reaching it is the commitment the approval gate is asking for.
-          // Arming rides inside prepareRunStart's transaction so a crash can't
-          // start the run while leaving its follow-up work waiting on approval.
-          input.armAutonomy = true;
-          if (
-            !input.workItem.id &&
-            ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
-              (input.workItem.input.stages ?? ['intake'])[0] !== 'intake')
-          ) {
-            return c.json(
-              { error: 'governed_transition_required', message: 'Create the work item in Intake before starting it.' },
-              409,
-            );
-          }
           await workItems.ensureReady();
           let prepared: FactoryStartPreparedResult;
           try {

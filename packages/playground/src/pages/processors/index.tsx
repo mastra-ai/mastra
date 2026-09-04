@@ -46,7 +46,7 @@ export function Processors() {
   }
 
   return (
-    <PageLayout>
+    <PageLayout height="full">
       <PageLayout.TopArea>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />

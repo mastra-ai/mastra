@@ -63,6 +63,11 @@ interface SpanTypeMap {
   WORKFLOW_LOOP: WorkflowLoopAttributes
   WORKFLOW_SLEEP: WorkflowSleepAttributes
   WORKFLOW_WAIT_EVENT: WorkflowWaitEventAttributes
+  MEMORY_OPERATION: MemoryOperationAttributes
+  WORKSPACE_ACTION: WorkspaceActionAttributes
+  SKILL_ACTION: SkillActionAttributes
+  AGENT_SIGNAL: AgentSignalAttributes
+  SKILL_RESOLUTION: SkillResolutionAttributes
   GENERIC: AIBaseAttributes
 }
 ```
@@ -434,8 +439,33 @@ enum SpanType {
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
 
-  /** Input or Output Processor execution */
+  /**
+   * Processor execution. This is the default; a processor can declare a
+   * different span type so its span names the subsystem it belongs to.
+   * See `Processor.spanType`.
+   */
   PROCESSOR_RUN = 'processor_run',
+
+  /** Memory read or write, including the observational memory model passes */
+  MEMORY_OPERATION = 'memory_operation',
+
+  /** Workspace filesystem, sandbox, search, or mount operation */
+  WORKSPACE_ACTION = 'workspace_action',
+
+  /** Skill lifecycle operation: resolve, inject, activate, search, or read */
+  SKILL_ACTION = 'skill_action',
+
+  /**
+   * An agent state signal entering the model's context. Recorded as an event
+   * span, so it has a start time and no duration.
+   */
+  AGENT_SIGNAL = 'agent_signal',
+
+  /**
+   * @deprecated Use `SKILL_ACTION` with `operation: 'resolve'`. No longer
+   * emitted; retained so stored traces keep resolving.
+   */
+  SKILL_RESOLUTION = 'skill_resolution',
 
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',

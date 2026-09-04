@@ -520,6 +520,11 @@ export interface GetAgentResponse {
   workspaceTools?: string[];
   /** Browser tool names available to this agent (if browser is configured) */
   browserTools?: string[];
+  /**
+   * Whether the agent has any browser provider — agent-level SDK browser or
+   * workspace-level CLI browser. Gates the Studio browser viewer.
+   */
+  hasBrowser?: boolean;
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -2950,6 +2955,14 @@ export interface GenerateDatasetItemsParams {
 export interface GeneratedItem {
   input: unknown;
   groundTruth?: unknown;
+}
+
+export interface UpdateDatasetExperimentParams {
+  datasetId: string;
+  experimentId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TriggerDatasetExperimentParams {

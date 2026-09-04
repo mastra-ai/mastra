@@ -8,6 +8,7 @@ import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useMemo } from 'react';
 import {
   EXPERIMENT_DATASET_COLUMN,
+  EXPERIMENT_DESCRIPTION_COLUMN,
   EXPERIMENT_DETAIL_COLUMNS,
   EXPERIMENT_NAME_COLUMN,
   experimentColumnLabels,
@@ -23,9 +24,29 @@ export interface ExperimentsListProps {
   search?: string;
   statusFilter?: string;
   datasetFilter?: string;
+  /** When provided, rows toggle selection (for comparison) instead of navigating. */
+  selection?: ExperimentsListSelection;
 }
 
-const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+export interface ExperimentsListSelection {
+  selectedExperimentIds: string[];
+  onToggleSelection: (experimentId: string) => void;
+}
+
+const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+
+const columnHeaders = [
+  { label: experimentColumnLabels.experiment },
+  { label: experimentColumnLabels.description },
+  { label: experimentColumnLabels.dataset },
+  { label: experimentColumnLabels.target },
+  { label: experimentColumnLabels.status },
+  { label: experimentColumnLabels.items, className: 'text-center' },
+  { label: experimentColumnLabels.succeeded, className: 'text-center' },
+  { label: experimentColumnLabels.failed, className: 'text-center' },
+  { label: experimentColumnLabels.review, className: 'text-center' },
+  { label: experimentColumnLabels.date },
+];
 
 export function ExperimentsList({
   experiments,
@@ -35,7 +56,9 @@ export function ExperimentsList({
   search = '',
   statusFilter = 'all',
   datasetFilter = 'all',
+  selection,
 }: ExperimentsListProps) {
+  const isSelectionActive = selection !== undefined;
   const { paths, Link } = useLinkComponent();
 
   const datasetMap = useMemo(() => {
@@ -74,34 +97,57 @@ export function ExperimentsList({
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
+  const gridColumns = isSelectionActive ? `auto ${COLUMNS}` : COLUMNS;
+  const headerCells = columnHeaders.map(col => (
+    <EntityList.TopCell key={col.label} className={col.className}>
+      {col.label}
+    </EntityList.TopCell>
+  ));
+
   return (
-    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
-      <EntityList.Top>
-        <EntityList.TopCell>{experimentColumnLabels.experiment}</EntityList.TopCell>
-        <EntityList.TopCell>{experimentColumnLabels.dataset}</EntityList.TopCell>
-        <EntityList.TopCell>{experimentColumnLabels.target}</EntityList.TopCell>
-        <EntityList.TopCell>{experimentColumnLabels.status}</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">{experimentColumnLabels.items}</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">{experimentColumnLabels.succeeded}</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">{experimentColumnLabels.failed}</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">{experimentColumnLabels.review}</EntityList.TopCell>
-        <EntityList.TopCell>{experimentColumnLabels.date}</EntityList.TopCell>
+    <EntityList columns={gridColumns} scrollRef={containerRef}>
+      <EntityList.Top hasLeadingCell={isSelectionActive}>
+        {isSelectionActive ? (
+          <>
+            <EntityList.TopCell>&nbsp;</EntityList.TopCell>
+            <EntityList.TopCells colStart={2}>{headerCells}</EntityList.TopCells>
+          </>
+        ) : (
+          headerCells
+        )}
       </EntityList.Top>
 
       {filteredData.map((exp, index) => {
         const dsName = exp.datasetId
           ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
           : '—';
+        const rowCells = (
+          <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
+        );
+
+        if (!selection) {
+          return (
+            <EntityList.RowLink
+              key={exp.id}
+              to={paths.experimentLink(exp.id)}
+              LinkComponent={Link}
+              {...getRowProps(index)}
+            >
+              {rowCells}
+            </EntityList.RowLink>
+          );
+        }
+
+        const isSelected = selection.selectedExperimentIds.includes(exp.id);
+        const toggle = () => selection.onToggleSelection(exp.id);
 
         return (
-          <EntityList.RowLink
-            key={exp.id}
-            to={paths.experimentLink(exp.id)}
-            LinkComponent={Link}
-            {...getRowProps(index)}
-          >
-            <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
-          </EntityList.RowLink>
+          <EntityList.RowWrapper key={exp.id}>
+            <EntityList.SelectCell checked={isSelected} onToggle={toggle} aria-label={`Select experiment ${exp.id}`} />
+            <EntityList.RowButton colStart={2} featured={isSelected} onClick={toggle} {...getRowProps(index)}>
+              {rowCells}
+            </EntityList.RowButton>
+          </EntityList.RowWrapper>
         );
       })}
     </EntityList>

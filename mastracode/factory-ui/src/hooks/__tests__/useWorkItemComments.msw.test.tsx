@@ -203,18 +203,25 @@ describe('useWorkItemComments', () => {
 });
 
 describe('useCreateWorkItemCommentMutation', () => {
-  it('exposes the pending create through mutation state, leaves the cache untouched, then refetches once through the board poll', async () => {
+  it('holds the send in mutation state, then lands the stored row without waiting for the refetch', async () => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => {
       releaseResponse = resolve;
+    });
+    let releaseRefetch!: () => void;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
     });
     let commentRequests = 0;
     let boardRequests = 0;
     let feedActivityAt = '2026-08-26T10:00:00.000Z';
     const serverComments: WorkItemComment[] = [wireComment('c1', 'hello')];
     server.use(
-      http.get(COMMENTS_URL, () => {
+      http.get(COMMENTS_URL, async () => {
         commentRequests += 1;
+        // Every read after the send is held open, so a row on screen can only
+        // have come from the create response.
+        if (commentRequests > 1) await refetchGate;
         return HttpResponse.json({ comments: [...serverComments] });
       }),
       http.get(BOARD_URL, () => {
@@ -252,8 +259,14 @@ describe('useCreateWorkItemCommentMutation', () => {
     releaseResponse();
     // The settled create pulls its own row back without waiting on the stream.
     await waitFor(() => expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']));
+
+    // The settled mutation invalidates only the board; its bumped
+    // feedActivityAt drives the single comments refetch, which reconciles the
+    // row that is already on screen.
+    releaseRefetch();
     await waitForMutationsIdle(client);
-    expect(commentRequests).toBe(requestsBeforeCreate.comments + 1);
+    await waitFor(() => expect(commentRequests).toBe(requestsBeforeCreate.comments + 1));
+    expect(firstPageComments(result.current.comments.data)).toEqual(['brand new', 'hello']);
     expect(boardRequests).toBe(requestsBeforeCreate.board + 1);
     // The succeeded create still shows as a row source; the list dedups it
     // against the landed server row by clientToken.

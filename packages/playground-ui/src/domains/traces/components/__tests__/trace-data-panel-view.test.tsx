@@ -801,19 +801,88 @@ describe('TraceDataPanelView — following the URL to another span', () => {
   });
 });
 
+describe('TraceDataPanelView — messages column', () => {
+  const messages = <div data-testid="messages-panel">messages here</div>;
+  const spanDetail = <div data-testid="span-detail">span content</div>;
+  const columns = (container: HTMLElement) => container.querySelector('[data-trace-columns]') as HTMLElement;
+  const precedes = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  describe('given a messages slot', () => {
+    it('renders it inside the same card, before the trace content', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      const panel = screen.getByTestId('messages-panel');
+      expect(container.querySelector('section')?.contains(panel)).toBe(true);
+      expect(precedes(panel, screen.getByText('agent run'))).toBe(true);
+      // The column is a layout concern, not a tab.
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+    });
+
+    it('uses an animated messages + trace grid', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns(container).className).toContain('transition-[grid-template-columns]');
+    });
+  });
+
+  it('fades timeline spans that are not featured', () => {
+    const rootSpan = nestedSpanFixture[0];
+    if (!rootSpan) throw new Error('fixture must have a root span');
+
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
+
+    const rows = screen.getAllByLabelText(/^View details for span/);
+    expect(rows.length).toBeGreaterThan(1);
+    const [featured, ...others] = rows;
+    expect(featured?.className).not.toContain('opacity-30');
+    others.forEach(row => expect(row.className).toContain('opacity-30'));
+  });
+
+  describe('given both a messages slot and a span panel slot', () => {
+    it('orders the columns messages → trace → span', () => {
+      const { container } = render(
+        <TraceDataPanelView {...baseProps} messagesPanelSlot={messages} spanPanelSlot={spanDetail} />,
+      );
+
+      const panel = screen.getByTestId('messages-panel');
+      const trace = screen.getByText('agent run');
+      const span = screen.getByTestId('span-detail');
+      expect(precedes(panel, trace)).toBe(true);
+      expect(precedes(trace, span)).toBe(true);
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_1fr]');
+    });
+  });
+
+  describe('given no messages slot', () => {
+    it('renders no messages column', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} />);
+
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_0fr]');
+    });
+
+    it('keeps the span column animatable', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} spanPanelSlot={spanDetail} />);
+
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_1fr]');
+    });
+  });
+});
+
 describe('TraceDataPanelView — trace-level tabs', () => {
   it('renders no tabs when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
   it('renders Spans and Scores tabs when a scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
 
     expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores/i })).toBeTruthy();
     // Spans is the default tab.
     expect(screen.getByText('agent run')).toBeTruthy();
     expect(screen.queryByText('trace scores here')).toBeNull();
@@ -844,7 +913,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
 
     expect(onTabChange).toHaveBeenCalledWith('scores');
   });
@@ -852,12 +921,12 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   it('shows the badge count in the Scores tab label', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
 
-    expect(screen.getByRole('tab', { name: /evaluations \(3\)/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores \(3\)/i })).toBeTruthy();
   });
 });
 
 describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders a Feedback tab next to Spans and Evaluations', () => {
+  it('renders Feedback before Scores', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -866,16 +935,14 @@ describe('TraceDataPanelView — trace feedback tab', () => {
       />,
     );
 
-    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Feedback', 'Scores']);
   });
 
   it('renders the Feedback tab even when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
 
     expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
   it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {
@@ -1091,14 +1158,15 @@ describe('TraceDataPanelView — span search', () => {
     expect(searchField().value).toBe('zzz-nothing');
   });
 
-  it('sits on the same row as the span type legend', () => {
+  it('sits on its own full-width row above the span type legend', () => {
     renderDeep();
 
-    // The legend is right-aligned on its own row; the search field fills the
-    // empty left half of that row rather than taking a row of its own.
+    // The field gets a whole row so it is never squeezed by a wide legend.
     const legendRow = screen.getByText('Tool').closest('div')?.parentElement;
+    const field = searchField();
 
-    expect(legendRow?.contains(searchField())).toBe(true);
+    expect(legendRow?.contains(field)).toBe(false);
+    expect((legendRow?.compareDocumentPosition(field) ?? 0) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it('restores the full trace when the query is cleared', async () => {

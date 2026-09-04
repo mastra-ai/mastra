@@ -17,6 +17,7 @@ import {
   rootBranchList,
   rootBranchSpans,
   subtraceBranchSpans,
+  threadedTraceSpans,
   traceSpans,
   traceList,
   traceListWithTwoTraces,
@@ -24,6 +25,7 @@ import {
   emptyTraceSpanScores,
   traceUsageBreakdown,
 } from './fixtures/traces';
+import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -49,6 +51,7 @@ const setTracePageHandlers = (systemPackages: GetSystemPackagesResponse) => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
+    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
     http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
     // The list fetches the lightweight projection first; serve the same rows there.
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
@@ -79,6 +82,8 @@ const renderPage = (initialEntry = '/traces') =>
   );
 
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the timeline reveals the selected span row on mount.
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
     value: createMemoryStorage(),
@@ -155,6 +160,51 @@ describe('Traces page usage columns', () => {
       expect(onBreakdownRequest).not.toHaveBeenCalled();
       expect(screen.queryByText('Input tokens')).toBeNull();
       expect(screen.queryByText('Est. cost')).toBeNull();
+    });
+  });
+
+  describe('Messages column', () => {
+    const setThreadedTraceHandlers = () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: threadedTraceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(threadedTraceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+    };
+
+    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel is wide', async () => {
+      setThreadedTraceHandlers();
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('given a span is also selected, then the panel covers the full frame', async () => {
+      setThreadedTraceHandlers();
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
     });
   });
 
@@ -247,10 +297,12 @@ describe('Traces side panel header actions', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    expect(screen.getByRole('button', { name: 'Evaluate trace' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Add full trace to dataset' })).not.toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Trace actions' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Evaluate trace' })).not.toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
     // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
   });
 });
 
@@ -268,7 +320,7 @@ describe('Traces side panel Scores tab', () => {
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
     return queryClient;
   };
 

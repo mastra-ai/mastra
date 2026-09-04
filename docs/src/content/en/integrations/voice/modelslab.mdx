@@ -1,0 +1,207 @@
+---
+title: "ModelsLab | Voice"
+description: "Add ModelsLab text-to-speech to Mastra with built-in voices, OpenAI-style speaker aliases, and asynchronous synthesis job polling."
+packages:
+  - "@mastra/voice-modelslab"
+---
+
+# ModelsLab
+
+ModelsLab provides text-to-speech (TTS) only. The Mastra integration submits an asynchronous synthesis job, waits for the audio URL, downloads the completed audio, and returns it as a Node.js readable stream.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/voice-modelslab@latest
+```
+
+## API key
+
+Set `MODELSLAB_API_KEY` or pass the key through `speechModel.apiKey`. The constructor throws `MODELSLAB_API_KEY is not set` when neither value is available.
+
+## Usage example
+
+```typescript
+import { ModelsLabVoice } from '@mastra/voice-modelslab'
+
+const voice = new ModelsLabVoice({
+  speechModel: {
+    apiKey: process.env.MODELSLAB_API_KEY,
+  },
+  speaker: '5',
+})
+
+const audioStream = await voice.speak('Hello, world!', {
+  speaker: 'nova',
+  language: 'english',
+  speed: 1,
+})
+
+const speakers = await voice.getSpeakers()
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'speechModel',
+    type: 'ModelsLabVoiceConfig',
+    description: 'Configuration for text-to-speech.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ModelsLabVoiceConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: "'default'",
+            description: 'ModelsLab speech model name.',
+            isOptional: true,
+            defaultValue: "'default'",
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'ModelsLab API key. Falls back to the MODELSLAB_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'speaker',
+    type: 'ModelsLabVoiceId | string',
+    description: 'Default voice ID or OpenAI-style speaker alias.',
+    isOptional: true,
+    defaultValue: "'1'",
+  },
+]}
+/>
+
+## Voices
+
+ModelsLab exposes six built-in English voices:
+
+| ID | Name | Gender | Language |
+| - | - | - | - |
+| `1` | Neutral | neutral | `en` |
+| `2` | Male | male | `en` |
+| `3` | Warm | male | `en` |
+| `4` | Deep Male | male | `en` |
+| `5` | Female | female | `en` |
+| `6` | Clear Female | female | `en` |
+
+OpenAI-style aliases map to these voices:
+
+| Alias | Voice ID |
+| - | - |
+| `alloy` | `1` |
+| `echo` | `2` |
+| `fable` | `3` |
+| `onyx` | `4` |
+| `nova` | `5` |
+| `shimmer` | `6` |
+
+## Methods
+
+### `speak()`
+
+Converts text to speech. If ModelsLab returns a processing ID, the integration polls every five seconds for up to five minutes. It downloads the completed audio before returning the readable stream, so this method doesn't provide progressive audio streaming.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text to convert to speech. A readable stream is fully buffered and converted to text first.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Options for the synthesis request.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'ModelsLabVoiceId | string',
+            description:
+              'Voice ID or OpenAI-style alias. Non-numeric values that are not aliases fall back to voice ID 1.',
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'Language sent to the ModelsLab API.',
+            isOptional: true,
+            defaultValue: "'english'",
+          },
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Speech speed sent to the ModelsLab API.',
+            isOptional: true,
+            defaultValue: '1.0',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### `getSpeakers()`
+
+Returns the built-in ModelsLab voice metadata.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Voice identifier from 1 through 6.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name of the voice.',
+    isOptional: false,
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: 'Language code for the voice.',
+    isOptional: false,
+  },
+  {
+    name: 'gender',
+    type: 'string',
+    description: 'Gender metadata for the voice.',
+    isOptional: false,
+  },
+]}
+/>
+
+Returns: `Promise<Array<{ voiceId: string; name: string; language: string; gender: string }>>`
+
+### `listen()`
+
+ModelsLab doesn't support speech-to-text. Calling this method throws an error that points to `@mastra/voice-deepgram` as a listening provider.
+
+## Important notes
+
+- ModelsLab text-to-speech requests send the API key in the request body.
+- Processing jobs are polled every five seconds and time out after 300 seconds.
+- The completed audio is fully downloaded before the stream is returned. The stream isn't progressive.
+- The integration doesn't force an output format. It downloads the audio from the URL returned by ModelsLab.
+- `speed` doesn't have runtime range validation in this package.
+- Non-numeric speaker values that don't match an alias fall back to voice ID `1`.
+- Speech-to-text isn't supported.

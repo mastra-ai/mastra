@@ -19,7 +19,6 @@ export function EnvironmentVariablesEditorReadOnlyList({
   nameLabel,
   valueLabel,
   updatedAtLabel,
-  variant = 'plain',
   scrollRef,
   ...props
 }: EnvironmentVariablesEditorReadOnlyListProps) {
@@ -28,13 +27,7 @@ export function EnvironmentVariablesEditorReadOnlyList({
 
   return (
     <EnvironmentVariablesEditorReadOnlyListContext.Provider value={contextValue}>
-      <DataList
-        columns={resolvedColumns}
-        variant={variant}
-        scrollRef={scrollRef}
-        className={cn('min-h-0', className)}
-        {...props}
-      >
+      <DataList columns={resolvedColumns} scrollRef={scrollRef} className={cn('min-h-0', className)} {...props}>
         {showHeader &&
           (header ?? (
             <EnvironmentVariablesEditorReadOnlyHeader

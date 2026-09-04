@@ -21,6 +21,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
@@ -225,7 +226,7 @@ function parseResourceNumber(raw: string | undefined): number | null {
   return parsed > 0 ? parsed : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set<string>([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -659,37 +660,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           }
         }
 
-        // Mirror matches into storage with bounded concurrency instead of one
-        // awaited upsert per repository.
-        const repos = new Array(matches.length);
-        const upsertConcurrency = 10;
-        for (let start = 0; start < matches.length; start += upsertConcurrency) {
-          await Promise.all(
-            matches.slice(start, start + upsertConcurrency).map(async ({ inst, repo }, offset) => {
-              const repository = await github.sourceControlStorage.repositories.upsert({
-                orgId,
-                input: {
-                  installationId: inst.id,
-                  externalId: repo.id.toString(),
-                  slug: repo.fullName,
-                  defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
-                  providerMetadata: { private: repo.private, owner: repo.owner },
-                },
-              });
-              repos[start + offset] = {
-                ...repo,
-                installationStorageId: inst.id,
-                repositoryStorageId: repository.id,
-                sandboxProvider: sandbox ? 'custom' : 'none',
-                // Display only — the runtime workdir is resolved from the
-                // live sandbox at open time, never read from this row. Repos
-                // clone into the VM's home; `~/<repo>` is the honest
-                // listing-time guess.
-                sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
-              };
-            }),
-          );
-        }
+        const repos = matches.map(({ inst, repo }) => ({
+          ...repo,
+          installationStorageId: inst.id,
+          sandboxProvider: sandbox ? 'custom' : 'none',
+          // Display only — the runtime workdir is resolved from the
+          // live sandbox at open time. Repositories are persisted only after
+          // selection, so `~/<repo>` is the honest listing-time guess.
+          sandboxWorkdir: `~/${sanitizeSegment(repo.fullName.split('/', 2)[1] || 'repo')}`,
+        }));
         return c.json({ repos });
       },
     }),
@@ -1086,9 +1065,7 @@ async function loadOwnedProject(options: {
   auth: RouteAuth;
   sandbox?: MastraFactorySandboxConfig;
   c: RouteContext;
-}): Promise<
-  { orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }
-> {
+}): Promise<{ orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }> {
   const { github, auth, sandbox, c } = options;
   const resolved = await resolveOrgTenant(c, auth);
   if ('response' in resolved) return { response: resolved.response };
@@ -1701,7 +1678,6 @@ function buildProjectGitRoutes({
         }
       },
     }),
-
   ];
 }
 

@@ -253,8 +253,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             if (repaired) {
               toolCallInput = repaired;
             } else {
+              // Log only metadata: raw tool inputs can carry credentials or PII.
               console.error('Error converting tool call input to JSON', {
-                input: value.input,
+                toolCallId: value.toolCallId,
+                toolName: value.toolName,
+                inputLength: value.input.length,
               });
               toolCallInput = undefined;
             }

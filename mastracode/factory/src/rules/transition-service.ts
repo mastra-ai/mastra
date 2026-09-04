@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
   FactoryCommitDecision,
@@ -71,11 +71,23 @@ export interface FactoryTransitionServiceOptions {
     factoryProjectId: string;
     workItemId: string;
     stage: FactoryRuleStage;
+    revision: number;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
    * in the background past the bound. */
   terminalCleanupTimeoutMs?: number;
+  /**
+   * Called after a transition first records a person's acceptance of a
+   * non-bug item (see `WorkItemRow.acceptedAt`). Fire-and-forget: failures
+   * are swallowed, the committed transition never depends on it.
+   */
+  onAccepted?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    item: WorkItemRow;
+  }) => Promise<void> | void;
 }
 
 function rejection(
@@ -115,12 +127,13 @@ export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): 
 interface TransitionConsentOptions {
   autonomy?: 'arm' | 'disarm';
   consentedBy?: string;
+  accept?: boolean;
 }
 
-// Entering a resting lane disarms whoever rests it; only a person's drag into a working lane arms.
-function transitionConsent(stage: FactoryRuleStage, humanBoardDrag: boolean): 'arm' | 'disarm' | undefined {
+// Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
+function transitionConsent(stage: FactoryRuleStage, humanMove: boolean): 'arm' | 'disarm' | undefined {
   if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
-  return humanBoardDrag ? 'arm' : undefined;
+  return humanMove ? 'arm' : undefined;
 }
 
 // An event arriving as data (GitHub, sweeps) never pre-approves the runs its transition queues.
@@ -129,9 +142,8 @@ function bearsConsent(actor: FactoryRuleActor): boolean {
 }
 
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
-function consentEffect(request: FactoryTransitionRequest, humanBoardDrag: boolean): TransitionConsentOptions {
-  const autonomy = transitionConsent(request.stage, humanBoardDrag);
-  if (autonomy === undefined) return {};
+function consentEffect(request: FactoryTransitionRequest, humanMove: boolean): TransitionConsentOptions {
+  const autonomy = transitionConsent(request.stage, humanMove);
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 
@@ -163,6 +175,22 @@ function requiresHumanApproval(triageType: FactoryTriageType | null | undefined)
   return triageType !== undefined && triageType !== null && triageType !== 'bug';
 }
 
+function isAtRest(stage: FactoryRuleStage): boolean {
+  return stage === 'intake' || stage === 'triage';
+}
+
+function entersWork(stage: FactoryRuleStage): boolean {
+  return stage === 'planning' || stage === 'execute';
+}
+
+// A person moving a card into Planning/Execute is the approval gesture —
+// recorded once, so later agent hops need no second nod. Not limited to moves
+// out of rest: a card accepted before acceptance was recorded still gets its
+// stamp (and its label reconciled) the next time a person moves it forward.
+function acceptsItem(request: FactoryTransitionRequest): boolean {
+  return isHumanTransition(request) && entersWork(request.stage);
+}
+
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
   return {
     code: 'rule_error',
@@ -188,12 +216,14 @@ export class FactoryTransitionService {
   readonly #timeoutMs: number;
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
+  readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
+    this.#onAccepted = options.onAccepted;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -259,11 +289,17 @@ export class FactoryTransitionService {
         'The persisted triage classification cannot be changed by a later transition.',
       );
     }
+    // The gate stands at the exit of rest. A non-bug card already in
+    // Planning/Execute can only have been put there by a person, so an agent
+    // carrying it further (plan → build) is not asked for a second nod even
+    // when the acceptance stamp predates its recording.
     const triageType = item.triageType ?? request.triageType;
     if (
       requiresHumanApproval(triageType) &&
-      (request.stage === 'planning' || request.stage === 'execute') &&
-      !isHumanTransition(request)
+      entersWork(request.stage) &&
+      isAtRest(fromStage) &&
+      !isHumanTransition(request) &&
+      !item.acceptedAt
     ) {
       return this.#commitRejection(
         request,
@@ -289,8 +325,8 @@ export class FactoryTransitionService {
       );
     }
 
-    const humanBoardDrag =
-      request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage;
+    // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
+    const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
 
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
@@ -309,6 +345,7 @@ export class FactoryTransitionService {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: [...item.stages],
+        acceptedAt: item.acceptedAt,
         metadata: item.metadata,
       },
       board: request.board,
@@ -347,7 +384,7 @@ export class FactoryTransitionService {
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
-          if (humanBoardDrag) {
+          if (humanMove) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
             if (skill) {
@@ -385,7 +422,9 @@ export class FactoryTransitionService {
       request,
       transitionId,
       evaluation,
-      evaluation.outcome === 'accepted' ? consentEffect(request, humanBoardDrag) : {},
+      evaluation.outcome === 'accepted'
+        ? { ...consentEffect(request, humanMove), accept: acceptsItem(request) && !item.acceptedAt }
+        : {},
     );
   }
 
@@ -409,6 +448,7 @@ export class FactoryTransitionService {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
       consentedBy: options.consentedBy,
+      ...(options.accept ? { accept: true } : {}),
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       workItemId: request.workItemId,
@@ -425,6 +465,25 @@ export class FactoryTransitionService {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
     const result = committed.result as unknown as FactoryTransitionResult;
+    if (
+      this.#onAccepted &&
+      options.accept &&
+      committed.status === 'committed' &&
+      result.status === 'accepted' &&
+      committed.item?.acceptedAt
+    ) {
+      const item = committed.item;
+      void Promise.resolve(
+        this.#onAccepted({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: request.workItemId,
+          item,
+        }),
+      ).catch(error => {
+        console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
+      });
+    }
     if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -434,6 +493,7 @@ export class FactoryTransitionService {
             factoryProjectId: request.factoryProjectId,
             workItemId: request.workItemId,
             stage: result.stage,
+            revision: result.revision,
           }),
         );
         // A late rejection after the timeout wins the race must not surface

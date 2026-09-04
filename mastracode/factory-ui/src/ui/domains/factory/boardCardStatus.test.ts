@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardCardStatus } from './boardCardStatus';
+import { boardCardStatus, itemAwaitsPerson } from './boardCardStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {
@@ -13,6 +13,7 @@ function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecis
     status: 'leased',
     attempts: 1,
     failureOccurrence: 0,
+    source: null,
     failureCode: null,
     canRetry: true,
     lastError: null,
@@ -31,15 +32,6 @@ describe('boardCardStatus', () => {
         decision: decision({ status: 'failed', lastError: 'ENOENT' }),
       }),
     ).toEqual({ kind: 'busy', label: 'Moving to Planning…' });
-  });
-
-  it('keeps the started run visible while a rule effect fails in the background', () => {
-    expect(
-      boardCardStatus({
-        runs: [{ label: 'Review', phase: 'workspace' }],
-        decision: decision({ status: 'failed' }),
-      }),
-    ).toEqual({ kind: 'busy', label: 'Review — preparing workspace…' });
   });
 
   it('keeps the click that is still resolving ahead of a rule effect queued behind it', () => {
@@ -90,28 +82,59 @@ describe('boardCardStatus', () => {
     // board ends up showing failures nobody caused.
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 0, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          status: 'retry',
+          attempts: 0,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'busy', label: 'Filing a linked card…' });
+    ).toEqual({ kind: 'busy', label: 'Syncing GitHub pull request…' });
+  });
+
+  it('names the system a linked card is synced with', () => {
+    const sync = (source: FactoryDecisionSummary['source']) =>
+      boardCardStatus({ decision: decision({ type: 'upsertLinkedWorkItem', source, status: 'pending', attempts: 0 }) });
+    expect(sync('github-issue')).toEqual({ kind: 'busy', label: 'Syncing GitHub issue…' });
+    expect(sync('linear-issue')).toEqual({ kind: 'busy', label: 'Syncing Linear issue…' });
   });
 
   it('still reports an effect that has actually been tried and failed', () => {
     expect(
       boardCardStatus({
-        decision: decision({ type: 'upsertLinkedWorkItem', status: 'retry', attempts: 2, lastError: null }),
+        decision: decision({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-issue',
+          status: 'retry',
+          attempts: 2,
+          lastError: null,
+        }),
       }),
-    ).toEqual({ kind: 'error', label: 'Linked card could not be filed — retrying…', detail: undefined });
+    ).toEqual({ kind: 'error', label: "Couldn't sync GitHub issue — retrying…", detail: undefined });
   });
 
-  it('tells a run that is underway apart from one still waiting to start', () => {
+  it('says a run is starting until the registry or the workspace record shows its session', () => {
     expect(boardCardStatus({ decision: decision({ status: 'pending', attempts: 0 }) })).toEqual({
       kind: 'busy',
       label: 'Starting an automated run…',
     });
     expect(boardCardStatus({ decision: decision({ status: 'leased' }) })).toEqual({
       kind: 'busy',
-      label: 'Automated run in progress…',
+      label: 'Starting an automated run…',
     });
+  });
+
+  it('leaves a leased run to the wick once its session is live', () => {
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'working' })).toEqual({
+      kind: 'idle',
+    });
+    expect(boardCardStatus({ decision: decision({ status: 'leased' }), sessionStatus: 'initializing' })).toEqual({
+      kind: 'idle',
+    });
+    expect(
+      boardCardStatus({ decision: decision({ type: 'transition', status: 'leased' }), sessionStatus: 'working' }),
+    ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
   });
 
   it('describes a queued rule effect in terms of what it does, not the queue', () => {
@@ -138,7 +161,35 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
   });
 
+  it('names the held classification so the card says why it waits on a person', () => {
+    expect(boardCardStatus({ heldAs: 'feature request' })).toEqual({
+      kind: 'held',
+      label: 'Feature request · needs your approval',
+    });
+    // A suggested run cannot start until the card is accepted, so the hold is the live question.
+    expect(
+      boardCardStatus({ heldAs: 'feature request', proposal: { label: 'Build', decisionId: 'decision-9' } }),
+    ).toEqual({ kind: 'held', label: 'Feature request · needs your approval' });
+    // Anything the server is doing outranks the standing hold.
+    expect(boardCardStatus({ heldAs: 'feature request', preparing: 'Starting…' })).toEqual({
+      kind: 'busy',
+      label: 'Starting…',
+    });
+  });
+
   it('falls back to idle when nothing is in flight', () => {
     expect(boardCardStatus({})).toEqual({ kind: 'idle' });
+  });
+});
+
+describe('itemAwaitsPerson', () => {
+  it('marks a parked run and an effect that failed for good, never a retry the server still owns', () => {
+    expect(itemAwaitsPerson(decision({ status: 'proposed' }), undefined)).toBe(true);
+    expect(itemAwaitsPerson(undefined, decision({ status: 'failed' }))).toBe(true);
+    expect(itemAwaitsPerson(undefined, decision({ status: 'retry' }))).toBe(false);
+  });
+
+  it('stays quiet while an effect the card calls busy runs over the parked run', () => {
+    expect(itemAwaitsPerson(decision({ status: 'proposed' }), decision({ status: 'leased' }))).toBe(false);
   });
 });

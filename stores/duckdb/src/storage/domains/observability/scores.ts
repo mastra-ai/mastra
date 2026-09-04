@@ -240,7 +240,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const s = args.score as LegacyScoreRecord;
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
-    `INSERT INTO score_events (
+    `INSERT OR REPLACE INTO score_events (
       scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
@@ -284,8 +284,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})
-     ON CONFLICT DO NOTHING`,
+     ].join(', ')})`,
   );
 }
 
@@ -338,14 +337,13 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
   });
 
   await db.execute(
-    `INSERT INTO score_events (
+    `INSERT OR REPLACE INTO score_events (
       scoreId, timestamp, cursorId, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     VALUES ${tuples.join(',\n       ')}`,
   );
 }
 

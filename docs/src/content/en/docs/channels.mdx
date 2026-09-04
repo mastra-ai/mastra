@@ -143,6 +143,29 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
+### Custom action handling
+
+Use `handlers.onAction` to handle button clicks and select changes from cards you post yourself. The handler is called with the Chat SDK action event and the default handler, plus the same `ctx` the other channel handlers receive. Values you set on `ctx.requestContext` before delegating carry through to the resumed tool call. The default handler processes the built-in Approve and Deny buttons and ignores every other action ID, so call it for events you don't handle to keep tool approval working:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+  handlers: {
+    onAction: async (event, defaultHandler, ctx) => {
+      if (event.actionId === 'retry') {
+        await event.thread?.post('Retrying...')
+        return
+      }
+      await defaultHandler()
+    },
+  },
+},
+```
+
+Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.channels.sdk`.
+
 ## Reply formatting
 
 Agent replies post as markdown by default. Platforms with native markdown rendering, such as Slack, render bold text, links, and tables directly. Other platforms convert the markdown to their own format. Agents write standard markdown and it renders correctly everywhere, matching how the same reply renders in Studio.

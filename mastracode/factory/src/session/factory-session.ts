@@ -238,7 +238,7 @@ export interface HydrateFactorySessionArgs {
  * default it was created with, and the reason is logged.
  */
 export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
-  // The org rung knowledge capture scopes on. Seeded first so it lands even if
+  // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
   try {

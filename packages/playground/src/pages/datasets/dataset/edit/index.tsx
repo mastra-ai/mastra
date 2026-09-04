@@ -75,7 +75,6 @@ function EditDatasetPage() {
                 id: dataset.id,
                 name: dataset.name,
                 description: dataset.description || '',
-                targetType: dataset.targetType,
                 inputSchema: dataset.inputSchema,
                 groundTruthSchema: dataset.groundTruthSchema,
                 requestContextSchema: dataset.requestContextSchema,

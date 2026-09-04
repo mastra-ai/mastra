@@ -29,7 +29,6 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
-import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -43,8 +42,12 @@ import {
   SourceControlConnectionNotFoundError,
   type SourceControlStorage,
 } from '../storage/domains/source-control/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
+import {
+  isAgentActor,
+  type FactoryDispatchFailureCode,
+  type WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
+import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -214,11 +217,8 @@ export async function prepareFactoryRuleBinding(
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
-    const branch = workItemBranch({
-      id: input.item.id,
-      source: workItemBranchSource(input.item.externalSource),
-      metadata: input.item.metadata,
-    });
+    const source = workItemBranchSource(input.item.externalSource);
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
     // Only the Intake exit derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     const currentStage = factoryRuleStage(input.item.stages);
@@ -235,6 +235,7 @@ export async function prepareFactoryRuleBinding(
     // land in the role's existing session: minting a replacement would repoint
     // the work item, flip the session's owner to the approver, and orphan the
     // previous sandbox.
+    const approver = input.record.approvedBy ?? undefined;
     const preparedSession =
       (await reuseBoundSession(github.sourceControlStorage, input)) ??
       (await ensureFactorySourceSession({
@@ -243,9 +244,9 @@ export async function prepareFactoryRuleBinding(
         factoryProjectId: input.record.factoryProjectId,
         repositorySlug,
         branch,
-        // A human-approved proposal has an interactive user: attribute the run to
-        // the approver, not the repo connector.
-        attributeToUserId: input.record.approvedBy ?? undefined,
+        // A person who approved the run is its interactive user: attribute it to
+        // them, not the repo connector. An agent's pre-approval names no person.
+        attributeToUserId: isAgentActor(approver) ? undefined : approver,
       }));
 
     await coordinator.prepare({
@@ -254,7 +255,7 @@ export async function prepareFactoryRuleBinding(
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
-      threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
@@ -471,7 +472,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
-        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -513,6 +513,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
+      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

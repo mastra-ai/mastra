@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
@@ -354,7 +355,7 @@ describe('Supervisor Pattern Integration Tests', () => {
       ]);
     });
 
-    it('should expose finishReason on the onDelegationComplete result (stream)', async () => {
+    it('should report an unsuccessful delegation when stream finishes with an error reason', async () => {
       let capturedContext: DelegationCompleteContext | undefined;
 
       const subAgent = new Agent({
@@ -372,7 +373,11 @@ describe('Supervisor Pattern Integration Tests', () => {
               { type: 'text-start', id: 'text-1' },
               { type: 'text-delta', id: 'text-1', delta: 'Streamed sub-agent answer' },
               { type: 'text-end', id: 'text-1' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+              {
+                type: 'finish',
+                finishReason: 'error',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
             ]),
           }),
         }),
@@ -439,7 +444,9 @@ describe('Supervisor Pattern Integration Tests', () => {
 
       expect(capturedContext).toBeDefined();
       expect(capturedContext!.result.text).toBe('Streamed sub-agent answer');
-      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.finishReason).toBe('error');
+      expect(capturedContext!.success).toBe(false);
+      expect(capturedContext!.error).toBeUndefined();
     });
 
     it('should let onDelegationComplete replace the tool result the parent sees in the same run', async () => {
@@ -498,6 +505,94 @@ describe('Supervisor Pattern Integration Tests', () => {
       // The second model call carries the tool result, and it must show the replacement.
       expect(promptsSeenByParent).toHaveLength(2);
       expect(promptsSeenByParent[1]).toContain('The sub-agent failed to produce a result.');
+    });
+
+    it('should use resultText from onDelegationComplete for a failed delegation without recovering it', async () => {
+      const resultText = 'The sub-agent failed in a recoverable way.';
+      const delegationError = new Error('sub-agent model failed');
+      const subAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        description: 'A sub-agent that fails.',
+        instructions: 'You are a failing sub-agent.',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw delegationError;
+          },
+        }),
+      });
+      const promptsSeenByParent: string[] = [];
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          promptsSeenByParent.push(JSON.stringify(prompt));
+          if (promptsSeenByParent.length === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-failingAgent',
+                  input: JSON.stringify({ prompt: 'do the thing' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Handled failure',
+            content: [{ type: 'text' as const, text: 'Handled failure' }],
+            warnings: [],
+          };
+        },
+      });
+      const onDelegationComplete = vi.fn(({ success, error }: DelegationCompleteContext) => {
+        expect(success).toBe(false);
+        expect(error).toBe(delegationError);
+        return { resultText };
+      });
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { failingAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const trackException = vi.fn();
+      supervisorAgent.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException,
+        getTransports: vi.fn().mockReturnValue(new Map()),
+      } as any);
+
+      await supervisorAgent.generate('Do the thing', {
+        maxSteps: 3,
+        delegation: { onDelegationComplete },
+      });
+
+      expect(onDelegationComplete).toHaveBeenCalledTimes(1);
+      const trackedErrors = trackException.mock.calls.map(([error]) => error);
+      const delegationToolError = trackedErrors.find(
+        error => error instanceof MastraError && error.id === 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+      );
+      expect(delegationToolError).toMatchObject({
+        message: resultText,
+        cause: expect.objectContaining({ message: delegationError.message }),
+      });
+      expect(promptsSeenByParent).toHaveLength(2);
+      expect(promptsSeenByParent[1]).toContain(resultText);
+      expect(promptsSeenByParent[1]).not.toContain('[Agent:supervisor] - Failed agent tool execution for failingAgent');
+      expect(promptsSeenByParent[1]).toContain('\"type\":\"error-text\"');
     });
 
     describe('throwing hooks', () => {

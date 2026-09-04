@@ -18,7 +18,6 @@ function attentionHandler(counter: { requests: number }) {
     return HttpResponse.json({
       items: [],
       openCount: 0,
-      approvalCount: 0,
       badgeCount: 0,
       unreadCount: 0,
       activityUnreadCount: 0,
