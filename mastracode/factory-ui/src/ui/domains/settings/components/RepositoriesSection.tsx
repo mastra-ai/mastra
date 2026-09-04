@@ -27,6 +27,7 @@ export function RepositoriesSection() {
   return (
     <div className="flex min-w-0 flex-col gap-8">
       <SettingsSubsection
+        scope="factory"
         title="Repositories"
         description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
         action={
