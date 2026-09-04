@@ -27,7 +27,7 @@ export function UserGithubConnectionRow() {
 
   if (status.userConnected) {
     return (
-      <SettingsSubsection title="GitHub account">
+      <SettingsSubsection scope="personal" title="GitHub account">
         <SettingsCard>
           <SettingsRow
             variant="factory"
@@ -47,7 +47,7 @@ export function UserGithubConnectionRow() {
   if (status.userConnected !== false) return undefined;
 
   return (
-    <SettingsSubsection title="GitHub account">
+    <SettingsSubsection scope="personal" title="GitHub account">
       <SettingsCard>
         <SettingsRow
           variant="factory"

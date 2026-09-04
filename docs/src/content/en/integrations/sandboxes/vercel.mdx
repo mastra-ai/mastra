@@ -1,6 +1,6 @@
 ---
 title: "Vercel | Sandbox"
-description: "API reference for VercelSandbox and VercelServerlessSandbox workspace providers."
+description: "Run Mastra workspace commands in Vercel Sandbox microVMs or stateless Serverless Functions, with authentication, files, ports, and processes."
 packages:
   - "@mastra/vercel"
 ---
@@ -194,6 +194,13 @@ Both callbacks are optional and can be used independently.
     description: 'Default environment variables inherited by all commands.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. Use an absolute path.',
+    isOptional: true,
   },
   {
     name: 'metadata',
@@ -414,6 +421,13 @@ const workspace = new Workspace({
     type: 'Record<string, string>',
     description:
       'Environment variables baked into the deployed function source. These are embedded at deploy time, not set dynamically.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins. When omitted, commands fall back to `/tmp` and `sandbox.workingDirectory` stays undefined.',
     isOptional: true,
   },
   {

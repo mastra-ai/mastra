@@ -5,6 +5,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { resolveModel } from './model.js';
@@ -69,12 +70,7 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
-/**
- * The organization rung local (TUI/studio) knowledge is captured under. A fixed
- * literal on purpose: deriving it from a hostname or path would fragment local
- * knowledge per checkout into scopes nothing ever reads.
- */
-export const LOCAL_KNOWLEDGE_ORG_ID = 'local';
+export { LOCAL_KNOWLEDGE_ORG_ID };
 
 // One error per session, not per memory resolution. Keyed on the session id
 // rather than the controller object: the controller is read off the request
@@ -88,6 +84,7 @@ const reportedOrgUnresolved = new Set<string>();
 function reportOrgUnresolved(
   controller: AgentControllerRequestContext<MastraCodeState> | undefined,
   factoryProjectId: string | undefined,
+  reason?: string,
 ) {
   const sessionId = controller?.session?.id;
   if (sessionId) {
@@ -99,7 +96,7 @@ function reportOrgUnresolved(
   }
   const session = controller?.session;
   console.error(
-    `[Subconscious] Knowledge capture disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'}). Knowledge is not written rather than written where it cannot be read.`,
+    `[Subconscious] Knowledge curation disabled: no organization resolved for session ${session?.id ?? 'unknown'} (project ${factoryProjectId ?? 'none'})${reason ? `: ${reason}` : ''}. Knowledge is not written rather than written where it cannot be read.`,
   );
 }
 
@@ -121,33 +118,25 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 
-    // A Factory-owned session that could not resolve its org refuses to capture:
+    // A Factory-owned session that could not resolve its org refuses to curate:
     // writing under a substituted identity produces knowledge the fail-closed
     // read path can never see.
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
-      // Factory seeds the authoritative org id into session state. There is no
-      // fallback: a session owner is a USER id, never an organization.
-      const factoryOrgId = state?.factoryOrgId;
-      const factoryOwned = isFactory || state?.factoryOrgUnresolved === true;
-      if (typeof factoryOrgId === 'string' && factoryOrgId.trim()) {
-        requestContext.set('organizationId', factoryOrgId);
-      } else if (factoryOwned) {
-        orgUnresolvedRefusal = true;
-        reportOrgUnresolved(controller, factoryProjectId);
+      const identity = resolveKnowledgeScopeIdentity(state);
+      if (identity.resolved) {
+        requestContext.set('organizationId', identity.organizationId);
       } else {
-        // TUI/studio: an explicit, named scope rather than a cascaded identity.
-        requestContext.set('organizationId', LOCAL_KNOWLEDGE_ORG_ID);
+        orgUnresolvedRefusal = true;
+        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
-      // Factory runs share one knowledge graph per project: anchor the
-      // subconscious knowledge scope's resource rung on the project id.
-      if (isFactory) {
-        requestContext.set('knowledgeResourceId', factoryProjectId);
+      if (identity.knowledgeResourceId) {
+        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
       }
     }
 
-    const captureEnabled = subconsciousEnabled && !orgUnresolvedRefusal;
+    const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
@@ -159,7 +148,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     const observeAttachments = state?.observeAttachments;
     // Factory sessions get a factory-only Subconscious config, so the cache key
     // carries a factory presence bit to keep the two configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${captureEnabled ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${subconsciousAvailable ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -177,27 +166,18 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
       options: {
-        // The factory sidebar shows a session the moment it exists, so it needs a
-        // name on the first turn. The TUI names its threads from OM's `threadTitle`
-        // as they grow and would only pay for an extra call here.
-        ...(isFactory ? { generateTitle: { model: getObserverModel } } : {}),
+        // Generate a durable title from the first user message. Every client uses
+        // the same title in its thread list and active-session chrome.
+        generateTitle: { model: getObserverModel },
         observationalMemory: {
           enabled: true,
           temporalMarkers: true,
           retrieval: vector ? { vector: true } : true,
-          experimental_subconscious: captureEnabled
+          experimental_subconscious: subconsciousAvailable
             ? new Subconscious({
                 defaultScope: 'resource',
                 maxScope: 'resource',
-                // Capture-time pinning is a factory-only opinion; every other
-                // client keeps plain curator-maintained pins.
-                pins: isFactory ? { capturePinning: true } : true,
-                // Factory sessions run the curator every 3 observation runs;
-                // other clients leave the cadence trigger dormant.
-                ...(isFactory ? { curationCadence: 3 } : {}),
-                // Real curation over a factory worklist needs tool room: the
-                // default 5-step budget exhausts mid-batch and the curator never
-                // reaches its cursor acknowledgment (observed live 2026-08-13).
+                pins: true,
                 ...(isFactory ? { maxSteps: 25 } : {}),
               })
             : undefined,

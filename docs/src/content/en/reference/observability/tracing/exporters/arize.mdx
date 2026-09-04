@@ -1,6 +1,6 @@
 ---
 title: "Reference: ArizeExporter | Observability"
-description: Arize exporter for Tracing using OpenInference
+description: "Configure ArizeExporter for Mastra tracing with Arize Phoenix or Arize AX, plus OpenTelemetry platforms supporting OpenInference semantic conventions."
 packages:
   - "@mastra/arize"
 ---
@@ -13,7 +13,7 @@ Sends Tracing data to Arize Phoenix or Arize AX, as well as any OpenTelemetry-co
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new ArizeExporter(config: ArizeExporterConfig)
 ```
 
@@ -109,7 +109,7 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -117,7 +117,7 @@ Exports a tracing event to the configured endpoint.
 
 ### export
 
-```typescript prettier:false
+```typescript oxfmt:false
 async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
@@ -125,7 +125,7 @@ Batch exports spans using OpenTelemetry with OpenInference semantic conventions.
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -133,7 +133,7 @@ Force flushes any buffered spans to the configured endpoint without shutting dow
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

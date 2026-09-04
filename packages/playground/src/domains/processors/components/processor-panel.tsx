@@ -200,8 +200,8 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 Status
               </Txt>
               <div className="flex items-center gap-2">
-                <Badge variant={result.success ? 'success' : 'error'}>{result.success ? 'Success' : 'Failed'}</Badge>
-                {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
+                <Badge variant={result.success ? 'green' : 'red'}>{result.success ? 'Success' : 'Failed'}</Badge>
+                {result.tripwire?.triggered && <Badge variant="blue">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
                 <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
@@ -246,9 +246,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
       )}
       <div className="mt-3 flex flex-wrap gap-1">
         {processor.phases.map(phase => (
-          <Badge key={phase} variant="default">
-            {phase}
-          </Badge>
+          <Badge key={phase}>{phase}</Badge>
         ))}
       </div>
       <div className="mt-3">

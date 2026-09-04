@@ -137,9 +137,7 @@ export function ReviewItemCard({
               item.tags.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1">
                   {item.tags.map(t => (
-                    <Badge key={t} variant="default">
-                      {t}
-                    </Badge>
+                    <Badge key={t}>{t}</Badge>
                   ))}
                 </div>
               ) : null
@@ -181,7 +179,7 @@ export function ReviewItemCard({
           {scoresEntries.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {scoresEntries.map(([scorerId, score]) => (
-                <Badge key={scorerId} variant={score >= 0.5 ? 'success' : 'error'}>
+                <Badge key={scorerId} variant={score >= 0.5 ? 'green' : 'red'}>
                   {scorerId.slice(0, 12)}: {score.toFixed(3)}
                 </Badge>
               ))}

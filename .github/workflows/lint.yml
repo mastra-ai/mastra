@@ -20,6 +20,8 @@ jobs:
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
       has_examples: ${{ steps.filter.outputs.has_examples }}
+      has_agents_inputs: ${{ steps.filter.outputs.has_agents_inputs }}
+      has_peerdeps_inputs: ${{ steps.filter.outputs.has_peerdeps_inputs }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -47,6 +49,17 @@ jobs:
           else
             echo "has_examples=false" >> $GITHUB_OUTPUT
           fi
+
+          printf '%s\n' "$ALL" > /tmp/changed-files.txt
+          node -e '
+            const fs = require("node:fs");
+            const { qualityAssuranceInputs } = require("./.github/scripts/ci-routing.cjs");
+            const changedFiles = fs.readFileSync("/tmp/changed-files.txt", "utf8").split(/\r?\n/).filter(Boolean);
+            const { hasAgentsInputs, hasPeerdepsInputs, agentsReasons, peerdepsReasons } = qualityAssuranceInputs(changedFiles);
+            const formatReasons = reasons => reasons.length === 0 ? "no relevant changed paths" : reasons.map(path => `\`${path}\``).join(", ");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_agents_inputs=${hasAgentsInputs}\nhas_peerdeps_inputs=${hasPeerdepsInputs}\n`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Quality assurance routing\n\n- AGENTS validation: \`${hasAgentsInputs}\` — ${formatReasons(agentsReasons)}\n- Peer dependency validation: \`${hasPeerdepsInputs}\` — ${formatReasons(peerdepsReasons)}\n`);
+          '
 
   lint:
     name: Lint
@@ -140,7 +153,7 @@ jobs:
     needs: changes
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
-    if: github.repository == 'mastra-ai/mastra'
+    if: needs.changes.outputs.has_agents_inputs == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       contents: read
       pull-requests: read
@@ -160,10 +173,10 @@ jobs:
 
   peerdeps-check:
     name: Validate peer dependencies
+    needs: changes
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ needs.changes.outputs.has_peerdeps_inputs == 'true' && github.repository == 'mastra-ai/mastra' }}
     permissions:
       contents: read
       pull-requests: read
@@ -198,7 +211,7 @@ jobs:
         run: node ./scripts/validate-peerdeps.mjs
 
       - name: Check @mastra/core import floor
-        run: pnpm --filter ./packages/server check:core-imports
+        run: pnpm check:core-imports
 
       - name: Check for git changes
         run: |

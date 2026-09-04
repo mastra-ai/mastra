@@ -19,6 +19,8 @@ const baseProps: TraceDataPanelViewProps = {
   placement: 'traces-list',
 };
 
+const openTraceActions = () => fireEvent.click(screen.getByRole('button', { name: 'Trace actions' }));
+
 // jsdom has no layout, so it ships no scrollIntoView.
 const scrollIntoView = vi.fn();
 Element.prototype.scrollIntoView = scrollIntoView;
@@ -129,6 +131,26 @@ describe('TraceDataPanelView — search highlighting', () => {
     expect(harness.highlights.set).not.toHaveBeenCalled();
   });
 
+  it('paints the whole name of a span matched only by its metadata', async () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+
+    // 'pgvector' lives in the memory span's metadata and in no span name.
+    search('pgvector');
+
+    // The rows are marked once the filtered tree commits, one frame after the query.
+    await waitFor(() => expect(harness.highlightedText('search-result-indirect')).toEqual(['memory lookup']));
+    expect(harness.highlightedText()).toEqual([]);
+  });
+
+  it('leaves a span matched by its name on the normal highlight', async () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
+
+    search('memory');
+
+    await waitFor(() => expect(harness.highlightedText()).toEqual(['memory']));
+    expect(harness.highlightedText('search-result-indirect')).toEqual([]);
+  });
+
   it('removes the highlight when the search field is cleared', () => {
     renderWithSpanPanel();
     search('agent');
@@ -154,20 +176,34 @@ describe('TraceDataPanelView — Add tool mocks to item', () => {
     const onAddTraceMocksToItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} onAddTraceMocksToItem={onAddTraceMocksToItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /add tool mocks to item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add tool mocks to item/i }));
 
     expect(onAddTraceMocksToItem).toHaveBeenCalledTimes(1);
     expect(onAddTraceMocksToItem).toHaveBeenCalledWith({ traceId: 'trace-1' });
   });
 
-  it('does not render the button when the prop is omitted', () => {
+  it('does not render the action when the prop is omitted', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByRole('button', { name: /add tool mocks to item/i })).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: /add tool mocks to item/i })).toBeNull();
   });
 });
 
 describe('TraceDataPanelView — header actions', () => {
+  it('keeps navigation and close visible while secondary actions stay in the menu', () => {
+    render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /previous trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /close panel/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
+
+    openTraceActions();
+    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+  });
+
   it('keeps the trace actions reachable in the header even while the panel is collapsed', () => {
     render(
       <TraceDataPanelView
@@ -180,11 +216,12 @@ describe('TraceDataPanelView — header actions', () => {
       />,
     );
 
-    // The body is hidden while collapsed, so these can only come from the header.
+    // The body is hidden while collapsed, so these can only come from the header menu.
     expect(screen.queryByText('agent run')).toBeNull();
-    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /save as dataset item/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /add tool mocks to item/i })).toBeTruthy();
+    openTraceActions();
+    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
 
   it('still saves the dataset item against the root span from the header', () => {
@@ -198,55 +235,37 @@ describe('TraceDataPanelView — header actions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
 });
 
-describe('TraceDataPanelView — trace usage summary', () => {
-  it('renders token and cost rows when usage is provided', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        usage={{ inputTokens: 1200, outputTokens: 300, estimatedCost: 0.0042, costUnit: 'usd' }}
-      />,
-    );
+describe('TraceDataPanelView — trace summary description', () => {
+  it('shows the start date, duration and entity right under the heading', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} entityHref="/agents/weather-agent/chat/new" />);
 
-    expect(screen.getByText('Trace input tokens')).not.toBeNull();
-    expect(screen.getByText('1.2K')).not.toBeNull();
-    expect(screen.getByText('Trace output tokens')).not.toBeNull();
-    expect(screen.getByText('300')).not.toBeNull();
-    expect(screen.getByText('Trace est. cost')).not.toBeNull();
-    expect(screen.getByText('$0.0042')).not.toBeNull();
+    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
+    // 1s between the fixture's startedAt and endedAt.
+    expect(screen.getAllByText('1.0s').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: /weather-agent/ })).toBeTruthy();
   });
 
-  it('renders a placeholder when the store produced no cost for the trace', () => {
-    render(<TraceDataPanelView {...baseProps} usage={{ inputTokens: 1200, outputTokens: 300 }} />);
+  it('renders the entity as plain text when no href is provided', () => {
+    render(<TraceDataPanelView {...baseProps} spans={deepTraceFixture} />);
 
-    expect(screen.getByText('Trace est. cost')).not.toBeNull();
-    expect(screen.getByText('—')).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /weather-agent/ })).toBeNull();
+    expect(screen.getAllByText(/weather-agent/).length).toBeGreaterThan(0);
   });
 
-  it('renders no usage rows when the prop is omitted', () => {
+  it('no longer renders the old key-value metadata rows', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByText('Trace est. cost')).toBeNull();
+    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByText('Ended at')).toBeNull();
     expect(screen.queryByText('Trace input tokens')).toBeNull();
-  });
-
-  it('does not render full-trace usage for a subtrace anchor', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        spans={nestedSpanFixture}
-        anchorSpanId="child"
-        usage={{ inputTokens: 12_500, outputTokens: 405, estimatedCost: 0.01, costUnit: 'usd' }}
-      />,
-    );
-
     expect(screen.queryByText('Trace est. cost')).toBeNull();
-    expect(screen.queryByText('12.5K')).toBeNull();
   });
 });
 
@@ -315,8 +334,9 @@ describe('TraceDataPanelView — the header', () => {
     expect(screen.queryByText(/# trace-1/)).toBeNull();
     expect(screen.queryByRole('button', { name: /previous trace/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
-    // The download is the one control both layouts keep.
-    expect(screen.getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
   });
 
   it('offers a collapse toggle only to a caller that owns the state', () => {
@@ -329,15 +349,17 @@ describe('TraceDataPanelView — the header', () => {
     const onCollapsedChange = vi.fn();
     render(<TraceDataPanelView {...baseProps} onCollapsedChange={onCollapsedChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /collapse panel/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /collapse panel/i }));
     expect(onCollapsedChange).toHaveBeenCalledWith(true);
   });
 
   it('reads its collapsed label from the state the caller passes in', () => {
     render(<TraceDataPanelView {...baseProps} collapsed onCollapsedChange={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: /expand panel/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
+    openTraceActions();
+    expect(screen.getByRole('menuitem', { name: /expand panel/i })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
   });
 
   it('hides the whole body while collapsed', () => {
@@ -369,23 +391,27 @@ describe('TraceDataPanelView — the header', () => {
     );
 
     const noHref = render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} />);
-    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
     expect(noHref.container).toBeTruthy();
 
     cleanup();
 
     render(<TraceDataPanelView {...baseProps} traceHref="/traces/trace-1" />);
-    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
 
     cleanup();
 
     render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.queryByLabelText('Open trace page')).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
 
     cleanup();
 
     render(<TraceDataPanelView {...baseProps} LinkComponent={Anchor} traceHref="/traces/trace-1" />);
-    expect(screen.getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe('/traces/trace-1');
+    openTraceActions();
+    expect(screen.getByRole('menuitem', { name: 'Open trace page' }).getAttribute('href')).toBe('/traces/trace-1');
   });
 
   it('never links out from the trace page itself', () => {
@@ -399,7 +425,8 @@ describe('TraceDataPanelView — the header', () => {
       <TraceDataPanelView {...baseProps} placement="trace-page" LinkComponent={Anchor} traceHref="/traces/trace-1" />,
     );
 
-    expect(screen.queryByRole('link', { name: 'Open trace page' })).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
   });
 });
 
@@ -425,13 +452,13 @@ describe('TraceDataPanelView — the body', () => {
 
   it('shows the trace summary in the side panel but not on the trace page', () => {
     const sidePanel = render(<TraceDataPanelView {...baseProps} />);
-    expect(screen.getByText('Status')).toBeTruthy();
+    expect(screen.getByLabelText(/^Started at /)).toBeTruthy();
     expect(sidePanel.container).toBeTruthy();
 
     cleanup();
 
     render(<TraceDataPanelView {...baseProps} placement="trace-page" />);
-    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByLabelText(/^Started at /)).toBeNull();
   });
 });
 
@@ -452,13 +479,15 @@ describe('TraceDataPanelView — the actions row', () => {
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
-    expect(screen.getByRole('button', { name: /evaluate trace/i })).toBeTruthy();
+    openTraceActions();
+    expect(screen.getByRole('menuitem', { name: /evaluate trace/i })).toBeTruthy();
   });
 
   it('never shows the actions row on the trace page', () => {
     render(<TraceDataPanelView {...baseProps} placement="trace-page" onEvaluateTrace={vi.fn()} />);
 
-    expect(screen.queryByRole('button', { name: /evaluate trace/i })).toBeNull();
+    openTraceActions();
+    expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
     expect(screen.queryByText(/available in Mastra Studio/)).toBeNull();
   });
 
@@ -466,7 +495,8 @@ describe('TraceDataPanelView — the actions row', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -475,7 +505,8 @@ describe('TraceDataPanelView — the actions row', () => {
     const onEvaluateTrace = vi.fn();
     render(<TraceDataPanelView {...baseProps} onEvaluateTrace={onEvaluateTrace} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /evaluate trace/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /evaluate trace/i }));
 
     expect(onEvaluateTrace).toHaveBeenCalledTimes(1);
   });
@@ -535,7 +566,8 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -544,7 +576,8 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -560,23 +593,10 @@ describe('TraceDataPanelView — an anchored subtrace', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
-  });
-
-  it('keeps the full-trace totals when the anchor is the trace root after all', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        spans={nestedSpanFixture}
-        anchorSpanId="root"
-        usage={{ inputTokens: 12_500, outputTokens: 800, estimatedCost: 0.05, costUnit: 'usd' }}
-      />,
-    );
-
-    // Anchoring on the root span is still the whole trace, so its totals stand.
-    expect(screen.getByText('12.5K')).toBeTruthy();
   });
 });
 
@@ -596,12 +616,17 @@ describe('TraceDataPanelView — downloading the trace', () => {
 
     render(withClient(<TraceDataPanelView {...baseProps} />));
 
-    const download = screen.getByRole('button', { name: 'Download trace JSON' });
-    expect(download.hasAttribute('disabled')).toBe(false);
+    openTraceActions();
+    const download = screen.getByRole('menuitem', { name: 'Download trace JSON' });
+    expect(download.hasAttribute('data-disabled')).toBe(false);
 
     fireEvent.click(download);
 
-    await waitFor(() => expect(download.hasAttribute('disabled')).toBe(true));
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Download trace JSON' })).toBeNull());
+    openTraceActions();
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: 'Download trace JSON' }).hasAttribute('data-disabled')).toBe(true),
+    );
   });
 });
 
@@ -659,7 +684,7 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
     render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} anchorSpanId="ghost" />);
 
     // No root span to describe, so the summary rows are left out entirely.
-    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByLabelText(/^Started at /)).toBeNull();
     expect(screen.getByText('agent run')).toBeTruthy();
   });
 
@@ -674,7 +699,8 @@ describe('TraceDataPanelView — an anchor the trace does not have', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
   });
@@ -695,7 +721,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
     const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'other-root' });
   });
@@ -720,7 +747,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
   });
@@ -735,7 +763,8 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /save as dataset item/i }));
+    openTraceActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: /add full trace to dataset/i }));
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
@@ -772,20 +801,89 @@ describe('TraceDataPanelView — following the URL to another span', () => {
   });
 });
 
+describe('TraceDataPanelView — messages column', () => {
+  const messages = <div data-testid="messages-panel">messages here</div>;
+  const spanDetail = <div data-testid="span-detail">span content</div>;
+  const columns = (container: HTMLElement) => container.querySelector('[data-trace-columns]') as HTMLElement;
+  const precedes = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  describe('given a messages slot', () => {
+    it('renders it inside the same card, before the trace content', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      const panel = screen.getByTestId('messages-panel');
+      expect(container.querySelector('section')?.contains(panel)).toBe(true);
+      expect(precedes(panel, screen.getByText('agent run'))).toBe(true);
+      // The column is a layout concern, not a tab.
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+    });
+
+    it('uses an animated messages + trace grid', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} messagesPanelSlot={messages} />);
+
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_0fr]');
+      expect(columns(container).className).toContain('transition-[grid-template-columns]');
+    });
+  });
+
+  it('fades timeline spans that are not featured', () => {
+    const rootSpan = nestedSpanFixture[0];
+    if (!rootSpan) throw new Error('fixture must have a root span');
+
+    render(<TraceDataPanelView {...baseProps} spans={nestedSpanFixture} featuredSpanIds={[rootSpan.spanId]} />);
+
+    const rows = screen.getAllByLabelText(/^View details for span/);
+    expect(rows.length).toBeGreaterThan(1);
+    const [featured, ...others] = rows;
+    expect(featured?.className).not.toContain('opacity-30');
+    others.forEach(row => expect(row.className).toContain('opacity-30'));
+  });
+
+  describe('given both a messages slot and a span panel slot', () => {
+    it('orders the columns messages → trace → span', () => {
+      const { container } = render(
+        <TraceDataPanelView {...baseProps} messagesPanelSlot={messages} spanPanelSlot={spanDetail} />,
+      );
+
+      const panel = screen.getByTestId('messages-panel');
+      const trace = screen.getByText('agent run');
+      const span = screen.getByTestId('span-detail');
+      expect(precedes(panel, trace)).toBe(true);
+      expect(precedes(trace, span)).toBe(true);
+      expect(columns(container).className).toContain('grid-cols-[1fr_1fr_1fr]');
+    });
+  });
+
+  describe('given no messages slot', () => {
+    it('renders no messages column', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} />);
+
+      expect(screen.queryByTestId('messages-panel')).toBeNull();
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_0fr]');
+    });
+
+    it('keeps the span column animatable', () => {
+      const { container } = render(<TraceDataPanelView {...baseProps} spanPanelSlot={spanDetail} />);
+
+      expect(columns(container).className).toContain('grid-cols-[0fr_1fr_1fr]');
+    });
+  });
+});
+
 describe('TraceDataPanelView — trace-level tabs', () => {
   it('renders no tabs when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
-    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
-  it('renders Details and Scores tabs when a scores slot is provided', () => {
+  it('renders Spans and Scores tabs when a scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => <div>trace scores here</div>} />);
 
-    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
-    // Details is the default tab.
+    expect(screen.getByRole('tab', { name: /spans/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores/i })).toBeTruthy();
+    // Spans is the default tab.
     expect(screen.getByText('agent run')).toBeTruthy();
     expect(screen.queryByText('trace scores here')).toBeNull();
   });
@@ -815,7 +913,7 @@ describe('TraceDataPanelView — trace-level tabs', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /evaluations/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /scores/i }));
 
     expect(onTabChange).toHaveBeenCalledWith('scores');
   });
@@ -823,12 +921,12 @@ describe('TraceDataPanelView — trace-level tabs', () => {
   it('shows the badge count in the Scores tab label', () => {
     render(<TraceDataPanelView {...baseProps} scoresTabSlot={() => null} scoresTabBadge={3} />);
 
-    expect(screen.getByRole('tab', { name: /evaluations \(3\)/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /scores \(3\)/i })).toBeTruthy();
   });
 });
 
 describe('TraceDataPanelView — trace feedback tab', () => {
-  it('renders a Feedback tab next to Details and Evaluations', () => {
+  it('renders Feedback before Scores', () => {
     render(
       <TraceDataPanelView
         {...baseProps}
@@ -837,16 +935,14 @@ describe('TraceDataPanelView — trace feedback tab', () => {
       />,
     );
 
-    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /evaluations/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Spans', 'Feedback', 'Scores']);
   });
 
   it('renders the Feedback tab even when no scores slot is provided', () => {
     render(<TraceDataPanelView {...baseProps} feedbackTabSlot={() => <div>trace feedback here</div>} />);
 
     expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: /evaluations/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /scores/i })).toBeNull();
   });
 
   it('shows the feedback slot with the trace id — and no span id — when the tab is active', () => {
@@ -874,7 +970,7 @@ describe('TraceDataPanelView — trace feedback tab', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
-    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /spans/i })).toBeNull();
   });
 });
 
@@ -1062,14 +1158,15 @@ describe('TraceDataPanelView — span search', () => {
     expect(searchField().value).toBe('zzz-nothing');
   });
 
-  it('sits on the same row as the span type legend', () => {
+  it('sits on its own full-width row above the span type legend', () => {
     renderDeep();
 
-    // The legend is right-aligned on its own row; the search field fills the
-    // empty left half of that row rather than taking a row of its own.
+    // The field gets a whole row so it is never squeezed by a wide legend.
     const legendRow = screen.getByText('Tool').closest('div')?.parentElement;
+    const field = searchField();
 
-    expect(legendRow?.contains(searchField())).toBe(true);
+    expect(legendRow?.contains(field)).toBe(false);
+    expect((legendRow?.compareDocumentPosition(field) ?? 0) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it('restores the full trace when the query is cleared', async () => {

@@ -1,6 +1,6 @@
 ---
 title: "Reference: createRoute() | Server"
-description: "API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation."
+description: "Use createRoute() to define type-safe Mastra server routes with Zod validation for requests and responses, plus handler context and OpenAPI metadata."
 packages:
   - "@mastra/server"
 ---
@@ -152,7 +152,7 @@ Returns a `ServerRoute` object that can be registered with an adapter or passed 
 
 ### Register through `server.apiRoutes`
 
-Routes created with `createRoute()` can be passed to `server.apiRoutes`. The adapter registers them with runtime validation, typed handler parameters, and generated OpenAPI metadata. See [Custom API routes](/docs/server/custom-api-routes) for details.
+Routes created with `createRoute()` can be passed to `server.apiRoutes`, where the adapter adds runtime validation and typed handler parameters while generating OpenAPI metadata. See [Custom API routes](/docs/server/custom-api-routes) for details.
 
 ```typescript
 import { Mastra } from '@mastra/core'

@@ -1,6 +1,6 @@
 ---
 title: 'LiveKit | Voice'
-description: 'Learn how to turn Mastra agents into realtime voice agents with LiveKit, including semantic turn detection and barge-in.'
+description: "Build real-time voice agents with Mastra and LiveKit for browser or phone calls, turn detection, interruptions, tools, memory, and telephony."
 packages:
   - '@mastra/livekit'
 ---
@@ -396,7 +396,7 @@ See [Realtime voice](#quickstart) for setup and concepts.
 The package has three entry points:
 
 - `@mastra/livekit`: server-side APIs, [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
-- `@mastra/livekit/worker`: the worker runtime, [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
+- `@mastra/livekit/worker`: the worker runtime, [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), the per-session agent class [`MastraVoiceAgent`](#mastravoiceagent), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
 - `@mastra/livekit/plugin`: the LLM-component plugin, [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option. `MastraLLM` is plugin-only.
 
 ### `createLiveKitWorker()`
@@ -707,6 +707,112 @@ export default createLiveKitWorker({
 ```
 
 Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 'assistant'; content: string; id?: string }`.
+
+### `MastraVoiceAgent`
+
+The LiveKit `voice.Agent` subclass that [`createLiveKitWorker()`](#createlivekitworker) builds for every session. Replies come from a Mastra agent (or a custom `generate` source) through the agent's `llmNode`; LiveKit keeps the audio loop, turn detection, and barge-in. Construct it yourself when you own the `voice.AgentSession`, for example to test a Mastra-backed agent with `@livekit/agents`' `voice.testing` harness without speech-to-text, text-to-speech, or a live worker. `createMastraVoiceAgent(options)` is an equivalent factory.
+
+```typescript title="src/mastra/voice-agent.test.ts"
+import { initializeLogger, voice } from '@livekit/agents'
+import { MastraVoiceAgent } from '@mastra/livekit/worker'
+import { supportAgent } from './agents/support'
+
+// Required outside a LiveKit worker: AgentSession needs the LiveKit logger initialized.
+initializeLogger({ level: 'silent', pretty: false })
+
+const session = new voice.AgentSession()
+await session.start({ agent: new MastraVoiceAgent({ agent: supportAgent, memory: false }) })
+
+// run() returns a RunResult, not a promise; wait() resolves when the turn completes.
+const result = session.run({ userInput: 'What are your opening hours?' })
+await result.wait()
+result.expect.nextEvent().isMessage({ role: 'assistant' })
+result.expect.noMoreEvents()
+```
+
+The agent carries its own placeholder `llm.LLM` so LiveKit runs the reply pipeline; generation always goes through `llmNode`, so a `FakeLLM` in the session's `llm` slot is ignored and calling the placeholder's `chat()` throws. To stub the model in tests, give the Mastra agent a mock model or pass a custom `generate` function.
+
+#### Options
+
+Provide exactly one reply source: `agent` or `generate`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'Agent',
+    description: 'In-process Mastra agent. Tools and memory run inside it.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Custom reply source, for example from createRemoteAgentReplyGenerator(). A generate source owns its own hooks; toolFeedback, onToolCall, onTurnComplete, and streamOptions only apply to the agent source.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'MastraVoiceAgentMemory | false',
+    description:
+      'Conversation persistence as { thread, resource? }. When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. When false, the full in-session LiveKit context is sent every turn.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext | Record<string, unknown>',
+    description: 'Request context entries forwarded to every generation.',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall: VoiceToolCall) => string | undefined | void',
+    description: 'Return a short phrase to speak while a tool runs. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'onToolCall',
+    type: '(toolCall: VoiceToolCall) => void',
+    description:
+      'Called as each tool call starts, before its result is known. Keep it cheap and non-throwing. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'onTurnComplete',
+    type: 'VoiceTurnCompleteHook',
+    description:
+      'Called once per turn after the reply finished streaming to text-to-speech. Fire-and-forget; errors are logged. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'greetingReminder',
+    type: '{ everyMs: number; text?: string }',
+    description:
+      'Periodic AI re-disclosure: once everyMs has elapsed, the next reply is prefixed with text (spoken at the turn boundary). The worker derives this from configuration.greeting.repeatEvery / repeatText.',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'MastraStreamOptions',
+    description: 'Extra options merged into every agent.stream() call. Agent source only.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'LiveKit agent instructions. Not used for reply generation; the Mastra agent applies its own.',
+    isOptional: true,
+  },
+  {
+    name: 'id / stt / vad / tts / turnHandling',
+    type: "voice.AgentOptions['id' | 'stt' | 'vad' | 'tts' | 'turnHandling']",
+    description:
+      'Passed through to the LiveKit voice.Agent constructor. Use them to set per-agent speech components or turn handling.',
+    isOptional: true,
+  },
+]}
+/>
 
 ### `MastraLLM`
 

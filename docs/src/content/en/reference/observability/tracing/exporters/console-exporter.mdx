@@ -1,6 +1,6 @@
 ---
 title: "Reference: ConsoleExporter | Observability"
-description: API reference for the ConsoleExporter
+description: "Configure ConsoleExporter to print Mastra trace events, spans, attributes, and lifecycle updates to the console for local debugging."
 packages:
   - "@mastra/core"
   - "@mastra/observability"
@@ -14,7 +14,7 @@ Outputs trace events to the console for debugging and development.
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new ConsoleExporter(config?: BaseExporterConfig)
 ```
 
@@ -50,7 +50,7 @@ new ConsoleExporter(config?: BaseExporterConfig)
 
 ## Properties
 
-```typescript prettier:false
+```typescript oxfmt:false
 readonly name = 'tracing-console-exporter';
 ```
 
@@ -58,7 +58,7 @@ readonly name = 'tracing-console-exporter';
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -77,7 +77,7 @@ Exports a tracing event to the console.
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

@@ -23,6 +23,7 @@
  */
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import * as coreStorage from '@mastra/core/storage';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   BatchCreateFeedbackArgs,
@@ -87,6 +88,8 @@ import type {
   ListBranchesResponse,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  FeedbackRecord,
+  UpdateFeedbackReviewStatusArgs,
   ListLogsArgs,
   ListLogsResponse,
   ListMetricsArgs,
@@ -101,6 +104,8 @@ import type {
   RetentionTablesDescriptor,
   ScoreRecord,
   TableRetentionPolicy,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -132,6 +137,7 @@ import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
@@ -144,10 +150,12 @@ export type VNextPostgresObservabilityConfig = PgDomainConfig & {
   partitioning?: PartitioningOptions;
   /** Discovery cache configuration. */
   discovery?: DiscoveryConfig;
+  /** Maximum execution time for one advanced trace query. Default 15 seconds. */
+  traceQueryTimeoutMs?: number;
 };
 
 function wrapError(op: string, error: unknown, details?: Record<string, unknown>): never {
-  if (error instanceof MastraError) throw error;
+  if (error instanceof MastraError || error instanceof coreStorage.TraceQueryExecutionError) throw error;
   throw new MastraError(
     {
       id: createStorageErrorId('PG', op, 'FAILED'),
@@ -164,6 +172,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #schema: string;
   readonly #partitioning: PartitioningOptions;
   readonly #discoveryConfig: DiscoveryConfig;
+  readonly #traceQueryTimeoutMs: number;
   #partitionMode?: PartitionMode;
 
   constructor(config: VNextPostgresObservabilityConfig) {
@@ -173,6 +182,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     this.#schema = schemaName ?? 'public';
     this.#partitioning = config.partitioning ?? {};
     this.#discoveryConfig = config.discovery ?? {};
+    this.#traceQueryTimeoutMs = coreStorage.resolveTraceQueryTimeoutMs(config.traceQueryTimeoutMs);
   }
 
   /**
@@ -333,8 +343,8 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override getFeatures() {
-    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs'] as const;
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    if (!deltaPollingFeatureEnabled()) return ['metrics', 'logs', 'trace-query'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
@@ -402,6 +412,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#client, this.#schema, args));
   }
 
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    return this.#run('QUERY_TRACES', () =>
+      traceQueryOps.queryTraces(this.#client, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
   override async listBranches(args: ListBranchesArgs): Promise<ListBranchesResponse> {
     return this.#run('LIST_BRANCHES', () => tracesOps.listBranches(this.#client, this.#schema, args));
   }
@@ -466,6 +482,14 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return this.#run('LIST_FEEDBACK', () => feedbackOps.listFeedback(this.#client, this.#schema, args));
+  }
+
+  override async updateFeedbackReviewStatus(args: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.#run(
+      'UPDATE_FEEDBACK_REVIEW_STATUS',
+      () => feedbackOps.updateFeedbackReviewStatus(this.#client, this.#schema, args),
+      { feedbackId: args.feedbackId },
+    );
   }
 
   // -------------------------------------------------------------------------

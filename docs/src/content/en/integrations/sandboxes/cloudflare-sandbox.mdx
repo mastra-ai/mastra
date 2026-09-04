@@ -1,6 +1,6 @@
 ---
 title: "Cloudflare Sandbox | Sandbox"
-description: "API reference for CloudflareSandbox, a Workspace sandbox provider that executes commands through a Cloudflare Sandbox Bridge Worker."
+description: "Execute commands and manage files in remote Cloudflare Sandboxes through the Sandbox Bridge API, with credentials, session reuse, and previews."
 packages:
   - "@mastra/cloudflare-sandbox"
 ---
@@ -119,7 +119,8 @@ await workspace.sandbox?.writeFiles?.([
   {
     name: 'workingDirectory',
     type: 'string',
-    description: 'Working directory applied to every command.',
+    description:
+      'Default directory for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
     isOptional: true,
   },
   {

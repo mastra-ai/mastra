@@ -120,7 +120,6 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
       const body = (await request.json()) as { branch?: string };
       return HttpResponse.json({ session: { ...reviewSession, branch: body.branch ?? reviewSession.branch } });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),
@@ -185,6 +184,22 @@ describe('Re-review action for open PRs in Done', () => {
       sessionId: SESSION_ID,
       destinationStage: 'review',
       invocation: { type: 'skill', skillName: 'factory-review' },
+      workItem: { id: 'item-pr-42', role: 'review' },
+    });
+  });
+
+  it('starts the re-review hands-off, asking the server to preapprove its plans', async () => {
+    const { startRequests } = stubReviewBoard();
+    const user = userEvent.setup();
+    const { client } = renderReviewBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
+
+    await waitForMutationsIdle(client);
+    expect(startRequests).toHaveLength(1);
+    expect(startRequests[0]).toMatchObject({
+      preapprovePlans: true,
       workItem: { id: 'item-pr-42', role: 'review' },
     });
   });

@@ -94,6 +94,8 @@ function githubContext(
       merged: false,
       assignees: ['assignee'],
       requestedReviewers: ['reviewer'],
+      author: 'author',
+      factoryAuthored: false,
       headBranch: 'feature',
       baseBranch: 'main',
     },
@@ -132,10 +134,10 @@ describe('defaultFactoryRules', () => {
   it('ships ordinary visible default leaves', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(rules.version).toBe('deployment-7');
-    expect(rules.work.intake?.issue?.onEnter).toBeUndefined();
+    expect(rules.work.intake?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.work.done?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules.review.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(rules.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
@@ -303,37 +305,6 @@ describe('defaultFactoryRules', () => {
     },
   );
 
-  it('does not duplicate investigation when a GitHub issue enters Triage through a governed run', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
-      cause: 'run_start',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toBeUndefined();
-  });
-
-  it('does not duplicate investigation when a new GitHub issue is materialized into Triage', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
-    const context = {
-      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work'),
-      cause: 'linked_item_materialized',
-      stage: 'triage',
-      fromStage: 'intake',
-      toStage: 'triage',
-    } as FactoryStageRuleContext;
-
-    expect(await rule?.(context)).toBeUndefined();
-    expect(await rule?.({ ...context, fromStage: 'planning' })).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-    });
-  });
-
   it('starts investigation when a board drag or reconciliation moves an issue into Triage', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).work.triage?.issue?.onEnter;
     const context = {
@@ -398,7 +369,7 @@ describe('defaultFactoryRules', () => {
     expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
-  it('cancels an in-flight review pass and dispatches factory-rereview when a push into an already-reviewed PR restarts Review', async () => {
+  it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
     const rule = defaultFactoryRules({ version: 'deployment-7' }).review.review?.pullRequest?.onEnter;
     const context = {
       ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
@@ -407,12 +378,13 @@ describe('defaultFactoryRules', () => {
       fromStage: 'done',
       toStage: 'review',
     } as FactoryStageRuleContext;
-    expect(await rule?.(context)).toMatchObject({
+    const decision = await rule?.(context);
+    expect(decision).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
       skillName: 'factory-rereview',
-      cancelInFlight: true,
     });
+    expect(decision).not.toHaveProperty('cancelInFlight');
   });
 
   it('cancels an in-flight review pass but stays on factory-review when the re-entry did not follow a completed pass', async () => {
@@ -792,8 +764,6 @@ describe('defaultFactoryRules', () => {
         reReviewContext({ actor: { type: 'github', login: 'reader', trusted: false, factoryAuthored: false } }),
         // Factory-authored ingress must not restart its own review.
         reReviewContext({ actor: { type: 'github', login: 'factory-app[bot]', trusted: true, factoryAuthored: true } }),
-        // No linked Review card.
-        reReviewContext({ item: undefined, board: undefined, itemRevision: undefined }),
         // Card already in Reviewing: a pass is pending or running.
         reReviewContext({ item: { ...prItem, stages: ['review'] } }),
       ]) {
@@ -883,10 +853,9 @@ describe('defaultFactoryRules', () => {
   });
 
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
-    'advances trusted %s authors and leaves untrusted authors in Intake',
+    'keeps every %s in Intake and stamps whether it may be picked up on its own',
     async event => {
       const rules = defaultFactoryRules({ version: 'deployment-7' });
-      const trustedStage = event === 'issueOpened' ? 'triage' : 'review';
       const trusted = githubContext(event);
       const untrusted = {
         ...githubContext(event),
@@ -895,28 +864,83 @@ describe('defaultFactoryRules', () => {
       const factoryAuthored = {
         ...githubContext(event),
         actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
+        ...(event === 'pullRequestOpened'
+          ? { pullRequest: { ...githubContext(event).pullRequest!, factoryAuthored: true } }
+          : {}),
       };
 
-      expect(await rules.github[event]?.onEvent?.(trusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: trustedStage,
-      });
-      expect(await rules.github[event]?.onEvent?.(untrusted)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: 'intake',
-      });
-      // A pull request Factory opened is the Work leg's own output: its
-      // provenance is known, so it advances to Review even though an App bot can
-      // never hold collaborator permission. An issue Factory opened gets no such
-      // pass — auto-triaging our own issue is a self-loop with no upside.
-      expect(await rules.github[event]?.onEvent?.(factoryAuthored)).toMatchObject({
-        type: 'upsertLinkedWorkItem',
-        stage: event === 'pullRequestOpened' ? 'review' : 'intake',
-      });
+      const expectedEligibility = {
+        issueOpened: { trusted: true, factoryAuthored: false },
+        pullRequestOpened: { trusted: true, factoryAuthored: true },
+      }[event];
+
+      for (const [actor, eligible] of [
+        [trusted, expectedEligibility.trusted],
+        [untrusted, false],
+        [factoryAuthored, expectedEligibility.factoryAuthored],
+      ] as const) {
+        expect(await rules.github[event]?.onEvent?.(actor)).toMatchObject({
+          type: 'upsertLinkedWorkItem',
+          stage: 'intake',
+          metadata: { autoStartCandidate: eligible },
+        });
+      }
     },
   );
 
-  it('keeps a factory-authored pull request opened before the Factory in Intake', async () => {
+  it('suggests a review from Intake only for stamped pull requests materialized by webhook', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const rule = rules.review.intake?.pullRequest?.onEnter;
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
+        cause: 'linked_item_materialized',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
+      }),
+    ).toMatchObject({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' });
+
+    // An untrusted author's PR gets no suggestion — the card waits for a click.
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'review'),
+        cause: 'linked_item_materialized',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: false } },
+      }),
+    ).toBeUndefined();
+
+    // A candidate filed by hand is not an arrival.
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+        cause: 'board_drag',
+        item: { ...item, source: 'github-pr' as const, metadata: { autoStartCandidate: true } },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('suggests an investigation from Intake only for stamped issues materialized by webhook', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const rule = rules.work.intake?.issue?.onEnter;
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
+        cause: 'linked_item_materialized',
+        item: { ...item, metadata: { autoStartCandidate: true } },
+      }),
+    ).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
+
+    expect(
+      await rule?.({
+        ...stageContext({ type: 'system', id: 'factory-rule-dispatcher' }, 'work'),
+        cause: 'linked_item_materialized',
+        item: { ...item, metadata: {} },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const older = {
       ...githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'),
@@ -926,6 +950,7 @@ describe('defaultFactoryRules', () => {
     expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
       type: 'upsertLinkedWorkItem',
       stage: 'intake',
+      metadata: { autoStartCandidate: false },
     });
   });
 
@@ -938,6 +963,7 @@ describe('defaultFactoryRules', () => {
       expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
+        metadata: { autoStartCandidate: false },
       });
     },
   );

@@ -13,6 +13,7 @@ import { getBufferedChunks, combineObservationsForBuffering } from '../message-u
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -142,23 +143,27 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const { record, threadId, resourceId, messages } = this.opts;
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
-    await this.storage.updateBufferedObservations({
-      id: record.id,
-      chunk: {
-        cycleId: this.cycleId,
-        observations: processed.observations,
-        tokenCount: processed.observationTokens,
-        messageIds: processed.observedMessageIds,
-        messageTokens,
-        lastObservedAt: processed.lastObservedAt,
-        suggestedContinuation: processed.suggestedContinuation,
-        currentTask: processed.currentTask,
-        threadTitle: processed.threadTitle,
-        extractedValues: processed.extractedValues,
-        extractionFailures: processed.extractionFailures,
-      },
-      lastBufferedAtTime: processed.lastObservedAt,
-    });
+    await withRetry(
+      () =>
+        this.storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: this.cycleId,
+            observations: processed.observations,
+            tokenCount: processed.observationTokens,
+            messageIds: processed.observedMessageIds,
+            messageTokens,
+            lastObservedAt: processed.lastObservedAt,
+            suggestedContinuation: processed.suggestedContinuation,
+            currentTask: processed.currentTask,
+            threadTitle: processed.threadTitle,
+            extractedValues: processed.extractedValues,
+            extractionFailures: processed.extractionFailures,
+          },
+          lastBufferedAtTime: processed.lastObservedAt,
+        }),
+      { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
+    );
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 

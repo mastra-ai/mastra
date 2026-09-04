@@ -183,6 +183,20 @@ export abstract class VersionedStorageDomain<
   abstract deleteVersionsByParentId(entityId: string): Promise<void>;
   abstract countVersions(entityId: string): Promise<number>;
 
+  /**
+   * Fetches multiple versions by ID in a single call.
+   * The default implementation issues one `getVersion()` per ID; adapters backed by a
+   * database should override this with a single batched query (e.g. `WHERE id IN (...)`).
+   * Missing IDs are omitted from the result and order is unspecified.
+   */
+  async getVersions(ids: string[]): Promise<TVersion[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const results: (TVersion | null)[] = await Promise.all(ids.map(id => this.getVersion(id)));
+    return results.filter((version): version is TVersion => version !== null);
+  }
+
   // ==========================================================================
   // Concrete resolution methods
   // ==========================================================================
@@ -227,11 +241,43 @@ export abstract class VersionedStorageDomain<
   async listResolved(args?: TListInput): Promise<TListResolvedOutput> {
     const result = await this.list(args);
 
-    const status = (args as Record<string, unknown> | undefined)?.status as string | undefined;
+    const status = (args as Record<string, unknown> | undefined)?.status as
+      | 'draft'
+      | 'published'
+      | 'archived'
+      | undefined;
     const entities = (result as Record<string, unknown>)[this.listKey] as TEntity[];
-    const resolved = await Promise.all(
-      entities.map(entity => this.resolveEntity(entity, { status: status as 'draft' | 'published' | 'archived' })),
-    );
+
+    let resolved: TResolved[];
+    if (status === 'draft') {
+      resolved = await Promise.all(entities.map(entity => this.resolveEntity(entity, { status })));
+    } else {
+      // Published/archived: batch-fetch all active versions in one call, then fall back
+      // to the latest version only for entities whose active version is missing.
+      const activeVersionIds = [
+        ...new Set(entities.map(entity => entity.activeVersionId).filter((id): id is string => !!id)),
+      ];
+      const versions = await this.getVersions(activeVersionIds);
+      const versionsById = new Map(versions.map(version => [version.id, version]));
+
+      resolved = await Promise.all(
+        entities.map(async entity => {
+          const activeVersion = entity.activeVersionId ? versionsById.get(entity.activeVersionId) : undefined;
+          if (activeVersion) {
+            return this.mergeVersion(entity, activeVersion);
+          }
+
+          if (entity.activeVersionId) {
+            this.logger?.warn?.(
+              `Entity ${entity.id} has activeVersionId ${entity.activeVersionId} but version not found. Falling back to latest version.`,
+            );
+          }
+
+          const latestVersion = await this.getLatestVersion(entity.id);
+          return latestVersion ? this.mergeVersion(entity, latestVersion) : (entity as unknown as TResolved);
+        }),
+      );
+    }
 
     return {
       ...result,
@@ -272,16 +318,19 @@ export abstract class VersionedStorageDomain<
       }
     }
 
-    if (version) {
-      const snapshotConfig = this.extractSnapshotConfig(version);
-      return {
-        ...entity,
-        ...snapshotConfig,
-        resolvedVersionId: version.id,
-      } as unknown as TResolved;
-    }
+    return version ? this.mergeVersion(entity, version) : (entity as unknown as TResolved);
+  }
 
-    return entity as unknown as TResolved;
+  /**
+   * Merges an entity's thin record with a version's snapshot config.
+   */
+  protected mergeVersion(entity: TEntity, version: TVersion): TResolved {
+    const snapshotConfig = this.extractSnapshotConfig(version);
+    return {
+      ...entity,
+      ...snapshotConfig,
+      resolvedVersionId: version.id,
+    } as unknown as TResolved;
   }
 
   // ==========================================================================

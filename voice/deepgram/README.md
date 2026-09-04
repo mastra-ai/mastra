@@ -1,19 +1,11 @@
 # @mastra/voice-deepgram
 
-Deepgram voice integration for Mastra, providing both Text-to-Speech (TTS) and Speech-to-Text (STT) using Deepgram's Aura (TTS) and Nova (STT) families.
+Add Deepgram text-to-speech and speech-to-text to Mastra with configurable models, voices, languages, synthesis, and streaming transcription.
 
 ## Installation
 
 ```bash
 npm install @mastra/voice-deepgram
-```
-
-## Configuration
-
-The module requires a Deepgram API key, which can be provided through environment variables or directly in the configuration:
-
-```bash
-DEEPGRAM_API_KEY=your_api_key
 ```
 
 ## Usage
@@ -50,25 +42,14 @@ const result = await voice.listen(audioStream, {
 console.log(result.transcript);
 ```
 
-## Features
+## Documentation
 
-- High-quality Text-to-Speech synthesis
-- Accurate Speech-to-Text transcription
+- [Deepgram](https://mastra.ai/integrations/voice/deepgram)
 
-## Voice Options
+## Changelog
 
-Deepgram provides several AI voices with different characteristics:
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/voice/deepgram/CHANGELOG.md) for version history and release notes.
 
-- aura-asteria-en (Female, American)
-- aura-athena-en (Female, American)
-- aura-zeus-en (Male, American)
-- aura-hera-en (Female, American)
-- aura-orion-en (Male, American)
+## Support
 
-View the complete list in the `voices.ts` file or [Deepgram's documentation](https://developers.deepgram.com/docs/tts-models).
-
-### New Features
-
-- **Speaker Selection**: You can now specify a speaker voice when initializing the `DeepgramVoice` class. This allows for more personalized speech generation.
-
-- **Updated `speak` Method**: The `speak` method now supports an optional `speaker` parameter in the options, allowing you to dynamically choose the voice for speech synthesis.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
