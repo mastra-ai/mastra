@@ -459,7 +459,7 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
     const requestContext = new RequestContext();
-    requestContext.set('controller', { resourceId: projectRecord.id });
+    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
 
     expect(integration.id).toBe('linear');
     expect(integration.intake).toBeDefined();
@@ -586,7 +586,9 @@ describe('PlatformLinearIntegration', () => {
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
     const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
+      workers(
+        ctx: unknown,
+      ): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
     expect(integration.workers(workerContext)).toEqual([

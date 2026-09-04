@@ -1,6 +1,8 @@
 import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -1045,5 +1047,34 @@ describe('FactoryTransitionService', () => {
 
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['same-effect-key']);
     expect(await ruleDecisionKeys(storage, 'org-2')).toEqual(['same-effect-key']);
+  });
+
+  it('validates and runs phase behavior from an installed custom board', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['queued'] });
+    const onEnter = vi.fn();
+    const board = createTestBoard({ onShipped: onEnter });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-release' })),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'shipped' });
+    expect(onEnter).toHaveBeenCalledOnce();
+    await expect(
+      service.transition(
+        request(
+          { id: item.id, revision: item.revision + 1 },
+          { board: 'work', stage: 'done', identity: 'work-disabled' },
+        ),
+      ),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'Board "work" is not installed.',
+    });
   });
 });

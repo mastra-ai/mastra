@@ -109,7 +109,7 @@ function workItemSourceKey(item: WorkItemRow): string | null {
   return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
 }
 
-function boardForItem(item: WorkItemRow): FactoryRuleBoard {
+function boardForItem(item: WorkItemRow): 'work' | 'review' {
   return item.externalSource?.type === 'pull-request' ? 'review' : 'work';
 }
 

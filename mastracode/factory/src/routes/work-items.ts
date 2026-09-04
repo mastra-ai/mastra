@@ -20,8 +20,8 @@ import type {
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard, WorkItemSource } from '../rules/types.js';
-import { FACTORY_RULE_BOARDS, isFactoryRuleStage } from '../rules/types.js';
+import type { FactoryRuleBoard, FactoryRuleStage, WorkItemSource } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
@@ -260,10 +260,8 @@ function parseTransitionBody(
   body: unknown,
 ): Omit<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId' | 'actor'> | null {
   if (!isRecord(body)) return null;
-  const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
-    ? (body.board as FactoryRuleBoard)
-    : undefined;
-  const stage = isFactoryRuleStage(body.stage) ? body.stage : undefined;
+  const board = typeof body.board === 'string' && body.board.length > 0 ? (body.board as FactoryRuleBoard) : undefined;
+  const stage = typeof body.stage === 'string' && body.stage.length > 0 ? (body.stage as FactoryRuleStage) : undefined;
   const requestId = boundedText(body.requestId, 256);
   const cause = boundedText(body.cause, 256);
   if (
