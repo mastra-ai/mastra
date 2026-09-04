@@ -104,6 +104,24 @@ describe('ThreadViewByTrace', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /close/i })).toBeNull());
   });
 
+  it('keeps the row of the selected span highlighted while its details are open', async () => {
+    installHandlers();
+    const { queryClient } = renderView();
+
+    const rowOf = (traceId: string) =>
+      screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
+
+    fireEvent.click(await screen.findByText('Chef agent run'));
+    await screen.findByRole('button', { name: /close/i });
+
+    expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
+    expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
+  });
+
   describe('highlighting the spans behind a message', () => {
     const spanLabel = (name: string) => screen.getByLabelText(`View details for span ${name}`);
 
