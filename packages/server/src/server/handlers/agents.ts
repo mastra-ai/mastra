@@ -29,6 +29,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   WORKSPACE_TOOLS,
   isReservedRequestContextKey,
   resolveToolConfig,
@@ -88,6 +89,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { hasAdminBypass } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -2640,6 +2642,29 @@ async function validateRunListThreadAccess({
   });
 }
 
+/**
+ * Resolves the resource scope for a run listing. Suspended runs carry tool
+ * arguments and suspend payloads, so an authenticated caller only ever lists
+ * runs owned by the resource the server mapped them to:
+ *
+ * - No authenticated user (auth off): the client-supplied `resourceId` is used as-is.
+ * - Admin bypass (`*`, `agents:*`, `agents:admin`): unrestricted, client value honored.
+ * - Mapped `MASTRA_RESOURCE_ID_KEY`: forced to the caller's resource; client value ignored.
+ * - Authenticated but no mapped resource: rejected — there is nothing to scope by.
+ */
+function resolveRunListResourceScope(requestContext: RequestContext, clientResourceId?: string): string | undefined {
+  const contextResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (contextResourceId) return contextResourceId;
+
+  const isAuthenticated = Boolean(requestContext.get(MASTRA_USER_KEY));
+  if (!isAuthenticated || hasAdminBypass(requestContext, 'agents')) return clientResourceId;
+
+  throw new HTTPException(403, {
+    message:
+      'Access denied: listing runs requires a resource scope. Configure mapUserToResourceId in server auth or grant an agents admin permission.',
+  });
+}
+
 function extractRunListVersionOptions(
   query: { agentVersionId?: string; agentVersionStatus?: 'draft' | 'published' },
   requestContext: RequestContext,
@@ -2725,7 +2750,7 @@ export const LIST_AGENT_RUNS_ROUTE = createRoute({
         requestContext,
       });
 
-      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveResourceId = resolveRunListResourceScope(requestContext, query.resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
       await validateRunListThreadAccess({
@@ -2773,9 +2798,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         requestContext,
       });
 
-      // Honor server-enforced thread/resource scoping from the request context
-      // so clients cannot list suspended runs outside their own scope.
-      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveResourceId = resolveRunListResourceScope(requestContext, query.resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
       await validateRunListThreadAccess({

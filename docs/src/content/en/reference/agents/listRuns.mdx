@@ -151,7 +151,13 @@ GET /agents/:agentId/runs
 
 The route accepts `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` as query parameters. Request-context thread and resource values override client query values. Thread-scoped requests fail with `403` when ownership can't be verified.
 
-The route requires the `agents:read` permission. Without a request-context resource or thread scope, this permission grants an agent-wide listing. Suspended rows can contain model-supplied tool arguments and tool-defined suspend payloads. User-facing applications should set trusted resource or thread values in the server request context rather than accepting the scope directly from the client.
+The route requires the `agents:read` permission. Suspended rows can contain model-supplied tool arguments and tool-defined suspend payloads, so when server auth is configured the listing is scoped to the authenticated caller:
+
+- If `mapUserToResourceId` maps the user to a resource, the listing is limited to that resource and any `resourceId` query value is ignored.
+- If the caller holds an admin permission (`*`, `agents:*`, or `agents:admin`), the listing is unrestricted and the `resourceId` query value is honored.
+- Otherwise the request fails with `403` because there is no resource to scope by.
+
+Without server auth, the `resourceId` query value is used as provided.
 
 ## Client SDK
 

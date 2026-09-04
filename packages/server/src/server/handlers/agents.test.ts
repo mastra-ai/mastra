@@ -13,6 +13,7 @@ import {
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
@@ -2365,6 +2366,115 @@ describe('Agent Routes Authorization', () => {
         } as any),
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
       expect((mockAgent as any).listRuns).not.toHaveBeenCalled();
+    });
+
+    describe('run listing resource scope', () => {
+      const scopeCases = [
+        { route: LIST_AGENT_RUNS_ROUTE, method: 'listRuns' },
+        { route: LIST_SUSPENDED_RUNS_ROUTE, method: 'listSuspendedRuns' },
+      ] as const;
+
+      function authenticatedContext({
+        resourceId,
+        permissions,
+      }: {
+        resourceId?: string;
+        permissions?: string[];
+      } = {}) {
+        const requestContext = createContextWithReservedKeys({ resourceId });
+        requestContext.set(MASTRA_USER_KEY, { id: 'user-a' });
+        if (permissions) requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+        return requestContext;
+      }
+
+      beforeEach(() => {
+        (mockAgent as any).listRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+        (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      });
+
+      for (const { route, method } of scopeCases) {
+        describe(route.path, () => {
+          it('should honor the client resourceId when no user is authenticated', async () => {
+            await route.handler({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: new RequestContext(),
+              resourceId: 'user-b',
+            } as any);
+
+            expect((mockAgent as any)[method]).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'user-b' }));
+          });
+
+          it('should force the listing to the mapped resourceId and ignore the client value', async () => {
+            await route.handler({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: authenticatedContext({ resourceId: 'user-a' }),
+              resourceId: 'user-b',
+            } as any);
+
+            expect((mockAgent as any)[method]).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'user-a' }));
+          });
+
+          it('should reject an authenticated caller without a mapped resourceId', async () => {
+            await expect(
+              route.handler({
+                mastra,
+                agentId: 'test-agent',
+                requestContext: authenticatedContext(),
+                resourceId: 'user-b',
+              } as any),
+            ).rejects.toThrow(
+              new HTTPException(403, {
+                message:
+                  'Access denied: listing runs requires a resource scope. Configure mapUserToResourceId in server auth or grant an agents admin permission.',
+              }),
+            );
+            expect((mockAgent as any)[method]).not.toHaveBeenCalled();
+          });
+
+          it('should allow an unscoped listing for callers with an agents admin permission', async () => {
+            await route.handler({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: authenticatedContext({ permissions: ['agents:admin'] }),
+            } as any);
+
+            expect((mockAgent as any)[method]).toHaveBeenCalledWith(expect.objectContaining({ resourceId: undefined }));
+          });
+
+          it('should let admin callers list another resource explicitly', async () => {
+            await route.handler({
+              mastra,
+              agentId: 'test-agent',
+              requestContext: authenticatedContext({ permissions: ['*'] }),
+              resourceId: 'user-b',
+            } as any);
+
+            expect((mockAgent as any)[method]).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'user-b' }));
+          });
+
+          it('should reject a mapped caller filtering by a thread owned by another resource', async () => {
+            await mockMemory.createThread({
+              threadId: `${method}-scope-thread-b`,
+              resourceId: 'user-b',
+              title: 'Thread B',
+            });
+
+            await expect(
+              route.handler({
+                mastra,
+                agentId: 'test-agent',
+                requestContext: authenticatedContext({ resourceId: 'user-a' }),
+                threadId: `${method}-scope-thread-b`,
+              } as any),
+            ).rejects.toThrow(
+              new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }),
+            );
+            expect((mockAgent as any)[method]).not.toHaveBeenCalled();
+          });
+        });
+      }
     });
 
     it('should list suspended runs with filters passed through', async () => {
