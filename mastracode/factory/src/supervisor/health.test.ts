@@ -192,13 +192,15 @@ describe('computeFactoryHealth', () => {
             status: 'failed',
             attempts: 1,
             failureCode: null,
-            lastError: 'worker said [not_a_code]: nope',
+            // The error text reproduces the writer's whole slot shape.
+            lastError:
+              'nested d-9 (invokeSkill (plan)) failed after 1 attempt(s) at 2026-09-03T12:00:00.000Z [session_unavailable]: nope',
           }),
         ],
       },
       NOW,
     );
-    expect(codeless.findings[0]!.evidence).toContain('[not_a_code]: nope');
+    expect(codeless.findings[0]!.evidence).toContain('[session_unavailable]: nope');
     expect(decisionFailureCodeFromEvidence(codeless.findings[0]!.evidence)).toBeUndefined();
   });
 
