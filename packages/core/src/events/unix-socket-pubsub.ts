@@ -929,7 +929,7 @@ export class UnixSocketPubSub extends PubSub {
 
   async #handlePromotedBrokerFrame(frame: ClientFrame) {
     if (frame.type === 'subscribe') {
-      this.#settleSubscribeWaiters(frame.topic);
+      this.#settleSubscribeWaiters(membershipKey(frame.topic, frame.group));
     } else if (frame.type === 'publish') {
       await this.#publishFromBroker(frame.topic, frame.event);
     }
