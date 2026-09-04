@@ -113,27 +113,7 @@ Processor callbacks run in this public sequence:
 
 Provider-executed tools can return results differently. If a deferred provider result arrives during a later model stream, `processToolResult` runs when that result arrives. It doesn't have one universal position after every model step.
 
-The [Processor interface](/reference/processors/processor-interface) documents callback arguments and return types.
-
-### Callback timing
-
-| Callback or operation | Frequency | Position and visibility |
-| - | - | - |
-| `processInput` | Once per initial request | During input preparation before the loop. Resuming from a durable snapshot may skip it. |
-| `processInputStep` | Once per model step | Before the provider request. It sees messages and tool results accumulated so far. |
-| `processLLMRequest` | Once per provider call | Last processor stage for rewriting the provider-facing prompt. Its prompt changes aren't written back to the message list. |
-| `processOutputStream` | Per streamed chunk | Runs while model output arrives. Data chunks are included when the processor opts in. |
-| `processLLMResponse` | Once per completed provider stream | Receives the completed response for the current model step. |
-| `processOutputStep` | Once per model step | Runs after the model response and before locally executed tools. |
-| Tool [`onInputStart`](/reference/tools/create-tool#oninputstart) | When streamed tool input begins | Runs before complete tool arguments are available. |
-| Tool [`onInputDelta`](/reference/tools/create-tool#oninputdelta) | Per streamed tool-input chunk | Observes incremental tool arguments. |
-| Tool [`onInputAvailable`](/reference/tools/create-tool#oninputavailable) | Once when tool input is complete | Runs after arguments are parsed and validated, before execution. |
-| Tool execution | Once per local tool call | Receives the live `RequestContext`. Approval or suspension can delay execution. |
-| Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
-| `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
-| [`processAPIError`](/reference/processors/processor-interface#processapierror) | On eligible provider API errors | Can update request state and request another provider attempt. |
-| [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
-| [`processOutputResult`](/reference/processors/processor-interface#processoutputresult) | Once at finalization | Post-processes the completed agent result before it's returned. |
+For exact frequencies, visibility guarantees, arguments, and return types, see [callback timing in the Processor interface](/reference/processors/processor-interface#callback-timing).
 
 ### What changes persist
 
