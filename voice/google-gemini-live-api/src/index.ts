@@ -30,6 +30,10 @@ type GeminiEventName = Extract<keyof GeminiLiveEventMap, string>;
 const DEFAULT_MODEL: GeminiVoiceModel = 'gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE: GeminiVoiceName = 'Puck';
 
+// How many recently handled tool call ids to keep for duplicate suppression.
+// Insertion-ordered; the oldest id is evicted once the bound is reached.
+const MAX_TRACKED_TOOL_CALL_IDS = 512;
+
 // Treats only plain objects (own prototype chain ends at `Object.prototype` or `null`) as
 // proto-struct compatible — `Date`, `Map`, `Set`, `Error`, `RegExp`, and class instances all
 // JSON-serialize to `{}` if forwarded bare and need wrapping for Gemini Live's `response` field.
@@ -128,6 +132,12 @@ export class GeminiLiveVoice extends MastraVoice<
   // Tool integration properties
   private tools?: ToolsInput;
   private requestContext?: any;
+  // Provider call ids already handled on this connection. Gemini Live can deliver the same
+  // function call through both inbound representations — a top-level `toolCall` message and
+  // `serverContent.modelTurn.parts[].functionCall` — so deduplicate by call id to execute
+  // each call exactly once. Calls without a provider id get a fresh UUID and are never
+  // suppressed.
+  private processedToolCallIds = new Set<string>();
 
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
@@ -446,6 +456,10 @@ export class GeminiLiveVoice extends MastraVoice<
       this.log('Already connected to Gemini Live API');
       return;
     }
+
+    // Dedup state must not leak across connections: ids used by a prior
+    // connection are valid again once a fresh one is opened.
+    this.processedToolCallIds.clear();
 
     // Store request context for tool execution
     this.requestContext = requestContext;
@@ -1621,6 +1635,21 @@ export class GeminiLiveVoice extends MastraVoice<
    */
   private async processSingleToolCall(toolName: string, toolArgs: Record<string, any>, toolId: string): Promise<void> {
     this.log('Processing tool call', { toolName, toolArgs, toolId });
+
+    // Skip duplicates: the same call id may arrive through both inbound
+    // representations (top-level `toolCall` and
+    // `serverContent.modelTurn.parts[].functionCall`).
+    if (this.processedToolCallIds.has(toolId)) {
+      this.log('Duplicate tool call ignored', { toolName, toolId });
+      return;
+    }
+    this.processedToolCallIds.add(toolId);
+    if (this.processedToolCallIds.size > MAX_TRACKED_TOOL_CALL_IDS) {
+      const oldest = this.processedToolCallIds.values().next().value;
+      if (oldest !== undefined) {
+        this.processedToolCallIds.delete(oldest);
+      }
+    }
 
     // Emit tool call event
     this.emit('toolCall', {
