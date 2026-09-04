@@ -58,6 +58,7 @@ describe('factory_escalate_finding', () => {
       status: 'escalated',
       escalatedAt: NOW.toISOString(),
       note: 'Worker is asking which API version to target.',
+      audited: true,
     });
     const row = await openRow(workItems, 'decision-failed:d1');
     expect(row).toMatchObject({ status: 'escalated', escalationNote: 'Worker is asking which API version to target.' });
@@ -70,6 +71,30 @@ describe('factory_escalate_finding', () => {
       targets: [{ type: 'supervisor_finding', id: 'decision-failed:d1' }],
       metadata: { cause: 'supervisor', note: 'Worker is asking which API version to target.' },
     });
+  });
+
+  it('reports an escalation that landed even when the audit write fails', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.workItems.syncSupervisorFindings({ ...SCOPE, findings: [finding('decision-failed:d1')], now: NOW });
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'agent', id: 'agent:thread-1' },
+      workItems: seed.workItems,
+      audit: {
+        record: async () => {
+          throw new Error('audit store down');
+        },
+      },
+      now: () => NOW,
+    });
+
+    const result = await execute<any>(tools.factory_escalate_finding, { findingKey: 'decision-failed:d1', note: 'n' });
+
+    // The row is escalated (the human-visible effect) and the result says the
+    // audit did not land, so the supervisor neither retries nor believes it failed.
+    expect(result).toMatchObject({ status: 'escalated', audited: false });
+    expect(result.auditError).toContain('audit store down');
+    expect(await openRow(seed.workItems, 'decision-failed:d1')).toMatchObject({ status: 'escalated' });
   });
 
   it('attributes to the human on an authenticated turn', async () => {

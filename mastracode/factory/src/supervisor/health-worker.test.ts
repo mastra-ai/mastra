@@ -5,7 +5,7 @@
  */
 
 import type { WorkerDeps } from '@mastra/core/worker';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -292,5 +292,70 @@ describe('FactorySupervisorHealthWorker force-surface doorbell', () => {
     });
     await sweep(worker);
     expect(attentionChanged).not.toHaveBeenCalled();
+  });
+
+  describe('with the clock under control', () => {
+    const T0 = new Date('2030-01-01T00:00:00.000Z');
+
+    /** Sweep under fake timers: the immediate tick fires on the advance; stop waits for it. */
+    async function fakeSweep(worker: FactorySupervisorHealthWorker) {
+      await worker.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await worker.stop();
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(T0);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('rings exactly once when a fresh finding crosses the backstop between sweeps', async () => {
+      await seedFailure(await seedWorkItem(), T0);
+      const attentionChanged = vi.fn();
+      const worker = new FactorySupervisorHealthWorker({
+        projects: seed.projects,
+        workItems: seed.workItems,
+        attentionChanged,
+      });
+      await worker.init(createDeps());
+
+      await fakeSweep(worker); // opens the finding at T0, inside the window
+      expect(attentionChanged).not.toHaveBeenCalled();
+      vi.setSystemTime(new Date(T0.getTime() + SUPERVISOR_ATTENTION_FORCE_SURFACE_MS + 1_000));
+      await fakeSweep(worker);
+      expect(attentionChanged).toHaveBeenCalledTimes(1);
+      await fakeSweep(worker);
+      expect(attentionChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it('still rings on the next good sweep when the crossing happened during a failed one', async () => {
+      await seedFailure(await seedWorkItem(), T0);
+      const attentionChanged = vi.fn();
+      const worker = new FactorySupervisorHealthWorker({
+        projects: seed.projects,
+        workItems: seed.workItems,
+        attentionChanged,
+      });
+      const deps = createDeps();
+      await worker.init(deps);
+      await fakeSweep(worker);
+      expect(attentionChanged).not.toHaveBeenCalled();
+
+      // The crossing happens inside a tick that fails after reconciliation.
+      vi.setSystemTime(new Date(T0.getTime() + SUPERVISOR_ATTENTION_FORCE_SURFACE_MS + 1_000));
+      const sync = vi.spyOn(seed.workItems, 'syncSupervisorFindings').mockRejectedValueOnce(new Error('db hiccup'));
+      await fakeSweep(worker);
+      expect(deps.logger.error).toHaveBeenCalled();
+      expect(attentionChanged).not.toHaveBeenCalled();
+      sync.mockRestore();
+
+      // The failed tick did not advance the checkpoint, so the next one rings.
+      vi.setSystemTime(new Date(T0.getTime() + SUPERVISOR_ATTENTION_FORCE_SURFACE_MS + 2_000));
+      await fakeSweep(worker);
+      expect(attentionChanged).toHaveBeenCalledTimes(1);
+    });
   });
 });

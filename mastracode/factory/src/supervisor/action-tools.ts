@@ -64,12 +64,22 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           escalatedAt,
         });
         if (!finding) throw new Error('The finding is not open, no longer exists, or belongs to another factory.');
-        await audit('factory.supervisor.finding_escalated', { type: 'supervisor_finding', id: findingKey }, { note });
+        // The escalation is the user-visible effect and has already landed.
+        // An audit failure must not read as "escalation failed" (a retry
+        // would only rewrite the note), so both outcomes are reported.
+        let auditError: string | null = null;
+        try {
+          await audit('factory.supervisor.finding_escalated', { type: 'supervisor_finding', id: findingKey }, { note });
+        } catch (error) {
+          auditError = error instanceof Error ? error.message : String(error);
+        }
         return {
           findingKey,
           status: finding.status,
           escalatedAt: escalatedAt.toISOString(),
           note: finding.escalationNote,
+          audited: auditError === null,
+          ...(auditError ? { auditError: `Escalated, but recording the audit entry failed: ${auditError}` } : {}),
         };
       },
     }),

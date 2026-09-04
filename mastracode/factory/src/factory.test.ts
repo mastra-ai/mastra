@@ -26,6 +26,7 @@ import type { FactoryProjectsStorage } from './storage/domains/projects/base.js'
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
+import { SUPERVISOR_ATTENTION_FORCE_SURFACE_MS } from './supervisor/health.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -826,6 +827,64 @@ describe('MastraFactory.prepare', () => {
       limit: 10,
     });
     expect(rows[0]?.lastNotifiedAt).toBeInstanceOf(Date);
+  });
+
+  /**
+   * The force-surface backstop flips a hidden finding visible with no storage
+   * write, so the sweep must ring the same feed doorbell writes do, on the
+   * factory's own event bus.
+   */
+  it('wires the health worker to touch the attention feed when the backstop surfaces a finding', async () => {
+    const storage = fakeStorage();
+    const pubsub = { publish: vi.fn(async () => {}), subscribe: vi.fn() } as never;
+    const factory = new MastraFactory({ secretEncryption, storage, pubsub });
+    const args = await factory.prepare();
+    const worker = args.workers!.find(
+      (w): w is FactorySupervisorHealthWorker => w instanceof FactorySupervisorHealthWorker,
+    )!;
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const workItems = storage.getDomain<WorkItemsStorage>('work-items');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'p' } });
+    // A supervisor-actionable finding already past the backstop; never escalated.
+    await workItems.syncSupervisorFindings({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      findings: [
+        {
+          id: 'seat-missing:stale',
+          kind: 'seat-missing',
+          workItemId: null,
+          workItemNumber: null,
+          title: 'stale',
+          evidence: 'stale',
+          ageMs: 0,
+          suggestedRepair: null,
+        },
+      ],
+      now: new Date(Date.now() - SUPERVISOR_ATTENTION_FORCE_SURFACE_MS - 60_000),
+    });
+    (pubsub as { publish: ReturnType<typeof vi.fn> }).publish.mockClear();
+
+    // A sweep reconciles against computed health, which would resolve the
+    // seeded row; keep the row by making the sweep compute the same finding.
+    const health = vi.spyOn(workItems, 'syncSupervisorFindings').mockResolvedValue(undefined);
+    try {
+      await worker.init({
+        pubsub,
+        storage: {} as never,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      });
+      await worker.start();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await worker.stop();
+    } finally {
+      health.mockRestore();
+    }
+
+    expect((pubsub as { publish: ReturnType<typeof vi.fn> }).publish).toHaveBeenCalledWith(
+      expect.stringContaining(project.id),
+      expect.objectContaining({ type: 'factory.feed.touched', runId: project.id }),
+    );
   });
 
   it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {

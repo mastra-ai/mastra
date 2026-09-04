@@ -19,7 +19,8 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
   readonly #notify: ((input: NotifySupervisorInput) => Promise<void>) | undefined;
   readonly #attentionChanged: ((scope: { orgId: string; factoryProjectId: string }) => void) | undefined;
   #running = false;
-  #lastTickAt: Date | undefined;
+  /** Per project, the instant of its last fully successful sweep: the backstop doorbell compares against it. */
+  readonly #sweptAt = new Map<string, Date>();
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
 
@@ -79,11 +80,6 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
 
   async #tick(): Promise<void> {
     const now = new Date();
-    // Rows that crossed the backstop between the previous sweep and this one
-    // are the ones no write announced. Before the first sweep everything is
-    // "since forever": already-stale rows get one refresh after boot.
-    const since = this.#lastTickAt ?? new Date(0);
-    this.#lastTickAt = now;
     const projects = await this.#projects.listAll();
     const concurrency = 4;
     let nextIndex = 0;
@@ -104,7 +100,15 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
             now,
           });
           await this.#emitUnnotified({ orgId: project.orgId, factoryProjectId: project.id });
+          // Rows that crossed the backstop since this project's last SUCCESSFUL
+          // sweep are the ones no write announced. The checkpoint only advances
+          // once the whole sweep for the project landed, so a crossing during a
+          // failed or abandoned tick still rings on the next good one. Before
+          // the first sweep it is "since forever": already-stale rows get one
+          // refresh after boot.
+          const since = this.#sweptAt.get(project.id) ?? new Date(0);
           await this.#announceForceSurfaced({ orgId: project.orgId, factoryProjectId: project.id }, since, now);
+          this.#sweptAt.set(project.id, now);
         }
       }),
     );
@@ -162,7 +166,7 @@ export class FactorySupervisorHealthWorker extends MastraWorker {
 
   /**
    * Ring the Attention doorbell once if any open finding became visible to
-   * humans purely by aging past the backstop since the previous sweep. Uses
+   * humans purely by aging past the backstop since `since`. Uses
    * the one visibility predicate at both instants, so escalated and
    * human-facing rows (visible at both) never count and the hidden-kind set
    * is never restated here.
