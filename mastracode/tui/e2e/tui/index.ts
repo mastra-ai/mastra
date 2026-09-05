@@ -8,6 +8,7 @@ import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
+import { backgroundSubagentsScenario } from './background-subagents.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserModelPickerScenario } from './browser-model-picker.js';
@@ -197,6 +198,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
+  'background-subagents': backgroundSubagentsScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,

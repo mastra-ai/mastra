@@ -2,10 +2,11 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
 import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
@@ -44,6 +45,7 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
 } from './handlers/index.js';
+import { getBackgroundToolTaskId } from './handlers/tool.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
@@ -59,6 +61,11 @@ function trackInteractivePrompt(
   properties?: Record<string, unknown>,
 ): void {
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
+function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
+  if (state.pendingNewThread) return !message.threadId;
+  return !message.threadId || message.threadId === state.session.thread.getId();
 }
 
 export async function dispatchEvent(
@@ -109,10 +116,13 @@ export async function dispatchEvent(
       break;
 
     case 'message_start':
-      handleMessageStart(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageStart(ectx, event.message);
+      }
       break;
 
     case 'message_update': {
+      if (!isMessageForCurrentThread(event.message, state)) break;
       // Only open the decode window when an assistant message carries actual
       // streamed text — tool-result-only updates (e.g. plan approval resume) and
       // user/system message updates must not count toward tokens/sec.
@@ -129,11 +139,24 @@ export async function dispatchEvent(
     }
 
     case 'message_end':
-      handleMessageEnd(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageEnd(ectx, event.message);
+      }
       break;
 
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
+      {
+        const threadId = state.session.thread.getId();
+        if (threadId) {
+          state.backgroundToolContexts.set(event.toolCallId, {
+            toolName: event.toolName,
+            resourceId: state.session.identity.getResourceId(),
+            threadId,
+            createdAt: Date.now(),
+          });
+        }
+      }
       handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -178,10 +201,25 @@ export async function dispatchEvent(
       handleToolInputEnd(ectx, event.toolCallId);
       break;
 
-    case 'tool_end':
+    case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
+      const taskId = getBackgroundToolTaskId(event.result);
+      const context = state.backgroundToolContexts.get(event.toolCallId);
+      if (taskId && context) {
+        acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+        state.globalBackgroundNotice.setActivities(
+          getBackgroundActivitiesForTarget(
+            state.backgroundActivities,
+            state.session.identity.getResourceId(),
+            state.pendingNewThread ? null : state.session.thread.getId(),
+          ),
+        );
+        flushRender(state);
+      }
+      if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
       handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
       break;
+    }
 
     case 'info':
       ectx.showInfo(event.message);

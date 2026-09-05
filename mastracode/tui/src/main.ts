@@ -154,6 +154,7 @@ async function tuiMain(pipedInput?: string | null) {
     version: getCurrentVersion(),
     inlineQuestions: true,
     githubSignals: result.githubSignals,
+    backgroundCompletionEvents: result.backgroundCompletionEvents,
     exit: exitCode => void shutdownAndExit(exitCode),
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });

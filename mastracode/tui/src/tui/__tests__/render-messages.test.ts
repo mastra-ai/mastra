@@ -217,6 +217,21 @@ function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage
 }
 
 describe('addUserMessage', () => {
+  it('suppresses legacy persisted background completion directives', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage(
+        'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+        'legacy-background-directive',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(0);
+    expect(state.messageComponentsById.has('legacy-background-directive')).toBe(false);
+  });
+
   it('replaces pending active steering only when the subscription echoes the user message', () => {
     const state = createState();
     addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
@@ -408,6 +423,131 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
+  });
+
+  it('renders one latest-position completion card for a stable background event id', () => {
+    const state = createState();
+    const message = createSignal({
+      id: 'background-task:task-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert completed in background',
+      attributes: {
+        source: 'background-work',
+        kind: 'background-task-completed',
+        priority: 'low',
+        status: 'completed',
+      },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-1:completed',
+          taskId: 'task-1',
+          originRunId: 'run-1',
+          originToolCallId: 'call-1',
+          toolName: 'mastra_expert',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+
+    addUserMessage(state, message);
+    addUserMessage(state, message);
+
+    expect(state.messageComponentsById.get(message.id)).toBeInstanceOf(NotificationComponent);
+    expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
+  });
+
+  it.each(['work-deferred', 'work-awaited'] as const)(
+    'preserves the background placeholder detail for %s without rendering a notification',
+    tagName => {
+      const state = createState();
+      const updateResult = vi.fn();
+      const setBackgroundTaskId = vi.fn();
+      state.pendingTools.set('call-1', { updateResult, setBackgroundTaskId } as never);
+
+      addUserMessage(
+        state,
+        createSignal({
+          id: `${tagName}-1`,
+          type: 'notification',
+          tagName,
+          contents: `${tagName}: call-1`,
+          attributes: { source: 'background-work', status: 'running' },
+          metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+        }).toDBMessage(),
+      );
+
+      expect(updateResult).not.toHaveBeenCalled();
+      expect(setBackgroundTaskId).toHaveBeenCalledWith('task-1');
+      expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+      expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+    },
+  );
+
+  it.each([
+    ['work-completed', 'Completed in background; reconciling result…'],
+    ['work-failed', 'Background execution failed; reconciling error…'],
+  ] as const)('updates the correlated tool row for %s without rendering a notification', (tagName, statusText) => {
+    const state = createState();
+    const updateResult = vi.fn();
+    state.pendingTools.set('call-1', { updateResult } as never);
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: `${tagName}-1`,
+        type: 'notification',
+        tagName,
+        contents: `${tagName}: call-1`,
+        attributes: { source: 'background-work', status: tagName === 'work-failed' ? 'failed' : 'completed' },
+        metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: tagName },
+      }).toDBMessage(),
+    );
+
+    expect(updateResult).toHaveBeenCalledWith({ content: [{ type: 'text', text: statusText }], isError: false }, true);
+    expect(state.messageComponentsById.has(`${tagName}-1`)).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
+
+  it('marks the correlated ordinary tool row as cancelled', () => {
+    const state = createState();
+    const cancelBackground = vi.fn();
+    state.pendingTools.set('call-1', { cancelBackground } as never);
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'work-cancelled-1',
+        type: 'notification',
+        tagName: 'work-cancelled',
+        contents: 'work-cancelled: call-1',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: 'cancelled' },
+      }).toDBMessage(),
+    );
+
+    expect(cancelBackground).toHaveBeenCalledOnce();
+    expect(state.messageComponentsById.has('work-cancelled-1')).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
+
+  it('suppresses an uncorrelated background-work lifecycle signal', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'work-completed-uncorrelated',
+        type: 'notification',
+        tagName: 'work-completed',
+        contents: 'work-completed: missing-call',
+        attributes: { source: 'background-work', status: 'completed' },
+        metadata: { originToolCallId: 'missing-call', taskId: 'task-1', status: 'completed' },
+      }).toDBMessage(),
+    );
+
+    expect(state.messageComponentsById.has('work-completed-uncorrelated')).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
   });
 
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
@@ -933,6 +1073,86 @@ describe('renderExistingMessages tasks', () => {
   });
 });
 
+describe('renderExistingMessages tools', () => {
+  it('reconstructs authoritative background tool results alongside completion cards', async () => {
+    const toolMessage = assistantToolMessage('assistant-background-result', [
+      {
+        id: 'tool-background-result-1',
+        name: 'search_content',
+        args: { pattern: 'backgroundCompletion', path: 'mastracode/tui/src' },
+        result: 'mastracode/tui/src/tui/render-messages.ts:534: const backgroundWork = ...',
+      },
+    ]);
+    const completionMessage = createSignal({
+      id: 'background-task:task-result-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'search_content completed in background',
+      attributes: {
+        source: 'background-work',
+        kind: 'background-task-completed',
+        priority: 'low',
+        status: 'completed',
+      },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-result-1:completed',
+          taskId: 'task-result-1',
+          originRunId: 'run-result-1',
+          originToolCallId: 'tool-background-result-1',
+          toolName: 'search_content',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.toolOutputExpanded = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, completionMessage]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('backgroundCompletion');
+    expect(rendered).toContain('render-messages.ts:534');
+    expect(rendered).toContain('✓ background · task-result-1');
+    expect(rendered).toContain('search_content completed in background');
+    expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
+    expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
+  });
+
+  it('reconstructs deferred background placeholders as pending tool rows', async () => {
+    const message = assistantToolMessage('assistant-background-tool', [
+      {
+        id: 'tool-background-1',
+        name: 'view',
+        args: { path: 'package.json' },
+        result: 'Background task started. Task ID: task-1',
+      },
+    ]);
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingTools.has('tool-background-1')).toBe(true);
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('◌ background · task-1');
+    expect(rendered).not.toContain('Background task started');
+  });
+});
+
 describe('renderExistingMessages subagents', () => {
   it('replays legacy persisted tool-call/tool-result parts', async () => {
     const message = legacyAssistantToolMessage('assistant-legacy-tool', {
@@ -995,6 +1215,115 @@ describe('renderExistingMessages subagents', () => {
     expect(rendered).toContain('alexandria openai/gpt-5.5');
     expect(rendered).toContain('How does memory rendering work?');
     expect(rendered).toContain('remembered answer');
+  });
+
+  it('replays a completed background plugin subagent with provenance and authoritative result', async () => {
+    const toolMessage = assistantToolMessage('assistant-plugin-background', [
+      {
+        id: 'tool-background-plugin-1',
+        name: 'mastra_expert',
+        args: { question: 'Audit background execution' },
+        result: 'Authoritative Alexandria audit',
+        isError: false,
+      },
+    ]);
+    const completionMessage = createSignal({
+      id: 'background-task:task-plugin-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert completed in background',
+      attributes: { source: 'background-work', status: 'completed' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-plugin-1:completed',
+          taskId: 'task-plugin-1',
+          originRunId: 'run-plugin-1',
+          originToolCallId: 'tool-background-plugin-1',
+          toolName: 'mastra_expert',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, completionMessage]) },
+    } as unknown as TUIState['session'];
+    state.controller = { session: state.session } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const subagent = state.chatContainer.children.find(
+      child => child instanceof SubagentExecutionComponent,
+    ) as SubagentExecutionComponent;
+    const collapsed = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(collapsed).toContain('background · task-plugin-1');
+    expect(collapsed).not.toContain('Authoritative Alexandria audit');
+
+    subagent.setExpanded(true);
+    const expanded = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(expanded).toContain('Authoritative Alexandria audit');
+    expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
+  });
+
+  it('replays a cancelled background plugin subagent as terminal', async () => {
+    const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
+      {
+        id: 'tool-background-plugin-cancelled',
+        name: 'mastra_expert',
+        args: { question: 'Audit cancellation' },
+        result: 'Background task started. Task ID: task-plugin-cancelled',
+        isError: false,
+      },
+    ]);
+    const cancellationMessage = createSignal({
+      id: 'background-task:task-plugin-cancelled:cancelled',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert cancelled in background',
+      attributes: { source: 'background-work', status: 'cancelled' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-plugin-cancelled:cancelled',
+          taskId: 'task-plugin-cancelled',
+          originRunId: 'run-plugin-cancelled',
+          originToolCallId: 'tool-background-plugin-cancelled',
+          toolName: 'mastra_expert',
+          status: 'cancelled',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, cancellationMessage]) },
+    } as unknown as TUIState['session'];
+    state.controller = { session: state.session } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const subagent = state.chatContainer.children.find(
+      child => child instanceof SubagentExecutionComponent,
+    ) as SubagentExecutionComponent;
+    const rendered = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('■ background · task-plugin-cancelled');
+    expect(rendered).not.toContain('◌ background');
+    expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {

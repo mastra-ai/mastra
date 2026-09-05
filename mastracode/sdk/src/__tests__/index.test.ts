@@ -141,6 +141,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    backgroundTools: { enabled: false },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
@@ -213,6 +214,7 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  createBackgroundWorkSignalProcessor: () => ({ id: 'background-work-signals' }),
   isBadRequestError: (error: unknown) =>
     typeof error === 'object' &&
     error !== null &&
@@ -1042,6 +1044,7 @@ describe('createMastraCode', () => {
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1068,6 +1071,7 @@ describe('createMastraCode', () => {
     expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
       'needs-mastra',
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1099,6 +1103,7 @@ describe('createMastraCode', () => {
     // scaffolding, so they run after it — last in each configured array.
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
       'acme-input',
@@ -1111,6 +1116,7 @@ describe('createMastraCode', () => {
 
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);
@@ -1154,6 +1160,7 @@ describe('createMastraCode', () => {
     expect(provider.isConnected).toBe(true);
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
       'acme-provider-input',
@@ -1219,6 +1226,7 @@ describe('createMastraCode', () => {
     expect(() => resolveInputProcessors()).not.toThrow();
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
       'plan-rejection-abort',
+      'background-work-signals',
       'agents-md-injector',
       'provider-history-compat',
     ]);

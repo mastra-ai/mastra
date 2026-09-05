@@ -327,6 +327,8 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
+  // Native background execution for eligible Mastra Code tools
+  backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Read-only discovery of MCP servers configured by other coding agents
@@ -340,6 +342,11 @@ export interface McpDiscoverySettings {
   claudeCodeGlobal: boolean;
   /** Reuse MCP servers from $CODEX_HOME/config.toml or ~/.codex/config.toml. */
   codexGlobal: boolean;
+}
+
+export interface BackgroundToolSettings {
+  /** Allow eligible Mastra Code tools to accept per-call background execution overrides. */
+  enabled: boolean;
 }
 
 export interface SignalSettings {
@@ -433,6 +440,7 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
+  backgroundTools: { enabled: false },
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
@@ -522,6 +530,14 @@ function parseGithubPollIntervalMs(value: unknown): number {
   const intervalMs = Math.floor(value);
   if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
+}
+
+function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
+  const raw =
+    rawBackgroundTools && typeof rawBackgroundTools === 'object' ? (rawBackgroundTools as Record<string, unknown>) : {};
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.backgroundTools.enabled,
+  };
 }
 
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
@@ -870,6 +886,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
+        backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
@@ -999,6 +1016,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
+      backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
