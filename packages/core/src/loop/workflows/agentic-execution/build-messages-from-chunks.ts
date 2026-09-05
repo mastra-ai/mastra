@@ -1,6 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
+import { preserveResponseItemIdsOnMerge } from '../../../agent/message-list/utils/response-item-metadata';
 import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
@@ -245,7 +246,10 @@ export function buildMessagesFromChunks({
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single 'result' state part
+          // Merge call + result into a single 'result' state part.
+          // When the call and result carry different Responses item ids
+          // (e.g. OpenAI hosted tool_search: tsc_… call / tso_… output),
+          // keep both so next-turn replay can reference each item.
           const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
           parts.push({
             type: 'tool-invocation' as const,
@@ -256,7 +260,11 @@ export function buildMessagesFromChunks({
               args: p.args,
               result: result.result,
             },
-            providerMetadata: result.providerMetadata ?? providerMetadata,
+            providerMetadata: preserveResponseItemIdsOnMerge(
+              providerMetadata,
+              result.providerMetadata,
+              result.providerMetadata ?? providerMetadata,
+            ),
             providerExecuted: resultProviderExecuted,
           } as MastraMessagePart);
         } else {
