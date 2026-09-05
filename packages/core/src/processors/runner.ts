@@ -883,6 +883,11 @@ export class ProcessorRunner {
           // Track input chunk (before processor transformation)
           state.addInputPart(processedPart);
 
+          if (processorOrWorkflow.__processOutputStream === false) {
+            state.addOutputPart(processedPart);
+            continue;
+          }
+
           try {
             const result = await this.executeWorkflowAsProcessor(
               processorOrWorkflow,
