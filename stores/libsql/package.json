@@ -22,7 +22,8 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:memory",
+    "test:memory": "LIBSQL_TEST_URL=:memory: vitest run src/storage/index.test.ts src/vector/index.test.ts",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
