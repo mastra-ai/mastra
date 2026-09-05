@@ -1,0 +1,198 @@
+---
+title: 'Reference: Agent.listRuns() | Agents'
+description: 'API reference for listing an agent’s current running and suspended runs.'
+packages:
+  - '@mastra/core'
+---
+
+# Agent.listRuns()
+
+The `.listRuns()` method lists an agent's current non-terminal runs from workflow snapshot storage. All agents can return runs waiting for approval or resume data with `status: 'suspended'`. Durable and evented agents can also return active runs with `status: 'running'`.
+
+This method doesn't return completed, failed, or canceled runs. Terminal snapshots are removed from operational storage.
+
+## Usage example
+
+List both statuses for one conversation:
+
+```typescript
+const { runs, total } = await agent.listRuns({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+
+for (const run of runs) {
+  if (run.status === 'suspended') {
+    console.log(run.toolCalls)
+  }
+}
+```
+
+Use `status` when you only need one branch:
+
+```typescript
+const { runs } = await agent.listRuns({ status: 'running' })
+```
+
+## Agent support
+
+| Agent type | `running` runs | `suspended` runs |
+| - | - | - |
+| Base `Agent` | Not available; returns an empty result | Available |
+| Durable agent | Available | Available |
+| Evented agent | Available | Available |
+
+`listRuns()` is defined on the base `Agent` so applications can use one discovery API without checking the agent implementation first. When `status` is omitted, a base agent returns suspended runs when workflow storage contains resumable snapshots. Durable and evented agents additionally return running runs.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'AgentListRunsOptions',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Filters and pagination for scoping the results.',
+    properties: [
+      {
+        type: 'AgentListRunsOptions',
+        parameters: [
+          {
+            name: 'status',
+            type: "'running' | 'suspended'",
+            isOptional: true,
+            description: 'Only return runs with this status. Omit to return both statuses.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory thread.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory resource.',
+          },
+          {
+            name: 'fromDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or after this date.',
+          },
+          {
+            name: 'toDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or before this date.',
+          },
+          {
+            name: 'perPage',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Number of items per page. Pagination is applied when both perPage and page are provided; otherwise all matching runs are returned.',
+          },
+          {
+            name: 'page',
+            type: 'number',
+            isOptional: true,
+            description: 'Zero-indexed page number.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+Returns `Promise<AgentListRunsResult>`. Duplicate `runId` values are removed before runs are ordered by `updatedAt` from newest to oldest. Runs with the same timestamp are ordered by `runId`. Pagination is applied last, and `total` is the number of matching runs before pagination.
+
+The same ordering and pagination rules apply with or without a `status` filter. Storage reads use batches, but Mastra still scans all matching candidates to compute the total and ordering. Run summaries, including suspended tool payloads, remain in memory until pagination. A small `perPage` limits the response size, not the total query work. Use `resourceId` and date filters to narrow large listings.
+
+```typescript
+interface AgentListRunsResult {
+  runs: AgentListedRun[]
+  total: number
+}
+
+type AgentListedRun =
+  | {
+      runId: string
+      status: 'running'
+      threadId?: string
+      resourceId?: string
+      updatedAt: Date
+    }
+  | {
+      runId: string
+      status: 'suspended'
+      threadId?: string
+      resourceId?: string
+      updatedAt: Date
+      suspendedAt: Date
+      toolCalls: AgentRunToolCall[]
+    }
+```
+
+For a suspended run, `updatedAt` equals `suspendedAt`. The shared `updatedAt` field lets applications order both response branches without a status check. If the same `runId` is temporarily visible in both states, the suspended row takes precedence.
+
+## HTTP endpoint
+
+The same listing is available through the authenticated server route:
+
+```http
+GET /agents/:agentId/runs
+```
+
+The route accepts `status`, `threadId`, `resourceId`, `fromDate`, `toDate`, `perPage`, and `page` as query parameters. Request-context thread values override the query. Thread-scoped requests fail with `403` when ownership can't be verified.
+
+### Access control
+
+Both `/runs` and `/suspended-runs` require the `agents:read` permission. Suspended rows include tool arguments and suspend payloads, so authenticated callers follow these resource-scoping rules:
+
+- Admin permissions (`*`, `agents:*`, or `agents:admin`) allow cross-resource listings, even if the caller has a mapped resource. The `resourceId` query value is honored. Omitting it lists across resources.
+- Other callers are limited to the resource set by `mapUserToResourceId`. Client-supplied `resourceId` values are ignored.
+- Authenticated callers without a mapped resource or an admin permission receive `403`. If server auth is configured but the request has no authenticated identity, the request is also denied.
+
+Without server auth or an authenticated identity, the request-context resource takes precedence over the query value, if set.
+
+When fine-grained authorization (FGA) is configured, resource ownership alone isn't enough. The server checks `memory:read` access for each stored thread before calculating the total and applying pagination. Admin resource bypass doesn't bypass thread FGA. Runs without a thread, with a missing thread, or with unavailable memory are excluded from resource-wide listings. Authorized runs retain their full payloads.
+
+### Version selection
+
+Use `agentVersionId` to select a stored agent configuration by version ID, or `agentVersionStatus=draft|published` to select its status. These parameters are mutually exclusive and take precedence over the request-context version selection. They don't filter snapshots by the version that created a run: discovery remains scoped to the agent ID and run filters.
+
+```http
+GET /agents/my-agent/runs?agentVersionStatus=draft&status=running
+```
+
+### Existing suspended-run clients
+
+`GET /agents/:agentId/suspended-runs` uses the same access rules. Clients that previously relied on authentication alone must also have `agents:read`. Configure `mapUserToResourceId` for user-facing clients instead of trusting a query-supplied resource. Reserve admin permissions for operators who need cross-resource listings.
+
+## Client SDK
+
+Use `listRuns()` on the agent resource returned by `MastraClient.getAgent()`:
+
+```typescript
+const agent = mastraClient.getAgent('my-agent')
+const { runs } = await agent.listRuns({
+  status: 'suspended',
+  resourceId: 'user-456',
+  page: 0,
+  perPage: 20,
+})
+```
+
+The client accepts `Date` objects for `fromDate` and `toDate`. Date fields in the returned runs are ISO strings because the response is serialized over HTTP. See the [client SDK agent reference](/reference/client-js/agents#listruns) for details.
+
+## Related
+
+- [`Agent.listSuspendedRuns()`](/reference/agents/listSuspendedRuns)
+- [`DurableAgent`](/reference/agents/durable-agent)
+- [Human-in-the-loop agents](/docs/agents/human-in-the-loop)

@@ -529,7 +529,7 @@ Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `
 
 `sendToolApproval()` automatically uses the same storage-backed discovery. If memory contains no active run for the thread, it searches storage for a suspended run before failing. Pass a `toolCallId` when several suspended runs match the thread.
 
-The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
+The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly. When server auth is configured, these routes only return runs owned by the resource that `mapUserToResourceId` mapped the caller to, unless the caller holds an admin permission such as `agents:admin`. Thread-level authorization still applies to admins when fine-grained authorization (FGA) is configured. See [run-list access control](/reference/agents/listRuns#access-control) for permission requirements and migration guidance.
 
 :::note
 

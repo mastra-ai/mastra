@@ -140,7 +140,11 @@ interface AgentRunToolCall {
 
 Results are scoped to the agent you call `listSuspendedRuns()` on because snapshots persist the owning agent's id. Runs started by other agents on the same Mastra instance aren't returned. In [supervisor setups](/docs/agents/human-in-the-loop#tool-approval-supervisor-agents), the supervisor sees its outer run to resume, while a subagent's inner run is visible only from the subagent itself. Filter by `threadId` and `resourceId` to limit results to one conversation.
 
-Run snapshots are only persisted while a run is waiting on input and are deleted when it finishes, so suspended runs are the only runs discoverable from storage. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/storage) configured. With the default in-memory store, snapshots are lost on restart.
+This method only returns runs waiting on input. Use [`listRuns()`](/reference/agents/listRuns) to list both suspended runs and durable runs with `status: 'running'`. Terminal snapshots are deleted when a run finishes. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/storage) configured. With the default in-memory store, snapshots are lost on restart.
+
+## HTTP access
+
+The corresponding `GET /agents/:agentId/suspended-runs` route requires `agents:read` and a server-mapped resource for authenticated non-admin callers. Thread-level authorization also applies when fine-grained authorization (FGA) is configured. These checks apply to the HTTP route, not direct calls to the core method. See [run-list access control](/reference/agents/listRuns#access-control) and [migration guidance for existing clients](/reference/agents/listRuns#existing-suspended-run-clients).
 
 ## Related
 
