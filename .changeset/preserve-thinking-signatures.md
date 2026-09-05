@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix API replay errors with reasoning models (such as Anthropic extended thinking) by preserving provider signatures and reasoning metadata during stream processing, and preventing empty assistant turns from being sent back to model providers on multi-turn conversations.
+Fixed replay errors for reasoning responses. Reasoning signatures are retained, and empty assistant messages are removed before requests are sent.

@@ -71,7 +71,7 @@ type StreamChunk =
   | StreamPayloadChunk<'reasoning-start'>
   | StreamPayloadChunk<'reasoning-delta'>
   | StreamPayloadChunk<'reasoning-end'>
-  | StreamPayloadChunk<'reasoning-signature'>
+  | (StreamPayloadChunk<'reasoning-signature'> & { signature?: unknown })
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -614,7 +614,7 @@ export class SessionRunEngine {
           getString(payload.signature) ??
           (isRecord(chunk) && 'signature' in chunk ? getString(chunk.signature) : undefined);
 
-        let thinkingContent: (MessageContentPart & { type: 'reasoning' }) | undefined;
+        let thinkingContent: (MastraMessagePart & { type: 'reasoning' }) | undefined;
 
         if (id && state.thinkingContentById.has(id)) {
           const thinkingState = state.thinkingContentById.get(id);
@@ -627,18 +627,20 @@ export class SessionRunEngine {
         if (!thinkingContent) {
           const lastReasoningPart = [...state.currentMessage.content.parts]
             .reverse()
-            .find((p): p is MessageContentPart & { type: 'reasoning' } => p.type === 'reasoning');
+            .find((p): p is MastraMessagePart & { type: 'reasoning' } => p.type === 'reasoning');
           if (lastReasoningPart) {
             thinkingContent = lastReasoningPart;
           } else {
             const thinkingIndex = state.currentMessage.content.parts.length;
-            const newPart: MessageContentPart & { type: 'reasoning' } = {
+            const newPart: MastraMessagePart & { type: 'reasoning' } = {
               type: 'reasoning',
               reasoning: '',
               details: [],
             };
             state.currentMessage.content.parts.push(newPart);
-            state.thinkingContentById.set(id, { index: thinkingIndex, text: '' });
+            if (id) {
+              state.thinkingContentById.set(id, { index: thinkingIndex, text: '' });
+            }
             thinkingContent = newPart;
           }
         }
