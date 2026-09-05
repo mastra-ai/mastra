@@ -357,17 +357,22 @@ describe('ResponseCache processor (integration via Agent)', () => {
   });
 
   describe('stream()', () => {
-    it('returns the cached chunks on the second identical call', async () => {
+    it('returns cached chunks without replaying the original inference timestamp', async () => {
       const firstStream = await agent.stream('Stream me');
+      const firstChunks = [];
+      for await (const chunk of firstStream.fullStream) {
+        firstChunks.push(chunk);
+      }
       const firstText = await firstStream.text;
       expect(firstText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
+      expect(firstChunks.find(chunk => chunk.type === 'step-start')?.payload.startedAt).toEqual(expect.any(Number));
 
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
 
       const secondStream = await agent.stream('Stream me');
-      const collectedChunks: unknown[] = [];
+      const collectedChunks = [];
       for await (const chunk of secondStream.fullStream) {
         collectedChunks.push(chunk);
       }
@@ -376,6 +381,7 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(secondText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
       expect(collectedChunks.length).toBeGreaterThan(0);
+      expect(collectedChunks.find(chunk => chunk.type === 'step-start')?.payload).not.toHaveProperty('startedAt');
     });
 
     it('preserves finishReason and usage on cache hit', async () => {
