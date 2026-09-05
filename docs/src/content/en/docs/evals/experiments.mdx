@@ -51,6 +51,69 @@ After running an experiment, the **Experiments** tab shows all runs for that dat
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
 
+## Platform-hosted experiments from the CLI
+
+`mastra experiments` is the canonical command family for Platform-hosted experiments. The existing `mastra api experiment` commands continue to target experiment routes on an OSS Mastra server.
+
+The Platform commands use the authenticated, project-scoped control plane. They submit authoritative Platform runs rather than downloading or executing hosted assets locally. Exporting hosted dataset items and scorer configuration for local runs with the OSS `runExperiment` API is future work tracked in MASTRA-4582. Results from that future flow will be written only to the local OSS store, not back to Platform.
+
+All success responses are written as JSON to standard output. Errors are written as JSON to standard error and set a nonzero exit code. Pass `--pretty` to format the JSON for reading.
+
+Run the commands from a directory with a [`.mastra-project.json` file](/docs/mastra-platform/configuration#project-config), or pass `--project` and `--organization`. Authenticate with `mastra auth login`. In continuous integration (CI), set `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ORG_ID`.
+
+List the hosted datasets and choose an immutable version:
+
+```bash npm2yarn
+npx mastra experiments datasets list
+npx mastra experiments datasets versions dataset_123
+```
+
+Because the CLI doesn't build or run experiment components locally, submit runs only to a Platform environment with a runnable deployment whose worker registers the requested target agent or workflow and every registry scorer.
+
+Submit the version with a scorer registered in the deployed experiment worker:
+
+```bash npm2yarn
+npx mastra experiments run '{
+  "experimentId": "translation-baseline-2026-08-26",
+  "environmentId": "env_123",
+  "datasetId": "dataset_123",
+  "datasetVersionId": "dataset_version_456",
+  "target": {
+    "type": "agent",
+    "id": "translation-agent"
+  },
+  "scorers": [
+    {
+      "id": "accuracy",
+      "version": "1"
+    }
+  ],
+  "limits": {
+    "concurrency": 2,
+    "timeoutMs": 30000
+  },
+  "policies": {
+    "allowedToolIds": [],
+    "allowedNetworkHosts": []
+  },
+  "secretReferences": [],
+  "requestedAt": "2026-08-26T18:00:00.000Z",
+  "idempotencyKey": "translation-baseline-2026-08-26"
+}'
+```
+
+Reuse the same `idempotencyKey` when retrying an identical submission. The response includes the experiment and job IDs, pinned dataset provenance, and a stable `studioUrl`. Reusing the key with a different request returns `IDEMPOTENCY_CONFLICT`.
+
+Inspect the run or wait for a terminal status:
+
+```bash npm2yarn
+npx mastra experiments get translation-baseline-2026-08-26
+npx mastra experiments poll translation-baseline-2026-08-26
+npx mastra experiments results translation-baseline-2026-08-26
+```
+
+Discover Platform-hosted scorer versions with `mastra experiments scorers list` and `mastra experiments scorers versions <definition-id>`. Hosted scorer execution isn't available yet. A run that supplies `hostedScorers` returns the typed `HOSTED_SCORER_EXECUTION_UNAVAILABLE` error without creating a job.
+
 ## Experiment targets
 
 You can point an experiment at a registered agent, workflow, or scorer.
