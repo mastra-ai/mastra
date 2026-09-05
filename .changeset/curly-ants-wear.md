@@ -7,5 +7,5 @@ Added `MASTRA_MESSAGE_AUTHOR_KEY` to `@mastra/core/request-context`. Set it from
 ```typescript
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 
-requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
 ```

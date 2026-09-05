@@ -71,7 +71,7 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
  * @example
  * ```typescript
  * // In your auth middleware:
- * requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+ * requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
  * ```
  */
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
