@@ -22,6 +22,14 @@ const browser = new FirecrawlBrowser({
   firecrawl: {
     ttl: 600,
   },
+  onSessionDeleted: ({ sessionId, threadId, receipt }) => {
+    console.log({
+      sessionId,
+      threadId,
+      duration: receipt.sessionDurationMs,
+      credits: receipt.creditsBilled,
+    })
+  },
 })
 
 export const browserAgent = new Agent({
@@ -51,6 +59,13 @@ then interact with elements using their refs (e.g., @e5).`,
     name: 'apiUrl',
     type: 'string',
     description: 'Base URL for a self-hosted Firecrawl API.',
+    isOptional: true,
+  },
+  {
+    name: 'onSessionDeleted',
+    type: '(event: FirecrawlBrowserSessionDeletedEvent) => void | Promise<void>',
+    description:
+      'Callback invoked after Firecrawl confirms a hosted session was deleted. The event includes the session ID, the thread ID for thread-scoped sessions, and Firecrawl\'s deletion response with provider-reported sessionDurationMs and creditsBilled when available.',
     isOptional: true,
   },
   {
@@ -114,6 +129,8 @@ Session provisioning depends on the `scope` option inherited from `AgentBrowser`
 - `'shared'`: One Firecrawl sandbox session is created when the browser launches and shared across all threads. The session is deleted when the browser closes.
 
 In both cases, `FirecrawlBrowser` deletes the remote Firecrawl session when the browser closes, including when session creation or connection fails partway through.
+
+Use `onSessionDeleted` to observe Firecrawl's deletion response. The callback runs only after Firecrawl successfully deletes the hosted session, including cleanup after a failed launch. Errors thrown by the callback are logged and do not prevent browser cleanup.
 
 ## Tools
 
