@@ -597,6 +597,7 @@ export const pluginsStreamingToolOutputScenario: McE2eScenario = {
     terminal.submit('Use the streaming plugin tool.');
     await runtime.waitForScreenText(/E2E plugin progress visible before completion/i, terminal, 10_000);
     await runtime.waitForScreenText(/Streaming plugin tool completed/i, terminal, 10_000);
+    await runtime.waitForScreenText(/subagent e2e-plugin (?:[1-9]\d*ms|[1-9]\.\d+s) ✓/i, terminal, 10_000);
 
     terminal.keyCtrlC();
   },
