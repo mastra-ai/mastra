@@ -63,6 +63,7 @@ const PROCESS_ENV_BRACKET = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g;
 // deploy-preflight.ts at the same time.
 const LEGACY_LOCAL_PATHS_FILE = 'preflight-local-paths.json';
 const PREFLIGHT_METADATA_FILE = 'preflight-metadata.json';
+const WORKERS_CONFIG_FILE = 'workers.json';
 
 interface ModuleMatch {
   value: string;
@@ -101,6 +102,259 @@ function walkAst(node: AstNode, visit: (node: AstNode) => void): void {
       walkAst(value, visit);
     }
   }
+}
+
+function propertyName(node: AstNode): string | undefined {
+  const key = node.key as AstNode | undefined;
+  if (key?.type === 'Identifier' && !node.computed) return key.name as string;
+  if (key?.type === 'Literal' && typeof key.value === 'string') return key.value;
+  return undefined;
+}
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type WorkerConfig = { enabled: boolean; [key: string]: JsonValue };
+
+type WorkersConfig = {
+  version: 1;
+  orchestration: WorkerConfig;
+  scheduler: WorkerConfig;
+  backgroundTasks: WorkerConfig;
+  custom: string[];
+};
+
+function staticJsonValue(node: AstNode): JsonValue | undefined {
+  if (node.type === 'Literal') {
+    const value = node.value;
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+    return undefined;
+  }
+
+  if (node.type === 'UnaryExpression' && node.operator === '-') {
+    const argument = node.argument as AstNode | undefined;
+    const value = argument ? staticJsonValue(argument) : undefined;
+    return typeof value === 'number' ? -value : undefined;
+  }
+
+  if (node.type === 'TemplateLiteral') {
+    const expressions = (node.expressions as AstNode[] | undefined) ?? [];
+    const quasis = (node.quasis as Array<{ value?: { cooked?: string } }> | undefined) ?? [];
+    if (expressions.length === 0) return quasis[0]?.value?.cooked ?? '';
+    return undefined;
+  }
+
+  if (node.type === 'ArrayExpression') {
+    const result: JsonValue[] = [];
+    for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+      if (!element) return undefined;
+      const value = staticJsonValue(element);
+      if (value === undefined) return undefined;
+      result.push(value);
+    }
+    return result;
+  }
+
+  if (node.type === 'ObjectExpression') {
+    const result: Record<string, JsonValue> = {};
+    for (const property of (node.properties as AstNode[] | undefined) ?? []) {
+      if (property.type !== 'Property' || property.kind !== 'init') return undefined;
+      const name = propertyName(property);
+      const valueNode = property.value as AstNode | undefined;
+      if (!name || !valueNode) return undefined;
+      const value = staticJsonValue(valueNode);
+      if (value === undefined) {
+        delete result[name];
+      } else {
+        result[name] = value;
+      }
+    }
+    return result;
+  }
+
+  return undefined;
+}
+
+function staticObjectValue(node: AstNode | undefined): Record<string, JsonValue> {
+  if (!node) return {};
+  const value = staticJsonValue(node);
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
+}
+
+function isConfigured(node: AstNode | undefined): boolean {
+  if (!node) return false;
+  if (node.type === 'Literal') return node.value !== null && node.value !== false;
+  return node.type !== 'Identifier' || node.name !== 'undefined';
+}
+
+function unwrapAwait(node: AstNode | undefined): AstNode | undefined {
+  return node?.type === 'AwaitExpression' ? (node.argument as AstNode | undefined) : node;
+}
+
+function findPreparedConfigSources(ast: AstNode): Map<string, AstNode> {
+  const factoryConfigs = new Map<string, AstNode>();
+  const preparedConfigs = new Map<string, AstNode>();
+
+  walkAst(ast, node => {
+    if (node.type !== 'VariableDeclarator') return;
+    const id = node.id as AstNode | undefined;
+    const init = node.init as AstNode | undefined;
+    const callee = init?.type === 'NewExpression' ? (init.callee as AstNode | undefined) : undefined;
+    const config = (init?.arguments as AstNode[] | undefined)?.[0];
+    if (
+      id?.type === 'Identifier' &&
+      callee?.type === 'Identifier' &&
+      callee.name === 'MastraFactory' &&
+      config?.type === 'ObjectExpression'
+    ) {
+      factoryConfigs.set(id.name as string, config);
+    }
+  });
+
+  walkAst(ast, node => {
+    if (node.type !== 'VariableDeclarator') return;
+    const id = node.id as AstNode | undefined;
+    const init = unwrapAwait(node.init as AstNode | undefined);
+    const callee = init?.type === 'CallExpression' ? (init.callee as AstNode | undefined) : undefined;
+    const object = callee?.type === 'MemberExpression' ? (callee.object as AstNode | undefined) : undefined;
+    const property = callee?.type === 'MemberExpression' ? (callee.property as AstNode | undefined) : undefined;
+    const isPrepareCall =
+      (property?.type === 'Identifier' && property.name === 'prepare') ||
+      (property?.type === 'Literal' && property.value === 'prepare');
+    if (id?.type !== 'Identifier' || object?.type !== 'Identifier' || !isPrepareCall) return;
+
+    const factoryConfig = factoryConfigs.get(object.name as string);
+    if (factoryConfig) preparedConfigs.set(id.name as string, factoryConfig);
+  });
+
+  return preparedConfigs;
+}
+
+function resolvedObjectProperty(
+  config: AstNode,
+  name: string,
+  preparedConfigs: Map<string, AstNode>,
+  seen = new Set<AstNode>(),
+): AstNode | undefined {
+  if (config.type !== 'ObjectExpression' || seen.has(config)) return undefined;
+  seen.add(config);
+
+  let value: AstNode | undefined;
+  for (const property of (config.properties as AstNode[] | undefined) ?? []) {
+    if (property.type === 'Property' && propertyName(property) === name) {
+      value = property.value as AstNode | undefined;
+      continue;
+    }
+    if (property.type !== 'SpreadElement') continue;
+
+    const argument = property.argument as AstNode | undefined;
+    const spreadConfig = argument?.type === 'Identifier' ? preparedConfigs.get(argument.name as string) : undefined;
+    if (!spreadConfig) continue;
+    const spreadValue = resolvedObjectProperty(spreadConfig, name, preparedConfigs, seen);
+    if (spreadValue) value = spreadValue;
+  }
+
+  return value;
+}
+
+/**
+ * Best-effort static extraction of the worker topology configured on a
+ * `new Mastra(...)` instance, including `MastraFactory.prepare()` results spread
+ * into its constructor. A worker service is only useful when the instance
+ * explicitly provides both storage and pubsub so its processes can coordinate.
+ * Dynamic values and callbacks are omitted from the display-only manifest.
+ */
+function findStaticCustomWorkerNames(ast: AstNode, workers: AstNode | undefined): string[] {
+  const variableInitializers = new Map<string, AstNode>();
+  const classWorkerNames = new Map<string, string>();
+
+  walkAst(ast, node => {
+    if (node.type === 'VariableDeclarator') {
+      const id = node.id as AstNode | undefined;
+      const init = node.init as AstNode | undefined;
+      if (id?.type === 'Identifier' && init) variableInitializers.set(id.name as string, init);
+      return;
+    }
+
+    if (node.type !== 'ClassDeclaration' && node.type !== 'ClassExpression') return;
+    const id = node.id as AstNode | undefined;
+    const body = node.body as AstNode | undefined;
+    if (id?.type !== 'Identifier' || body?.type !== 'ClassBody') return;
+
+    for (const member of (body.body as AstNode[] | undefined) ?? []) {
+      if (member.type !== 'PropertyDefinition' || propertyName(member) !== 'name') continue;
+      const value = member.value as AstNode | undefined;
+      const name = value ? staticJsonValue(value) : undefined;
+      if (typeof name === 'string') classWorkerNames.set(id.name as string, name);
+    }
+  });
+
+  const names = new Set<string>();
+  const seen = new Set<AstNode>();
+  const visit = (node: AstNode | undefined): void => {
+    if (!node || seen.has(node)) return;
+    seen.add(node);
+
+    if (node.type === 'Identifier') {
+      visit(variableInitializers.get(node.name as string));
+      return;
+    }
+    if (node.type === 'ArrayExpression') {
+      for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+        if (element?.type === 'SpreadElement') {
+          visit(element.argument as AstNode | undefined);
+        } else {
+          visit(element ?? undefined);
+        }
+      }
+      return;
+    }
+    if (node.type === 'NewExpression') {
+      const callee = node.callee as AstNode | undefined;
+      const name = callee?.type === 'Identifier' ? classWorkerNames.get(callee.name as string) : undefined;
+      if (name) names.add(name);
+      return;
+    }
+    if (node.type === 'ObjectExpression') {
+      const name = staticObjectValue(node).name;
+      if (typeof name === 'string') names.add(name);
+    }
+  };
+
+  visit(workers);
+  for (const builtIn of ['orchestration', 'scheduler', 'backgroundTasks']) names.delete(builtIn);
+  return [...names].sort();
+}
+
+function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
+  const preparedConfigs = findPreparedConfigSources(ast);
+  let workersConfig: WorkersConfig | undefined;
+  walkAst(ast, node => {
+    if (workersConfig || node.type !== 'NewExpression') return;
+    const callee = node.callee as AstNode | undefined;
+    if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
+    const config = (node.arguments as AstNode[] | undefined)?.[0];
+    if (config?.type !== 'ObjectExpression') return;
+
+    const storage = resolvedObjectProperty(config, 'storage', preparedConfigs);
+    const pubsub = resolvedObjectProperty(config, 'pubsub', preparedConfigs);
+    const workers = resolvedObjectProperty(config, 'workers', preparedConfigs);
+    if (!isConfigured(storage) || !isConfigured(pubsub) || (workers?.type === 'Literal' && workers.value === false)) {
+      return;
+    }
+
+    const scheduler = staticObjectValue(resolvedObjectProperty(config, 'scheduler', preparedConfigs));
+    const backgroundTasks = staticObjectValue(resolvedObjectProperty(config, 'backgroundTasks', preparedConfigs));
+
+    workersConfig = {
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { ...scheduler, enabled: scheduler.enabled !== false },
+      backgroundTasks: { ...backgroundTasks, enabled: backgroundTasks.enabled === true },
+      custom: findStaticCustomWorkerNames(ast, workers),
+    };
+  });
+  return workersConfig;
 }
 
 /** Find the first `process.env.X` / `process.env['X']` read inside an expression. */
@@ -188,8 +442,9 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  * expression, `guardedBy: "X"` is recorded so the CLI preflight can apply
  * deploy-time env context instead of hard-erroring on a dead fallback.
  *
- * Two assets are emitted into the output directory for the CLI preflight:
+ * Three assets are emitted into the output directory:
  * - `preflight-metadata.json` — unified metadata (local paths + user env refs)
+ * - `workers.json` — statically extracted worker topology, or `null`
  * - `preflight-local-paths.json` — legacy shape, kept for one release so an
  *   older globally-installed CLI paired with a newer project-local deployer
  *   doesn't lose the LOCAL_STORAGE_PATH check.
@@ -197,6 +452,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 export function localStorageDetector(rootDir?: string): Plugin {
   const userModuleMatches = new Map<string, ModuleMatch[]>();
   const userModuleEnvRefs = new Map<string, Set<string>>();
+  const userModuleWorkersConfigs = new Map<string, WorkersConfig>();
   let normalizedRoot: string | undefined;
   if (rootDir) {
     let root = rootDir.replace(/\\/g, '/');
@@ -228,21 +484,29 @@ export function localStorageDetector(rootDir?: string): Plugin {
         }
       }
 
-      if (matches.length > 0) {
-        // Best-effort structural pass: a parse failure (or a non-Rollup test
-        // context without `this.parse`) simply means no `guardedBy`, which
-        // preserves the previous always-error behavior.
+      // Best-effort structural pass: only parse modules that may contain
+      // Mastra worker config or need guard analysis for a detected local path.
+      // Existing local-path matches remain unguarded on parse failure.
+      if (_code.includes('Mastra') || matches.length > 0) {
         try {
           const ast = this.parse(_code) as unknown as AstNode;
-          const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
-          for (const match of matches) {
-            const guardedBy = guarded.get(match.value);
-            if (guardedBy) match.guardedBy = guardedBy;
+          const workersConfig = findWorkersConfig(ast);
+          if (workersConfig) {
+            userModuleWorkersConfigs.set(id, workersConfig);
+          }
+          if (matches.length > 0) {
+            const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
+            for (const match of matches) {
+              const guardedBy = guarded.get(match.value);
+              if (guardedBy) match.guardedBy = guardedBy;
+            }
           }
         } catch {
-          // ignore — fall back to unguarded detections
+          // ignore — optional static metadata is best-effort
         }
+      }
 
+      if (matches.length > 0) {
         userModuleMatches.set(id, matches);
       }
 
@@ -253,6 +517,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
       const detections: LocalStorageDetection[] = [];
       const seen = new Set<string>();
       const userEnvRefs = new Set<string>();
+      let workersConfig: WorkersConfig | undefined;
 
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== 'chunk') continue;
@@ -263,6 +528,7 @@ export function localStorageDetector(rootDir?: string): Plugin {
           for (const ref of userModuleEnvRefs.get(moduleId) ?? []) {
             userEnvRefs.add(ref);
           }
+          workersConfig ??= userModuleWorkersConfigs.get(moduleId);
 
           const matches = userModuleMatches.get(moduleId);
           if (!matches) continue;
@@ -287,6 +553,12 @@ export function localStorageDetector(rootDir?: string): Plugin {
         type: 'asset',
         fileName: PREFLIGHT_METADATA_FILE,
         source: JSON.stringify(metadata),
+      });
+
+      this.emitFile({
+        type: 'asset',
+        fileName: WORKERS_CONFIG_FILE,
+        source: JSON.stringify(workersConfig ?? null),
       });
 
       // Legacy asset — shape unchanged (no `guardedBy`) for older CLIs.

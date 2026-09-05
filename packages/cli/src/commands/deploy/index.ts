@@ -11,7 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
+import { mkdir, rm, stat, access, readFile, writeFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
@@ -28,6 +28,8 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { fetchDatabases } from '../db/platform-api.js';
+import type { ProjectDatabase } from '../db/platform-api.js';
 import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
@@ -61,6 +63,540 @@ function derivePublicUrls(
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
+const workerManifestCheckPath = (targetDir: string): string => join(targetDir, '.mastra', 'worker-manifest-checked');
+
+async function hasWorkersManifest(targetDir: string): Promise<boolean> {
+  try {
+    await access(workersManifestPath(targetDir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function hasWorkerManifestCheck(targetDir: string): Promise<boolean> {
+  try {
+    await access(workerManifestCheckPath(targetDir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function deployBuildNeedsRefresh(
+  staleness: { isStale: boolean },
+  workersManifestExists: boolean,
+  workerManifestChecked: boolean,
+): boolean {
+  return staleness.isStale || (!workersManifestExists && !workerManifestChecked);
+}
+
+interface WorkerManifestSection {
+  enabled: boolean;
+  [key: string]: unknown;
+}
+
+interface WorkerManifestV1 extends Record<string, unknown> {
+  version: 1;
+  orchestration: WorkerManifestSection;
+  scheduler: WorkerManifestSection;
+  backgroundTasks: WorkerManifestSection;
+  custom: string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isWorkerManifestV1(value: Record<string, unknown> | null): value is WorkerManifestV1 {
+  return (
+    value?.version === 1 &&
+    isRecord(value.orchestration) &&
+    isRecord(value.scheduler) &&
+    isRecord(value.backgroundTasks) &&
+    Array.isArray(value.custom) &&
+    value.custom.every(name => typeof name === 'string')
+  );
+}
+
+async function readWorkersConfig(targetDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(workersManifestPath(targetDir), 'utf-8');
+    const manifest = JSON.parse(raw) as unknown;
+    return isRecord(manifest) ? manifest : null;
+  } catch {
+    return null;
+  }
+}
+
+function workerManifestHasEnabledWorkers(manifest: Record<string, unknown> | null): boolean {
+  if (isWorkerManifestV1(manifest)) {
+    return (
+      manifest.orchestration.enabled === true ||
+      manifest.scheduler.enabled === true ||
+      manifest.backgroundTasks.enabled === true ||
+      manifest.custom.length > 0
+    );
+  }
+  return manifest?.enabled === true;
+}
+
+export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
+  return workerManifestHasEnabledWorkers(await readWorkersConfig(targetDir));
+}
+
+export type WorkersDeployMode = 'separate' | 'inline';
+
+/**
+ * Decide whether this deploy should provision a dedicated worker service
+ * ("separate") or run workers alongside the API server in the same container
+ * ("inline").
+ *
+ * Order of precedence:
+ *   1. Explicit `--workers` flag wins.
+ *   2. If the environment already has a worker service, stay on separate —
+ *      switching a live environment to inline is a destructive-feeling
+ *      change we don't perform without an explicit flag.
+ *   3. If no workers are actually configured in the build, mode is
+ *      irrelevant; return `separate` (the default, no side effects).
+ *   4. Non-interactive / `--yes` deploys default to the recommended
+ *      `separate` mode.
+ *   5. Otherwise prompt.
+ */
+export async function resolveWorkersDeployMode(input: {
+  workersEnabled: boolean;
+  environmentHasWorkerService: boolean;
+  workersOption: WorkersDeployMode | undefined;
+  autoAccept: boolean;
+  promptConfirm: (message: string) => Promise<boolean | symbol>;
+  isCancel: (value: unknown) => value is symbol;
+}): Promise<WorkersDeployMode> {
+  if (input.workersOption) return input.workersOption;
+  if (input.environmentHasWorkerService) return 'separate';
+  if (!input.workersEnabled) return 'separate';
+  if (input.autoAccept) return 'separate';
+
+  const answer = await input.promptConfirm(
+    'Run background workers as a separate service? (recommended — the alternative runs them alongside the API server in the same container)',
+  );
+  if (input.isCancel(answer)) return 'separate';
+  return answer === false ? 'inline' : 'separate';
+}
+
+/**
+ * Suppress the workers manifest from the build output so the platform treats
+ * this deploy as "no dedicated worker service" and railway-builder omits
+ * `ENV MASTRA_WORKERS=false`, letting workers boot in the API container.
+ */
+export async function suppressWorkersManifestForInlineMode(targetDir: string): Promise<void> {
+  try {
+    await unlink(workersManifestPath(targetDir));
+  } catch (error) {
+    // Missing file is the desired end state — nothing to do.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
+type ArchitectureColors = ReturnType<typeof pc.createColors>;
+type ArchitectureTone = 'blue' | 'cyan' | 'green' | 'gray' | 'magenta' | 'orange' | 'red' | 'yellow';
+
+const UNITED_STATES_DEPLOY_LOCATION = 'United States';
+const EUROPE_DEPLOY_LOCATION = 'Europe';
+
+interface ArchitectureNode {
+  title: string;
+  subtitle: string;
+  tone: ArchitectureTone;
+}
+
+const BOX_INNER_WIDTH = 30;
+const BOX_WIDTH = BOX_INNER_WIDTH + 2;
+const BOX_TEXT_WIDTH = BOX_INNER_WIDTH - 2;
+const BOX_HEIGHT = 4;
+const SLOT_HEIGHT = BOX_HEIGHT + 1;
+const CONNECTOR_GAP_WIDTH = 7;
+const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
+
+const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
+  turso: { label: 'Turso', tone: 'cyan' },
+  neon: { label: 'Neon', tone: 'green' },
+  mongodb: { label: 'MongoDB', tone: 'green' },
+  redis: { label: 'Redis', tone: 'red' },
+};
+
+function architectureTextWidth(value: string): number {
+  return Array.from(value).length;
+}
+
+function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string {
+  const characters = Array.from(value);
+  if (characters.length <= width) return value;
+  return `${characters.slice(0, width - 1).join('')}…`;
+}
+
+const DEPLOY_REGION_PRESENTATION: Array<{
+  matches: (region: string) => boolean;
+  label: string;
+  location: string;
+}> = [
+  {
+    matches: region => region === 'eu' || region === 'ams' || region.startsWith('europe-'),
+    label: 'EU West',
+    location: EUROPE_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'iad' || region.startsWith('us-east'),
+    label: 'US East',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'sfo',
+    label: 'US West (SF)',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+  {
+    matches: region => region === 'us' || region === 'pdx' || region.startsWith('us-west'),
+    label: 'US West',
+    location: UNITED_STATES_DEPLOY_LOCATION,
+  },
+];
+
+function getDeploymentRegionPresentation(region: string | null): { label: string; location: string } {
+  const normalized = region?.trim().toLowerCase();
+  if (!normalized) return { label: 'US West', location: UNITED_STATES_DEPLOY_LOCATION };
+  return (
+    DEPLOY_REGION_PRESENTATION.find(presentation => presentation.matches(normalized)) ?? {
+      label: region ?? 'US West',
+      location: UNITED_STATES_DEPLOY_LOCATION,
+    }
+  );
+}
+
+function formatDeploymentLocation(region: string | null): string {
+  return getDeploymentRegionPresentation(region).location;
+}
+
+function formatDeploymentRegion(region: string | null): string {
+  return getDeploymentRegionPresentation(region).label;
+}
+
+function formatArchitectureDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function paintArchitectureTone(colors: ArchitectureColors, tone: ArchitectureTone, value: string): string {
+  switch (tone) {
+    case 'blue':
+      return colors.blue(value);
+    case 'cyan':
+      return colors.cyan(value);
+    case 'green':
+      return colors.green(value);
+    case 'gray':
+      return colors.gray(value);
+    case 'magenta':
+      return colors.magenta(value);
+    case 'orange':
+      return colors.isColorSupported ? `\u001B[38;5;214m${value}\u001B[39m` : value;
+    case 'red':
+      return colors.red(value);
+    case 'yellow':
+      return colors.yellow(value);
+  }
+}
+
+function formatWorkersConfigName(name: string): string {
+  return name
+    .replace(/Ms$/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\bTtl\b/g, 'TTL')
+    .replace(/\bUrl\b/g, 'URL')
+    .replace(/\bId\b/g, 'ID')
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
+function formatDuration(ms: number): string {
+  const units = [
+    ['day', 86_400_000],
+    ['hour', 3_600_000],
+    ['minute', 60_000],
+    ['second', 1_000],
+  ] as const;
+  for (const [unit, unitMs] of units) {
+    if (ms >= unitMs && ms % unitMs === 0) {
+      const amount = ms / unitMs;
+      return `${amount} ${unit}${amount === 1 ? '' : 's'}`;
+    }
+  }
+  return `${ms} ms`;
+}
+
+function formatWorkersConfigValue(name: string, value: unknown): string {
+  if (typeof value === 'number' && name.endsWith('Ms')) return formatDuration(value);
+  if (typeof value === 'string') return value.replace(/(^|[-_ ])\w/g, match => match.toUpperCase());
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
+  return String(value);
+}
+
+function flattenWorkersConfig(
+  config: Record<string, unknown>,
+  prefix: string[] = [],
+): Array<{ name: string; value: string }> {
+  const entries: Array<{ name: string; value: string }> = [];
+  for (const [name, value] of Object.entries(config)) {
+    if (name === 'enabled') continue;
+    if (isRecord(value)) {
+      entries.push(...flattenWorkersConfig(value, [...prefix, formatWorkersConfigName(name)]));
+      continue;
+    }
+    entries.push({
+      name: [...prefix, formatWorkersConfigName(name)].join(' · '),
+      value: formatWorkersConfigValue(name, value),
+    });
+  }
+  return entries;
+}
+
+function renderWorkerConfigItem(
+  title: string,
+  enabled: boolean,
+  details: Array<{ name?: string; value: string }>,
+  colors: ArchitectureColors,
+): string[] {
+  const dot = enabled ? colors.green('●') : colors.gray('●');
+  const label = enabled ? colors.bold(colors.white(title)) : colors.gray(title);
+  const detailColor = enabled ? colors.yellow : colors.gray;
+  return [
+    `${dot} ${label}`,
+    ...details.map(({ name, value }) =>
+      name ? `    ${colors.dim(name)}: ${detailColor(value)}` : `    ${detailColor(value)}`,
+    ),
+  ];
+}
+
+function renderVersionedWorkersConfig(manifest: WorkerManifestV1, colors: ArchitectureColors): string[] {
+  const customEnabled = manifest.custom.length > 0;
+  return [
+    ...renderWorkerConfigItem(
+      'Orchestration',
+      manifest.orchestration.enabled === true,
+      flattenWorkersConfig(manifest.orchestration),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Scheduler',
+      manifest.scheduler.enabled === true,
+      flattenWorkersConfig(manifest.scheduler),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Background Tasks',
+      manifest.backgroundTasks.enabled === true,
+      flattenWorkersConfig(manifest.backgroundTasks),
+      colors,
+    ),
+    ...renderWorkerConfigItem(
+      'Custom',
+      customEnabled,
+      manifest.custom.map(workerName => ({ value: workerName })),
+      colors,
+    ),
+  ];
+}
+
+function renderDeploymentPanel(
+  input: {
+    projectName: string;
+    environment: Pick<Environment, 'name' | 'region'>;
+    workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
+    renderedAt: Date;
+  },
+  colors: ArchitectureColors,
+): string[] {
+  const workersConfigLines = isWorkerManifestV1(input.workersConfig)
+    ? renderVersionedWorkersConfig(input.workersConfig, colors)
+    : input.workersEnabled && input.workersConfig
+      ? Object.entries(input.workersConfig)
+          .filter(([name]) => name !== 'enabled')
+          .map(
+            ([name, value]) =>
+              `• ${colors.bold(formatWorkersConfigName(name))}: ${colors.yellow(formatWorkersConfigValue(name, value))}`,
+          )
+      : [`• ${colors.bold('Status')}: ${colors.yellow(input.workersEnabled ? 'Enabled' : 'Disabled')}`];
+
+  return [
+    colors.bold(input.projectName),
+    colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`),
+    colors.dim(formatArchitectureDate(input.renderedAt)),
+    '',
+    colors.bold('Workers Config'),
+    colors.dim('Static analysis only; runtime workers may differ.'),
+    ...workersConfigLines,
+  ];
+}
+
+function visibleArchitectureWidth(value: string): number {
+  return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
+}
+
+function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
+  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(BOX_WIDTH));
+
+  const title = truncateArchitectureText(node.title);
+  const subtitle = truncateArchitectureText(node.subtitle);
+  const border = (value: string) => paintArchitectureTone(colors, node.tone, value);
+  return [
+    border(`┌${'─'.repeat(BOX_INNER_WIDTH)}┐`),
+    `${border('│')} ${colors.bold(title)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(title))} ${border('│')}`,
+    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(subtitle))} ${border('│')}`,
+    border(`└${'─'.repeat(BOX_INNER_WIDTH)}┘`),
+  ];
+}
+
+function connectorJunction(up: boolean, down: boolean, left: boolean, right: boolean): string {
+  if (up && down && left && right) return '┼';
+  if (up && down && left) return '┤';
+  if (up && down && right) return '├';
+  if (down && left && right) return '┬';
+  if (up && left && right) return '┴';
+  if (down && right) return '┌';
+  if (down && left) return '┐';
+  if (up && right) return '└';
+  if (up && left) return '┘';
+  if (left || right) return '─';
+  return '│';
+}
+
+function renderConnectorGap(
+  y: number,
+  nodeConnectorYs: ReadonlySet<number>,
+  centerConnectorY: number,
+  side: 'left' | 'right',
+  colors: ArchitectureColors,
+): string {
+  const connectorYs = [...nodeConnectorYs, centerConnectorY];
+  const minY = Math.min(...connectorYs);
+  const maxY = Math.max(...connectorYs);
+  if (y < minY || y > maxY) return ' '.repeat(CONNECTOR_GAP_WIDTH);
+
+  const hasNode = nodeConnectorYs.has(y);
+  const left = side === 'left' ? hasNode : y === centerConnectorY;
+  const right = side === 'left' ? y === centerConnectorY : hasNode;
+  const cells = Array.from({ length: CONNECTOR_GAP_WIDTH }, () => ' ');
+
+  if (left) {
+    for (let x = 0; x < CONNECTOR_SPINE_X; x++) cells[x] = '─';
+  }
+  if (right) {
+    for (let x = CONNECTOR_SPINE_X + 1; x < CONNECTOR_GAP_WIDTH; x++) cells[x] = '─';
+  }
+  cells[CONNECTOR_SPINE_X] = connectorJunction(y > minY, y < maxY, left, right);
+
+  return colors.dim(cells.join(''));
+}
+
+export function renderDeploymentArchitecture(
+  input: {
+    projectName: string;
+    environment: Pick<Environment, 'id' | 'name' | 'region'>;
+    serverLabel: string;
+    workersEnabled: boolean;
+    workersConfig: Record<string, unknown> | null;
+    databases: readonly ProjectDatabase[];
+    observabilityEnabled: boolean;
+    renderedAt?: Date;
+  },
+  colors: ArchitectureColors = pc,
+): string {
+  const databases = input.databases
+    .filter(
+      database =>
+        database.deletedAt === null &&
+        (database.environmentId === null || database.environmentId === input.environment.id) &&
+        (database.status === 'ready' || database.status === 'provisioning'),
+    )
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  const leftNodes: ArchitectureNode[] = [
+    { title: 'Studio', subtitle: 'Project studio', tone: 'blue' },
+    {
+      title: input.serverLabel,
+      subtitle: 'API service',
+      tone: input.serverLabel === 'Factory' ? 'orange' : 'magenta',
+    },
+    ...(input.workersEnabled ? [{ title: 'Workers', subtitle: 'Worker runtime', tone: 'yellow' as const }] : []),
+  ];
+  const rightNodes: ArchitectureNode[] = [
+    ...databases.map(database => {
+      const presentation = DATABASE_PRESENTATION[database.kind];
+      return {
+        title: database.name,
+        subtitle: `${presentation.label} · ${database.status === 'ready' ? 'Connected' : 'Provisioning'}`,
+        tone: presentation.tone,
+      };
+    }),
+    ...(input.observabilityEnabled
+      ? [{ title: 'Observability', subtitle: 'Mastra Platform', tone: 'green' as const }]
+      : []),
+  ];
+
+  const slotCount = Math.max(leftNodes.length, rightNodes.length);
+  const centerSlot = Math.floor((slotCount - 1) / 2);
+  const centerNode: ArchitectureNode = {
+    title: input.environment.name,
+    subtitle: formatDeploymentLocation(input.environment.region),
+    tone: 'gray',
+  };
+  const connectorLineOffset = 2;
+  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
+  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const lines: string[] = [];
+
+  for (let slot = 0; slot < slotCount; slot++) {
+    const leftBox = renderArchitectureBox(leftNodes[slot], colors);
+    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, colors);
+    const rightBox = renderArchitectureBox(rightNodes[slot], colors);
+
+    for (let line = 0; line < BOX_HEIGHT; line++) {
+      const y = slot * SLOT_HEIGHT + line;
+      lines.push(
+        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
+      );
+    }
+
+    if (slot < slotCount - 1) {
+      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
+      lines.push(
+        `${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
+      );
+    }
+  }
+
+  const panelLines = renderDeploymentPanel(
+    {
+      projectName: input.projectName,
+      environment: input.environment,
+      workersEnabled: input.workersEnabled,
+      workersConfig: input.workersConfig,
+      renderedAt: input.renderedAt ?? new Date(),
+    },
+    colors,
+  );
+  const rowCount = Math.max(lines.length, panelLines.length);
+  const panelWidth = Math.max(...panelLines.map(visibleArchitectureWidth));
+
+  return Array.from({ length: rowCount }, (_, index) => {
+    const panelLine = panelLines[index] ?? '';
+    const paddedPanelLine = `${panelLine}${' '.repeat(Math.max(0, panelWidth - visibleArchitectureWidth(panelLine)))}`;
+    return `${paddedPanelLine}  ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
+  }).join('\n');
 }
 
 function getPackageName(projectDir: string): string | null {
@@ -104,7 +640,22 @@ export async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    archive.glob(
+      '**',
+      {
+        cwd: outputDir,
+        ignore: [
+          'node_modules/**',
+          // Exclude build-only worker introspection artifacts left by older CLI builds.
+          'worker-manifest.mjs',
+          'worker-manifest.mjs.map',
+          'workers-config.mjs',
+          'workers-config.mjs.map',
+        ],
+        dot: true,
+      },
+      { prefix: 'output' },
+    );
     void archive.finalize();
   });
 }
@@ -177,7 +728,7 @@ type ProjectResolution =
   | { existing: true; projectId: string; projectName: string; projectSlug: string }
   | { existing: false; projectName: string };
 
-async function resolveProject(
+export async function resolveProject(
   token: string,
   orgId: string,
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
@@ -187,7 +738,14 @@ async function resolveProject(
 ): Promise<ProjectResolution> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) {
-    return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
+    const projects = await fetchProjects(token, orgId).catch(() => []);
+    const project = projects.find(candidate => candidate.id === envProjectId);
+    return {
+      existing: true,
+      projectId: envProjectId,
+      projectName: project?.name ?? envProjectId,
+      projectSlug: project?.slug ?? project?.name ?? envProjectId,
+    };
   }
 
   if (flagProject) {
@@ -272,14 +830,15 @@ async function resolveProject(
 
 type EnvironmentResolution =
   | { existing: true; environment: Environment }
-  | { existing: false; name: string; type: 'production' | 'staging' | 'preview' };
+  | { existing: false; name: string; type: 'production' | 'staging' | 'preview'; region?: string };
 
-async function resolveEnvironment(
+export async function resolveEnvironment(
   token: string,
   orgId: string,
   projectId: string,
   envName: string,
   autoAccept: boolean,
+  requestedRegion?: string,
 ): Promise<EnvironmentResolution> {
   const environments = await fetchEnvironments(token, orgId, projectId);
 
@@ -309,7 +868,26 @@ async function resolveEnvironment(
     }
   }
 
-  return { existing: false, name: envName, type: envType };
+  let region = requestedRegion;
+  if (!region && !autoAccept) {
+    const selectedRegion = await p.select({
+      message: 'Select a deployment region',
+      initialValue: 'us',
+      options: [
+        { value: 'us', label: 'United States' },
+        { value: 'eu', label: 'Europe' },
+      ],
+    });
+
+    if (p.isCancel(selectedRegion)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    region = selectedRegion;
+  }
+
+  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -540,9 +1118,20 @@ export interface DeployOptions {
   region?: string;
   debug?: boolean;
   envFile?: string;
+  /**
+   * How to run background workers for this deploy:
+   *   `separate` — provision a dedicated worker service.
+   *   `inline`   — run workers in-process alongside the API server.
+   * When omitted, the CLI prompts on the first deploy where workers are
+   * detected but the environment has no worker service yet.
+   */
+  workers?: 'separate' | 'inline';
 }
 
 export async function unifiedDeployAction(dir: string | undefined, opts: DeployOptions) {
+  if (opts.workers !== undefined && opts.workers !== 'separate' && opts.workers !== 'inline') {
+    throw new Error(`--workers must be "separate" or "inline" (got "${String(opts.workers)}")`);
+  }
   const analytics = getAnalytics();
   if (!analytics) {
     return runUnifiedDeploy(dir, opts);
@@ -559,6 +1148,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
       hasEnvFile: Boolean(opts.envFile),
       hasConfig: Boolean(opts.config),
       debug: Boolean(opts.debug),
+      workers: opts.workers ?? 'prompt',
       headless: Boolean(process.env.MASTRA_API_TOKEN),
       targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
     },
@@ -650,7 +1240,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   // Step 5: Resolve environment (auto-create production if first deploy)
-  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept);
+  const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept, opts.region);
 
   let environment: Environment;
 
@@ -661,14 +1251,18 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     environment = await createEnvironment(token, orgId, projectId, {
       name: envResolution.name,
       type: envResolution.type,
-      ...(opts.region ? { region: opts.region } : {}),
+      ...(envResolution.region ? { region: envResolution.region } : {}),
     });
     p.log.success(`Created ${envResolution.type} environment "${envResolution.name}"`);
   }
 
   // Show confirmation for existing project
   if (resolution.existing) {
-    const isAlreadyLinked = projectConfig?.projectId === projectId && projectConfig?.organizationId === orgId;
+    const isAlreadyLinked =
+      projectConfig?.projectId === projectId &&
+      projectConfig.organizationId === orgId &&
+      projectConfig.projectName === projectName &&
+      projectConfig.projectSlug === projectSlug;
 
     p.note(
       [
@@ -719,6 +1313,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     projectType = await analyzeEntryProjectType(mastraEntryFile);
   }
   const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
+  const workersManifestExists = await hasWorkersManifest(targetDir);
+  const workerManifestChecked = await hasWorkerManifestCheck(targetDir);
+  const buildNeedsRefresh = deployBuildNeedsRefresh(staleness, workersManifestExists, workerManifestChecked);
 
   if (opts.skipBuild) {
     if (staleness.isStale && staleness.reason !== 'no-build') {
@@ -729,12 +1326,17 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       }
     }
     p.log.step('Skipping build (--skip-build)');
-  } else if (staleness.isStale) {
+  } else if (buildNeedsRefresh) {
     t = performance.now();
     if (staleness.reason === 'hash-mismatch') {
       p.log.step('Source files changed, rebuilding...');
+    } else if (staleness.reason === 'no-manifest') {
+      p.log.step('Build manifest missing, rebuilding...');
+    } else if (!workersManifestExists && !workerManifestChecked) {
+      p.log.step('Build metadata is outdated, rebuilding...');
     }
     await runBuild(targetDir, { debug: opts.debug });
+    await writeFile(workerManifestCheckPath(targetDir), '');
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
   } else {
     p.log.step('Build is up-to-date, skipping rebuild');
@@ -817,12 +1419,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
+  const deploymentEnv = mergePreflightEnvVars(environment.envVars, envVars);
+
   // Pre-upload validation. Preflight sees the same env picture the platform
   // applies at deploy time: request env vars merged over the environment's
   // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
-    const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
-    let issues = await preflightBuildOutput(targetDir, preflightEnv, {
+    let issues = await preflightBuildOutput(targetDir, deploymentEnv, {
       hasEnvFile: hasAmbientEnvFile,
       // Managed resources (e.g. attached databases) inject vars at deploy
       // time; the platform exposes their names on the environment. Absent
@@ -869,7 +1472,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         ...(environment.managedEnvVarNames ?? []),
         ...autoProvisioned.newlyManagedEnvVarNames,
       ];
-      issues = await preflightBuildOutput(targetDir, preflightEnv, {
+      issues = await preflightBuildOutput(targetDir, deploymentEnv, {
         hasEnvFile: hasAmbientEnvFile,
         managedEnvVarNames: mergedManagedNames,
         environmentName: environment.name,
@@ -888,6 +1491,46 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       process.exit(0);
     }
   }
+
+  let workersConfig = await readWorkersConfig(targetDir);
+  let workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+
+  const workersMode = await resolveWorkersDeployMode({
+    workersEnabled,
+    environmentHasWorkerService: Boolean(environment.workerProviderServiceId),
+    workersOption: opts.workers,
+    autoAccept,
+    promptConfirm: message => p.confirm({ message, initialValue: true }),
+    isCancel: (value): value is symbol => p.isCancel(value),
+  });
+  if (workersMode === 'inline' && workersEnabled) {
+    await suppressWorkersManifestForInlineMode(targetDir);
+    p.log.step('Running workers inline in the server container (no dedicated worker service)');
+    // Re-derive so the deployment overview reflects the inline mode.
+    workersConfig = await readWorkersConfig(targetDir);
+    workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  }
+
+  const publicUrls = derivePublicUrls(environment.slug, projectType);
+  let databases: ProjectDatabase[] = [];
+  try {
+    databases = await fetchDatabases(token, orgId, projectId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    p.log.warn(`Could not load attached databases for the deployment architecture (${message}).`);
+  }
+  p.note(
+    renderDeploymentArchitecture({
+      projectName,
+      environment,
+      serverLabel: publicUrls.serverLabel,
+      workersEnabled,
+      workersConfig,
+      databases,
+      observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
+    }),
+    'Deployment Overview',
+  );
 
   t = performance.now();
   s.start('Zipping build artifact...');
@@ -915,9 +1558,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);
-    p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
-    p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
+    p.log.info(`  Studio: ${pc.cyan(publicUrls.studioUrl)}`);
+    p.log.info(`  ${publicUrls.serverLabel}: ${pc.cyan(publicUrls.serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);

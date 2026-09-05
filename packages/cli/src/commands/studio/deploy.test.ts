@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 let closeHandler: (() => void) | undefined;
+let archiveInstance:
+  | {
+      glob: ReturnType<typeof vi.fn>;
+      append: ReturnType<typeof vi.fn>;
+    }
+  | undefined;
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -102,14 +108,17 @@ vi.mock('@clack/prompts', () => ({
 
 vi.mock('archiver', () => ({
   ZipArchive: vi.fn(function () {
-    return {
+    const archive = {
       on: vi.fn(),
       pipe: vi.fn(),
       glob: vi.fn(),
+      append: vi.fn(),
       finalize: vi.fn(async () => {
         closeHandler?.();
       }),
     };
+    archiveInstance = archive;
+    return archive;
   }),
 }));
 
@@ -857,5 +866,220 @@ describe('resolveProject (studio)', () => {
     await expect(deployAction(undefined, { yes: true })).rejects.not.toThrow(/Pass --project/);
 
     expect(prompts.select).not.toHaveBeenCalled();
+  });
+});
+
+// ─── platform-workers rollout gate ──────────────────────────────────────
+
+describe('worker manifest rollout archive', () => {
+  it('replaces workers.json only inside the uploaded archive', async () => {
+    const { zipOutput } = await import('./deploy.js');
+
+    await zipOutput('/project', 'null');
+
+    expect(archiveInstance?.glob).toHaveBeenCalledWith(
+      '**',
+      expect.objectContaining({ ignore: ['node_modules/**', 'workers.json'] }),
+      { prefix: 'output' },
+    );
+    expect(archiveInstance?.append).toHaveBeenCalledWith('null', { name: 'output/workers.json' });
+  });
+});
+
+describe('applyWorkersFlagGuard', () => {
+  const OUTPUT_DIR = '/fake/.mastra/output';
+  const MANIFEST_PATH = `${OUTPUT_DIR}/workers.json`;
+
+  async function loadHelper() {
+    const mod = await import('./deploy.js');
+    return mod.applyWorkersFlagGuard;
+  }
+
+  function inMemoryFs(initial: Record<string, string>) {
+    const files: Record<string, string> = { ...initial };
+    return {
+      files,
+      readFile: vi.fn(async (path: string) => {
+        if (!(path in files)) throw new Error('ENOENT');
+        return files[path]!;
+      }),
+      writeFile: vi.fn(async (path: string, content: string) => {
+        files[path] = content;
+      }),
+    };
+  }
+
+  it('no manifest on disk → status "no-manifest" and does NOT consult PostHog', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({});
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(true) };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result.status).toBe('no-manifest');
+    expect(analytics.isFeatureEnabled).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('manifest already null → status "already-null" and does NOT consult PostHog or overwrite', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({ [MANIFEST_PATH]: 'null' });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(true) };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result.status).toBe('already-null');
+    expect(analytics.isFeatureEnabled).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('flag ON with a non-null manifest → status "preserved" and does NOT overwrite', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({
+      [MANIFEST_PATH]: JSON.stringify({ enabled: true, mode: 'full' }),
+    });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(true) };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result.status).toBe('preserved');
+    expect(analytics.isFeatureEnabled).toHaveBeenCalledWith('platform-workers', {
+      groups: { organization: 'org-1' },
+    });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true, mode: 'full' }));
+  });
+
+  it('flag OFF with a non-null manifest → status "downgraded" without mutating reusable output', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const originalManifest = JSON.stringify({ enabled: true, mode: 'full', globalConcurrency: 20 });
+    const fs = inMemoryFs({ [MANIFEST_PATH]: originalManifest });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(fs.files[MANIFEST_PATH]).toBe(originalManifest);
+  });
+
+  it('checks the flag again on a later deploy because downgrade does not persist', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const originalManifest = JSON.stringify({ enabled: true, mode: 'full' });
+    const fs = inMemoryFs({ [MANIFEST_PATH]: originalManifest });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true) };
+
+    await expect(applyWorkersFlagGuard({ outputDir: OUTPUT_DIR, orgId: 'org-1', analytics, fs })).resolves.toEqual({
+      status: 'downgraded',
+      manifestOverride: 'null',
+    });
+    await expect(applyWorkersFlagGuard({ outputDir: OUTPUT_DIR, orgId: 'org-1', analytics, fs })).resolves.toEqual({
+      status: 'preserved',
+    });
+
+    expect(analytics.isFeatureEnabled).toHaveBeenCalledTimes(2);
+    expect(fs.files[MANIFEST_PATH]).toBe(originalManifest);
+  });
+
+  it('null analytics (telemetry disabled) with a non-null manifest → fail-CLOSED (downgraded)', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({
+      [MANIFEST_PATH]: JSON.stringify({ enabled: true }),
+    });
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics: null,
+      fs,
+    });
+
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true }));
+  });
+
+  it('analytics.isFeatureEnabled rejects → fail-CLOSED (guard swallows and downgrades)', async () => {
+    // Defensive test: even if a future analytics stub violates the contract by
+    // throwing/rejecting instead of returning false, the guard MUST NOT propagate
+    // the error and MUST default to flag-off (downgrade).
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({
+      [MANIFEST_PATH]: JSON.stringify({ enabled: true }),
+    });
+    const analytics = {
+      isFeatureEnabled: vi.fn().mockRejectedValue(new Error('posthog down')),
+    };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result).toEqual({ status: 'downgraded', manifestOverride: 'null' });
+    expect(fs.files[MANIFEST_PATH]).toBe(JSON.stringify({ enabled: true }));
+  });
+
+  it('malformed manifest JSON → status "no-manifest" (does not touch or overwrite)', async () => {
+    const applyWorkersFlagGuard = await loadHelper();
+    const fs = inMemoryFs({ [MANIFEST_PATH]: 'not-json-at-all' });
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+
+    const result = await applyWorkersFlagGuard({
+      outputDir: OUTPUT_DIR,
+      orgId: 'org-1',
+      analytics,
+      fs,
+    });
+
+    expect(result.status).toBe('no-manifest');
+    expect(analytics.isFeatureEnabled).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('PosthogAnalytics.isFeatureEnabled', () => {
+  it('returns false when the client is not initialized (telemetry disabled)', async () => {
+    const originalDisabled = process.env.MASTRA_TELEMETRY_DISABLED;
+    process.env.MASTRA_TELEMETRY_DISABLED = '1';
+    try {
+      const { PosthogAnalytics } = await import('../../analytics/index.js');
+      const analytics = new PosthogAnalytics({
+        version: '1.0.0',
+        apiKey: 'fake-key',
+        host: 'https://fake.posthog.example.com',
+      });
+      const result = await analytics.isFeatureEnabled('any-flag', {
+        groups: { organization: 'org-1' },
+      });
+      expect(result).toBe(false);
+    } finally {
+      if (originalDisabled === undefined) {
+        delete process.env.MASTRA_TELEMETRY_DISABLED;
+      } else {
+        process.env.MASTRA_TELEMETRY_DISABLED = originalDisabled;
+      }
+    }
   });
 });

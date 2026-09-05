@@ -25,6 +25,13 @@ export interface Environment {
    * Absent on platforms that predate the field.
    */
   managedEnvVarNames?: string[];
+  /**
+   * Railway service ID of this environment's background-worker service, or
+   * null when no dedicated worker service has been provisioned. Absent on
+   * platforms that predate the field; the CLI treats missing and null the
+   * same way (workers currently run inline on the API service).
+   */
+  workerProviderServiceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

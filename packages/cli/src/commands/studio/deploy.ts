@@ -23,6 +23,84 @@ function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * Platform-workers rollout gate.
+ *
+ * On every deploy where the built `workers.json` declares a non-null worker
+ * manifest, consult PostHog for the `platform-workers` flag scoped to the
+ * user's org. When OFF, return an archive-only `workers.json` override so the
+ * platform receives no manifest and provisions no dedicated worker service.
+ * The reusable build output remains unchanged for later deploys.
+ *
+ * Fail-CLOSED: any PostHog error, disabled telemetry, or missing analytics
+ * client falls through to "flag off" → downgrade. A user must NEVER accidentally
+ * get workers because a flag lookup failed.
+ *
+ * Returns a report so `runStudioDeploy` can print the correct one-line notice.
+ */
+export async function applyWorkersFlagGuard(deps: {
+  outputDir: string;
+  orgId: string;
+  analytics: {
+    isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean>;
+  } | null;
+  fs?: {
+    readFile: (path: string) => Promise<string>;
+  };
+}): Promise<{
+  status: 'no-manifest' | 'already-null' | 'preserved' | 'downgraded';
+  manifestOverride?: string;
+}> {
+  const { readFile: readFn } = deps.fs ?? {
+    readFile: async (p: string) => readFile(p, 'utf-8'),
+  };
+
+  const manifestPath = join(deps.outputDir, 'workers.json');
+
+  let raw: string;
+  try {
+    raw = await readFn(manifestPath);
+  } catch {
+    return { status: 'no-manifest' };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // A malformed manifest is upstream's problem — don't try to fix it here.
+    return { status: 'no-manifest' };
+  }
+
+  if (parsed === null || parsed === undefined) {
+    return { status: 'already-null' };
+  }
+
+  // Fail-closed: no analytics → treat as flag-off → downgrade. Users on
+  // MASTRA_TELEMETRY_DISABLED=1 will emit no manifest until we build a proper
+  // out-of-band flag transport. That's the conservative rollout stance.
+  //
+  // Defensive try/catch: `PosthogAnalytics.isFeatureEnabled` catches internally
+  // today, but we do not want this guard to break the deploy if a future
+  // refactor (or a custom analytics stub) violates the contract.
+  let flagOn = false;
+  if (deps.analytics) {
+    try {
+      flagOn = await deps.analytics.isFeatureEnabled('platform-workers', {
+        groups: { organization: deps.orgId },
+      });
+    } catch {
+      flagOn = false;
+    }
+  }
+
+  if (flagOn) {
+    return { status: 'preserved' };
+  }
+
+  return { status: 'downgraded', manifestOverride: JSON.stringify(null) };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -65,7 +143,7 @@ export function getMastraVersion(projectDir: string): string | null {
     return null;
   }
 }
-async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(projectDir: string, workersManifestOverride?: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -81,7 +159,12 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.pipe(output);
     // `**` skips dotfiles by default; `dot` keeps the .npmrc that the build
     // copies into the output so private-registry installs work remotely.
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: 'output' });
+    const ignore = ['node_modules/**'];
+    if (workersManifestOverride !== undefined) ignore.push('workers.json');
+    archive.glob('**', { cwd: outputDir, ignore, dot: true }, { prefix: 'output' });
+    if (workersManifestOverride !== undefined) {
+      archive.append(workersManifestOverride, { name: 'output/workers.json' });
+    }
     void archive.finalize();
   });
 }
@@ -556,6 +639,21 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
+  // Platform-workers rollout gate. If the deploying user is not opted into
+  // the `platform-workers` PostHog flag, overwrite `.mastra/output/workers.json`
+  // with `null` so the platform receives no manifest and provisions no
+  // dedicated worker service. The app still runs its BackgroundTaskWorker
+  // in-process (mode: 'full' default), so background tasks execute — just
+  // co-located with the API replica.
+  const workersGuard = await applyWorkersFlagGuard({
+    outputDir: join(targetDir, '.mastra', 'output'),
+    orgId,
+    analytics: getAnalytics(),
+  });
+  if (workersGuard.status === 'downgraded') {
+    p.log.warn('Background workers not yet enabled for your account — deploy will run in single-process mode.');
+  }
+
   // If the user didn't pass --env-file and no ambient .env* file exists,
   // skip the local env-var upload entirely and let the platform use the
   // env vars stored on the project. The server-side deploy handler merges
@@ -595,7 +693,7 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
 
   t = performance.now();
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, workersGuard.manifestOverride);
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;

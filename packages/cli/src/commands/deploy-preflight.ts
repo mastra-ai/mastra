@@ -122,6 +122,14 @@ const LOCAL_PATHS_METADATA_FILE = 'preflight-local-paths.json';
 /** Unified metadata file emitted by newer deployers. */
 const PREFLIGHT_METADATA_FILE = 'preflight-metadata.json';
 
+/**
+ * Statically-extracted `backgroundTasks` manifest emitted by newer deployers.
+ * When present with `enabled: true`, the deployed API needs a `REDIS_URL`
+ * so the platform can spin up a worker service alongside it — the worker
+ * shares the API's `REDIS_URL` for job coordination.
+ */
+const WORKERS_MANIFEST_FILE = 'workers.json';
+
 /* ------------------------------------------------------------------ */
 /*  Public API                                                        */
 /* ------------------------------------------------------------------ */
@@ -207,6 +215,12 @@ export async function preflightBuildOutput(
   issues.push(
     ...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames, environmentName)),
   );
+
+  // Background workers need a REDIS_URL to coordinate with the API service.
+  // If the extracted manifest says workers are enabled but no REDIS_URL is
+  // in scope, surface a missing-env-var issue with the same `redis` autofix
+  // used elsewhere so `maybeAutoProvisionDatabases` can offer inline attach.
+  issues.push(...(await checkWorkersNeedRedis(outputDir, envVars, managedEnvVarNames)));
 
   return issues;
 }
@@ -386,12 +400,29 @@ function localhostHostOf(value: string): string {
   return new URL(value).host;
 }
 
+function isUsableEnvVarValue(name: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  if (!dbAutofixFor(name)) return true;
+
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function checkEnvVarNames(
   referenced: Iterable<string>,
   envVars: Record<string, string>,
   managedEnvVarNames?: string[] | null,
 ): PreflightIssue[] {
-  const provided = new Set(Object.keys(envVars));
+  const provided = new Set(
+    Object.entries(envVars)
+      .filter(([name, value]) => isUsableEnvVarValue(name, value))
+      .map(([name]) => name),
+  );
   const managed = new Set(managedEnvVarNames ?? []);
   const missing: string[] = [];
   const issues: PreflightIssue[] = [];
@@ -457,6 +488,77 @@ function checkEnvVarNames(
   }
 
   return issues;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Check 3 — workers need REDIS_URL                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * If the build extracted a workers manifest with `enabled: true` but the
+ * deploy env doesn't provide `REDIS_URL` (locally or via a platform-managed
+ * database), surface a missing-env-var warning with the standard `redis`
+ * autofix. `maybeAutoProvisionDatabases` then offers inline attach so the
+ * managed Redis exists before the platform tries to spin up a worker
+ * service against the environment.
+ *
+ * Best-effort: the manifest file is absent for stale builds or older
+ * deployers, in which case the check is skipped (falls through to the
+ * existing `MISSING_ENV_VAR` path if user code references `REDIS_URL`).
+ */
+async function checkWorkersNeedRedis(
+  outputDir: string,
+  envVars: Record<string, string>,
+  managedEnvVarNames?: string[] | null,
+): Promise<PreflightIssue[]> {
+  let raw: string;
+  try {
+    raw = await readFile(join(outputDir, WORKERS_MANIFEST_FILE), 'utf-8');
+  } catch {
+    return [];
+  }
+
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  if (!manifest || typeof manifest !== 'object') return [];
+
+  const workerManifest = manifest as {
+    version?: unknown;
+    enabled?: unknown;
+    orchestration?: { enabled?: unknown };
+    scheduler?: { enabled?: unknown };
+    backgroundTasks?: { enabled?: unknown };
+    custom?: unknown;
+  };
+  const workersEnabled =
+    workerManifest.version === 1
+      ? workerManifest.orchestration?.enabled === true ||
+        workerManifest.scheduler?.enabled === true ||
+        workerManifest.backgroundTasks?.enabled === true ||
+        (Array.isArray(workerManifest.custom) && workerManifest.custom.length > 0)
+      : workerManifest.enabled === true;
+  if (!workersEnabled) return [];
+
+  const redisUrl = envVars.REDIS_URL;
+  const managed = new Set(managedEnvVarNames ?? []);
+  if ((redisUrl !== undefined && isUsableEnvVarValue('REDIS_URL', redisUrl)) || managed.has('REDIS_URL')) return [];
+
+  const autofix = dbAutofixFor('REDIS_URL');
+  return [
+    {
+      code: 'MISSING_ENV_VAR',
+      severity: 'warning',
+      message:
+        'Background tasks are enabled in this project, but the deploy env has no REDIS_URL — the platform needs Redis to coordinate the worker service with the API.',
+      fix: 'Add REDIS_URL to your env file, or let `mastra deploy` provision a managed redis for this environment.',
+      autofix,
+    },
+  ];
 }
 
 /* ------------------------------------------------------------------ */
