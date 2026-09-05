@@ -12,7 +12,7 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 1. Search for `new MastraFactory`, `defaultFactoryRules`, and the `rules` property.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. If the deployment doesn't configure `rules`, start with `defaultFactoryRules({ version, overrides })` and pass the result to `MastraFactory`.
+4. For board, tool, or Linear rules, start with `defaultFactoryRules({ version, overrides })` if needed and pass the result to `MastraFactory`. For GitHub rules, configure the installed GitHub integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
@@ -31,7 +31,7 @@ Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegrat
 new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Migrate global `rules.github[event].onEvent` to constructor `rules[event]`. Global GitHub configuration is rejected. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable webhook authentication or reconciliation bookkeeping.
+GitHub integrations exclusively own their event handlers; configure them through constructor `rules[event]`, not the global Factory rules tree. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable webhook authentication or reconciliation bookkeeping.
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
