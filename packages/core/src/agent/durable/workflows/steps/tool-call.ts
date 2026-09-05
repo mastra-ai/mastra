@@ -59,6 +59,7 @@ const durableToolCallInputSchema = z.object({
  * Output schema for the durable tool call step
  */
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
+  aborted: z.boolean().optional(),
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
   error: z
@@ -288,6 +289,7 @@ export function createDurableToolCallStep() {
 
       const { runId, options: agentOptions, state } = initData;
       const logger = (mastra as any)?.getLogger?.();
+      const isAborted = () => (globalRunRegistry.get(runId)?.abortSignal ?? params.abortSignal)?.aborted === true;
 
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
       // pausing — stores persist only span-end events, so an un-ended root is dropped if
@@ -669,6 +671,13 @@ export function createDurableToolCallStep() {
         (suspendData as { type?: unknown }).type === 'approval';
       const approvalGated = suspendedForApproval || (requiresApproval && suspendData === undefined);
 
+      // A completed response can still be running async processors when Stop arrives.
+      // Do not enter a new approval wait or execute its tools after cancellation.
+      // Existing resumes still need their normal approval/suspension metadata cleanup.
+      if (isAborted() && resumeData === undefined) {
+        return { ...typedInput, aborted: true };
+      }
+
       if (approvalGated && !approvalDecision) {
         const resumeSchema = JSON.stringify({
           type: 'object',
@@ -681,6 +690,8 @@ export function createDurableToolCallStep() {
 
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
+
+        if (isAborted()) return { ...typedInput, aborted: true };
 
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
         if (pubsub) {
@@ -708,6 +719,11 @@ export function createDurableToolCallStep() {
 
         // Flush messages before suspension
         await doFlush();
+
+        if (isAborted()) {
+          await removeToolMetadata('approval');
+          return { ...typedInput, aborted: true };
+        }
 
         // End the trace's open spans as suspended before pausing.
         endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
@@ -800,6 +816,8 @@ export function createDurableToolCallStep() {
         await removeToolMetadata('suspension');
       }
 
+      if (isAborted()) return { ...typedInput, aborted: true };
+
       // 3. Check for background task execution
       const bgManager = registryEntry?.backgroundTaskManager;
       const bgConfig = registryEntry?.backgroundTasksConfig;
@@ -849,6 +867,8 @@ export function createDurableToolCallStep() {
       }
 
       // Execute the tool
+      if (isAborted()) return { ...typedInput, aborted: true };
+
       if (!tool.execute) {
         return {
           ...typedInput,
