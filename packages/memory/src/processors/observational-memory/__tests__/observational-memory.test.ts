@@ -1515,6 +1515,80 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('Hello');
     });
 
+    it('should exclude non-temporal system reminders from observer history', () => {
+      const reminder = createTestMessage(
+        '<system-reminder>Continue naturally and prioritize the latest user message.</system-reminder>',
+        'user',
+      );
+      reminder.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: '<system-reminder>Continue naturally and prioritize the latest user message.</system-reminder>',
+          },
+          {
+            type: 'image',
+            image: 'data:image/png;base64,abc123',
+            mimeType: 'image/png',
+          },
+        ],
+        metadata: {
+          systemReminder: {
+            type: 'continuation',
+            message: 'Continue naturally and prioritize the latest user message.',
+          },
+        },
+      } as any;
+      const textMsg = createTestMessage('Help me plan dinner', 'user');
+
+      const formatted = formatMessagesForObserver([reminder, textMsg]);
+
+      expect(formatted).toContain('Help me plan dinner');
+      expect(formatted).not.toContain('Continue naturally');
+      expect(formatted).not.toContain('<system-reminder');
+      expect(formatted).not.toContain('[Image');
+    });
+
+    it('should exclude persisted signal-role reminders and legacy reminder metadata from observer history', () => {
+      const signalReminder = createTestMessage(
+        '<system-reminder>A background task completed.</system-reminder>',
+        'user',
+      );
+      (signalReminder as any).role = 'signal';
+      signalReminder.content = {
+        format: 2,
+        parts: [{ type: 'text', text: '<system-reminder>A background task completed.</system-reminder>' }],
+        metadata: { signal: { type: 'reactive', tagName: 'system-reminder' } },
+      } as any;
+
+      const legacyReminder = createTestMessage('<system-reminder>AGENTS.md changed.</system-reminder>', 'user');
+      legacyReminder.content = {
+        format: 2,
+        parts: [{ type: 'text', text: '<system-reminder>AGENTS.md changed.</system-reminder>' }],
+        metadata: { dynamicAgentsMdReminder: true },
+      } as any;
+
+      const textMsg = createTestMessage('Book flights for Friday', 'user');
+
+      const formatted = formatMessagesForObserver([signalReminder, legacyReminder, textMsg]);
+
+      expect(formatted).toContain('Book flights for Friday');
+      expect(formatted).not.toContain('background task completed');
+      expect(formatted).not.toContain('AGENTS.md changed');
+    });
+
+    it('should not treat assistant messages mentioning system-reminder markup as reminders', () => {
+      const assistantMsg = createTestMessage(
+        '<system-reminder> is markup the runtime uses for reminders.',
+        'assistant',
+      );
+
+      const formatted = formatMessagesForObserver([assistantMsg]);
+
+      expect(formatted).toContain('markup the runtime uses for reminders');
+    });
+
     it('should render persisted temporal gap markers as time-passed lines', () => {
       const temporalGapMarker = createTestMessage('ignored', 'user');
       temporalGapMarker.id = '__temporal_gap_test';
@@ -2770,6 +2844,7 @@ describe('Observer Agent Helpers', () => {
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
       const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
         createCurrentTaskExtractor(),
         createSuggestedResponseExtractor(),
