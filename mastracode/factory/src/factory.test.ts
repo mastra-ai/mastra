@@ -365,12 +365,11 @@ describe('MastraFactory.prepare', () => {
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
-    expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules).not.toHaveProperty('work');
+    expect(rules).not.toHaveProperty('review');
     expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(rules).not.toHaveProperty('github');
+    expect(rules).not.toHaveProperty('linear');
   });
 
   it('threads explicitly configured Factory rules without composing handler leaves', async () => {

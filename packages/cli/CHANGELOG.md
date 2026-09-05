@@ -1,5 +1,15 @@
 # mastra
 
+## 1.28.0-alpha.5
+
+### Patch Changes
+
+- Fixed file replacements so values containing `$&`, `$$`, `` $` `` or `$'` are written to generated files exactly as provided instead of being expanded. ([#23091](https://github.com/mastra-ai/mastra/pull/23091))
+
+- Updated dependencies [[`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11)]:
+  - @mastra/core@1.65.0-alpha.5
+  - @mastra/deployer@1.65.0-alpha.5
+
 ## 1.28.0-alpha.4
 
 ### Patch Changes

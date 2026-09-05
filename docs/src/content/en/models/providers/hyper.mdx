@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 32 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 33 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -176,6 +176,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 13107,
     "inputCost": 0.188,
     "outputCost": 0.7
+  },
+  {
+    "model": "hyper/inkling",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 1.0888,
+    "outputCost": 4.40964
   },
   {
     "model": "hyper/kimi-k2-thinking",

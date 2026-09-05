@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { defaultFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -33,24 +34,23 @@ async function createItem(storage: WorkItemsStorage, number: number, stage = 'in
 /** Queue one invokeSkill decision on a fresh card by moving it into Execute under a rule override. */
 async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
   const item = await createItem(storage, number);
-  const rules = defaultFactoryRules({
-    version: 'rules-v1',
-    overrides: {
-      work: {
-        execute: {
-          issue: {
-            onEnter: () => ({
-              type: 'invokeSkill',
-              role: 'plan',
-              skillName: 'factory-plan',
-              idempotencyKey: `plan-${number}`,
-            }),
-          },
-        },
+  const boards = createLifecycleTestRegistry({
+    execute: {
+      issue: {
+        onEnter: () => ({
+          type: 'invokeSkill',
+          role: 'plan',
+          skillName: 'factory-plan',
+          idempotencyKey: `plan-${number}`,
+        }),
       },
     },
   });
-  const transitions = new FactoryTransitionService({ storage, rules });
+  const transitions = new FactoryTransitionService({
+    storage,
+    rules: defaultFactoryRules({ version: 'rules-v1' }),
+    boards,
+  });
   const result = await transitions.transition({
     ...SCOPE,
     workItemId: item.id,

@@ -26,7 +26,7 @@ function issueToIngress(issue: import('../../capabilities/intake.js').IntakeIssu
 }
 
 export function attachLinearIssueReconciler(
-  linear: Pick<LinearIntegration, 'intake'>,
+  linear: Pick<LinearIntegration, 'intake' | 'rules'>,
   context: IntegrationContext,
 ): LinearIssueReconciler | undefined {
   if (!context.rules || !linear.intake.resolveIntakeDispatch) return undefined;
@@ -35,6 +35,7 @@ export function attachLinearIssueReconciler(
     projects: context.storage.projects,
     storage: context.rules.workItems,
     rules: context.rules.config,
+    linearRules: linear.rules,
   });
 
   return createIssueReconciler({

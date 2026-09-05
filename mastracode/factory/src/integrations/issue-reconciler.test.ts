@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { resolveGithubRules } from './github/default-rules.js';
+import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
 import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
-import type { LinearIntegration } from './linear/integration.js';
+import { resolveLinearRules } from './linear/default-rules.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
 function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
@@ -33,14 +35,17 @@ function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
 
 const repository = { id: 10, fullName: 'acme/repo', installationId: 7 };
 
-async function githubSetup(input: {
-  stages?: string[];
-  metadata?: Record<string, unknown>;
-  externalId?: string;
-  url?: string;
-  fetchIssue?: GithubIssueFetcher;
-  permission?: string;
-} = {}) {
+async function githubSetup(
+  input: {
+    stages?: string[];
+    metadata?: Record<string, unknown>;
+    externalId?: string;
+    url?: string;
+    fetchIssue?: GithubIssueFetcher;
+    permission?: string;
+    rules?: GithubRuleOverrides;
+  } = {},
+) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
   const sourceControl = seeded.sourceControl.forIntegration('github');
@@ -51,7 +56,12 @@ async function githubSetup(input: {
   });
   const storedRepository = await sourceControl.repositories.upsert({
     orgId: project.orgId,
-    input: { installationId: installation.id, externalId: String(repository.id), slug: repository.fullName, defaultBranch: 'main' },
+    input: {
+      installationId: installation.id,
+      externalId: String(repository.id),
+      slug: repository.fullName,
+      defaultBranch: 'main',
+    },
   });
   const connection = await sourceControl.connections.create({
     orgId: project.orgId,
@@ -89,7 +99,7 @@ async function githubSetup(input: {
   const permissionLookup = vi.fn().mockResolvedValue(input.permission);
   const reconciler = createGithubIssueReconciler(
     {
-      github: { getRepositoryCollaboratorPermission: permissionLookup },
+      github: { rules: resolveGithubRules(input.rules), getRepositoryCollaboratorPermission: permissionLookup },
       sourceControl,
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
@@ -118,7 +128,12 @@ describe('issue reconcilers', () => {
     const fetchIssue = vi.fn().mockResolvedValue(githubState());
     const setup = await githubSetup({ metadata: { assignees: ['old'] }, fetchIssue });
 
-    await expect(setup.reconciler([repository])).resolves.toMatchObject({ repositories: 1, checked: 1, updated: 1, failed: 0 });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({
+      repositories: 1,
+      checked: 1,
+      updated: 1,
+      failed: 0,
+    });
     expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
     expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
@@ -212,6 +227,29 @@ describe('issue reconcilers', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
   });
 
+  it('uses a replacement handler for reconciled closures without running the default', async () => {
+    const issueClosed = vi.fn(() => undefined);
+    const setup = await githubSetup({
+      rules: { issueClosed },
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed' })),
+    });
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    expect(issueClosed).toHaveBeenCalledOnce();
+    expect(issueClosed).toHaveBeenCalledWith(expect.objectContaining({ event: 'issueClosed' }));
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
+  });
+
+  it('disables reconciled closures without breaking bookkeeping or another instance', async () => {
+    const fetchIssue = vi.fn().mockResolvedValue(githubState({ state: 'closed' }));
+    const disabled = await githubSetup({ rules: { issueClosed: null }, fetchIssue });
+    const defaults = await githubSetup({ fetchIssue });
+    await expect(disabled.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    await expect(disabled.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    expect(await disabled.workItems.listDeferredDecisions('org-1', disabled.project.id)).toEqual([]);
+    await expect(defaults.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
+    expect(await defaults.workItems.listDeferredDecisions('org-1', defaults.project.id)).toHaveLength(1);
+  });
+
   it('skips terminal GitHub cards and preserves undefined provider metadata', async () => {
     const terminalFetch = vi.fn();
     const terminal = await githubSetup({ stages: ['done'], fetchIssue: terminalFetch });
@@ -227,36 +265,60 @@ describe('issue reconcilers', () => {
     expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
   });
 
-  it('replays canceled Linear issues through rules ingress', async () => {
-    const seeded = await createFactoryStorageForTests();
-    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
-    await seeded.workItems.upsert({
-      orgId: project.orgId,
-      userId: project.createdBy,
-      factoryProjectId: project.id,
-      input: {
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: 'https://linear.app/acme/issue/ENG-42' },
-        title: 'ENG-42: Issue',
-        stages: ['planning'],
-        sessions: {},
-        metadata: { linearIssueId: 'linear-uuid' },
-      },
-    });
-    const intake = {
-      resolveIntakeDispatch: vi.fn().mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
-      getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
-    } as unknown as Intake;
-    const reconcile = attachLinearIssueReconciler(
-      { intake } as Pick<LinearIntegration, 'intake'>,
-      {
-        storage: { projects: seeded.projects },
-        rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
-      } as never,
-    );
+  it.each(['default', 'replacement', 'disabled'] as const)(
+    'replays canceled Linear issues with %s instance rules',
+    async mode => {
+      const seeded = await createFactoryStorageForTests();
+      const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'linear:ENG-42',
+            url: 'https://linear.app/acme/issue/ENG-42',
+          },
+          title: 'ENG-42: Issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-uuid' },
+        },
+      });
+      const intake = {
+        resolveIntakeDispatch: vi
+          .fn()
+          .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
+        getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
+      } as unknown as Intake;
+      const replacement = vi.fn(() => ({
+        type: 'notify' as const,
+        idempotencyKey: 'reconciled-linear',
+        title: 'Closed issue',
+      }));
+      const reconcile = attachLinearIssueReconciler(
+        {
+          intake,
+          rules: resolveLinearRules(
+            mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
+          ),
+        },
+        {
+          storage: { projects: seeded.projects },
+          rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
+        } as never,
+      );
 
-    await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
-    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(1);
-    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
-  });
+      await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
+      const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      expect(decisions).toHaveLength(mode === 'disabled' ? 0 : 1);
+      if (mode === 'default') expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
+      if (mode === 'replacement') {
+        expect(replacement).toHaveBeenCalledOnce();
+        expect(decisions[0]?.decision).toMatchObject({ type: 'notify', title: 'Closed issue' });
+      }
+    },
+  );
 });
