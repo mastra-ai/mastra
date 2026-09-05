@@ -70,6 +70,7 @@ describe('durable step-start chunk shape', () => {
     await emitStepStartEvent(pubsub, runId, {
       stepId: 'llm-execution',
       messageId: 'msg-1',
+      startedAt: 0,
       request: { body: '{}' },
       warnings: [],
     });
@@ -84,6 +85,7 @@ describe('durable step-start chunk shape', () => {
       payload: {
         stepId: 'llm-execution',
         messageId: 'msg-1',
+        startedAt: 0,
         request: { body: '{}' },
         warnings: [],
       },
@@ -134,6 +136,7 @@ describe('durable step-start chunk shape', () => {
       expect(chunk.payload.request).toEqual({});
       expect(Array.isArray(chunk.payload.warnings)).toBe(true);
       expect(chunk.payload.messageId).toEqual(expect.any(String));
+      expect(chunk.payload.startedAt).toEqual(expect.any(Number));
 
       // The exact operation the @mastra/ai-sdk converter performs — throws on
       // the old flat shape because `chunk.payload` was undefined.
