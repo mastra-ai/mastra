@@ -13,7 +13,7 @@ import { SpanType, isSpanRecordOfType } from '@mastra/core/observability';
 
 if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
   span.attributes?.usage; // UsageStats | undefined, no cast
-  span.input?.messages; // ModelGenerationMessage[]
+  span.input?.messages; // MessageListInput
 }
 ```
 

@@ -116,7 +116,7 @@ Narrow a span by its type to read the typed payload. On a stored `SpanRecord`, u
 import { SpanType, isSpanRecordOfType } from '@mastra/core/observability'
 
 if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
-  span.input?.messages // ModelGenerationMessage[]
+  span.input?.messages // MessageListInput
   span.attributes?.usage // UsageStats | undefined
 }
 ```
@@ -836,19 +836,14 @@ interface AgentRunResult {
 
 Input recorded on `MODEL_GENERATION` spans.
 
+Mastra's own loop records the normalized model messages, system messages first. SDK agents record the raw messages the caller passed, so `messages` keeps the full `MessageListInput` shape.
+
 ```typescript
 interface ModelGenerationInput {
-  /** Messages sent to the model, system messages first */
-  messages: ModelGenerationMessage[]
+  /** Messages sent to the model */
+  messages: MessageListInput
   /** Output schema, when structured output was requested */
   schema?: unknown
-}
-
-interface ModelGenerationMessage {
-  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
-  role: string
-  /** Message content: a string or a list of content parts */
-  content: unknown
 }
 ```
 

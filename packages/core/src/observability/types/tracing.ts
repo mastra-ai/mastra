@@ -900,20 +900,16 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // ============================================================================
 
 /**
- * One chat message as recorded on a `MODEL_GENERATION` span: the
- * provider-agnostic role/content pair every message format shares.
+ * Input recorded on `MODEL_GENERATION` spans.
+ *
+ * Mastra's own loop records the normalized model messages, system messages
+ * first. SDK agents (`@mastra/claude`, `@mastra/openai`, ...) record the raw
+ * messages the caller passed, so `messages` keeps the full `MessageListInput`
+ * shape rather than a single message format.
  */
-export interface ModelGenerationMessage {
-  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
-  role: string;
-  /** Message content: a string or a list of content parts */
-  content: unknown;
-}
-
-/** Input recorded on `MODEL_GENERATION` spans. */
 export interface ModelGenerationInput {
-  /** Messages sent to the model, system messages first */
-  messages: ModelGenerationMessage[];
+  /** Messages sent to the model */
+  messages: MessageListInput;
   /** Output schema, when structured output was requested */
   schema?: unknown;
 }
