@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
+import type { SpanInputMap, SpanOutputMap, SpanTypeMap } from '../../../observability/types';
 import {
   deltaLimitSchema,
   deltaInfoSchema,
@@ -140,8 +141,25 @@ export const spanRecordSchema = z
   })
   .describe('Span record data');
 
-/** Complete span record as stored in the database */
-export type SpanRecord = z.infer<typeof spanRecordSchema>;
+/** Span record exactly as the schema stores it: payload fields are untyped. */
+type StoredSpanRecord = z.infer<typeof spanRecordSchema>;
+
+/**
+ * Complete span record as stored in the database.
+ *
+ * Narrow `TType` to read `attributes`, `input` and `output` with the shapes
+ * core records for that span type. The schema itself stays permissive, so
+ * this is a read-side view only; narrow with `isSpanRecordOfType` from
+ * `@mastra/core/observability`.
+ */
+export type SpanRecord<TType extends SpanType = SpanType> = SpanType extends TType
+  ? StoredSpanRecord
+  : Omit<StoredSpanRecord, 'spanType' | 'attributes' | 'input' | 'output'> & {
+      spanType: TType;
+      attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
+      input?: SpanInputMap[TType] | null;
+      output?: SpanOutputMap[TType] | null;
+    };
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)
