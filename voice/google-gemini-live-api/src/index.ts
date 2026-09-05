@@ -1662,6 +1662,24 @@ export class GeminiLiveVoice extends MastraVoice<
     const tool = this.tools?.[toolName];
     if (!tool) {
       this.log('Tool not found', { toolName });
+
+      // Gemini blocks the turn until every `functionCall` id in the batch is answered. Returning
+      // without a `functionResponse` leaves the call unanswered forever, so the model never speaks
+      // again (dead air until hangup). Send an error response for this id before emitting.
+      const notFoundMessage = {
+        toolResponse: {
+          functionResponses: [
+            {
+              id: toolId,
+              name: toolName,
+              response: { error: `Tool "${toolName}" not found` },
+            },
+          ],
+        },
+      };
+
+      this.sendEvent('toolResponse', notFoundMessage);
+
       this.createAndEmitError(GeminiLiveErrorCode.TOOL_NOT_FOUND, `Tool "${toolName}" not found`, {
         toolName,
         availableTools: Object.keys(this.tools || {}),
