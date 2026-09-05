@@ -47,6 +47,9 @@ describe('BrowserCliHandler', () => {
     });
 
     it.each([
+      'browser-use \\\n < script.py',
+      'true && \\\n browser-use \\\n > result.txt \\\n < script.py; cat result.txt',
+      "browser-use \\\n <<'PY'\nPAYLOADPY\n",
       'true && browser-use < script.py',
       'false || browser-use < script.py',
       'true; browser-use > result.txt < script.py; cat result.txt',

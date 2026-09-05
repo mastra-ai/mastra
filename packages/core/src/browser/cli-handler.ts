@@ -279,8 +279,23 @@ export class BrowserCliHandler {
   }
 
   private isBrowserUseStdinCommand(command: string): boolean {
-    // Only inspect the shell header, never operators or CLI names in a heredoc body.
-    const { parts } = splitShellCommand(command.trimStart().split('\n')[0]!);
+    // Join shell continuations in the header only; never inspect a heredoc body.
+    let header = '';
+    let quote = '';
+    const source = command.trimStart();
+    for (let i = 0; i < source.length; i++) {
+      const char = source[i]!;
+      if (char === '\\' && quote !== "'" && i + 1 < source.length) {
+        const next = source[++i]!;
+        if (next !== '\n') header += char + next;
+        continue;
+      }
+      if (char === '\n' && !quote) break;
+      if (char === quote) quote = '';
+      else if (!quote && (char === "'" || char === '"')) quote = char;
+      header += char;
+    }
+    const { parts } = splitShellCommand(header);
     const word = String.raw`(?:[^\s<>;&|"'\\]|\\.|"[^"]*"|'[^']*')+`;
     const redirection = String.raw`\d*(?:<<-?|>>?|<|[<>]&|<>|>\|)\s*${word}\s*`;
     const stdinInvocation = new RegExp(
