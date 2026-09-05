@@ -220,7 +220,22 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         finding: decisionFailedFinding(reparked, factoryHealthSubject(reparked.workItemId, item ?? undefined), now()),
         now: now(),
         newContent: true,
+        // A newer question may have replaced this one while we looked up the
+        // card; then this refresh must not regress the finding to it.
+        onlyIfParkedOn: { decisionId: reparked.id, toolCallId: next.toolCallId },
       });
+      if (!finding) {
+        deps.logger?.warn('Factory supervisor re-park superseded before its finding refresh', {
+          decisionId: decision.id,
+          toolCallId: next.toolCallId,
+        });
+        return {
+          run: 'parked-again',
+          recorded: false,
+          nextQuestion: next.question,
+          note: 'The worker asked another question, and a newer one has already replaced it; answer the newest (same decision id).',
+        };
+      }
       const rung = await ring({
         findingKey: finding.findingKey,
         summary: String(finding.finding.evidence ?? finding.findingKey),

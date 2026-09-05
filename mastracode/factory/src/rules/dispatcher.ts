@@ -708,7 +708,8 @@ export class FactoryDecisionDispatcher {
       console.error('Factory terminal-failure finding write failed', sanitizeDispatchError(error));
       return;
     }
-    if (!this.#notifySupervisor || finding.lastNotifiedAt) return;
+    // No precondition was given, so the write always applies.
+    if (!finding || !this.#notifySupervisor || finding.lastNotifiedAt) return;
     try {
       await this.#notifySupervisor({
         projectId: decision.factoryProjectId,
