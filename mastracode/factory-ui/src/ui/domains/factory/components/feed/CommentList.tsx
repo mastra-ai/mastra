@@ -1,13 +1,12 @@
-import { ArrivalScope, useWatched } from '@mastra/playground-ui/components/Arrival';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-
-import './comment-arrival.css';
 
 import {
   useDeleteWorkItemCommentMutation,
@@ -21,7 +20,7 @@ import type { AuditActorProfile, AuditEvent } from '../../services/audit';
 import type { WorkItem } from '../../services/workItems';
 import { ActivityEvent } from '../WorkItemActivity';
 import { CommentRow } from './CommentRow';
-import type { CommentQuoteDraft } from './CommentQuote';
+import type { CommentQuoteDraft } from './quoteDraft';
 import { useCentreInViewport } from './useCentreInViewport';
 import { useMentionResolver } from './useMentionResolver';
 
@@ -29,17 +28,6 @@ const CONTINUATION_WINDOW_MS = 5 * 60_000;
 // Stable defaults: a fresh `[]` per render would read as new input downstream.
 const NO_EVENTS: AuditEvent[] = [];
 const NO_ACTORS: Record<string, AuditActorProfile> = {};
-
-/** The feed's own entrance: a row the reader watched land rises into place. */
-function ArrivingComment({ children }: { children: ReactNode }) {
-  const watched = useWatched();
-
-  return (
-    <div className={watched ? 'comment-arriving' : undefined}>
-      <ArrivalScope>{children}</ArrivalScope>
-    </div>
-  );
-}
 
 export interface FeedUser {
   userId?: string;
@@ -248,12 +236,13 @@ export function CommentList({
             </div>
           ) : null}
           {/* Mounted through loading so the live region exists before the first addition. */}
-          <div
+          <Comment
+            variant="thread"
             role="log"
             aria-live="polite"
             aria-relevant="additions"
             aria-label="Activity"
-            className="flex flex-col px-1 py-1"
+            className="px-1 py-1"
           >
             {showSkeleton || nothingToShow ? null : (
               <StreamLanding initialRows={rows.length}>
@@ -280,7 +269,7 @@ export function CommentList({
                         {row.kind === 'event' ? (
                           <ActivityEvent event={row.event} actors={actors} className="px-2 py-1.5" />
                         ) : (
-                          <ArrivingComment>
+                          <CommentArrival>
                             <CommentRow
                               ref={row.comment.id === highlightCommentId ? centreHighlightedRow : undefined}
                               comment={row.comment}
@@ -293,7 +282,7 @@ export function CommentList({
                               onSaveEdit={row.pending ? undefined : body => submitEdit(row.comment, body)}
                               onDelete={row.pending ? undefined : () => deleteComment.mutate(row.comment.id)}
                             />
-                          </ArrivingComment>
+                          </CommentArrival>
                         )}
                       </div>
                     ))}
@@ -301,7 +290,7 @@ export function CommentList({
                 )}
               </StreamLanding>
             )}
-          </div>
+          </Comment>
         </div>
       </ArrivalScope>
     </ScrollArea>
