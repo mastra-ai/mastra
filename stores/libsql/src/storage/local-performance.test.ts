@@ -162,7 +162,7 @@ describe('LibSQLStore local performance initialization', () => {
     expect(createTableCountAfterThirdInit).toBe(createTableCount);
   });
 
-  it('does not cache in-memory DB init', async () => {
+  it('caches in-memory DB init like any other local DB', async () => {
     const { client, statements } = createMockClient();
     mockCreateClient.mockReturnValueOnce(client as any);
 
@@ -174,7 +174,7 @@ describe('LibSQLStore local performance initialization', () => {
     const secondCreateTableCount = sqls(statements).filter(sql => /^CREATE TABLE/i.test(sql)).length;
 
     expect(firstCreateTableCount).toBeGreaterThan(0);
-    expect(secondCreateTableCount).toBeGreaterThan(firstCreateTableCount);
+    expect(secondCreateTableCount).toBe(firstCreateTableCount);
   });
 
   it('coalesces concurrent local file DB init', async () => {

@@ -13,7 +13,7 @@
     "test:workflow-routing": "vitest run --config vitest.routing.config.ts"
   },
   "devDependencies": {
-    "@libsql/client": "^0.17.4",
+    "@libsql/client": "^0.18.0",
     "@types/node": "^26.0.0",
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
