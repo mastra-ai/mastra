@@ -13,9 +13,26 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
-import { KnowledgeLibSQL } from '.';
+import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+
+describe('KnowledgeLibSQL storage isolation', () => {
+  it('identifies domains configured for the same URL as one physical backend', () => {
+    expect(new KnowledgeLibSQL({ url: 'file:shared.db' }).getStorageIsolationKey()).toBe(
+      new KnowledgeLibSQL({ url: 'file:./shared.db' }).getStorageIsolationKey(),
+    );
+    expect(getLibSQLKnowledgeIsolationKey({ url: 'file:///tmp/shared.db' })).toBe(
+      getLibSQLKnowledgeIsolationKey({ url: 'file://localhost/tmp/shared.db' }),
+    );
+    expect(getLibSQLKnowledgeIsolationKey({ url: 'libsql://EXAMPLE.com/db?mode=ro' })).toBe(
+      getLibSQLKnowledgeIsolationKey({ url: 'libsql://example.com:443/db' }),
+    );
+    expect(new KnowledgeLibSQL({ url: 'file:first.db' }).getStorageIsolationKey()).not.toBe(
+      new KnowledgeLibSQL({ url: 'file:second.db' }).getStorageIsolationKey(),
+    );
+  });
+});
 
 describe('KnowledgeLibSQL initialization', () => {
   it('detects legacy tables without mutation and resets only Knowledge storage', async () => {

@@ -12,7 +12,7 @@ import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
 import { HarnessLibSQL } from './domains/harness';
-import { KnowledgeLibSQL } from './domains/knowledge';
+import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from './domains/knowledge';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -249,7 +249,10 @@ export class LibSQLStore extends MastraCompositeStore {
     const workflows = new WorkflowsLibSQL(domainConfig);
     const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
-    const knowledge = new KnowledgeLibSQL(domainConfig);
+    const knowledge = new KnowledgeLibSQL({
+      ...domainConfig,
+      storageIsolationKey: getLibSQLKnowledgeIsolationKey(config, this.client),
+    });
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
     const channels = new ChannelsLibSQL(domainConfig);
