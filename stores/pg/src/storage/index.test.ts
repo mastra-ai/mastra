@@ -141,6 +141,15 @@ describe('read/write pools', () => {
         items: [{ input: { q: 1 } }],
       });
       await datasets.updateItem({ id: item!.id, datasetId: dataset.id, filters, input: { q: 2 } });
+      // Schema validation must list existing items from the writer: the lagging
+      // replica sees no items, so a schema the stored item violates would pass.
+      await expect(
+        datasets.updateDataset({
+          id: dataset.id,
+          filters,
+          inputSchema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
+        }),
+      ).rejects.toThrow(/schema/i);
       await datasets.batchDeleteItems({ datasetId: dataset.id, filters, itemIds: [item!.id] });
       await datasets.deleteDataset({ id: dataset.id, filters });
 
