@@ -260,6 +260,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             // @ts-expect-error - x-optional is a custom property
             schema['x-optional'] = [...(schema['x-optional'] || []), key];
             schema.required?.push(key);
+            const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
+            const arrayKeywords = ['items'] as const;
+            const typeSpecificKeywords = (type: JSONSchema7['type']) =>
+              type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
+
             if (Array.isArray(prop.type)) {
               const types = [...prop.type];
               if (!types.includes('null')) {
@@ -279,16 +284,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 prop.enum = [...prop.enum, null];
               }
 
-              const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
-              const arrayKeywords = ['items'] as const;
               prop.anyOf = types.map(type => {
                 if (type === 'null') {
                   return { type: 'null' } as JSONSchema7;
                 }
 
                 const branch = { type } as JSONSchema7;
-                const keywords = type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
-                for (const keyword of keywords) {
+                for (const keyword of typeSpecificKeywords(type)) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     branch[keyword] = prop[keyword];
@@ -304,17 +306,33 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               }
             } else if (prop.type && prop.type !== 'null') {
               const originalType = prop.type;
-              const propSchema = { ...prop } as JSONSchema7;
-              delete propSchema.anyOf;
-              delete propSchema.type;
-              delete prop.type;
-              prop.anyOf = [
-                {
-                  ...propSchema,
-                  type: originalType,
-                },
-                { type: 'null' },
-              ];
+              const keywords = typeSpecificKeywords(originalType);
+              if (keywords.length > 0) {
+                const branch = { type: originalType } as JSONSchema7;
+                for (const keyword of [...keywords, 'const', 'enum'] as const) {
+                  if (keyword in prop) {
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    branch[keyword] = prop[keyword];
+                    // @ts-expect-error - keyword is a valid property for JSON Schema
+                    delete prop[keyword];
+                  }
+                }
+
+                delete prop.type;
+                prop.anyOf = [branch, { type: 'null' }];
+              } else {
+                const propSchema = { ...prop } as JSONSchema7;
+                delete propSchema.anyOf;
+                delete propSchema.type;
+                delete prop.type;
+                prop.anyOf = [
+                  {
+                    ...propSchema,
+                    type: originalType,
+                  },
+                  { type: 'null' },
+                ];
+              }
             }
           }
         }
