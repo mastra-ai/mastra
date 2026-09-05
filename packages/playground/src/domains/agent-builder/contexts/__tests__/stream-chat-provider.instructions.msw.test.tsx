@@ -152,4 +152,108 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     expect(captured.body).toBeTruthy();
     expect(captured.body.instructions).toBeUndefined();
   });
+
+  it('sends extraInstructions as additive `system` when the mode is "append"', async () => {
+    const captured: CapturedRequest = { body: null };
+
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
+        captured.body = await request.json();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        });
+        return new HttpResponse(stream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const perTurnState = '## Current authoring state\n- Lifecycle: constructing';
+
+    await act(async () => {
+      render(
+        <Providers>
+          <StreamChatProvider
+            agentId="builder-agent"
+            threadId="thread-test"
+            initialMessages={[]}
+            extraInstructions={perTurnState}
+            extraInstructionsMode="append"
+          >
+            <Composer message="Hello agent" onSent={() => {}} />
+          </StreamChatProvider>
+        </Providers>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(captured.body).toBeTruthy();
+
+    // `system` is additive: the agent keeps its configured instructions and
+    // appends this text. Sending it as `instructions` would replace them.
+    expect(captured.body.system).toBe(perTurnState);
+    expect(captured.body.instructions).toBeUndefined();
+
+    // Append mode must not drop the rest of modelSettings either.
+    expect(captured.body.maxSteps).toBe(100);
+    expect(captured.body.modelSettings.maxRetries).toBe(3);
+    expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
+
+    // Still never smuggled into the visible message list.
+    const serializedMessages = JSON.stringify(captured.body.messages ?? []);
+    expect(serializedMessages).not.toContain('Current authoring state');
+    expect(serializedMessages).toContain('Hello agent');
+  });
+
+  it('defaults to replacement mode so Agent Builder keeps its existing wire shape', async () => {
+    const captured: CapturedRequest = { body: null };
+
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
+        captured.body = await request.json();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        });
+        return new HttpResponse(stream, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const snapshot = '## Current agent configuration (authoritative)\n- Name: "Support Bot"';
+
+    await act(async () => {
+      render(
+        <Providers>
+          <StreamChatProvider
+            agentId="builder-agent"
+            threadId="thread-test"
+            initialMessages={[]}
+            extraInstructions={snapshot}
+          >
+            <Composer message="Hello agent" onSent={() => {}} />
+          </StreamChatProvider>
+        </Providers>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(captured.body).toBeTruthy();
+    expect(captured.body.instructions).toBe(snapshot);
+    expect(captured.body.system).toBeUndefined();
+  });
 });

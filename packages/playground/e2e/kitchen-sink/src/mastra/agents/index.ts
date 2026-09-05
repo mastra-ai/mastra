@@ -234,6 +234,164 @@ export const codeOverrideLockedAgent = new Agent({
   editor: false,
 });
 
+/**
+ * Deterministic agent referenced by the Workflow Builder prompt suite.
+ * Declarative agent steps return `{ text }`, so the fixed reply is what the
+ * generated workflows must map their final output from.
+ */
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer support questions for Workflow Builder comparison tests.',
+  model: new aiTest.MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: 'Support answer for the customer.' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createDelayedStream(
+        [{ type: 'text-delta', delta: 'Support answer for the customer.' }, { type: 'finish' }],
+        0,
+      ),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+});
+
+/**
+ * Deterministic bridge agent for the foreach comparison scenario. A root-level
+ * array `outputSchema` on an agent step runs through Core's structured-output
+ * path, which shows the model an `{ elements: [...] }` object schema and
+ * unwraps it back to a raw array. So the mock must emit the WRAPPED
+ * `{ "elements": [...] }` JSON, not a bare array. The unwrapped raw array of
+ * `{ prompt }` items is what the downstream foreach iterates.
+ */
+const subtopicPromptsPayload = JSON.stringify({
+  elements: [
+    { prompt: 'Write a one-line blurb about the first subtopic.' },
+    { prompt: 'Write a one-line blurb about the second subtopic.' },
+    { prompt: 'Write a one-line blurb about the third subtopic.' },
+  ],
+});
+
+export const subtopicsAgent = new Agent({
+  id: 'subtopics-agent',
+  name: 'Subtopics Agent',
+  instructions: 'Return three subtopic prompts for the Workflow Builder foreach comparison test.',
+  model: new aiTest.MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 30, totalTokens: 40 },
+      content: [{ type: 'text', text: subtopicPromptsPayload }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createDelayedStream(
+        [
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'subtopics-agent', modelId: 'subtopics-fixture', timestamp: new Date(0) },
+          { type: 'text-start', id: 'subtopics-text' },
+          { type: 'text-delta', id: 'subtopics-text', delta: subtopicPromptsPayload },
+          { type: 'text-end', id: 'subtopics-text' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 30, totalTokens: 40 },
+          },
+        ],
+        0,
+      ),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+});
+
+/**
+ * Deterministic writer agent used as the foreach child in the comparison
+ * scenario. Declarative agent steps return `{ text }`, so each iteration yields
+ * a fixed blurb string.
+ */
+export const blurbAgent = new Agent({
+  id: 'blurb-agent',
+  name: 'Blurb Agent',
+  instructions: 'Write a one-line blurb for Workflow Builder foreach comparison tests.',
+  model: new aiTest.MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: 'A concise one-line blurb.' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createDelayedStream([{ type: 'text-delta', delta: 'A concise one-line blurb.' }, { type: 'finish' }], 0),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+});
+
+/**
+ * Deterministic agent for the single-agent twin of the subtopics scenario. The
+ * foreach variant splits the work across a bridge agent and a per-item child;
+ * this one returns every `{ subtopic, blurb }` pair from a single structured
+ * turn, which is the shape a model picks when the prompt does not ask for
+ * iteration. Root-level array output is wrapped as `{ elements: [...] }` for the
+ * same reason as `subtopicsAgent`.
+ */
+const subtopicBlurbsPayload = JSON.stringify({
+  elements: [
+    { subtopic: 'Solar Power', blurb: 'Sunlight converted directly into usable electricity.' },
+    { subtopic: 'Wind Energy', blurb: 'Moving air spun into grid-ready power.' },
+    { subtopic: 'Energy Storage', blurb: 'Holding surplus generation until demand returns.' },
+  ],
+});
+
+export const subtopicBlurbsAgent = new Agent({
+  id: 'subtopic-blurbs-agent',
+  name: 'Subtopic Blurbs Agent',
+  instructions: 'Return three subtopics with blurbs for the Workflow Builder single-agent comparison test.',
+  model: new aiTest.MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 30, totalTokens: 40 },
+      content: [{ type: 'text', text: subtopicBlurbsPayload }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createDelayedStream(
+        [
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'subtopic-blurbs-agent',
+            modelId: 'subtopic-blurbs-fixture',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'subtopic-blurbs-text' },
+          { type: 'text-delta', id: 'subtopic-blurbs-text', delta: subtopicBlurbsPayload },
+          { type: 'text-end', id: 'subtopic-blurbs-text' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 30, totalTokens: 40 },
+          },
+        ],
+        0,
+      ),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+});
+
 let builderFixtureCount = 0;
 let builderFixture: Fixtures | undefined;
 
