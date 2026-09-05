@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { UserSessionsSection } from '../UserSessionsSection';
 
@@ -114,14 +114,15 @@ afterEach(() => {
   delete window.__MASTRACODE_CONFIG__;
 });
 
-function renderSection() {
-  return renderWithProviders(
+async function renderSection() {
+  const { client } = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/factory-1']}>
       <Routes>
         <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
       </Routes>
     </MemoryRouter>,
   );
+  await waitForMutationsIdle(client);
 }
 
 async function openFilters() {
@@ -139,7 +140,7 @@ async function selectFilter(label: string, option: string) {
 
 describe('User session filters', () => {
   it('keeps controls in a popover and searches across session details', async () => {
-    renderSection();
+    await renderSection();
 
     expect(await screen.findByRole('button', { name: 'Fix authentication' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Improve compiler output' })).toBeInTheDocument();
@@ -160,7 +161,7 @@ describe('User session filters', () => {
   });
 
   it('filters by the viewer and deduplicates owner choices', async () => {
-    renderSection();
+    await renderSection();
     await openFilters();
 
     await selectFilter('Owner', 'Mine');
@@ -175,7 +176,7 @@ describe('User session filters', () => {
   });
 
   it('uses the existing status precedence and shows a filtered-empty state', async () => {
-    renderSection();
+    await renderSection();
     await openFilters();
 
     await selectFilter('Status', 'Initializing');
