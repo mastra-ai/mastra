@@ -165,10 +165,15 @@ export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
 // Delete Score Schemas
 // ============================================================================
 
+const DELETE_SCORES_MAX_IDS = 1000;
+
 /** Schema for deleteScores operation arguments */
 export const deleteScoresArgsSchema = z
   .object({
-    scoreIds: z.array(z.string()).describe('IDs of the score events to delete'),
+    scoreIds: z
+      .array(z.string())
+      .max(DELETE_SCORES_MAX_IDS)
+      .describe(`IDs of the score events to delete (maximum ${DELETE_SCORES_MAX_IDS})`),
     organizationId: organizationIdField.optional().describe('Restrict deletion to scores in this organization'),
     resourceId: resourceIdField.optional().describe('Restrict deletion to scores for this resource'),
   })

@@ -210,10 +210,15 @@ export type UpdateFeedbackReviewStatusArgs = z.infer<typeof updateFeedbackReview
 // Delete Feedback Schemas
 // ============================================================================
 
+const DELETE_FEEDBACK_MAX_IDS = 1000;
+
 /** Schema for deleteFeedback operation arguments */
 export const deleteFeedbackArgsSchema = z
   .object({
-    feedbackIds: z.array(z.string()).describe('IDs of the feedback events to delete'),
+    feedbackIds: z
+      .array(z.string())
+      .max(DELETE_FEEDBACK_MAX_IDS)
+      .describe(`IDs of the feedback events to delete (maximum ${DELETE_FEEDBACK_MAX_IDS})`),
     organizationId: organizationIdField.optional().describe('Restrict deletion to feedback in this organization'),
     resourceId: resourceIdField.optional().describe('Restrict deletion to feedback for this resource'),
   })
