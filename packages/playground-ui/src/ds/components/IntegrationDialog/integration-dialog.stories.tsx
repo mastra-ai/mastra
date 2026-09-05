@@ -20,7 +20,7 @@ const integrations: IntegrationDialogItem[] = [
   { id: 'notion', name: 'Notion', logo: logo('notion') },
   { id: 'openai', name: 'OpenAI', logo: logo('openai') },
   { id: 'slack', name: 'Slack', description: 'Workspace', logo: logo('slack') },
-  { id: 'stripe', name: 'Stripe', logo: logo('stripe'), disabled: true },
+  { id: 'stripe', name: 'Stripe', logo: logo('stripe') },
 ];
 
 function Example({ items = integrations }: { items?: IntegrationDialogItem[] }) {
@@ -70,5 +70,9 @@ export const Default: Story = {};
 export const FewItems: Story = { args: { items: integrations.slice(0, 3) } };
 
 export const NoLogos: Story = { args: { items: integrations.slice(0, 4).map(({ logo: _logo, ...item }) => item) } };
+
+export const DisabledItem: Story = {
+  args: { items: integrations.slice(0, 4).map(item => (item.id === 'clerk' ? { ...item, disabled: true } : item)) },
+};
 
 export const Empty: Story = { args: { items: [] } };
