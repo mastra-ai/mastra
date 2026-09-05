@@ -47,6 +47,59 @@ function activeSeatbeltProfile(sandbox: LocalSandbox): string {
   return sandbox.wrapCommandForIsolation('echo hi').args[1]!;
 }
 
+describe('LocalSandbox explicit sh argv', () => {
+  it('preserves operators, positional arguments, cwd, env and streamed output', async () => {
+    const workingDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra argv test '));
+    const shell =
+      process.platform === 'win32'
+        ? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'sh.exe')
+        : 'sh';
+    const sandbox = new LocalSandbox({ workingDirectory, isolation: 'none' });
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    try {
+      if (process.platform === 'win32') {
+        await fs.access(shell);
+        const gitDirectory = path.dirname(path.dirname(shell));
+        sandbox.setEnv(env => ({
+          ...env,
+          PATH: [path.join(gitDirectory, 'bin'), path.join(gitDirectory, 'usr', 'bin'), process.env.PATH ?? ''].join(
+            path.delimiter,
+          ),
+        }));
+      }
+      sandbox.setEnv(env => ({ ...env, ARGV_TEST: 'sandbox' }));
+      const reproduction = await sandbox.executeCommand(shell, ['-c', 'printf "first" && printf " second"']);
+      expect(reproduction).toMatchObject({ success: true, exitCode: 0, stdout: 'first second', stderr: '' });
+      const result = await sandbox.executeCommand(
+        shell,
+        [
+          '-c',
+          'printf "first" && printf " second"; printf "%s" "$1" | cat > output.txt; printf "%s" "$ARGV_TEST" >&2',
+          'sh',
+          'a "quoted" value with % and \\ backslash',
+        ],
+        { env: { ARGV_TEST: 'call' }, onStdout: stdout, onStderr: stderr },
+      );
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('first second');
+      expect(result.stderr).toBe('call');
+      expect(stdout).toHaveBeenCalled();
+      expect(stderr).toHaveBeenCalled();
+      expect(await fs.readFile(path.join(workingDirectory, 'output.txt'), 'utf8')).toBe(
+        'a "quoted" value with % and \\ backslash',
+      );
+      expect(await sandbox.processes.list()).toEqual([]);
+      const failure = await sandbox.executeCommand(shell, ['-c', 'exit 7']);
+      expect(failure.exitCode).toBe(7);
+    } finally {
+      await sandbox._destroy();
+      await fs.rm(workingDirectory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('LocalSandbox', () => {
   let tempDir: string;
   let sandbox: LocalSandbox;
