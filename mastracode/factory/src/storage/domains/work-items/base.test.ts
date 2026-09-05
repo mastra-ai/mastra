@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
+  factorySupervisorFindingAttentionIdentity,
   isAgentActor,
   WorkItemRelationError,
   WorkItemsStorage,
@@ -737,19 +738,104 @@ describe('supervisor finding notification stamps', () => {
     return page.rows.find(row => row.findingKey === key);
   }
 
+  /** Stamps the row's current content, as a sender that just rang it would. */
+  async function stamp(storage: WorkItemsStorage, key: string, occurrence: number, notifiedAt: Date) {
+    const row = await getRow(storage, key);
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence,
+      notifiedAt,
+      finding: row?.finding ?? {},
+    });
+  }
+
   it('round-trips last_notified_at through the stamp method', async () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt).toBeNull();
 
     const notifiedAt = new Date('2030-01-01T00:01:00.000Z');
+    await stamp(storage, 'decision-failed:item-1', 0, notifiedAt);
+    expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(notifiedAt.getTime());
+  });
+
+  it('openSupervisorFinding with newContent resets stamp and escalation state, and the stamp is content-safe', async () => {
+    const storage = await makeStorage();
+    const key = 'decision-failed:item-1';
+    const t0 = new Date('2030-01-01T00:00:00.000Z');
+    await openFinding(storage, key, t0);
+    await stamp(storage, key, 0, t0);
+    await storage.escalateSupervisorFinding({
+      ...scope,
+      findingKey: key,
+      note: 'old question needs a person',
+      escalatedAt: t0,
+    });
+    // A person read and archived the old question.
+    await storage.setAttentionReceipt({
+      ...scope,
+      userId: 'u',
+      identity: factorySupervisorFindingAttentionIdentity(key, 0),
+      action: 'archive',
+      now: t0,
+    });
+    expect(await getRow(storage, key)).toMatchObject({
+      status: 'escalated',
+      escalationNote: 'old question needs a person',
+    });
+
+    // Question two on the same run: new content is a new incident.
+    const q2 = { ...finding(key), evidence: 'Parked on ask_user: "q2"' };
+    const t1 = new Date('2030-01-01T00:05:00.000Z');
+    const refreshed = await storage.openSupervisorFinding({ ...scope, finding: q2, now: t1, newContent: true });
+    expect(refreshed).toMatchObject({
+      occurrence: 1,
+      status: 'open',
+      escalatedAt: null,
+      escalationNote: null,
+      lastNotifiedAt: null,
+    });
+    expect(refreshed.openedAt.getTime()).toBe(t1.getTime());
+    expect((await storage.listUnnotifiedSupervisorFindings({ ...scope, limit: 10 })).map(r => r.findingKey)).toEqual([
+      key,
+    ]);
+    // The archived receipt belonged to the old occurrence; the new one is unread.
+    expect(
+      await storage.listAttentionReceipts({
+        ...scope,
+        identities: [factorySupervisorFindingAttentionIdentity(key, 1)],
+      }),
+    ).toEqual([]);
+
+    // Question three lands while question two's ring is still in flight.
+    const q3 = { ...finding(key), evidence: 'Parked on ask_user: "q3"' };
+    await storage.openSupervisorFinding({
+      ...scope,
+      finding: q3,
+      now: new Date('2030-01-01T00:06:00.000Z'),
+      newContent: true,
+    });
+    // Question two's ring landing must not mark the row (now question three) as notified.
     await storage.markSupervisorFindingNotified({
       ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt,
+      findingKey: key,
+      occurrence: refreshed.occurrence,
+      notifiedAt: new Date('2030-01-01T00:06:30.000Z'),
+      finding: refreshed.finding,
     });
-    expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(notifiedAt.getTime());
+    expect((await getRow(storage, key))?.lastNotifiedAt).toBeNull();
+    // Question three's own ring does.
+    const current = (await getRow(storage, key))!;
+    expect(current.occurrence).toBe(2);
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence: current.occurrence,
+      notifiedAt: new Date('2030-01-01T00:07:00.000Z'),
+      finding: current.finding,
+    });
+    expect((await getRow(storage, key))?.lastNotifiedAt).toBeInstanceOf(Date);
   });
 
   it('lists only open, un-stamped findings oldest first', async () => {
@@ -757,12 +843,7 @@ describe('supervisor finding notification stamps', () => {
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     const keys = ['decision-failed:a', 'decision-failed:b', 'decision-failed:c', 'decision-failed:d'];
     await storage.syncSupervisorFindings({ ...scope, findings: keys.map(finding), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:b',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:b', 0, t0);
     // Resolve `c` and `d` by syncing a snapshot without them; `d` stays resolved.
     await storage.syncSupervisorFindings({
       ...scope,
@@ -800,12 +881,7 @@ describe('supervisor finding notification stamps', () => {
     expect(reopened?.occurrence).toBe(1);
 
     // The stale stamp was emitted for occurrence 0 — it must not land.
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:04:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:04:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt).toBeNull();
   });
 
@@ -813,30 +889,15 @@ describe('supervisor finding notification stamps', () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     const first = new Date('2030-01-01T00:01:00.000Z');
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: first,
-    });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:05:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, first);
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:05:00.000Z'));
     expect((await getRow(storage, 'decision-failed:item-1'))?.lastNotifiedAt?.getTime()).toBe(first.getTime());
   });
 
   it('reopen clears the stamp so a reopened incident re-emits', async () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt: new Date('2030-01-01T00:01:00.000Z'),
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, new Date('2030-01-01T00:01:00.000Z'));
 
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:03:00.000Z'));
@@ -850,12 +911,7 @@ describe('supervisor finding notification stamps', () => {
     const storage = await makeStorage();
     await openFinding(storage, 'decision-failed:item-1', new Date('2030-01-01T00:00:00.000Z'));
     const notifiedAt = new Date('2030-01-01T00:01:00.000Z');
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:item-1',
-      occurrence: 0,
-      notifiedAt,
-    });
+    await stamp(storage, 'decision-failed:item-1', 0, notifiedAt);
 
     // Resolve via reconciliation (finding absent from the sweep).
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:02:00.000Z') });
@@ -1025,6 +1081,16 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
   });
   const rows = async (storage: WorkItemsStorage) =>
     (await storage.listSupervisorFindingPage({ ...scope, limit: 10 })).rows;
+  async function stamp(storage: WorkItemsStorage, key: string, occurrence: number, notifiedAt: Date) {
+    const row = (await rows(storage)).find(r => r.findingKey === key);
+    await storage.markSupervisorFindingNotified({
+      ...scope,
+      findingKey: key,
+      occurrence,
+      notifiedAt,
+      finding: row?.finding ?? {},
+    });
+  }
 
   it('inserts exactly one row and leaves unrelated open findings untouched', async () => {
     const storage = await makeStorage();
@@ -1052,12 +1118,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
     await storage.escalateSupervisorFinding({ ...scope, findingKey: 'decision-failed:d1', note: 'n', escalatedAt: t0 });
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:01:00.000Z') });
 
@@ -1081,12 +1142,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
 
     const same = await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
     expect(same).toMatchObject({ occurrence: 0, lastNotifiedAt: t0 });
@@ -1103,12 +1159,7 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     const storage = await makeStorage();
     const t0 = new Date('2030-01-01T00:00:00.000Z');
     await storage.openSupervisorFinding({ ...scope, finding: finding('decision-failed:d1'), now: t0 });
-    await storage.markSupervisorFindingNotified({
-      ...scope,
-      findingKey: 'decision-failed:d1',
-      occurrence: 0,
-      notifiedAt: t0,
-    });
+    await stamp(storage, 'decision-failed:d1', 0, t0);
 
     // The sweep recomputes the same finding (different ageMs, as it would).
     await storage.syncSupervisorFindings({
@@ -1153,5 +1204,88 @@ describe('openSupervisorFinding (single-finding, non-reconciling)', () => {
     // A sweep that genuinely post-dates the row and no longer derives it resolves it as before.
     await storage.syncSupervisorFindings({ ...scope, findings: [], now: new Date('2030-01-01T00:05:00.000Z') });
     expect(await rows(storage)).toEqual([]);
+  });
+});
+
+describe('answered decisions', () => {
+  const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+  const now = new Date('2030-01-01T00:00:00.000Z');
+  const parked = {
+    toolName: 'ask_user',
+    toolCallId: 'call-1',
+    question: 'Which database?',
+    session: { bindingId: 'b-1', resourceId: 'r-1', threadId: 't-1' },
+  };
+
+  async function parkedDecision(storage: WorkItemsStorage) {
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'answered', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', prompt: 'Go.', idempotencyKey: 'answered' }],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    const failed = await storage.failDeferredDecision({
+      id: claimed!.id,
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Factory run is waiting on ask_user for an answer.',
+      failureCode: 'run_awaiting_input',
+      terminal: true,
+      suspension: parked,
+    });
+    return failed!;
+  }
+
+  it('resolveAnsweredDecision marks a failed decision succeeded, once', async () => {
+    const storage = await makeStorage();
+    const failed = await parkedDecision(storage);
+    const later = new Date(now.getTime() + 60_000);
+    const resolved = await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later });
+    expect(resolved).toMatchObject({ id: failed.id, status: 'succeeded' });
+    expect(await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later })).toBeNull();
+    expect((await storage.getDeferredDecision(scope.orgId, scope.factoryProjectId, failed.id))?.status).toBe(
+      'succeeded',
+    );
+  });
+
+  it('reparkDecision replaces the parked question on a failed decision and nothing else', async () => {
+    const storage = await makeStorage();
+    const failed = await parkedDecision(storage);
+    const later = new Date(now.getTime() + 60_000);
+    const next = { ...parked, toolCallId: 'call-2', question: 'And which port?', options: ['5432', '5433'] };
+    const reparked = await storage.reparkDecision({
+      ...scope,
+      decisionId: failed.id,
+      suspension: next,
+      lastError: 'Factory run is waiting on ask_user for an answer.',
+      now: later,
+    });
+    expect(reparked).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_awaiting_input',
+      failureOccurrence: failed.failureOccurrence,
+      suspension: next,
+    });
+    // Not for decisions in any other state.
+    await storage.resolveAnsweredDecision({ ...scope, decisionId: failed.id, now: later });
+    expect(
+      await storage.reparkDecision({ ...scope, decisionId: failed.id, suspension: next, lastError: 'x', now: later }),
+    ).toBeNull();
   });
 });

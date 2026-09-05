@@ -12,6 +12,7 @@ import type { FactoryFeedReader } from '../storage/domains/comments/feed-context
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
+  FactoryParkedSuspension,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
   WorkItemRow,
@@ -20,6 +21,7 @@ import type {
 import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import { decisionFailedFinding, factoryHealthSubject } from '../supervisor/health.js';
 import type { NotifySupervisorInput } from '../supervisor/notify.js';
+import { truncateText } from '../supervisor/text.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
@@ -64,6 +66,65 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
  */
 type ParkedRunPolicy = 'escalate' | 'await';
 
+export type ParkedTool = { toolName: string; toolCallId: string; args: unknown; suspendPayload: unknown };
+
+/** Bounds on the captured choices of a parked question (count, and label length). */
+const MAX_PARKED_OPTIONS = 20;
+const MAX_PARKED_OPTION_LENGTH = 120;
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+/**
+ * What the run is parked on, in the shape an answer needs later: the question
+ * text (from the suspend payload, else the tool args, else the tool itself),
+ * any choices offered, and the exact session the suspension lives in.
+ */
+export function describeParkedTool(parked: ParkedTool, binding: FactoryRunBindingRecord): FactoryParkedSuspension {
+  const payload = asRecord(parked.suspendPayload);
+  const args = asRecord(parked.args);
+  const questionText = [payload.question, args.question, payload.message, args.message].find(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+  const raw =
+    questionText ??
+    (parked.suspendPayload !== undefined && parked.suspendPayload !== null
+      ? JSON.stringify(parked.suspendPayload)
+      : parked.args !== undefined && parked.args !== null
+        ? JSON.stringify(parked.args)
+        : undefined);
+  // `ask_user` offers `{ label, description? }` objects; other tools may offer
+  // plain strings. Either way the answer is submitted as the label text, so
+  // labels are kept verbatim or not at all: a set that exceeds the capture
+  // bounds (it is persisted, rendered into evidence, and rung out as a
+  // notification summary) is marked omitted rather than altered.
+  const offered = [payload.options, args.options]
+    .map(value =>
+      Array.isArray(value)
+        ? value
+            .map(item => (typeof item === 'string' ? item : asRecord(item).label))
+            .filter((item): item is string => typeof item === 'string' && item.length > 0)
+        : [],
+    )
+    .find(labels => labels.length > 0);
+  const optionsOmitted =
+    offered !== undefined &&
+    (offered.length > MAX_PARKED_OPTIONS || offered.some(label => label.length > MAX_PARKED_OPTION_LENGTH));
+  const options = offered && !optionsOmitted ? offered : undefined;
+  const selectionMode = [payload.selectionMode, args.selectionMode].find(
+    (value): value is string => typeof value === 'string',
+  );
+  return {
+    toolName: parked.toolName,
+    toolCallId: parked.toolCallId,
+    question: raw && raw !== '{}' ? truncateText(raw) : `${parked.toolName} (${parked.toolCallId})`,
+    ...(options ? { options } : {}),
+    ...(optionsOmitted ? { optionsOmitted: true as const } : {}),
+    ...(selectionMode ? { selectionMode } : {}),
+    session: { bindingId: binding.id, resourceId: binding.resourceId, threadId: binding.threadId },
+  };
+}
+
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
@@ -72,19 +133,22 @@ function watchRun(
     onParkedRun,
     onAgentEnd,
     label,
+    binding,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
     onParkedRun: ParkedRunPolicy;
     onAgentEnd?: () => Promise<boolean>;
     label: string;
+    /** The session the run lives in; persisted with a parked suspension as the answer's join key. */
+    binding: FactoryRunBindingRecord;
   },
 ) {
   let resolveAgentEnd!: () => void;
   let agentEnd!: Promise<void>;
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
-  let parked: { toolName: string; toolCallId: string } | undefined;
+  let parked: ParkedTool | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
@@ -103,7 +167,12 @@ function watchRun(
       return;
     }
     if (event.type === 'tool_suspended') {
-      parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      parked = {
+        toolName: event.toolName,
+        toolCallId: event.toolCallId,
+        args: event.args,
+        suspendPayload: event.suspendPayload,
+      };
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -126,21 +195,27 @@ function watchRun(
           const { toolCallId } = parked;
           parked = undefined;
           arm();
-          await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
+          await session.respondToToolSuspension({
+            resumeData: { action: 'approved' } satisfies SubmitPlanResumeData,
+            toolCallId,
+          });
           observed = await wait();
         }
       }
       if (parked !== undefined && (!observed || endReason === 'suspended')) {
         if (onParkedRun === 'await') return;
+        const suspension = describeParkedTool(parked, binding);
         if (parked.toolName === 'submit_plan') {
           throw new FactoryDispatchError(
             'plan_awaiting_approval',
             'Factory run wrote a plan and is waiting for it to be reviewed.',
+            { suspension },
           );
         }
         throw new FactoryDispatchError(
           'run_awaiting_input',
           `Factory run is waiting on ${parked.toolName} for an answer.`,
+          { suspension },
         );
       }
       if (!observed) {
@@ -204,7 +279,12 @@ interface DispatcherSession extends SkillSession {
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
-  respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
+  /**
+   * Resume data is whatever the suspended tool's resume schema accepts — a
+   * plan verdict for `submit_plan`, a string or string list for `ask_user` —
+   * which is why the underlying session types it loosely. Mirrored here.
+   */
+  respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -591,6 +671,7 @@ export class FactoryDecisionDispatcher {
         failureCode,
         terminal,
         advanceDeliveryGeneration: !executionCompleted,
+        ...(error instanceof FactoryDispatchError && error.suspension ? { suspension: error.suspension } : {}),
       });
       if (terminal && failed) await this.#raiseTerminalFailure(failed);
     }
@@ -627,7 +708,8 @@ export class FactoryDecisionDispatcher {
       console.error('Factory terminal-failure finding write failed', sanitizeDispatchError(error));
       return;
     }
-    if (!this.#notifySupervisor || finding.lastNotifiedAt) return;
+    // No precondition was given, so the write always applies.
+    if (!finding || !this.#notifySupervisor || finding.lastNotifiedAt) return;
     try {
       await this.#notifySupervisor({
         projectId: decision.factoryProjectId,
@@ -642,6 +724,7 @@ export class FactoryDecisionDispatcher {
         findingKey: finding.findingKey,
         occurrence: finding.occurrence,
         notifiedAt: new Date(),
+        finding: finding.finding,
       });
     } catch (error) {
       // Row is open and un-stamped: the next sweep re-rings for it.
@@ -828,6 +911,7 @@ export class FactoryDecisionDispatcher {
           onParkedRun: 'escalate',
           onAgentEnd: () => this.#roleSuperseded(record, decision.role),
           label: 'Factory skill run',
+          binding,
         });
 
         const sendKickoff = async () => {
@@ -1247,6 +1331,7 @@ export class FactoryDecisionDispatcher {
             approvePlans: await this.#plansAreAutoApproved(record, item),
             onParkedRun: 'await',
             label: 'Factory kickoff run',
+            binding,
           });
           const sendKickoff = (dedupeKey: string) =>
             awaitNotification(
@@ -1316,5 +1401,6 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxBackoffMs: MAX_BACKOFF_MS,
   skillCompletionObservationTimeoutMs: SKILL_COMPLETION_OBSERVATION_TIMEOUT_MS,
   maxInFlight: MAX_IN_FLIGHT,
+  maxPlanApprovals: MAX_PLAN_APPROVALS,
   stages: FACTORY_RULE_STAGES,
 } as const;

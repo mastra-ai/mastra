@@ -34,6 +34,7 @@ export type FactoryHealthFindingKind =
 
 export type FactoryHealthRepair =
   | { action: 'retry-decision'; decisionId: string }
+  | { action: 'answer-suspension'; decisionId: string }
   | { action: 'dismiss-decision'; decisionId: string }
   | { action: 'resolve-proposal'; decisionId: string }
   | { action: 'revoke-binding'; bindingId: string }
@@ -170,10 +171,30 @@ export function decisionFailedFinding(
     kind: 'decision-failed',
     id: `decision-failed:${decision.id}`,
     ...subject,
-    evidence: `${decisionFailedEvidencePrefix(decision)}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
+    evidence: `${decisionFailedEvidencePrefix(decision)}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}${parkedQuestion(decision)}`,
     ageMs: now.getTime() - decision.updatedAt.getTime(),
-    suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
+    // A run parked on a question is not a crash: retrying re-dispatches into
+    // the same parked suspension and fails the same way. The repair is an
+    // answer (or an escalation), never a retry.
+    suggestedRepair: QUESTION_FAILURE_CODES.has(decision.failureCode ?? '')
+      ? { action: 'answer-suspension', decisionId: decision.id }
+      : { action: 'retry-decision', decisionId: decision.id },
   };
+}
+
+/** Failure codes that mean "parked on a question", not "crashed". */
+export const QUESTION_FAILURE_CODES: ReadonlySet<string> = new Set(['run_awaiting_input', 'plan_awaiting_approval']);
+
+/** The worker's question, when the failure is a parked run, so the reader needs no second lookup. */
+function parkedQuestion(decision: FactoryDeferredDecisionRecord): string {
+  const parked = decision.suspension;
+  if (!parked) return '';
+  const choices = parked.options?.length
+    ? ` Options: ${parked.options.join(' | ')}.`
+    : parked.optionsOmitted
+      ? ' Options: offered, but too many or too long to capture; answer from the session.'
+      : '';
+  return ` Parked on ${parked.toolName}: ${JSON.stringify(parked.question)}.${choices}`;
 }
 
 /** Everything the evidence line says before the optional ` [code]` slot; nothing here comes from error text. */

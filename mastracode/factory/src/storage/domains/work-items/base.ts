@@ -198,6 +198,25 @@ export interface FactoryDecisionStatusPageInput {
   limit: number;
 }
 
+/**
+ * What a run was parked on when its decision failed terminally: the question
+ * as the worker asked it, and the exact session it is parked in. The session
+ * identity is the join key an answer needs — a card holds one session per
+ * role, so nothing derivable from the card names the right one.
+ */
+export interface FactoryParkedSuspension {
+  toolName: string;
+  toolCallId: string;
+  /** The worker's question (or a description of the suspension), bounded text. */
+  question: string;
+  /** Offered choices, verbatim. Absent when none were offered, or when they exceeded the capture bounds. */
+  options?: string[];
+  /** Set when choices were offered but not captured verbatim (too many, or too long): an answer cannot be matched against them. */
+  optionsOmitted?: true;
+  selectionMode?: string;
+  session: { bindingId: string; resourceId: string; threadId: string };
+}
+
 export interface FactoryDeferredDecisionRecord {
   id: string;
   orgId: string;
@@ -219,6 +238,8 @@ export interface FactoryDeferredDecisionRecord {
   leaseExpiresAt: Date | null;
   lastError: string | null;
   failureCode: FactoryDispatchFailureCode | null;
+  /** Set with a question-shaped terminal failure; what an answer resumes. */
+  suspension: FactoryParkedSuspension | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   /** Who released this run — the run is attributed to them, not the repo connector. */
@@ -417,6 +438,8 @@ export interface FactoryDispatchFailureInput extends FactoryLeaseIdentity {
   failureCode: FactoryDispatchFailureCode;
   terminal: boolean;
   advanceDeliveryGeneration?: boolean;
+  /** Decisions only: the parked suspension behind a question-shaped failure. */
+  suspension?: FactoryParkedSuspension;
 }
 
 export interface CommitFactoryTransitionInput {
@@ -865,6 +888,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       lease_expires_at: { type: 'timestamp', nullable: true },
       last_error: { type: 'text', nullable: true },
       failure_code: { type: 'text', nullable: true },
+      suspension: { type: 'json', nullable: true },
       approved_at: { type: 'timestamp', nullable: true },
       approved_by: { type: 'text', nullable: true },
       completed_at: { type: 'timestamp', nullable: true },
@@ -1070,6 +1094,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
     failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
+    suspension: (row.suspension as FactoryParkedSuspension | null) ?? null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
@@ -1116,7 +1141,7 @@ function toSupervisorFinding(row: GovernanceDbRow): FactorySupervisorFindingReco
  */
 async function upsertSupervisorFinding(
   ops: FactoryStorageOps,
-  scope: { orgId: string; factoryProjectId: string; now: Date },
+  scope: { orgId: string; factoryProjectId: string; now: Date; newContent?: boolean },
   finding: FactoryHealthFinding,
   row: GovernanceDbRow | null | undefined,
 ): Promise<boolean> {
@@ -1139,22 +1164,28 @@ async function upsertSupervisorFinding(
   }
   const reopening = row.resolved_at !== null;
   const findingChanged = stableJson(row.finding) !== stableJson(finding);
-  if (!reopening && !findingChanged) return false;
-  await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => ({
-    finding,
-    occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
-    opened_at: current.resolved_at !== null ? scope.now : current.opened_at,
-    updated_at: scope.now,
-    resolved_at: null,
-    // A reopened incident re-rings the doorbell: clear the notification
-    // stamp so the next sweep emits for it again.
-    last_notified_at: current.resolved_at !== null ? null : current.last_notified_at,
-    // A reopened incident is a new incident: stale escalation state
-    // must never keep it visible (or hidden) on the old terms.
-    status: current.resolved_at !== null ? 'open' : current.status,
-    escalated_at: current.resolved_at !== null ? null : current.escalated_at,
-    escalation_note: current.resolved_at !== null ? null : current.escalation_note,
-  }));
+  if (!reopening && !findingChanged && !scope.newContent) return false;
+  await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => {
+    // A reopened incident is a new incident, and so is an open one refreshed
+    // with new actionable content (a run that parked on a different
+    // question). A new incident gets a new occurrence: the doorbell rings
+    // again (stamp cleared, so a ring that never lands is retried by the
+    // sweep), stale escalation state never keeps it visible (or hidden) on
+    // the old terms, a person's read/archived receipt on the old occurrence
+    // does not carry over, and the force-surface clock restarts.
+    const fresh = current.resolved_at !== null || scope.newContent === true;
+    return {
+      finding,
+      occurrence: Number(current.occurrence) + (fresh ? 1 : 0),
+      opened_at: fresh ? scope.now : current.opened_at,
+      updated_at: scope.now,
+      resolved_at: null,
+      last_notified_at: fresh ? null : current.last_notified_at,
+      status: fresh ? 'open' : current.status,
+      escalated_at: fresh ? null : current.escalated_at,
+      escalation_note: fresh ? null : current.escalation_note,
+    };
+  });
   return true;
 }
 
@@ -1323,25 +1354,45 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     factoryProjectId: string;
     finding: FactoryHealthFinding;
     now: Date;
-  }): Promise<FactorySupervisorFindingRecord> {
-    const { changed, row } = await this.#withProjectRelationTransaction(
-      input.orgId,
-      input.factoryProjectId,
-      async ops => {
-        const where = {
+    /**
+     * The finding carries new actionable content (a different question on the
+     * same run): treated as a new incident, exactly like a reopen (new
+     * occurrence, stamp and escalation reset). The caller rings for it; an
+     * unsent ring is swept up.
+     */
+    newContent?: boolean;
+    /**
+     * Write only while the named decision still carries exactly this parked
+     * call, checked inside the same transaction. An older re-park settling
+     * after a newer one must not regress the finding to the older question.
+     * Null when the precondition no longer holds.
+     */
+    onlyIfParkedOn?: { decisionId: string; toolCallId: string };
+  }): Promise<FactorySupervisorFindingRecord | null> {
+    const outcome = await this.#withProjectRelationTransaction(input.orgId, input.factoryProjectId, async ops => {
+      if (input.onlyIfParkedOn) {
+        const decision = await ops.findOne<GovernanceDbRow>('factory_deferred_decisions', {
+          id: input.onlyIfParkedOn.decisionId,
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
-          finding_key: input.finding.id,
-        };
-        const existing = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
-        const changed = await upsertSupervisorFinding(ops, input, input.finding, existing);
-        const row = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
-        if (!row) throw new Error('[WorkItemsStorage] supervisor finding vanished after open.');
-        return { changed, row };
-      },
-    );
-    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    return toSupervisorFinding(row);
+        });
+        const parkedOn = (decision?.suspension as { toolCallId?: unknown } | null | undefined)?.toolCallId;
+        if (decision?.status !== 'failed' || parkedOn !== input.onlyIfParkedOn.toolCallId) return null;
+      }
+      const where = {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        finding_key: input.finding.id,
+      };
+      const existing = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+      const changed = await upsertSupervisorFinding(ops, input, input.finding, existing);
+      const row = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+      if (!row) throw new Error('[WorkItemsStorage] supervisor finding vanished after open.');
+      return { changed, row };
+    });
+    if (!outcome) return null;
+    if (outcome.changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    return toSupervisorFinding(outcome.row);
   }
 
   async listSupervisorFindingPage(input: {
@@ -1402,11 +1453,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     findingKey: string;
     occurrence: number;
     notifiedAt: Date;
+    /** The exact finding content that was rung: the stamp lands only while the row still carries it. */
+    finding: Record<string, unknown>;
   }): Promise<void> {
-    // Occurrence-safe conditional stamp: a resolve/reopen between send and
-    // stamp must not suppress the new occurrence's notification, so the stamp
-    // only lands on the exact occurrence that was emitted, while it is still
-    // open and still un-stamped. No matching row is a silent no-op.
+    // Occurrence- and content-safe conditional stamp: a resolve/reopen between
+    // send and stamp must not suppress the new occurrence's notification, and
+    // a refresh with new content in that window (a run that parked on yet
+    // another question) must not be marked notified by the older ring. So the
+    // stamp lands only on the exact occurrence and content that were emitted,
+    // while still open and still un-stamped. No matching row is a silent no-op.
+    const expected = stableJson(input.finding);
     await this.#db.updateAtomic<GovernanceDbRow>(
       'factory_supervisor_findings',
       {
@@ -1417,7 +1473,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         resolved_at: null,
         last_notified_at: null,
       },
-      () => ({ last_notified_at: input.notifiedAt }),
+      current =>
+        expected !== undefined && stableJson(current.finding) !== expected
+          ? null
+          : { last_notified_at: input.notifiedAt },
     );
   }
 
@@ -1585,6 +1644,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           lease_expires_at: null,
           last_error: input.lastError,
           failure_code: input.failureCode,
+          // Each failure describes itself: a later, differently-shaped failure
+          // must not leave an old question behind.
+          ...(table === 'factory_deferred_decisions' ? { suspension: input.suspension ?? null } : {}),
           completed_at: input.terminal ? input.now : null,
           ...(table === 'factory_deferred_decisions' && input.terminal
             ? { failure_occurrence: Number(current.failure_occurrence ?? 0) + 1 }
@@ -2584,6 +2646,48 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return resolved;
   }
 
+  /**
+   * A decision that failed only because its run parked on a question is done
+   * once that question is answered and the run runs on: the effect the
+   * decision asked for (the run) happened. Marks it `succeeded` so the next
+   * health sweep resolves its finding. Null when it is not a failed decision.
+   */
+  async resolveAnsweredDecision(input: {
+    orgId: string;
+    factoryProjectId: string;
+    decisionId: string;
+    now: Date;
+  }): Promise<FactoryDeferredDecisionRecord | null> {
+    return this.#resolveFailedDecision({ ...input, status: 'succeeded' });
+  }
+
+  /**
+   * The answered run parked again on a new question. The decision stays
+   * `failed` with the same failure code; only the parked question changes,
+   * so the same finding (keyed by the decision) keeps describing the run and
+   * a later answer resumes the right suspension.
+   */
+  async reparkDecision(input: {
+    orgId: string;
+    factoryProjectId: string;
+    decisionId: string;
+    suspension: FactoryParkedSuspension;
+    lastError: string;
+    now: Date;
+  }): Promise<FactoryDeferredDecisionRecord | null> {
+    let reparked = false;
+    const row = await this.#db.updateAtomic<GovernanceDbRow>(
+      'factory_deferred_decisions',
+      { id: input.decisionId, org_id: input.orgId, factory_project_id: input.factoryProjectId },
+      current => {
+        if (current.status !== 'failed') return null;
+        reparked = true;
+        return { suspension: input.suspension, last_error: input.lastError, updated_at: input.now };
+      },
+    );
+    return reparked && row ? toDeferredDecision(row) : null;
+  }
+
   async supersedeTerminalDecisionsForWorkItem(input: {
     orgId: string;
     factoryProjectId: string;
@@ -2677,6 +2781,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             lease_expires_at: null,
             last_error: null,
             failure_code: null,
+            suspension: null,
             completed_at: null,
             updated_at: now,
           };

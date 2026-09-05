@@ -1,4 +1,4 @@
-import type { FactoryDispatchFailureCode } from '../storage/domains/work-items/base.js';
+import type { FactoryDispatchFailureCode, FactoryParkedSuspension } from '../storage/domains/work-items/base.js';
 
 interface FactoryDispatchFailureMetadata {
   canRetry: boolean;
@@ -25,13 +25,17 @@ const FAILURE_METADATA = {
 } satisfies Record<FactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
 
 export class FactoryDispatchError extends Error {
+  /** What the run is parked on, for question-shaped codes; what an answer resumes. */
+  readonly suspension: FactoryParkedSuspension | undefined;
+
   constructor(
     readonly code: FactoryDispatchFailureCode,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { suspension?: FactoryParkedSuspension },
   ) {
     super(message, options);
     this.name = 'FactoryDispatchError';
+    this.suspension = options?.suspension;
   }
 }
 
