@@ -35,11 +35,15 @@ describe.skipIf(!existsSync(distEsm) || !existsSync(distCjs))('observational mem
     const ddl = exportSchemasFromEsm();
     expect(ddl).toContain('mastra_observational_memory');
     expect(ddl).toContain('idx_om_lookup_key');
+    expect(ddl).toContain('CREATE UNIQUE INDEX');
+    expect(ddl).toContain('idx_om_lookup_key_generation_count_unique');
   }, 30000);
 
   it('CJS build includes the observational memory table', () => {
     const ddl = exportSchemasFromCjs();
     expect(ddl).toContain('mastra_observational_memory');
     expect(ddl).toContain('idx_om_lookup_key');
+    expect(ddl).toContain('CREATE UNIQUE INDEX');
+    expect(ddl).toContain('idx_om_lookup_key_generation_count_unique');
   }, 30000);
 });
