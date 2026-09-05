@@ -26,3 +26,5 @@ import { DialogNew } from '@mastra/playground-ui/components/DialogNew';
 ```
 
 The caller closes the dialog after the action succeeds.
+
+Also added `IntegrationDialog`, a searchable integration picker built on `DialogNew` with a fixed search field and a fading scroll list.

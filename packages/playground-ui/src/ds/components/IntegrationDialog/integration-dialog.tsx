@@ -1,0 +1,143 @@
+import { BlocksIcon } from 'lucide-react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { DialogNew } from '@/ds/components/DialogNew';
+import type { DialogNewProps } from '@/ds/components/DialogNew';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { controlFocusBorderVisible } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
+
+export type IntegrationDialogItem = {
+  id: string;
+  name: string;
+  description?: string;
+  logo?: ReactNode;
+  disabled?: boolean;
+};
+
+export type IntegrationDialogProps = Omit<DialogNewProps, 'variant' | 'children'> & {
+  title: ReactNode;
+  description?: ReactNode;
+  items: IntegrationDialogItem[];
+  onSelect: (item: IntegrationDialogItem) => void;
+  searchPlaceholder?: string;
+  searchLabel?: string;
+  emptyMessage?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+};
+
+function matches(item: IntegrationDialogItem, query: string) {
+  return `${item.name} ${item.id} ${item.description ?? ''}`.toLowerCase().includes(query);
+}
+
+function IntegrationDialog({
+  title,
+  description,
+  items,
+  onSelect,
+  searchPlaceholder = 'Search integrations',
+  searchLabel = 'Search integrations',
+  emptyMessage,
+  children,
+  className,
+  ...props
+}: IntegrationDialogProps) {
+  return (
+    <DialogNew {...props}>
+      {children}
+      <DialogNew.Content className={cn('max-w-lg', className)}>
+        <IntegrationDialogContent
+          title={title}
+          description={description}
+          items={items}
+          onSelect={onSelect}
+          searchPlaceholder={searchPlaceholder}
+          searchLabel={searchLabel}
+          emptyMessage={emptyMessage}
+        />
+      </DialogNew.Content>
+    </DialogNew>
+  );
+}
+
+type IntegrationDialogContentProps = Pick<
+  IntegrationDialogProps,
+  'title' | 'description' | 'items' | 'onSelect' | 'emptyMessage'
+> &
+  Required<Pick<IntegrationDialogProps, 'searchPlaceholder' | 'searchLabel'>>;
+
+function IntegrationDialogContent({
+  title,
+  description,
+  items,
+  onSelect,
+  searchPlaceholder,
+  searchLabel,
+  emptyMessage,
+}: IntegrationDialogContentProps) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleItems = normalizedQuery ? items.filter(item => matches(item, normalizedQuery)) : items;
+
+  return (
+    <>
+      <DialogNew.Header>
+        <DialogNew.Title>{title}</DialogNew.Title>
+        {description ? <DialogNew.Description>{description}</DialogNew.Description> : null}
+      </DialogNew.Header>
+      <div className="shrink-0 px-5 py-2">
+        <SearchFieldBlock
+          name="integration-search"
+          label={searchLabel}
+          labelIsHidden
+          placeholder={searchPlaceholder}
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          onReset={() => setQuery('')}
+          variant="outline"
+          size="md"
+        />
+      </div>
+      <DialogNew.Body className="pt-2 pb-5">
+        {visibleItems.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {visibleItems.map(item => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  disabled={item.disabled}
+                  onClick={() => onSelect(item)}
+                  className={cn(
+                    'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border1 px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-surface3 disabled:pointer-events-none disabled:opacity-50',
+                    controlFocusBorderVisible,
+                  )}
+                >
+                  <span className="text-neutral4 grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
+                    {item.logo ?? <BlocksIcon />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="text-ui-md leading-ui-md text-neutral6 block truncate font-medium">
+                      {item.name}
+                    </span>
+                    <span className="text-ui-sm leading-ui-sm text-neutral3 block truncate">
+                      {item.description ?? item.id}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p role="status" className="text-ui-sm text-neutral3 py-8 text-center">
+            {emptyMessage ?? (normalizedQuery ? `No integrations match “${query}”.` : 'No integrations are available.')}
+          </p>
+        )}
+      </DialogNew.Body>
+    </>
+  );
+}
+
+IntegrationDialog.Trigger = DialogNew.Trigger;
+
+export { IntegrationDialog };
