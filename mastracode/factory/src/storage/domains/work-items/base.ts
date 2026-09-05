@@ -1361,25 +1361,38 @@ export class WorkItemsStorage extends FactoryStorageDomain {
      * unsent ring is swept up.
      */
     newContent?: boolean;
-  }): Promise<FactorySupervisorFindingRecord> {
-    const { changed, row } = await this.#withProjectRelationTransaction(
-      input.orgId,
-      input.factoryProjectId,
-      async ops => {
-        const where = {
+    /**
+     * Write only while the named decision still carries exactly this parked
+     * call, checked inside the same transaction. An older re-park settling
+     * after a newer one must not regress the finding to the older question.
+     * Null when the precondition no longer holds.
+     */
+    onlyIfParkedOn?: { decisionId: string; toolCallId: string };
+  }): Promise<FactorySupervisorFindingRecord | null> {
+    const outcome = await this.#withProjectRelationTransaction(input.orgId, input.factoryProjectId, async ops => {
+      if (input.onlyIfParkedOn) {
+        const decision = await ops.findOne<GovernanceDbRow>('factory_deferred_decisions', {
+          id: input.onlyIfParkedOn.decisionId,
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
-          finding_key: input.finding.id,
-        };
-        const existing = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
-        const changed = await upsertSupervisorFinding(ops, input, input.finding, existing);
-        const row = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
-        if (!row) throw new Error('[WorkItemsStorage] supervisor finding vanished after open.');
-        return { changed, row };
-      },
-    );
-    if (changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    return toSupervisorFinding(row);
+        });
+        const parkedOn = (decision?.suspension as { toolCallId?: unknown } | null | undefined)?.toolCallId;
+        if (decision?.status !== 'failed' || parkedOn !== input.onlyIfParkedOn.toolCallId) return null;
+      }
+      const where = {
+        org_id: input.orgId,
+        factory_project_id: input.factoryProjectId,
+        finding_key: input.finding.id,
+      };
+      const existing = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+      const changed = await upsertSupervisorFinding(ops, input, input.finding, existing);
+      const row = await ops.findOne<GovernanceDbRow>('factory_supervisor_findings', where);
+      if (!row) throw new Error('[WorkItemsStorage] supervisor finding vanished after open.');
+      return { changed, row };
+    });
+    if (!outcome) return null;
+    if (outcome.changed) this.#attentionChanged?.({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    return toSupervisorFinding(outcome.row);
   }
 
   async listSupervisorFindingPage(input: {

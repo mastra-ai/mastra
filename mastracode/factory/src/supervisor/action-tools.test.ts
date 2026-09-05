@@ -820,4 +820,101 @@ describe('factory_answer_suspension', () => {
     const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
     expect(result).toMatchObject({ outcome: 'escalated', answerAudited: true, escalationAudited: true });
   });
+
+  it('an older re-park settling late never regresses the finding to its question', async () => {
+    // Two answers race: the first run's re-park (q2) is slow between its
+    // decision write and its finding refresh; meanwhile q2 is answered and
+    // q3 is parked and published. The late q2 refresh must be a no-op.
+    const seed = await createFactoryStorageForTests();
+    const { decision } = await parkDecision(seed);
+    const key = `decision-failed:${decision.id}`;
+    const notify = vi.fn(async () => {});
+    const q2 = {
+      type: 'tool_suspended' as const,
+      toolCallId: 'call-2',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'q2?' },
+    };
+    const q3 = {
+      type: 'tool_suspended' as const,
+      toolCallId: 'call-3',
+      toolName: 'ask_user',
+      suspendPayload: { question: 'q3?' },
+    };
+    // A purpose-built session: consuming a parked call emits the current
+    // boundary and parks its call id, so the next answer targets it.
+    const parked = new Set(['call-1']);
+    const listeners = new Set<(event: typeof q2) => void>();
+    let boundary = q2;
+    const session = {
+      suspensions: { has: ({ toolCallId }: { toolCallId: string }) => parked.has(toolCallId) },
+      respondToToolSuspension: vi.fn(async ({ toolCallId }: { resumeData: unknown; toolCallId?: string }) => {
+        if (!toolCallId || !parked.has(toolCallId)) return;
+        parked.delete(toolCallId);
+        parked.add(boundary.toolCallId);
+        for (const listener of listeners) listener(boundary);
+      }),
+      subscribe: (listener: (event: typeof q2) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    // Hold the older refresh: gate `get` (called between reparkDecision and openSupervisorFinding).
+    let releaseOlder!: () => void;
+    const olderHeld = new Promise<void>(resolve => (releaseOlder = resolve));
+    let holds = 0;
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'agent', id: 'agent:thread-1' },
+      workItems: {
+        getDeferredDecision: (...args: Parameters<typeof seed.workItems.getDeferredDecision>) =>
+          seed.workItems.getDeferredDecision(...args),
+        listRunBindings: (...args: Parameters<typeof seed.workItems.listRunBindings>) =>
+          seed.workItems.listRunBindings(...args),
+        escalateSupervisorFinding: (...args: Parameters<typeof seed.workItems.escalateSupervisorFinding>) =>
+          seed.workItems.escalateSupervisorFinding(...args),
+        openSupervisorFinding: (...args: Parameters<typeof seed.workItems.openSupervisorFinding>) =>
+          seed.workItems.openSupervisorFinding(...args),
+        markSupervisorFindingNotified: (...args: Parameters<typeof seed.workItems.markSupervisorFindingNotified>) =>
+          seed.workItems.markSupervisorFindingNotified(...args),
+        resolveAnsweredDecision: (...args: Parameters<typeof seed.workItems.resolveAnsweredDecision>) =>
+          seed.workItems.resolveAnsweredDecision(...args),
+        reparkDecision: (...args: Parameters<typeof seed.workItems.reparkDecision>) =>
+          seed.workItems.reparkDecision(...args),
+        get: async (...args: Parameters<typeof seed.workItems.get>) => {
+          holds += 1;
+          if (holds === 1) await olderHeld;
+          return seed.workItems.get(...args);
+        },
+      },
+      audit: seed.audit,
+      controller: { getSessionByResource: async () => session },
+      notifySupervisor: notify,
+      now: () => new Date(),
+      resumeAckMs: 5_000,
+    });
+
+    const older = execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'a1' });
+    await vi.waitFor(() => expect(holds).toBe(1));
+    // q2 is on the decision now; answer it, and let that run park on q3 and publish.
+    boundary = q3;
+    const newer = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'a2' });
+    expect(newer).toMatchObject({ run: 'parked-again', recorded: true, nextQuestion: 'q3?' });
+    const published = (await seed.workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows.find(
+      r => r.findingKey === key,
+    )!;
+    expect(published.finding.evidence).toContain('q3?');
+    expect(published.lastNotifiedAt).toBeInstanceOf(Date);
+
+    releaseOlder();
+    const olderResult = await older;
+    expect(olderResult).toMatchObject({ run: 'parked-again', recorded: false });
+    const after = (await seed.workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows.find(
+      r => r.findingKey === key,
+    )!;
+    expect(after.finding.evidence).toContain('q3?');
+    expect(after.occurrence).toBe(published.occurrence);
+    expect(after.lastNotifiedAt?.getTime()).toBe(published.lastNotifiedAt?.getTime());
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
 });
