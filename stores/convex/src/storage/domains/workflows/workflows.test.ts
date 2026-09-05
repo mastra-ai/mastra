@@ -128,6 +128,38 @@ describe('WorkflowsConvex.persistWorkflowSnapshot — $-prefixed keys', () => {
   });
 });
 
+describe('WorkflowsConvex snapshot persistence', () => {
+  it('persists each checkpoint in one request without a client-side read', async () => {
+    const { client, requests } = createFakeClient();
+    const workflows = new WorkflowsConvex({ client });
+    const createdAt = new Date('2026-05-15T00:00:00.000Z');
+    const updatedAt = new Date('2026-05-16T00:00:00.000Z');
+    const snapshot = snapshotWithDollarKeys();
+
+    for (let checkpoint = 0; checkpoint < 2; checkpoint++) {
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId: 'run-1',
+        snapshot,
+        createdAt,
+        updatedAt,
+      });
+    }
+
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      expect(request).toMatchObject({
+        op: 'insert',
+        record: {
+          snapshot: JSON.stringify(snapshot),
+          createdAt: createdAt.toISOString(),
+          updatedAt: updatedAt.toISOString(),
+        },
+      });
+    }
+  });
+});
+
 describe('WorkflowsConvex atomic workflow updates', () => {
   it('advertises concurrent update support', () => {
     const { client } = createFakeClient();
