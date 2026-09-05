@@ -90,6 +90,37 @@ interface SpanTypeMap {
 
 This mapping defines which attribute interface is used for each span type when creating or processing spans.
 
+### `SpanInputMap` and `SpanOutputMap`
+
+Mapping of span types to the `input` and `output` payload they record. Mastra fixes the shape only for the span types it produces itself; types that carry caller-defined data stay `unknown`, and `GENERIC` stays `any` so custom spans accept any value.
+
+```typescript
+interface SpanInputMap {
+  AGENT_RUN: AgentRunInput
+  MODEL_GENERATION: ModelGenerationInput
+  GENERIC: any
+  // every other span type: unknown
+}
+
+interface SpanOutputMap {
+  AGENT_RUN: AgentRunOutput
+  MODEL_GENERATION: ModelGenerationOutput
+  GENERIC: any
+  // every other span type: unknown
+}
+```
+
+Narrow a span by its type to read the typed payload. On a stored `SpanRecord`, use `isSpanRecordOfType`:
+
+```typescript
+import { SpanType, isSpanRecordOfType } from '@mastra/core/observability'
+
+if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
+  span.input?.messages // ModelGenerationMessage[]
+  span.attributes?.usage // UsageStats | undefined
+}
+```
+
 ### Span
 
 Span interface, used internally for tracing.
@@ -112,8 +143,8 @@ interface Span<TType extends SpanType> {
 
   attributes?: SpanTypeMap[TType]
   metadata?: Record<string, any>
-  input?: any
-  output?: any
+  input?: SpanInputMap[TType]
+  output?: SpanOutputMap[TType]
   errorInfo?: any
 
   /** Tags for categorizing traces (only present on root spans) */
@@ -762,6 +793,100 @@ interface WorkflowStepAttributes {
 }
 ```
 
+## Span payloads
+
+### `AgentRunInput`
+
+Input recorded on `AGENT_RUN` spans: the messages the caller passed for a fresh run, or the resume data for a resumed run.
+
+```typescript
+type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput
+
+interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown
+  /** Tool the run resumes into */
+  toolName?: string
+  /** Tool call the run resumes into */
+  toolCallId?: string
+  [key: string]: unknown
+}
+```
+
+### `AgentRunOutput`
+
+Output recorded on `AGENT_RUN` spans.
+
+```typescript
+type AgentRunOutput = AgentRunResult | InterruptedSpanOutput
+
+interface AgentRunResult {
+  /** Final response text */
+  text?: string
+  /** Final structured output */
+  object?: unknown
+  /** Generated files */
+  files?: unknown[]
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData
+}
+```
+
+### `ModelGenerationInput`
+
+Input recorded on `MODEL_GENERATION` spans.
+
+```typescript
+interface ModelGenerationInput {
+  /** Messages sent to the model, system messages first */
+  messages: ModelGenerationMessage[]
+  /** Output schema, when structured output was requested */
+  schema?: unknown
+}
+
+interface ModelGenerationMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string
+  /** Message content: a string or a list of content parts */
+  content: unknown
+}
+```
+
+### `ModelGenerationOutput`
+
+Output recorded on `MODEL_GENERATION` spans. Every field is optional: a durable run records only `text`.
+
+```typescript
+type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput
+
+interface ModelGenerationResult {
+  text?: string
+  object?: unknown
+  reasoning?: unknown
+  reasoningText?: string
+  files?: unknown[]
+  sources?: unknown[]
+  toolCalls?: unknown[]
+  warnings?: unknown[]
+}
+```
+
+### `InterruptedSpanOutput`
+
+Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, or the caller aborted.
+
+```typescript
+interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted'
+  /** Why the run stopped */
+  reason?: string
+  /** Tool that suspended the run */
+  toolName?: string
+  /** Tool call that suspended the run */
+  toolCallId?: string
+}
+```
+
 ## Options types
 
 ### `StartSpanOptions`
@@ -783,7 +908,7 @@ interface StartSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: any
+  input?: SpanInputMap[TType]
 
   /** Parent span */
   parent?: AnySpan
@@ -809,10 +934,10 @@ interface UpdateSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: any
+  input?: SpanInputMap[TType]
 
   /** Output data */
-  output?: any
+  output?: SpanOutputMap[TType]
 }
 ```
 
@@ -823,7 +948,7 @@ Options for ending spans.
 ```typescript
 interface EndSpanOptions<TType extends SpanType> {
   /** Output data */
-  output?: any
+  output?: SpanOutputMap[TType]
 
   /** Span metadata */
   metadata?: Record<string, any>
