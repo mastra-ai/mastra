@@ -195,6 +195,25 @@ The storage implementation handles schema creation and updates automatically. It
 
 `PostgresStore` exposes notification storage through `getStore('notifications')`.
 
+### Observational Memory Generation Safety
+
+PostgreSQL storage enforces one observational-memory row per `(lookupKey, generationCount)`. This keeps initialization idempotent across multiple Mastra processes and prevents ambiguous reflection histories. The invariant is required even when `skipDefaultIndexes` is enabled because it protects correctness rather than query performance.
+
+When `init()` upgrades an existing database, it stops with a `MIGRATION_REQUIRED` error if duplicate generations already exist. Mastra does not delete either row automatically because they can contain different observations. Inspect all duplicate groups and reconcile their contents before restarting. Replace `public` below if you configured a different `schemaName`:
+
+```sql
+SELECT "lookupKey", "generationCount", COUNT(*)
+FROM "public"."mastra_observational_memory"
+GROUP BY "lookupKey", "generationCount"
+HAVING COUNT(*) > 1;
+```
+
+Initialization also validates the required index through the PostgreSQL catalog. If an incompatible relation already occupies its name, Mastra fails closed instead of assuming that `CREATE UNIQUE INDEX IF NOT EXISTS` produced the expected invariant. Review and replace the conflicting relation described by the error before restarting.
+
+If you set `disableInit: true`, include the unique `(lookupKey, generationCount)` index from the current `@mastra/pg` schema in your externally managed migration before deploying the package update. Calls that encounter a missing index fail with an actionable `MIGRATION_REQUIRED` error.
+
+Automatic upgrades use a regular `CREATE UNIQUE INDEX`, which takes a `SHARE` lock and can block writes to a large observational-memory table until the build finishes. For large production tables, pre-create the exported index with `CREATE UNIQUE INDEX CONCURRENTLY` before deploying this version; run that statement outside a transaction. Initialization validates and reuses a compatible pre-created index. The duplicate-generation `GROUP BY` scan runs only when index creation fails with a uniqueness violation.
+
 ### Observability
 
 PostgreSQL supports observability and can handle low trace volumes. Throughput capacity depends on deployment factors such as hardware, schema design, indexing, and retention policies, and should be validated for your specific environment. For high-volume production environments, consider:
