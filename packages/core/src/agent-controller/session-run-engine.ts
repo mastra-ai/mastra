@@ -1188,6 +1188,68 @@ export class SessionRunEngine {
   }
 
   /**
+   * Settle parked native tool suspensions before aborting their suspended run.
+   * The run cannot emit another chunk after `suspend()`, so update the saved
+   * assistant message directly instead of leaving its tool invocation in
+   * `state: 'call'` forever.
+   */
+  async settleSuspendedToolCallsAsDenied(
+    suspensions: Array<{ toolCallId: string; runId: string; toolName: string }>,
+  ): Promise<void> {
+    if (suspensions.length === 0) return;
+
+    const currentMessage = this.#session.displayState.get().currentMessage;
+    const agent =
+      this.#machinery.getRunScope(suspensions[0]!.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.#machinery.getAgent();
+    const memory = await agent.getMemory();
+    const persistedMessages = memory
+      ? (
+          await memory.recall({
+            threadId: this.#session.thread.requireId(),
+            resourceId: this.#session.identity.getResourceId(),
+          })
+        ).messages
+      : [];
+    const candidates = currentMessage ? [currentMessage, ...persistedMessages] : persistedMessages;
+    const changedMessages = new Map<string, MastraDBMessage>();
+    let currentMessageChanged = false;
+
+    for (const { toolCallId } of suspensions) {
+      let settled = false;
+      for (const message of candidates) {
+        const part = message.content.parts.find(
+          part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+        );
+        if (!part || part.type !== 'tool-invocation' || part.toolInvocation.state !== 'call') continue;
+
+        part.toolInvocation = Object.assign(part.toolInvocation, {
+          state: 'output-denied' as const,
+          approval: { id: toolCallId, approved: false as const, reason: ABORTED_BY_USER_REASON },
+        });
+        if (message.threadId) changedMessages.set(message.id, message);
+        currentMessageChanged ||= message === currentMessage;
+        settled = true;
+      }
+      if (settled) {
+        this.#session.emit({
+          type: 'tool_end',
+          toolCallId,
+          result: ABORTED_BY_USER_REASON,
+          isError: false,
+          denied: true,
+        });
+      }
+    }
+
+    if (changedMessages.size > 0) {
+      await memory?.saveMessages({ messages: [...changedMessages.values()] });
+    }
+    if (currentMessage && currentMessageChanged) {
+      this.#session.emit({ type: 'message_update', message: currentMessage });
+    }
+  }
+
+  /**
    * Mark a tool call as denied on the in-flight assistant message and notify
    * subscribers, mirroring what the `tool-output-denied` chunk would do. Used
    * when the run is torn down before that chunk can be consumed (abort while a
