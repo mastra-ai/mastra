@@ -40,6 +40,8 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { createBoardRegistry } from './boards/index.js';
+import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
@@ -201,12 +203,16 @@ export interface MastraFactoryConfig {
    */
   integrations?: FactoryIntegration[];
   /**
-   * Authoritative Factory board, tool-result, and GitHub-event rules. Construct
+   * Authoritative Factory board, tool-result, and Linear-event rules. Construct
    * with `defaultFactoryRules({ version, overrides })` so deployment policy has
    * an explicit version and exact handler leaves replace rather than compose.
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+  /** Board definitions installed for this Factory instance. */
+  boards?: readonly InstalledBoard[];
+  /** Whether the built-in Work and Review boards are installed. Default: true. */
+  includeDefaultBoards?: boolean;
 
   /**
    * Platform-specific overrides. `githubAppSlug` identifies Factory's own
@@ -302,6 +308,7 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
 
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
+  readonly #boards: BoardRegistry;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
@@ -315,6 +322,10 @@ export class MastraFactory {
           "new LibSQLFactoryStorage({ url }) from '@mastra/libsql' for local dev.",
       );
     }
+    this.#boards = createBoardRegistry({
+      boards: config.boards,
+      includeDefaultBoards: config.includeDefaultBoards,
+    });
     this.#config = config;
   }
 
@@ -582,6 +593,7 @@ export class MastraFactory {
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           rules,
+          boards: this.#boards,
           storage: workItemsStorage,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
@@ -635,6 +647,7 @@ export class MastraFactory {
       ? new FactoryPhaseStateProcessor({
           rules,
           storage: workItemsStorage,
+          boardRegistry: this.#boards,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -899,6 +912,7 @@ export class MastraFactory {
             factoryReady,
             knowledgeEnabled,
             rules,
+            boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({

@@ -30,6 +30,13 @@ export interface FactoryAutomationFailedAttentionItem extends FactoryAttentionIt
   canRetry: boolean;
 }
 
+/** A run parked for approval: the lane composed it, nobody has released it yet. */
+export interface FactoryAutomationProposedAttentionItem extends FactoryAttentionItemBase {
+  kind: 'automation-proposed';
+  decisionId: string;
+  decisionType: string;
+}
+
 export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
   kind: 'mention';
   commentId: string;
@@ -57,6 +64,7 @@ export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionI
 
 export type FactoryAttentionItem =
   | FactoryAutomationFailedAttentionItem
+  | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
   | FactoryActivityAttentionItem
   | FactorySupervisorFindingAttentionItem;
@@ -73,6 +81,7 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
     case 'activity':
       return item.workItemId;
     case 'automation-failed':
+    case 'automation-proposed':
       return item.decisionId;
     case 'supervisor-finding':
       return item.findingKey;
@@ -82,7 +91,6 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
 export interface FactoryAttentionResponse {
   items: FactoryAttentionItem[];
   openCount: number;
-  approvalCount: number;
   badgeCount: number;
   unreadCount: number;
   /** Counted apart: the activity tier never reaches the sidebar badge. */

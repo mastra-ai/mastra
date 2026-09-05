@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 32 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 33 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -114,8 +114,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 202752,
     "maxOutput": 20275,
-    "inputCost": 0.93,
-    "outputCost": 2.878
+    "inputCost": 0.86,
+    "outputCost": 2.784
   },
   {
     "model": "hyper/glm-5.1",
@@ -126,8 +126,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 202750,
     "maxOutput": 3276,
-    "inputCost": 1.29,
-    "outputCost": 4.22
+    "inputCost": 1.262,
+    "outputCost": 4.132
   },
   {
     "model": "hyper/glm-5.2",
@@ -178,6 +178,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.7
   },
   {
+    "model": "hyper/inkling",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 1.0888,
+    "outputCost": 4.40964
+  },
+  {
     "model": "hyper/kimi-k2-thinking",
     "imageInput": false,
     "audioInput": false,
@@ -198,8 +210,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 26214,
-    "inputCost": 0.5284,
-    "outputCost": 2.785
+    "inputCost": 0.5144,
+    "outputCost": 2.755
   },
   {
     "model": "hyper/kimi-k2.6",
@@ -270,8 +282,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262100,
     "maxOutput": 6553,
-    "inputCost": 0.418,
-    "outputCost": 1.588
+    "inputCost": 0.484,
+    "outputCost": 1.852
   },
   {
     "model": "hyper/minimax-m3",

@@ -5,12 +5,12 @@ import type { ReactElement } from 'react';
 import { useId } from 'react';
 
 import { useCardMorph } from '../hooks/useCardMorph';
-import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
 import { boardCardStatus } from '../boardCardStatus';
 import type { BoardCandidate } from '../boardCandidates';
 import { setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
-import type { RunAction } from '../boardRunSpecs';
+import { cardMoves } from '../cardPrimaryAction';
+import type { CardMove } from '../cardPrimaryAction';
 import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
@@ -21,9 +21,6 @@ export function CandidateCard({
   candidate,
   projectRepositoryId,
   factoryProjectId,
-  pendingRunRoles,
-  preparing,
-  disabled,
   onRun,
   onFile,
 }: {
@@ -32,26 +29,16 @@ export function CandidateCard({
   projectRepositoryId: string;
   /** Factory project id resolving Linear descriptions in the detail panel. */
   factoryProjectId: string;
-  pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  /** Status text while a run trigger is resolving, before the run mutation starts. */
-  preparing?: string;
-  disabled: boolean;
-  /** Start a run; `prompt` undefined = the action's default prompt. */
-  onRun: (action: RunAction, prompt?: string) => void;
-  /** File the candidate onto the board without starting a run. */
+  /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
+  onRun: (move: CardMove, prompt?: string) => void;
   onFile: () => void;
 }) {
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const [defaultAction] = candidate.runActions;
-  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
-  const status = boardCardStatus({
-    runs: candidate.runActions
-      .filter(action => pendingRunRoles.has(action.role))
-      .map(action => ({ label: action.label, phase: pendingRunRoles.get(action.role) })),
-    preparing,
-  });
+  const moves = cardMoves(candidate, candidate.column);
+  const [defaultMove] = moves;
+  const status = boardCardStatus({});
 
   const fileFromDetails = () => {
     morph.closeDetails();
@@ -59,20 +46,19 @@ export function CandidateCard({
   };
 
   const menuItems: ReactElement[] = [
-    ...candidate.runActions.map(action => (
+    ...moves.map(move => (
       <DropdownMenu.Item
-        key={action.label}
-        disabled={runPending}
+        key={move.label}
         onClick={() => {
           morph.closeDetails();
-          onRun(action);
+          onRun(move);
         }}
       >
-        {actionIcon(action.label)}
-        <span>{pendingRunRoles.has(action.role) ? 'Starting…' : action.label}</span>
+        {actionIcon(move.label)}
+        <span>{move.label}</span>
       </DropdownMenu.Item>
     )),
-    <DropdownMenu.Item key="file" disabled={runPending} onClick={fileFromDetails}>
+    <DropdownMenu.Item key="file" onClick={fileFromDetails}>
       <Plus aria-hidden />
       <span>Add to board</span>
     </DropdownMenu.Item>,
@@ -88,7 +74,6 @@ export function CandidateCard({
         ref={morph.cardRef}
         draggable
         aria-label={candidate.title}
-        aria-busy={runPending || undefined}
         data-testid="candidate-card"
         onDragStart={event =>
           setDragPayload(event, {
@@ -103,29 +88,23 @@ export function CandidateCard({
           })
         }
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 relative flex min-h-36 cursor-grab flex-col gap-3 rounded-3xl border p-2.5 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
         <button
           type="button"
           draggable={false}
           aria-label={`Details for ${candidate.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-3xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={morph.openDetails}
         />
         <CandidateCardRows
           candidate={candidate}
           status={status}
           actions={
-            <CardActions
-              actions={[
-                {
-                  label: runPending ? 'Starting…' : defaultAction.label,
-                  disabled: disabled || runPending,
-                  start: () => onRun(defaultAction),
-                },
-              ]}
-            />
+            defaultMove === undefined ? undefined : (
+              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+            )
           }
           controls={
             <>
@@ -161,9 +140,7 @@ export function CandidateCard({
         projectRepositoryId={projectRepositoryId}
         factoryProjectId={factoryProjectId}
         menu={menuItems}
-        defaultAction={defaultAction}
-        disabled={disabled}
-        runPending={runPending}
+        defaultMove={defaultMove}
         onRun={onRun}
       />
     </>

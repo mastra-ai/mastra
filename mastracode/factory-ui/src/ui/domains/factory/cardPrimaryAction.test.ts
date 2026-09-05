@@ -1,37 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ItemRunSpec, RunAction } from './boardRunSpecs';
-import { cardActions, cardPrimaryAction, resumeTarget } from './cardPrimaryAction';
-import type { CardAction } from './cardPrimaryAction';
-import type { FactoryDecisionSummary } from './services/decisions';
+import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
+import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
-const review: RunAction = {
-  label: 'Review',
-  role: 'review',
-  invocation: { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' },
-};
-
-const investigate: RunAction = {
-  label: 'Investigate',
-  role: 'plan',
-  invocation: { type: 'skill', skillName: 'factory-triage', arguments: 'issue #1' },
-};
-
-const investigateTriage: RunAction = {
-  label: 'Investigate',
-  role: 'triage',
-  invocation: { type: 'skill', skillName: 'factory-triage', arguments: 'issue #1' },
-};
-
-const build: RunAction = {
-  label: 'Build',
-  role: 'work',
-  invocation: { type: 'prompt', prompt: 'Implement a fix for issue #1' },
-};
-
-function spec(...actions: RunAction[]): ItemRunSpec {
-  return { branch: 'factory/pr-1', threadTitle: 'PR: one', actions };
-}
+const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const build: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
+const review: CardMove = { label: 'Review', role: 'review', stage: 'review' };
 
 function sessionRef(role: string): WorkItemSessionRef {
   return { sessionId: `session-${role}`, branch: 'factory/pr-1', threadId: `thread-${role}`, startedBy: 'user-1' };
@@ -62,85 +36,71 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
   };
 }
 
-function proposalSummary(): FactoryDecisionSummary {
-  return {
-    id: 'decision-1',
-    evaluationId: 'evaluation-1',
-    workItemId: 'item-1',
-    type: 'invokeSkill',
-    role: 'review',
-    status: 'proposed',
-    attempts: 0,
-    failureOccurrence: 0,
-    source: null,
-    failureCode: null,
-    canRetry: false,
-    lastError: null,
-    createdAt: '2026-08-30T00:00:00.000Z',
-    updatedAt: '2026-08-30T00:00:00.000Z',
-    completedAt: null,
-  };
-}
-
-describe('resumeTarget', () => {
-  it('resumes the deepest used seat of a card parked in Intake', () => {
-    const sessions = { plan: sessionRef('plan'), work: sessionRef('work') };
-    expect(resumeTarget('intake', spec(investigate, build), sessions)).toEqual({ kind: 'run', action: build });
+describe('cardMoves', () => {
+  it('offers an issue its two lanes, and a needs-approval issue only the decision', () => {
+    const issue = { source: 'github-issue' as const, metadata: {} };
+    expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
+    expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
+    // Accepted, so the label is stale until the source catches up.
+    expect(
+      cardMoves(
+        { ...issue, metadata: { labels: ['Status: Needs Approval'] }, acceptedAt: '2026-08-30T00:00:00.000Z' },
+        'triage',
+      ),
+    ).toEqual([investigate, build]);
   });
 
-  it('re-enters the lane of a used seat the board cannot start directly', () => {
-    // A GitHub issue offers Investigate (triage) and Build (work); plan is rule-only,
-    // so a card parked mid-Planning must go back to Planning, not restart the triage run.
-    const sessions = { triage: sessionRef('triage'), plan: sessionRef('plan') };
-    expect(resumeTarget('intake', spec(investigateTriage, build), sessions)).toEqual({
-      kind: 'move',
-      stage: 'planning',
-    });
+  it('re-reviews an open pull request sitting in Done, and reviews it in a working lane', () => {
+    const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
+    expect(cardMoves(pullRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
+    expect(cardMoves(pullRequest, 'review')).toEqual([review]);
   });
 
-  it('re-enters the lane even when the card offers no runs at all', () => {
-    const sessions = { plan: sessionRef('plan') };
-    expect(resumeTarget('intake', undefined, sessions)).toEqual({ kind: 'move', stage: 'planning' });
+  it('offers a Work card in Review no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
+    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review')).toEqual([]);
+  });
+
+  it('offers a finished card no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-pr', metadata: { merged: true }, stages: ['done'] }, 'done')).toEqual([]);
+    expect(cardMoves({ source: 'github-pr', metadata: { state: 'open' } }, 'canceled')).toEqual([]);
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'done')).toEqual([]);
+  });
+
+  it('offers nothing for a manual card', () => {
+    expect(cardMoves({ source: 'manual', metadata: {} }, 'intake')).toEqual([]);
+  });
+});
+
+describe('resumeStage', () => {
+  it('re-enters the lane of the deepest seat a card parked in Intake has used', () => {
+    expect(resumeStage('intake', { triage: sessionRef('triage'), plan: sessionRef('plan') })).toBe('planning');
+    expect(resumeStage('intake', { plan: sessionRef('plan'), work: sessionRef('work') })).toBe('execute');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
-    expect(resumeTarget('intake', spec(review), {})).toBeUndefined();
-    expect(resumeTarget('done', spec(review), { review: sessionRef('review') })).toBeUndefined();
+    expect(resumeStage('intake', {})).toBeUndefined();
+    expect(resumeStage('done', { review: sessionRef('review') })).toBeUndefined();
   });
 });
 
 describe('cardPrimaryAction', () => {
+  const handlers = {
+    onApproveProposal: vi.fn(),
+    onCreateSession: vi.fn(),
+    onMove: vi.fn(),
+  };
+
   it('resumes a parked card instead of leaving Open session as the only way back', () => {
-    const runSpec = spec(review);
-    const onRestartRun = vi.fn();
-    const action = cardPrimaryAction({
-      item: item({ review: sessionRef('review') }),
-      runSpec,
-      resume: { kind: 'run', action: review },
-      hasSession: true,
-      onApproveProposal: vi.fn(),
-      onStartRun: vi.fn(),
-      onRestartRun,
-      onCreateSession: vi.fn(),
-      onMove: vi.fn(),
-    });
-
-    expect(action?.label).toBe('Resume');
-    action?.start();
-    expect(onRestartRun).toHaveBeenCalledWith(runSpec, review);
-  });
-
-  it('resumes a rule-only seat by re-entering its lane', () => {
     const onMove = vi.fn();
     const action = cardPrimaryAction({
+      ...handlers,
       item: item({ plan: sessionRef('plan') }),
-      runSpec: spec(build),
-      resume: { kind: 'move', stage: 'planning' },
+      move: build,
+      resumeStage: 'planning',
       hasSession: true,
-      onApproveProposal: vi.fn(),
-      onStartRun: vi.fn(),
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
       onMove,
     });
 
@@ -149,20 +109,15 @@ describe('cardPrimaryAction', () => {
     expect(onMove).toHaveBeenCalledWith('planning');
   });
 
-  it('asks for the maintainer decision on a held non-bug card instead of offering Build', () => {
+  it('asks for the maintainer decision on a held non-bug card instead of offering its lane', () => {
     const onMove = vi.fn();
-    const onStartRun = vi.fn();
     const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
     const action = cardPrimaryAction({
+      ...handlers,
       item: held,
       columnStage: 'triage',
-      runSpec: spec(investigateTriage, build),
-      runAction: build,
+      move: build,
       hasSession: true,
-      onApproveProposal: vi.fn(),
-      onStartRun,
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
       onMove,
     });
 
@@ -170,7 +125,6 @@ describe('cardPrimaryAction', () => {
     expect(action?.ariaLabel).toBe('Accept and plan');
     action?.start();
     expect(onMove).toHaveBeenCalledWith('planning');
-    expect(onStartRun).not.toHaveBeenCalled();
   });
 
   it('keeps the maintainer decision ahead of a suggested run on a held card', () => {
@@ -178,16 +132,13 @@ describe('cardPrimaryAction', () => {
     const onApproveProposal = vi.fn();
     const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
     const action = cardPrimaryAction({
+      ...handlers,
       item: held,
       columnStage: 'triage',
-      runSpec: spec(investigateTriage, build),
-      runAction: build,
-      proposal: proposalSummary(),
+      move: build,
+      waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
-      onStartRun: vi.fn(),
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
       onMove,
     });
 
@@ -197,39 +148,26 @@ describe('cardPrimaryAction', () => {
     expect(onApproveProposal).not.toHaveBeenCalled();
   });
 
-  it('offers the lane run again once the card is accepted, and never holds bugs', () => {
+  it('offers the lane again once the card is accepted, and never holds bugs', () => {
     const base = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
-    const startArgs = {
-      columnStage: 'triage' as const,
-      runSpec: spec(investigateTriage, build),
-      runAction: build,
-      hasSession: true,
-      onApproveProposal: vi.fn(),
-      onStartRun: vi.fn(),
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
-      onMove: vi.fn(),
-    };
-    expect(cardPrimaryAction({ ...startArgs, item: { ...base, acceptedAt: '2026-08-30T00:00:00.000Z' } })?.label).toBe(
+    const args = { ...handlers, columnStage: 'triage' as const, move: build, hasSession: true };
+    expect(cardPrimaryAction({ ...args, item: { ...base, acceptedAt: '2026-08-30T00:00:00.000Z' } })?.label).toBe(
       'Build',
     );
-    expect(cardPrimaryAction({ ...startArgs, item: { ...base, triageType: 'bug' } })?.label).toBe('Build');
-    expect(cardPrimaryAction({ ...startArgs, item: base, columnStage: 'planning' })?.label).toBe('Build');
+    expect(cardPrimaryAction({ ...args, item: { ...base, triageType: 'bug' } })?.label).toBe('Build');
+    expect(cardPrimaryAction({ ...args, item: base, columnStage: 'planning' })?.label).toBe('Build');
   });
 
   it('still releases a proposed run first: the suggestion beats resuming beside it', () => {
     const onApproveProposal = vi.fn();
     const action = cardPrimaryAction({
+      ...handlers,
       item: item({ review: sessionRef('review') }),
-      runSpec: spec(review),
-      resume: { kind: 'run', action: review },
-      proposal: proposalSummary(),
+      move: review,
+      resumeStage: 'review',
+      waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
-      onStartRun: vi.fn(),
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
-      onMove: vi.fn(),
     });
 
     expect(action?.label).toBe('Review');
@@ -237,24 +175,22 @@ describe('cardPrimaryAction', () => {
     expect(onApproveProposal).toHaveBeenCalledWith('decision-1');
   });
 
-  it('keeps Start for a fresh arrival with no seat used', () => {
-    const runSpec = spec(review);
-    const onStartRun = vi.fn();
-    const action = cardPrimaryAction({
-      item: item({}),
-      runSpec,
-      runAction: review,
-      hasSession: false,
-      onApproveProposal: vi.fn(),
-      onStartRun,
-      onRestartRun: vi.fn(),
-      onCreateSession: vi.fn(),
-      onMove: vi.fn(),
-    });
+  it('moves the card into the lane it names', () => {
+    const onMove = vi.fn();
+    const action = cardPrimaryAction({ ...handlers, item: item({}), move: review, hasSession: false, onMove });
 
     expect(action?.label).toBe('Review');
     action?.start();
-    expect(onStartRun).toHaveBeenCalledWith(runSpec, review);
+    expect(onMove).toHaveBeenCalledWith('review');
+  });
+
+  it('falls back to opening a session on a card with no lane to offer', () => {
+    const onCreateSession = vi.fn();
+    const action = cardPrimaryAction({ ...handlers, item: item({}), hasSession: false, onCreateSession });
+
+    expect(action?.label).toBe('Start session');
+    action?.start();
+    expect(onCreateSession).toHaveBeenCalledWith({ branch: 'factory/item-item-1', threadTitle: 'one' });
   });
 });
 
@@ -264,7 +200,7 @@ describe('cardActions', () => {
   const run = { label: 'Investigate', start: vi.fn() };
 
   it('leads with the likeliest click and offers a rival run only beside an idle session', () => {
-    const idle = { running: false, waiting: false, attention: false };
+    const idle = { running: false, waiting: false };
     const labels = (actions: CardAction[]) => actions.map(action => action.label);
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
@@ -277,11 +213,10 @@ describe('cardActions', () => {
   });
 
   it('lights only the click the card waits on a person for', () => {
-    const idle = { running: false, waiting: false, attention: false };
+    const idle = { running: false, waiting: false };
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
     expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
-    expect(lit(cardActions({ ...idle, running: true, attention: true, session, run }))).toEqual(['Open session']);
   });
 });

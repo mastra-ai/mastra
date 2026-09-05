@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -35,13 +36,19 @@ function requestContext(
   return context;
 }
 
-async function prepare(storage: WorkItemsStorage, role = 'work', sourceType: 'issue' | 'pull-request' = 'issue') {
+async function prepare(
+  storage: WorkItemsStorage,
+  role = 'work',
+  sourceType: 'issue' | 'pull-request' = 'issue',
+  board?: { id: string; stage: string },
+) {
   return storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
     workItem: {
       input: {
+        ...(board ? { board: board.id } : {}),
         externalSource: {
           integrationId: 'github',
           type: sourceType,
@@ -49,7 +56,7 @@ async function prepare(storage: WorkItemsStorage, role = 'work', sourceType: 'is
           url: sourceType === 'issue' ? 'https://example.test/issues/1' : 'https://example.test/pull/1',
         },
         title: 'Improve the settings UI',
-        stages: ['planning'],
+        stages: [board?.stage ?? 'planning'],
         sessions: {},
         metadata: {},
       },
@@ -232,6 +239,30 @@ describe('FactoryPhaseStateProcessor', () => {
       attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
     });
     expect(signal?.contents).toContain('Factory work phase: Building (execute)');
+  });
+
+  it('emits the persisted custom board and phase in the state signal', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: { queued: { title: 'Release Queue', next: 'shipped' }, shipped: { title: 'Shipped' } },
+    });
+    const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'queued' });
+    expect(prepared.item).toMatchObject({ board: 'release', stages: ['queued'] });
+    expect(prepared.binding).toMatchObject({ status: 'active' });
+    const rules = defaultFactoryRules({ version: 'rules-v1' });
+    const processor = new FactoryPhaseStateProcessor({
+      rules,
+      storage,
+      boardRegistry: createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
+    });
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+
+    expect(signal).toMatchObject({ attributes: { board: 'release', stage: 'queued' } });
+    expect(signal?.contents).toContain('Factory release phase: Release Queue (queued)');
   });
 
   it('uses completed step results to avoid reconciling unrelated historical messages', async () => {

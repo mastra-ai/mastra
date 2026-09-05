@@ -101,6 +101,26 @@ function reportOrgUnresolved(
 }
 
 /**
+ * Whether the experimental subconscious (knowledge graph + reminder sidekick)
+ * is switched on for this process: it needs a vector store and the opt-in flag.
+ */
+export function isSubconsciousEnabled(vector: MastraVector | undefined): boolean {
+  return Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+}
+
+/**
+ * Whether the subconscious tools (`knowledge_*`, `ask_memory`) are registered
+ * for a given session. Beyond the process-level switch, a Factory-owned
+ * session that cannot resolve its org refuses the subconscious entirely (see
+ * `getDynamicMemory`, which applies the same two checks inline because it also
+ * needs the resolved identity). The system prompt's tool guidance calls here so
+ * it never advertises tools that `getDynamicMemory` did not register.
+ */
+export function hasSubconsciousTools(vector: MastraVector | undefined, state: MastraCodeState | undefined): boolean {
+  return isSubconsciousEnabled(vector) && resolveKnowledgeScopeIdentity(state).resolved;
+}
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -114,7 +134,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
-    const subconsciousEnabled = Boolean(vector) && process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    const subconsciousEnabled = isSubconsciousEnabled(vector);
     const factoryProjectId = state?.factoryProjectId;
     const isFactory = typeof factoryProjectId === 'string' && factoryProjectId.trim().length > 0;
 

@@ -40,6 +40,22 @@ interface ObservabilityInstance {
 }
 ```
 
+### `BatchDeleteTracesArgs`
+
+Arguments for `ObservabilityStorage.batchDeleteTraces()`. The method deletes matching traces and spans, then cascades to metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved.
+
+```typescript
+interface BatchDeleteTracesArgs {
+  traceIds: string[]
+  organizationId?: string
+  resourceId?: string
+}
+```
+
+When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. Storage adapters that don't support tenant-scoped trace deletion throw an error rather than applying an unscoped delete.
+
+For ClickHouse vNext, the method records the complete predicate and waits for lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs, which Mastra OSS doesn't configure by default. Deletion requests aren't purged automatically in Mastra OSS. Automatic retirement will be introduced with future database-agnostic retention configuration.
+
 ### `SpanTypeMap`
 
 Mapping of span types to their corresponding attribute interfaces.

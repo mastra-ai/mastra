@@ -1,4 +1,5 @@
 import type {
+  ActionEvent,
   Adapter,
   CardElement,
   ChatConfig,
@@ -398,6 +399,21 @@ export type SlashCommandChannelHandler = (
 export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | false | undefined;
 
 /**
+ * Handler function for action events (button clicks, select changes).
+ * Receives the original Chat SDK event, the default handler implementation
+ * (built-in tool approval card handling; a no-op for other action ids), and a
+ * runtime context carrying the resolved Mastra instance.
+ */
+export type ActionChannelHandler = (
+  event: ActionEvent,
+  defaultHandler: () => Promise<void>,
+  ctx: ChannelHandlerContext,
+) => Promise<void>;
+
+/** Configuration for action handling. */
+export type ActionChannelHandlerConfig = ActionChannelHandler | false | undefined;
+
+/**
  * Context passed to {@link ChannelConfig.resolveResourceId}.
  * Lets an app decide who owns resource-level memory for a channel thread,
  * separately from who sent the message (`message.author`).
@@ -469,6 +485,14 @@ export interface ChannelHandlers {
    * Default: Routes the command and its arguments to agent.stream and posts the response.
    */
   onSlashCommand?: SlashCommandChannelHandlerConfig;
+
+  /**
+   * Handler for action events (button clicks, select changes).
+   * Default: Handles the built-in tool approval cards
+   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and ignores other action ids.
+   * Setting `false` also disables the built-in tool approval buttons.
+   */
+  onAction?: ActionChannelHandlerConfig;
 }
 
 /** Configuration for agent chat channels. */
