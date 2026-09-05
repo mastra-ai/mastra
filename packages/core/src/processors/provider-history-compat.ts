@@ -152,7 +152,7 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
-  errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
+  errorPatterns: [/tool_use\.id.*should match pattern/i, /tool_call_id.*invalid/i],
   fix(messages) {
     const idMap = buildToolIdMap(messages);
     if (idMap.size === 0) return false;
@@ -221,21 +221,38 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeGoogle(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  return matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex');
+}
+
 type ProviderFamily = 'anthropic' | 'openai' | 'google';
 
 function getModelProviderFamily(model: unknown): ProviderFamily | undefined {
   if (matchesProviderPrefix(model, 'anthropic')) return 'anthropic';
   if (matchesProviderPrefix(model, 'openai') || matchesProviderPrefix(model, 'azure')) return 'openai';
-  if (matchesProviderPrefix(model, 'google') || matchesProviderPrefix(model, 'vertex')) return 'google';
+  if (isMaybeGoogle(model)) return 'google';
   return undefined;
 }
 
-function getPartProviderFamily(part: { providerOptions?: unknown }): ProviderFamily | undefined {
-  if (!part.providerOptions || typeof part.providerOptions !== 'object') return undefined;
-  const providers = Object.keys(part.providerOptions);
-  if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
-  if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
-  if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+function getPartProviderFamily(part: { providerOptions?: unknown; toolCallId?: string }): ProviderFamily | undefined {
+  if (part.providerOptions && typeof part.providerOptions === 'object') {
+    const providers = Object.keys(part.providerOptions);
+    if (providers.some(provider => provider === 'anthropic')) return 'anthropic';
+    if (providers.some(provider => provider === 'openai' || provider === 'azure')) return 'openai';
+    if (providers.some(provider => provider === 'google' || provider === 'vertex')) return 'google';
+  }
+
+  // Provider-executed tool metadata is not always preserved in persisted history,
+  // but provider-owned IDs retain stable prefixes.
+  if (part.toolCallId?.startsWith('srvtoolu_')) return 'anthropic';
+  if (part.toolCallId?.startsWith('ws_')) return 'openai';
   return undefined;
 }
 
@@ -268,7 +285,8 @@ export const stripForeignProviderExecutedTools: CompatRule = {
     for (const message of prompt) {
       if (message.role === 'assistant') {
         const content = message.content.filter(
-          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+          part =>
+            (part.type !== 'tool-call' && part.type !== 'tool-result') || !foreignToolCallIds.has(part.toolCallId),
         );
         if (content.length > 0) rewritten.push({ ...message, content });
         continue;
@@ -564,6 +582,26 @@ export const azureSystemReminderTransform: CompatRule = {
  * All built-in compat rules. Extend by passing additional rules to the
  * `ProviderHistoryCompat` constructor.
  */
+/**
+ * Gemini rejects prompts whose first non-system turn is from the assistant.
+ * Insert a minimal synthetic user turn ahead of it, but only for Google /
+ * Vertex models — other providers accept assistant-first prompts and should
+ * see the conversation unchanged.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/22874
+ */
+export const googleEnsureUserFirstTurn: CompatRule = {
+  name: 'google-ensure-user-first-turn',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeGoogle(model)) return undefined;
+    const firstNonSystemIndex = prompt.findIndex(m => m.role !== 'system');
+    if (firstNonSystemIndex === -1 || prompt[firstNonSystemIndex]?.role !== 'assistant') return undefined;
+    const result = [...prompt];
+    result.splice(firstNonSystemIndex, 0, { role: 'user', content: [{ type: 'text', text: '.' }] });
+    return result;
+  },
+};
+
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
@@ -571,6 +609,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
+  googleEnsureUserFirstTurn,
 ];
 
 // ---------------------------------------------------------------------------
@@ -601,6 +640,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **google-ensure-user-first-turn** — inserts a synthetic user turn when
+ *   the first non-system message is from the assistant and the resolved model
+ *   is Google/Vertex, which Gemini requires. Preemptive; nothing is persisted.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

@@ -95,6 +95,7 @@ import type {
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
+import { ProviderHistoryCompat } from '../processors/provider-history-compat';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import {
@@ -456,7 +457,7 @@ function listProcessorWorkflowChildren(workflow: ProcessorWorkflow): unknown[] {
 }
 
 function hasConfiguredProcessor(
-  processors: InputProcessorOrWorkflow[],
+  processors: Array<InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow>,
   predicate: (processor: Processor) => boolean,
 ): boolean {
   return processors.some(processor => {
@@ -1696,13 +1697,7 @@ export class Agent<
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
-    const errorProcessors =
-      errorProcessorOverrides ??
-      (this.#errorProcessors
-        ? typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-          : this.#errorProcessors
-        : []);
+    const errorProcessors = await this.listResolvedErrorProcessors(requestContext, errorProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
@@ -1865,6 +1860,29 @@ export class Agent<
   }
 
   /**
+   * Resolves error processors from agent configuration.
+   * @internal
+   */
+  private async listResolvedErrorProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<ErrorProcessorOrWorkflow[]> {
+    const configuredProcessors =
+      configuredProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
+          : this.#errorProcessors
+        : []);
+
+    return hasConfiguredProcessor(configuredProcessors, processor => processor.id === 'provider-history-compat')
+      ? configuredProcessors
+      : [...configuredProcessors, new ProviderHistoryCompat()];
+  }
+
+  /**
    * Resolves input processors from agent configuration in execution order.
    * @internal
    */
@@ -1902,12 +1920,22 @@ export class Agent<
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
 
+    // Provider history compat is on by default so provider-specific prompt
+    // fixups (e.g. Gemini's user-first requirement) apply to every agent.
+    // Users can replace it by configuring their own instance.
+    const hasProviderCompat = hasConfiguredProcessor(
+      configuredProcessors,
+      processor => processor.id === 'provider-history-compat',
+    );
+    const providerCompatProcessors = hasProviderCompat ? [] : [new ProviderHistoryCompat()];
+
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
     // Skills processors run after workspace
     // Channel processors run after skills (context injection for platform awareness)
     // Browser processors run after channel processors to inject browser context
     // User-configured processors run after auto-derived layers to allow customization
+    // Provider compat runs last so it sees the final outbound prompt
     return [
       ...memoryProcessors,
       ...workspaceProcessors,
@@ -1915,6 +1943,7 @@ export class Agent<
       ...channelProcessors,
       ...browserProcessors,
       ...configuredProcessors,
+      ...providerCompatProcessors,
     ];
   }
 
@@ -7496,13 +7525,7 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) =>
-        overrides ??
-        (this.#errorProcessors
-          ? typeof this.#errorProcessors === 'function'
-            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-            : this.#errorProcessors
-          : []),
+      }) => this.listResolvedErrorProcessors(requestContext, overrides),
       llm,
     };
 

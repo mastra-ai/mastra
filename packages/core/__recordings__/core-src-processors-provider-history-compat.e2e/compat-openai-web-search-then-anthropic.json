@@ -1,0 +1,313 @@
+{
+  "meta": {
+    "name": "compat-openai-web-search-then-anthropic",
+    "testFile": "src/processors/provider-history-compat.e2e.test.ts",
+    "testName": "provider history compat › openai-web-search-then-anthropic",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-09-03T04:57:36.560Z",
+    "updatedAt": "2026-09-03T05:15:54.054Z"
+  },
+  "recordings": [
+    {
+      "hash": "f8bb9d651beb4d33",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Answer in at most ten words."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Use the web_search tool to find who created TypeScript, then answer in one sentence."
+                }
+              ]
+            }
+          ],
+          "include": ["web_search_call.action.sources"],
+          "tools": [
+            {
+              "type": "web_search"
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1788412550558
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "resp_070f695ea6105e6c006a990286de2887d08700baaca46e8502",
+          "object": "response",
+          "created_at": 1788412550,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1788412552,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "ws_070f695ea6105e6c006a9902878eb887d0b986a7b7b1e78e00",
+              "type": "web_search_call",
+              "status": "completed",
+              "action": {
+                "type": "search",
+                "queries": ["who created TypeScript"],
+                "query": "who created TypeScript",
+                "sources": [
+                  {
+                    "type": "url",
+                    "url": "https://www.techtarget.com/searchapparchitecture/news/252488217/TypeScripts-co-creator-speaks-out-on-TypeScript-40?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.typescriptlang.org/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.npmjs.com/package/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.codecademy.com/resources/docs/typescript/about-typescript?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://ts-aot.dev/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://commandline.microsoft.com/typescript-7-0-anders-hejlsberg-peterman-pod/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.xjavascript.com/blog/who-created-typescript/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://codearchaeology.dev/languages/typescript/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://www.skypack.dev/view/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://programmingandcoding.fandom.com/wiki/TypeScript?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://npm.io/package/ts-creator?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://scriptc.dev/?utm_source=openai"
+                  },
+                  {
+                    "type": "url",
+                    "url": "https://en.wikipedia.org/wiki/TypeScript?utm_source=openai"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "msg_070f695ea6105e6c006a990288785487d096ad6e00102885ff",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [
+                    {
+                      "type": "url_citation",
+                      "end_index": 137,
+                      "start_index": 57,
+                      "title": "TypeScript",
+                      "url": "https://en.wikipedia.org/wiki/TypeScript?utm_source=openai"
+                    }
+                  ],
+                  "logprobs": [],
+                  "text": "TypeScript was created by Anders Hejlsberg at Microsoft. ([en.wikipedia.org](https://en.wikipedia.org/wiki/TypeScript?utm_source=openai)) "
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "context": null,
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 1
+            }
+          },
+          "tools": [
+            {
+              "type": "web_search",
+              "return_token_budget": "default",
+              "search_content_types": ["text"],
+              "search_context_size": "medium",
+              "user_location": {
+                "type": "approximate",
+                "city": null,
+                "country": "US",
+                "region": null,
+                "timezone": null
+              }
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 8174,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 49,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 8223
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "5b5c99ec1db5b1e8",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most ten words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Use the web_search tool to find who created TypeScript, then answer in one sentence."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "TypeScript was created by Anders Hejlsberg at Microsoft. ([en.wikipedia.org](https://en.wikipedia.org/wiki/TypeScript?utm_source=openai)) "
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788412553260
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefwKeDD67ehYQq8rCbYU",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 91,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

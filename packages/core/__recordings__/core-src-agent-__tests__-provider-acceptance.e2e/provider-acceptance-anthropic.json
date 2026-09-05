@@ -1,0 +1,234 @@
+{
+  "meta": {
+    "name": "provider-acceptance-anthropic",
+    "testFile": "src/agent/__tests__/provider-acceptance.e2e.test.ts",
+    "testName": "provider acceptance › anthropic",
+    "model": "claude-haiku-4-5",
+    "createdAt": "2026-09-03T04:51:02.540Z"
+  },
+  "recordings": [
+    {
+      "hash": "05340a962e6df79c",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411060325
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRb2QEvTZrZL7uN3HH",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 48,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ee109fd073d14d1f",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I will ask a question next."
+                },
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411061108
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRdz14MYqi2dA5CX6G",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 31,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "9a97afda49af8f14",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer in at most five words."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hi."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello! How can I help you today?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Say the word \"ready\" and nothing else."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1788411061775
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011CefuRgst3LMBAxGEVdcoX",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Ready"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 41,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

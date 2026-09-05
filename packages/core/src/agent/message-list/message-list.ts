@@ -731,8 +731,6 @@ export class MessageList {
           });
         }
 
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
         return messages
           .filter(message => message != null)
           .map(aiV5ModelMessageToV2PromptMessage)
@@ -791,9 +789,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
 
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
-        let messages = [...systemMessages, ...coreMessages];
-
-        messages = ensureGeminiCompatibleMessages(messages, this.logger);
+        const messages = [...systemMessages, ...coreMessages];
 
         return messages.map(aiV4CoreMessageToV1PromptMessage);
       },

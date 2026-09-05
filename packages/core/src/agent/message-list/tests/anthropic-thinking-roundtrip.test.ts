@@ -142,7 +142,12 @@ describe('Anthropic signed thinking round-trip', () => {
       }) as any,
     });
 
-    expect(result).toBeUndefined();
+    // The Gemini user-first rule prepends a synthetic user turn, but the
+    // assistant message and its provider metadata are forwarded unchanged.
+    expect(result?.prompt).toBeDefined();
+    expect(result!.prompt[0]).toMatchObject({ role: 'user' });
+    const assistant = result!.prompt.find(m => m.role === 'assistant')!;
+    expect((assistant.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
     expect((prompt[0]!.content as any[])[0].providerOptions.google.thoughtSignature).toBe('gemini-sig');
   });
 });

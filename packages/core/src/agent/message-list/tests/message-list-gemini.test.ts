@@ -129,8 +129,11 @@ describe('MessageList - Gemini Compatibility', () => {
     });
   });
 
-  describe('aiV5.llmPrompt() - Gemini message ordering requirements', () => {
-    it('should ensure first non-system message is user in llmPrompt', async () => {
+  describe('aiV5.llmPrompt() - provider-agnostic message ordering', () => {
+    // The Gemini user-first injection is applied in the LLM execution step once the
+    // resolved model is known (see issue #22874), so llmPrompt() itself must not
+    // reshape the history.
+    it('should not inject a user message before an assistant-first history', async () => {
       const list = new MessageList();
 
       list.addSystem('System message');
@@ -139,15 +142,13 @@ describe('MessageList - Gemini Compatibility', () => {
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
+      expect(llmPrompt).toHaveLength(3);
       expect(llmPrompt[0].role).toBe('system');
-      // Should inject user message after system
-      expect(llmPrompt[1].role).toBe('user');
-      expect(llmPrompt[1].content).toEqual([{ type: 'text', text: '.' }]);
-      expect(llmPrompt[2].role).toBe('assistant');
-      expect(llmPrompt[3].role).toBe('user');
+      expect(llmPrompt[1].role).toBe('assistant');
+      expect(llmPrompt[2].role).toBe('user');
     });
 
-    it('should inject user after system when starting with assistant in llmPrompt', async () => {
+    it('should pass through system + assistant-only history unchanged', async () => {
       const list = new MessageList();
 
       list.addSystem('You are helpful');
@@ -155,10 +156,9 @@ describe('MessageList - Gemini Compatibility', () => {
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
-      expect(llmPrompt).toHaveLength(3);
+      expect(llmPrompt).toHaveLength(2);
       expect(llmPrompt[0].role).toBe('system');
-      expect(llmPrompt[1].role).toBe('user'); // Injected after system
-      expect(llmPrompt[2].role).toBe('assistant');
+      expect(llmPrompt[1].role).toBe('assistant');
     });
 
     it('should pass through empty message list unchanged in llmPrompt', async () => {
@@ -169,14 +169,12 @@ describe('MessageList - Gemini Compatibility', () => {
     });
 
     it('should pass through system-only message list unchanged in llmPrompt', async () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
+      const list = new MessageList();
       list.addSystem('You are a helpful assistant');
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
       expect(llmPrompt).toHaveLength(1);
       expect(llmPrompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalled();
     });
   });
 
@@ -630,14 +628,12 @@ describe('MessageList - Gemini Compatibility', () => {
     });
 
     it('should not throw when generating with system-only messages via llmPrompt', async () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
+      const list = new MessageList();
       list.addSystem('You are a helpful assistant.');
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
       expect(llmPrompt).toHaveLength(1);
       expect(llmPrompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalled();
     });
 
     it('should not throw when generating with system-only messages via aiV4.prompt', () => {
