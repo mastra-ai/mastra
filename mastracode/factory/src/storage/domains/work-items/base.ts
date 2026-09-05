@@ -1168,14 +1168,16 @@ async function upsertSupervisorFinding(
   await ops.updateAtomic<GovernanceDbRow>('factory_supervisor_findings', { id: row.id }, current => {
     // A reopened incident is a new incident, and so is an open one refreshed
     // with new actionable content (a run that parked on a different
-    // question): the doorbell rings again (stamp cleared, so a ring that
-    // never lands is retried by the sweep) and stale escalation state must
-    // never keep it visible (or hidden) on the old terms.
+    // question). A new incident gets a new occurrence: the doorbell rings
+    // again (stamp cleared, so a ring that never lands is retried by the
+    // sweep), stale escalation state never keeps it visible (or hidden) on
+    // the old terms, a person's read/archived receipt on the old occurrence
+    // does not carry over, and the force-surface clock restarts.
     const fresh = current.resolved_at !== null || scope.newContent === true;
     return {
       finding,
-      occurrence: Number(current.occurrence) + (current.resolved_at !== null ? 1 : 0),
-      opened_at: current.resolved_at !== null ? scope.now : current.opened_at,
+      occurrence: Number(current.occurrence) + (fresh ? 1 : 0),
+      opened_at: fresh ? scope.now : current.opened_at,
       updated_at: scope.now,
       resolved_at: null,
       last_notified_at: fresh ? null : current.last_notified_at,
@@ -1354,9 +1356,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date;
     /**
      * The finding carries new actionable content (a different question on the
-     * same run): the notification stamp and any escalation state are reset,
-     * as for a reopened incident. The caller rings for it; an unsent ring is
-     * swept up.
+     * same run): treated as a new incident, exactly like a reopen (new
+     * occurrence, stamp and escalation reset). The caller rings for it; an
+     * unsent ring is swept up.
      */
     newContent?: boolean;
   }): Promise<FactorySupervisorFindingRecord> {

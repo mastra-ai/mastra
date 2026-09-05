@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyStageTransition,
   factoryDecisionAttentionIdentity,
+  factorySupervisorFindingAttentionIdentity,
   isAgentActor,
   WorkItemRelationError,
   WorkItemsStorage,
@@ -771,25 +772,41 @@ describe('supervisor finding notification stamps', () => {
       note: 'old question needs a person',
       escalatedAt: t0,
     });
+    // A person read and archived the old question.
+    await storage.setAttentionReceipt({
+      ...scope,
+      userId: 'u',
+      identity: factorySupervisorFindingAttentionIdentity(key, 0),
+      action: 'archive',
+      now: t0,
+    });
     expect(await getRow(storage, key)).toMatchObject({
       status: 'escalated',
       escalationNote: 'old question needs a person',
     });
 
-    // Question two on the same run: new content, same occurrence.
+    // Question two on the same run: new content is a new incident.
     const q2 = { ...finding(key), evidence: 'Parked on ask_user: "q2"' };
     const t1 = new Date('2030-01-01T00:05:00.000Z');
     const refreshed = await storage.openSupervisorFinding({ ...scope, finding: q2, now: t1, newContent: true });
     expect(refreshed).toMatchObject({
-      occurrence: 0,
+      occurrence: 1,
       status: 'open',
       escalatedAt: null,
       escalationNote: null,
       lastNotifiedAt: null,
     });
+    expect(refreshed.openedAt.getTime()).toBe(t1.getTime());
     expect((await storage.listUnnotifiedSupervisorFindings({ ...scope, limit: 10 })).map(r => r.findingKey)).toEqual([
       key,
     ]);
+    // The archived receipt belonged to the old occurrence; the new one is unread.
+    expect(
+      await storage.listAttentionReceipts({
+        ...scope,
+        identities: [factorySupervisorFindingAttentionIdentity(key, 1)],
+      }),
+    ).toEqual([]);
 
     // Question three lands while question two's ring is still in flight.
     const q3 = { ...finding(key), evidence: 'Parked on ask_user: "q3"' };
@@ -803,17 +820,18 @@ describe('supervisor finding notification stamps', () => {
     await storage.markSupervisorFindingNotified({
       ...scope,
       findingKey: key,
-      occurrence: 0,
+      occurrence: refreshed.occurrence,
       notifiedAt: new Date('2030-01-01T00:06:30.000Z'),
       finding: refreshed.finding,
     });
     expect((await getRow(storage, key))?.lastNotifiedAt).toBeNull();
     // Question three's own ring does.
     const current = (await getRow(storage, key))!;
+    expect(current.occurrence).toBe(2);
     await storage.markSupervisorFindingNotified({
       ...scope,
       findingKey: key,
-      occurrence: 0,
+      occurrence: current.occurrence,
       notifiedAt: new Date('2030-01-01T00:07:00.000Z'),
       finding: current.finding,
     });
