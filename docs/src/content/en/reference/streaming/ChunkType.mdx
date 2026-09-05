@@ -1,11 +1,11 @@
 ---
-title: "Reference: ChunkType | Streaming"
-description: "The ChunkType type defines the mastra format of stream chunks that can be emitted during streaming responses from agents."
+title: 'Reference: ChunkType | Streaming'
+description: 'The ChunkType type defines the mastra format of stream chunks that can be emitted during streaming responses from agents.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
-import PropertiesTable from "@site/src/components/PropertiesTable";
+import PropertiesTable from '@site/src/components/PropertiesTable';
 
 # ChunkType
 
@@ -948,6 +948,13 @@ Signals the start of a processing step.
             type: 'LanguageModelV2CallWarning[]',
             isOptional: true,
             description: 'Any warnings from the language model call',
+          },
+          {
+            name: 'startedAt',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Epoch milliseconds captured immediately before the model provider call, so time to first token can be measured even when the chunk is delivered after streaming has begun',
           },
         ],
       },
