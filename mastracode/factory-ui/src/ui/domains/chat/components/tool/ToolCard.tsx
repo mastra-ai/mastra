@@ -14,6 +14,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { highlightCode, languageForPath } from '../../../../ui/highlight';
 import { stripSerializedAnsi } from '../../services/ansi';
 import type { ToolCall } from '../../services/transcript';
+import { ToolTime } from '../ToolTime';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
@@ -183,7 +184,7 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
       aria-busy={tool.status === 'running'}
     >
       <ToolCallTrigger>
-        <ToolCallPresentedHeader icon={icon} label={label} detail={detail} />
+        <ToolCallPresentedHeader leading={<ToolTime at={tool.createdAt} />} icon={icon} label={label} detail={detail} />
       </ToolCallTrigger>
       <ToolCallContent>
         <ToolBody tool={tool} command={command} />

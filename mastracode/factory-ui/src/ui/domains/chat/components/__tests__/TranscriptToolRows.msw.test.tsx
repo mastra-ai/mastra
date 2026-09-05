@@ -445,4 +445,49 @@ describe('TranscriptEntries tool rows', () => {
     const assistantProse = screen.getByText('All 36 tests passed.').closest('.mastra-markdown');
     expect(assistantProse).toHaveClass('my-3');
   });
+
+  describe('local timestamps', () => {
+    const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    const calendar = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'medium' });
+    const PART_AT = new Date('2026-07-15T10:03:42.000Z');
+
+    it('leads a tool row with the moment core stamped on the call, in local time', () => {
+      renderEntries([
+        assistantMessage('msg-1', [
+          { ...doneTool('call-1', 'execute_command', { command: 'pnpm build' }), createdAt: PART_AT.getTime() },
+        ]),
+      ]);
+
+      const row = screen.getByRole('group', { name: 'Tool: execute_command' });
+      const time = within(row).getByText(clock.format(PART_AT));
+      expect(time.tagName).toBe('TIME');
+      expect(time).toHaveAttribute('dateTime', PART_AT.toISOString());
+      expect(time).toHaveAttribute('title', calendar.format(PART_AT));
+      // Reads left to right: the clock, then what ran.
+      expect(
+        time.compareDocumentPosition(within(row).getByText('Run')) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('falls back to the message time for calls core never stamped', () => {
+      renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'view')])]);
+
+      const row = screen.getByRole('group', { name: 'Tool: view' });
+      expect(within(row).getByText(clock.format(CREATED_AT))).toHaveAttribute('dateTime', CREATED_AT.toISOString());
+    });
+
+    it('leads a group row with the time its first call began', () => {
+      renderEntries([
+        assistantMessage('msg-1', [
+          { ...doneTool('call-1', 'view'), createdAt: PART_AT.getTime() },
+          { ...doneTool('call-2', 'search_content'), createdAt: PART_AT.getTime() + 1000 },
+          { ...doneTool('call-3', 'view'), createdAt: PART_AT.getTime() + 2000 },
+        ]),
+      ]);
+
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(within(group).getByText(clock.format(PART_AT))).toBeInTheDocument();
+      expect(within(group).queryByText(clock.format(new Date(PART_AT.getTime() + 2000)))).not.toBeInTheDocument();
+    });
+  });
 });

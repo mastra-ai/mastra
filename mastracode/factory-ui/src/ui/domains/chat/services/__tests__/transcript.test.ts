@@ -1,11 +1,12 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
   message: { content: { parts: unknown[] } };
+  runtimeTools?: Record<string, { createdAt?: number }>;
 };
 
 function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
@@ -497,6 +498,31 @@ describe('transcript reducer message entries', () => {
         },
       },
     ]);
+  });
+
+  it('stamps a live tool call when it starts and keeps that stamp across a repeated start', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-05T15:42:05.000Z'));
+      const started = transcriptReducer(initialTranscript, {
+        type: 'event',
+        event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
+      });
+      const entry = started.entries[0];
+      if (!isMessageEntry(entry)) throw new Error('expected a message entry');
+      expect(entry.runtimeTools?.['tool-1']?.createdAt).toBe(Date.parse('2026-09-05T15:42:05.000Z'));
+
+      vi.setSystemTime(new Date('2026-09-05T15:42:09.000Z'));
+      const restarted = transcriptReducer(started, {
+        type: 'event',
+        event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
+      });
+      const again = restarted.entries[0];
+      if (!isMessageEntry(again)) throw new Error('expected a message entry');
+      expect(again.runtimeTools?.['tool-1']?.createdAt).toBe(Date.parse('2026-09-05T15:42:05.000Z'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stamps isError on the mirrored part when tool_end reports a failure', () => {

@@ -23,6 +23,8 @@ export interface ToolCall {
   result?: unknown;
   /** Appended shell stdout/stderr for shell-style tools. */
   output: string;
+  /** Epoch ms the call began: the persisted part's stamp, or when the live `tool_start` arrived. */
+  createdAt?: number;
 }
 
 /**
@@ -111,12 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -322,7 +319,13 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return withTool(
         state,
         event.toolCallId,
-        t => ({ ...t, toolName: event.toolName, args: event.args, status: 'running' }),
+        t => ({
+          ...t,
+          toolName: event.toolName,
+          args: event.args,
+          status: 'running',
+          createdAt: t.createdAt ?? Date.now(),
+        }),
         {
           toolName: event.toolName,
           args: event.args,
@@ -891,8 +894,7 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
+    { data?: { providerOptions?: unknown } } | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;
@@ -1204,6 +1206,7 @@ function toolCallFromPart(part: MastraMessagePart | undefined): ToolCall | undef
     status: invocation.state === 'result' ? 'done' : 'running',
     result: 'result' in invocation ? invocation.result : undefined,
     output: '',
+    createdAt: part.createdAt,
   };
 }
 
