@@ -73,6 +73,45 @@ const rules = defaultFactoryRules({ version: 'deployment-v2' });
 // Pass rules to MastraFactory. Optional tool overrides remain under overrides.tools.
 ```
 
+### Board transition policy
+
+Boards own three separate concerns: topology declares which moves exist, `transitionPolicy` restricts those moves, and lifecycle handlers return entry/exit effects. The transition service uses the policy on the item's persisted, installed board, with no fallback to Work policy.
+
+Work automatically supplies its classification requirement, non-bug human-approval gate, and acceptance decision. Review has no additional transition policy. Custom boards without a policy do not inherit Work's classification requirements or acceptance stamping, even if they use Work phase names or an agent role named `triage`.
+
+```typescript
+import { defineBoard } from '@mastra/factory/boards';
+import type { BoardTransitionPolicy } from '@mastra/factory/boards';
+
+const releasePolicy: BoardTransitionPolicy = context => {
+  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+  }
+};
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'approval',
+  transitionPolicy: releasePolicy,
+  phases: {
+    approval: { title: 'Approval', next: 'shipped' },
+    shipped: { title: 'Shipped' },
+  },
+});
+// Install through new MastraFactory({ storage, boards: [releaseBoard] }).
+```
+
+A policy receives a deeply readonly snapshot of the item and transition, including actor, ingress, source, revision, persisted classification and acceptance, requested classification, and initial-entry/reentry flags. Dates are ISO strings. `isHumanTransition` requires both a human actor and human ingress; a deferred rule with a human actor is not a human transition.
+
+Return `undefined` for no additional restriction, `{ type: 'allow' }` with optional `triageType` and `accept: true` intents, or `{ type: 'reject', code, reason }`. Policies cannot return lifecycle effects or arbitrary patches. Classification intents must come from the existing triage-agent path and match its requested verdict; acceptance intents require a human transition. Runtime validates these intents and applies them only in the revision-checked transaction after all lifecycle handlers allow the move.
+
+Policies must be side-effect-free. They run on initial entry, reentry, and same-stage requests, but completed replays use the stored result. Concurrent attempts can evaluate more than once. Policy and lifecycle evaluation share one timeout budget; a timeout does not cancel arbitrary work started by a callback.
+
+A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
+
+**Remaining limitations:** Phase execution semantics are not generalized by this API. Working/resting interpretation, role routing, terminal cleanup, consent, and kickoff behavior still include built-in naming assumptions. For example, naming a phase `shipped` does not make it a runtime terminal phase. Built-in board replacement and customization remain unsupported.
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.

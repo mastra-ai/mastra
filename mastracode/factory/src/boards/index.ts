@@ -1,5 +1,10 @@
 export { BoardDefinitionError, defineBoard } from './define-board.js';
 export type { BoardDefinition, BoardPhaseDefinition, BoardTransition } from './define-board.js';
+export type {
+  BoardTransitionPolicy,
+  BoardTransitionPolicyContext,
+  BoardTransitionPolicyResult,
+} from './transition-policy.js';
 export { createBoardRegistry, defaultBoards } from './registry.js';
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 import { isReviewBoardPhase, reviewBoard } from './review.js';

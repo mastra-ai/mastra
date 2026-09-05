@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -131,6 +132,7 @@ interface TransitionConsentOptions {
   autonomy?: 'arm' | 'disarm';
   consentedBy?: string;
   accept?: boolean;
+  triageType?: FactoryTriageType;
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
@@ -172,26 +174,6 @@ function isTriageAgent(actor: FactoryRuleActor): actor is Extract<FactoryRuleAct
 
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
   return request.actor.type === 'human' && request.ingress.type === 'human';
-}
-
-function requiresHumanApproval(triageType: FactoryTriageType | null | undefined): boolean {
-  return triageType !== undefined && triageType !== null && triageType !== 'bug';
-}
-
-function isAtRest(stage: FactoryRuleStage): boolean {
-  return stage === 'intake' || stage === 'triage';
-}
-
-function entersWork(stage: FactoryRuleStage): boolean {
-  return stage === 'planning' || stage === 'execute';
-}
-
-// A person moving a card into Planning/Execute is the approval gesture —
-// recorded once, so later agent hops need no second nod. Not limited to moves
-// out of rest: a card accepted before acceptance was recorded still gets its
-// stamp (and its label reconciled) the next time a person moves it forward.
-function acceptsItem(request: FactoryTransitionRequest): boolean {
-  return isHumanTransition(request) && entersWork(request.stage);
 }
 
 function ruleFailure(error: unknown): { code: FactoryRuleRejectionCode; reason: string } {
@@ -316,58 +298,6 @@ export class FactoryTransitionService {
       );
     }
 
-    if (isTriageAgent(request.actor) && request.triageType === undefined) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'invalid_transition',
-        'Triage transitions must report a structured triage classification.',
-      );
-    }
-    if (item.triageType && request.triageType && item.triageType !== request.triageType) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'forbidden',
-        'The persisted triage classification cannot be changed by a later transition.',
-      );
-    }
-    // The gate stands at the exit of rest. A non-bug card already in
-    // Planning/Execute can only have been put there by a person, so an agent
-    // carrying it further (plan → build) is not asked for a second nod even
-    // when the acceptance stamp predates its recording.
-    const triageType = item.triageType ?? request.triageType;
-    if (
-      requiresHumanApproval(triageType) &&
-      entersWork(request.stage) &&
-      isAtRest(fromStage) &&
-      !isHumanTransition(request) &&
-      !item.acceptedAt
-    ) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
-      );
-    }
-
-    // The card's own content can steer a bound agent; on a card authored
-    // outside the write-access circle, leaving rest takes a person's gesture.
-    if (
-      request.actor.type === 'agent' &&
-      !isWorkingFactoryRuleStage(fromStage) &&
-      isWorkingFactoryRuleStage(request.stage) &&
-      externallyAuthoredWorkItem(item)
-    ) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'approval_required',
-        'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
-      );
-    }
-
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
 
@@ -399,11 +329,51 @@ export class FactoryTransitionService {
     } satisfies Omit<FactoryStageRuleContext, 'stage'>;
 
     let evaluation:
-      | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
+      | { outcome: 'accepted'; decisions: Record<string, unknown>[]; intents: TransitionConsentOptions }
       | { outcome: 'rejected'; code: string; reason: string };
     try {
       evaluation = await withRuleTimeout(
         (async () => {
+          const policy = boardTransitionPolicyResultSchema.parse(
+            await board.transitionPolicy?.(
+              immutablePolicySnapshot({
+                ...contextBase,
+                item: { ...contextBase.item, triageType: item.triageType },
+                initialEntry: request.initialEntry ?? false,
+                reenter: request.reenter ?? false,
+                isHumanTransition: isHumanTransition(request),
+                requestedTriageType: request.triageType,
+              }),
+            ),
+          );
+          if (policy?.type === 'reject') {
+            return { outcome: 'rejected' as const, code: policy.code, reason: policy.reason };
+          }
+          if (
+            policy?.triageType !== undefined &&
+            (!isTriageAgent(request.actor) ||
+              policy.triageType !== request.triageType ||
+              (item.triageType !== null && item.triageType !== policy.triageType))
+          ) {
+            throw new Error('Board policy requested an unauthorized classification.');
+          }
+          if (policy?.accept && !isHumanTransition(request)) {
+            throw new Error('Board policy requested unauthorized acceptance.');
+          }
+          // External content can steer a bound agent; board allowance cannot bypass this guard.
+          if (
+            request.actor.type === 'agent' &&
+            !isWorkingFactoryRuleStage(fromStage) &&
+            isWorkingFactoryRuleStage(request.stage) &&
+            externallyAuthoredWorkItem(item)
+          ) {
+            return {
+              outcome: 'rejected' as const,
+              code: 'approval_required',
+              reason:
+                'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
+            };
+          }
           const decisions: FactoryCommitDecision[] = [];
           for (const rule of resolveFactoryStageRules(this.#boards, {
             board: request.board,
@@ -449,6 +419,7 @@ export class FactoryTransitionService {
           }
           return {
             outcome: 'accepted' as const,
+            intents: { triageType: policy?.triageType, accept: policy?.accept === true && !item.acceptedAt },
             decisions: validateFactoryRuleDecisions(validated) as unknown as Record<string, unknown>[],
           };
         })(),
@@ -465,9 +436,7 @@ export class FactoryTransitionService {
       request,
       transitionId,
       evaluation,
-      evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, humanMove), accept: acceptsItem(request) && !item.acceptedAt }
-        : {},
+      evaluation.outcome === 'accepted' ? { ...consentEffect(request, humanMove), ...evaluation.intents } : {},
     );
   }
 
@@ -502,7 +471,7 @@ export class FactoryTransitionService {
       ruleSetVersion: this.#rules.version,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
-      ...(isTriageAgent(request.actor) && request.triageType ? { triageType: request.triageType } : {}),
+      ...(options.triageType ? { triageType: options.triageType } : {}),
     });
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');

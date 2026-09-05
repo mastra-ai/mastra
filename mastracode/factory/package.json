@@ -19,6 +19,12 @@
         "default": "./dist/index.js"
       }
     },
+    "./boards": {
+      "import": {
+        "types": "./dist/boards/index.d.ts",
+        "default": "./dist/boards/index.js"
+      }
+    },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",

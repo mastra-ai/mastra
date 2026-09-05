@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { workTransitionPolicy } from './work-transition-policy.js';
 
 function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
@@ -120,6 +121,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   id: 'work',
   title: 'Work',
   initialPhase: 'intake',
+  transitionPolicy: workTransitionPolicy,
   phases: {
     intake: {
       title: 'Intake',

@@ -37,6 +37,29 @@ Do not create an `actions` config or execute authoritative policy in React. Each
 
 Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
 
+## Configure board transition policy
+
+Search the installed `defineBoard()` definition for `transitionPolicy`. Read `src/boards/transition-policy.ts` for the public contract and `src/boards/work-transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
+
+Topology declares allowed moves; transition policy adds business restrictions; lifecycle handlers return effects. Add custom restrictions to the board definition, not the generic transition service or global rules:
+
+```typescript
+import type { BoardTransitionPolicy } from '@mastra/factory/boards';
+
+const transitionPolicy: BoardTransitionPolicy = context => {
+  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+  }
+};
+// Pass transitionPolicy to the installed custom defineBoard() definition.
+```
+
+The policy receives a deeply readonly snapshot with ISO-string dates. Return `undefined`, `{ type: 'allow', triageType?, accept?: true }`, or `{ type: 'reject', code, reason }`, never skill calls, transitions, consent overrides, or patches. Classification intents require the existing triage-agent path and must match its requested classification. Acceptance requires both human actor and human ingress. Runtime validates results and commits intents atomically only after successful lifecycle evaluation.
+
+Policies must be side-effect-free and share the lifecycle timeout budget. Initial entry, reentry, and same-stage requests evaluate policy; completed replay does not. Concurrent attempts may evaluate more than once, and timing out does not cancel work started by a callback. Do not access storage or integrations from a policy.
+
+Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Working/resting phase semantics, role routing, terminal cleanup, consent, and kickoff behavior still contain built-in naming assumptions; custom policies do not generalize them. Do not advertise a custom `shipped` phase as terminal or invent built-in replacement APIs.
+
 ## Apply supported overrides
 
 Tool-result overrides replace the exact handler leaf. Integration overrides replace one event handler. Neither composes with the built-in handler; siblings remain unchanged. Board handlers belong to their definitions, not this override mechanism.
