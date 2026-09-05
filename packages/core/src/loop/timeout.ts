@@ -4,15 +4,19 @@
  * This is distinct from a caller-supplied abort so that timeouts can be reported as
  * failures rather than treated as clean cancellations.
  */
+export type MastraTimeoutType = 'step' | 'total' | 'firstChunk';
+
 export class MastraTimeoutError extends Error {
-  readonly timeoutType: 'step' | 'total';
+  readonly timeoutType: MastraTimeoutType;
   readonly timeoutMs: number;
 
-  constructor({ timeoutType, timeoutMs }: { timeoutType: 'step' | 'total'; timeoutMs: number }) {
+  constructor({ timeoutType, timeoutMs }: { timeoutType: MastraTimeoutType; timeoutMs: number }) {
     super(
       timeoutType === 'total'
         ? `Agent execution timed out after ${timeoutMs}ms (modelSettings.timeout.totalMs)`
-        : `Model call timed out after ${timeoutMs}ms (modelSettings.timeout.stepMs)`,
+        : timeoutType === 'firstChunk'
+          ? `Model call timed out before first content after ${timeoutMs}ms (modelSettings.timeout.firstChunkMs)`
+          : `Model call timed out after ${timeoutMs}ms (modelSettings.timeout.stepMs)`,
     );
     this.name = 'MastraTimeoutError';
     this.timeoutType = timeoutType;
@@ -53,7 +57,7 @@ export function createTimeoutAbortSignal({
 }: {
   parentSignal?: AbortSignal;
   timeoutMs?: number;
-  timeoutType: 'step' | 'total';
+  timeoutType: MastraTimeoutType;
 }): TimeoutAbortSignal {
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return { signal: parentSignal, cleanup: () => {} };
@@ -146,6 +150,46 @@ export function guardStreamWithAbort<T>(
           return;
         }
         controller.enqueue(value);
+      } catch (error) {
+        settle();
+        reader.cancel(error).catch(() => {});
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      settle();
+      return reader.cancel(reason);
+    },
+  });
+}
+
+export function guardStreamUntilMatch<T>(
+  stream: ReadableStream<T>,
+  signal: AbortSignal | undefined,
+  matches: (chunk: T) => boolean,
+  onMatchedOrSettled: () => void,
+): ReadableStream<T> {
+  if (!signal) return stream;
+
+  const reader = stream.getReader();
+  let active = true;
+  const settle = () => {
+    if (!active) return;
+    active = false;
+    onMatchedOrSettled();
+  };
+
+  return new ReadableStream<T>({
+    async pull(controller) {
+      try {
+        const result = active ? await raceAgainstAbort(reader.read(), signal) : await reader.read();
+        if (result.done) {
+          settle();
+          controller.close();
+          return;
+        }
+        if (matches(result.value)) settle();
+        controller.enqueue(result.value);
       } catch (error) {
         settle();
         reader.cancel(error).catch(() => {});
