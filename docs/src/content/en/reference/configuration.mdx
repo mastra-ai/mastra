@@ -941,6 +941,26 @@ export const mastra = new Mastra({
 })
 ```
 
+### server.memory
+
+**Type:** `{ requireResourceScope?: boolean }`
+
+Controls memory access for authenticated requests. When `requireResourceScope` is `true` (the default), memory routes require a server-derived resource ID, normally set through `auth.mapUserToResourceId`. Authenticated requests without one are rejected with a 403 instead of returning every resource's threads.
+
+Set it to `false` only if all authenticated callers are meant to read all memory.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    memory: {
+      requireResourceScope: false,
+    },
+  },
+})
+```
+
 ### server.middleware
 
 **Type:** `Middleware | Middleware[]`

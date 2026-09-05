@@ -298,6 +298,26 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 
 These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
 
+### Memory requires a resource scope
+
+`MASTRA_RESOURCE_ID_KEY` is the authorization boundary for memory. Memory routes return a 403 when a request is authenticated but no resource ID can be derived from the request context. Client-provided resource IDs are ignored in that case, because a caller could otherwise pass another user's resource ID.
+
+Configure `mapUserToResourceId` (or set `MASTRA_RESOURCE_ID_KEY` in middleware) so authenticated users are scoped to their own memory.
+
+Deployments that intentionally expose all memory to every authenticated caller can opt out:
+
+```typescript filename="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    memory: {
+      requireResourceScope: false,
+    },
+  },
+})
+```
+
+Unauthenticated local development, Studio auth, and deployments using an FGA provider are unaffected.
+
 ## TypeScript support
 
 When you provide a type parameter to `RequestContext`, all methods are fully typed:

@@ -643,6 +643,7 @@ async function prepareCreateResponseRequest({
     if (body.agent_id) {
       resolvedAgent = await resolveResponseAgent({ mastra, agentId: body.agent_id });
       previousResponseTurnRecord = await findResponseTurnRecord({
+        mastra,
         agent: resolvedAgent,
         responseId: body.previous_response_id,
         requestContext,
