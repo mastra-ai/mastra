@@ -652,7 +652,48 @@ describe('FactoryTransitionService', () => {
     expect(reviewed).toMatchObject({ status: 'accepted', stage: 'review' });
   });
 
-  it('lets an agent carry a non-bug card that already left rest, and stamps acceptance on the next human move', async () => {
+  it.each(['planning', 'execute'] as const)(
+    'requires approval after an intermediate Review move into %s',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { metadata: { authorTrusted: true } });
+      const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+      const reviewed = await service.transition({
+        ...request(item, { stage: 'review', identity: 'classify-review' }),
+        actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+        ingress: { type: 'agent', identity: 'classify-review' },
+        triageType: 'feature request',
+      });
+      assert(reviewed.status === 'accepted');
+      const before = await storage.get({ orgId: 'org-1', id: item.id });
+      expect(before).toMatchObject({ stages: ['review'], triageType: 'feature request', acceptedAt: null });
+      const decisionsBefore = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      const result = await service.transition({
+        ...request({ ...item, revision: reviewed.revision }, { stage }),
+        actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+        ingress: { type: 'agent', identity: `review-${stage}` },
+      });
+      expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toEqual(before);
+      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual(decisionsBefore);
+
+      const approved = await service.transition(
+        request({ ...item, revision: reviewed.revision }, { stage, identity: 'approve-review' }),
+      );
+      assert(approved.status === 'accepted');
+      const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
+      expect(acceptedAt).toBeInstanceOf(Date);
+      const continued = await service.transition({
+        ...request({ ...item, revision: approved.revision }, { stage: stage === 'planning' ? 'execute' : 'planning' }),
+        actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+        ingress: { type: 'agent', identity: 'continue-approved' },
+      });
+      expect(continued.status).toBe('accepted');
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
+    },
+  );
+
+  it('requires approval for a historical non-bug card without an acceptance stamp', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
     const item = await createItem(storage);
@@ -681,17 +722,21 @@ describe('FactoryTransitionService', () => {
       actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
       ingress: { type: 'agent', identity: 'agent-execute' },
     });
-    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+    expect(executed).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      stages: ['planning'],
+      revision: (planned as { revision: number }).revision,
+      acceptedAt: null,
+    });
 
     const reworked = await service.transition({
       ...request(
-        { id: item.id, revision: (executed as { revision: number }).revision },
-        { stage: 'planning', identity: 'human-rework' },
+        { id: item.id, revision: (planned as { revision: number }).revision },
+        { stage: 'execute', identity: 'human-rework' },
       ),
       cause: 'board_drag',
     });
-    expect(reworked).toMatchObject({ status: 'accepted', stage: 'planning' });
+    expect(reworked).toMatchObject({ status: 'accepted', stage: 'execute' });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeInstanceOf(Date);
     await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(2));
   });

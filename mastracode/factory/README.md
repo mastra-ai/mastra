@@ -77,7 +77,7 @@ const rules = defaultFactoryRules({ version: 'deployment-v2' });
 
 Boards own three separate concerns: topology declares which moves exist, `transitionPolicy` restricts those moves, and lifecycle handlers return entry/exit effects. The transition service uses the policy on the item's persisted, installed board, with no fallback to Work policy.
 
-Work automatically supplies its classification requirement, non-bug human-approval gate, and acceptance decision. Review has no additional transition policy. Custom boards without a policy do not inherit Work's classification requirements or acceptance stamping, even if they use Work phase names or an agent role named `triage`.
+Work automatically supplies its classification requirement, non-bug human-approval gate, and acceptance decision. Classified non-bug items without recorded acceptance require a human transition into Planning or Execute, regardless of their previous phase. Passing through Review does not grant approval. Historical items without an acceptance stamp also require this human transition; once acceptance is recorded, agents can continue the work. Review has no additional transition policy. Custom boards without a policy do not inherit Work's classification requirements or acceptance stamping, even if they use Work phase names or an agent role named `triage`.
 
 ```typescript
 import { defineBoard } from '@mastra/factory/boards';

@@ -1,7 +1,7 @@
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
-  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition } = context;
+  const { item, requestedTriageType, actor, toStage, isHumanTransition } = context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
   if (triageAgent && requestedTriageType === undefined) {
     return {
@@ -19,15 +19,8 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
   }
   const triageType = item.triageType ?? requestedTriageType;
   const entersWork = toStage === 'planning' || toStage === 'execute';
-  // Historical cards already working need no second approval from an agent.
-  if (
-    triageType != null &&
-    triageType !== 'bug' &&
-    entersWork &&
-    (fromStage === 'intake' || fromStage === 'triage') &&
-    !isHumanTransition &&
-    !item.acceptedAt
-  ) {
+  // An intermediate phase is not evidence of human approval.
+  if (triageType != null && triageType !== 'bug' && entersWork && !isHumanTransition && !item.acceptedAt) {
     return {
       type: 'reject',
       code: 'approval_required',
