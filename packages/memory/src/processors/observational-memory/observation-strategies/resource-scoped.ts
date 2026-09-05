@@ -264,6 +264,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.requestContext,
           this.priorMetadataByThread,
           this.opts.observabilityContext,
+          undefined,
+          { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
         );
       }),
     );

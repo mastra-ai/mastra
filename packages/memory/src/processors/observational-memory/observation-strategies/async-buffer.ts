@@ -65,7 +65,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
       priorExtractedValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
+      trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
     });
     const hookedValues = await applyExtractorHooks({
