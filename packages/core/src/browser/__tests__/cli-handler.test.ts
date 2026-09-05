@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraBrowser } from '../browser';
@@ -8,6 +12,65 @@ describe('BrowserCliHandler', () => {
 
   beforeEach(() => {
     handler = new BrowserCliHandler();
+  });
+
+  describe('Browser Use stdin', () => {
+    it.each(['browser-use', 'browseruse', 'browser', 'bu'])('preserves %s stdin through a real shell', alias => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-'));
+      const payload = `print("a; b && c || d")\nprint('--cdp-url ws://external/browser')\nprint("$HOME $(echo unexpected) \\\"")\n`;
+      const cdpUrl = `ws://localhost/browser/a'b?x=$(echo unexpected)&y=1`;
+      try {
+        writeFileSync(
+          join(directory, alias),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        const command = `  ${alias} <<'PY'\n${payload}PY\n`;
+        const analysis = handler.analyzeCommand(command);
+        expect(analysis.parts).toEqual([command]);
+        expect(analysis.browserClis.map(cli => cli.name)).toEqual(['browser-use']);
+        expect(analysis.usingExternalCdp).toBe(false);
+        expect(analysis.externalCdpUrl).toBeNull();
+        const transformed = handler.injectCdpUrl(command, cdpUrl, `thread'; echo unexpected`);
+        const output = execFileSync('sh', ['-c', transformed], {
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, endpoint, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(endpoint).toBe(cdpUrl);
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each(['browser-use', 'bu  ', 'browser< script.py', 'browseruse < script.py'])(
+      'uses environment transport for %s',
+      command => {
+        expect(handler.analyzeCommand(command).browserClis.map(cli => cli.name)).toEqual(['browser-use']);
+        const result = handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread');
+        expect(result).toMatch(/^BU_CDP_WS=/);
+        expect(result).not.toMatch(/--cdp-url|--session/);
+      },
+    );
+
+    it('isolates daemon names by thread and endpoint while keeping repeated calls stable', () => {
+      const name = (thread?: string, endpoint = 'ws://localhost/one') =>
+        handler.injectCdpUrl('bu', endpoint, thread).match(/BU_NAME=(\S+)/)?.[1];
+      expect(name('one')).toBe(name('one'));
+      expect(name('one')).not.toBe(name('two'));
+      expect(name('one')).not.toBe(name('one', 'ws://localhost/two'));
+      expect(name()).toBe(name('default'));
+    });
+
+    it.each(['browser-use-extra', 'browser-use open https://example.com', 'echo browser-use'])(
+      'does not select stdin transport for %s',
+      command => {
+        expect(handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
+      },
+    );
   });
 
   describe('getBrowserCliConfig', () => {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { shellQuote, splitShellCommand, reassembleShellCommand } from '../workspace/sandbox/utils';
 import type { MastraBrowser } from './browser';
 
@@ -198,6 +199,14 @@ export class BrowserCliHandler {
    * chained command string (commands joined by &&, ||, or ;).
    */
   injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
+    if (this.isBrowserUseStdinCommand(command)) {
+      const name = createHash('sha256')
+        .update(JSON.stringify([threadId ?? 'default', cdpUrl]))
+        .digest('hex')
+        .slice(0, 16);
+      return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(`mastra-${name}`)} sh -c ${shellQuote(command)}`;
+    }
+
     const { parts, operators } = splitShellCommand(command);
 
     const modifiedParts = parts.map((part: string) => {
@@ -269,6 +278,10 @@ export class BrowserCliHandler {
     return warmups;
   }
 
+  private isBrowserUseStdinCommand(command: string): boolean {
+    return /^\s*(?:browser-use|browseruse|browser|bu)(?=\s|<|$)\s*(?:<|$)/.test(command);
+  }
+
   /**
    * Process a command for browser CLI handling.
    * Detects browser CLIs, checks for external CDP, and prepares injection.
@@ -285,6 +298,16 @@ export class BrowserCliHandler {
     /** External CDP URL if detected */
     externalCdpUrl: string | null;
   } {
+    // Python on stdin is opaque: shell splitting and flag detection would inspect its contents.
+    if (this.isBrowserUseStdinCommand(command)) {
+      return {
+        browserClis: [{ name: 'browser-use', config: CLI_CDP_PATTERNS['browser-use']! }],
+        parts: [command],
+        usingExternalCdp: false,
+        externalCdpUrl: null,
+      };
+    }
+
     const { parts } = splitShellCommand(command);
 
     const browserClis = parts
