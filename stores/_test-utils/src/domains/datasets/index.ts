@@ -1134,7 +1134,9 @@ export function createDatasetsTests({
           tags: null,
           comment: null,
         });
-        expect(upserted.toolMockReport).toBeNull();
+        if (supportsToolMocks) {
+          expect(upserted.toolMockReport).toBeNull();
+        }
         expect(typeof upserted.metadata?.purgedAt).toBe('string');
       });
 
