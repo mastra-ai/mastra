@@ -36,6 +36,15 @@ async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTM
   await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
 }
 
+async function enterCustomModel(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, modelId: string) {
+  await user.click(trigger);
+  await user.type(await screen.findByPlaceholderText('Search models…'), modelId);
+  const option = await screen.findByRole('option', { name: `Use “${modelId}”` });
+  fireEvent.pointerDown(option, { pointerType: 'mouse' });
+  fireEvent.click(option, { detail: 1 });
+  await waitFor(() => expect(screen.queryByRole('option', { name: `Use “${modelId}”` })).not.toBeInTheDocument());
+}
+
 async function rowFor(packName: string): Promise<HTMLLIElement> {
   const row = (await screen.findByText(packName)).closest('li');
   if (!(row instanceof HTMLLIElement)) throw new Error(`Model pack row not found for ${packName}`);
@@ -184,6 +193,39 @@ describe('ModelPacksSection', () => {
         }),
       );
       expect(await screen.findByText('My Pack')).toBeInTheDocument();
+    });
+
+    it('POSTs model IDs that are not in the available-model catalog', async () => {
+      let postBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse([])),
+        http.post(PACKS_URL, async ({ request }) => {
+          postBody = await request.json();
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection models={models} />);
+
+      await user.click(await screen.findByRole('button', { name: 'New pack' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'Latest Models');
+      const selects = screen.getAllByRole('combobox');
+      await enterCustomModel(user, selects[0]!, 'openai/gpt-next');
+      await enterCustomModel(user, selects[1]!, 'anthropic/claude-next');
+      await enterCustomModel(user, selects[2]!, 'openai/gpt-next-mini');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+
+      await waitFor(() =>
+        expect(postBody).toEqual({
+          name: 'Latest Models',
+          models: {
+            build: 'openai/gpt-next',
+            plan: 'anthropic/claude-next',
+            fast: 'openai/gpt-next-mini',
+          },
+        }),
+      );
     });
   });
 

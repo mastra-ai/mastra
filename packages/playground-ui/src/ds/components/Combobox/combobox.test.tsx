@@ -20,7 +20,11 @@ const options = [
   { label: 'Google', value: 'google' },
 ];
 
-function renderCombobox(props?: { onValueChange?: (value: string) => void; value?: string }) {
+function renderCombobox(props?: {
+  onValueChange?: (value: string) => void;
+  value?: string;
+  allowCustomValue?: boolean;
+}) {
   return render(
     <Combobox
       options={options}
@@ -28,6 +32,7 @@ function renderCombobox(props?: { onValueChange?: (value: string) => void; value
       onValueChange={props?.onValueChange}
       placeholder="Pick provider"
       searchPlaceholder="Search providers"
+      allowCustomValue={props?.allowCustomValue}
     />,
   );
 }
@@ -119,6 +124,36 @@ describe('Combobox', () => {
     await waitFor(() => {
       expect(onValueChange).toHaveBeenCalledWith('google');
     });
+  });
+
+  it('selects a custom value when custom values are allowed', async () => {
+    const onValueChange = vi.fn();
+    renderCombobox({ onValueChange, allowCustomValue: true });
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'new-provider/new-model' }, inputType: 'insertText' });
+
+    const customOption = await screen.findByRole('option', { name: 'Use “new-provider/new-model”' });
+    fireEvent.pointerDown(customOption, { pointerType: 'mouse' });
+    fireEvent.click(customOption, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith('new-provider/new-model');
+    });
+  });
+
+  it('does not offer a custom value unless custom values are allowed', async () => {
+    renderCombobox();
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'new-provider/new-model' }, inputType: 'insertText' });
+
+    expect(await screen.findByText('No option found.')).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /new-provider\/new-model/ })).toBeNull();
   });
 
   it('renders a pill-shaped trigger from the shared buttonVariants recipe', () => {
