@@ -90,6 +90,47 @@ describe('credential store provider registry', () => {
     warn.mockRestore();
   });
 
+  it("resolves a server-started factory session turn as the session's own tenant, org first", () => {
+    // A notification wake carries only the controller context: the factory
+    // stamped the org onto the session and chose its owner at creation.
+    const ctx = new RequestContext();
+    ctx.set('controller', {
+      state: { factoryProjectId: 'project_1', factoryOrgId: 'org_1' },
+      session: { id: 's1', ownerId: 'user_owner' },
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_owner', orgFirst: true });
+  });
+
+  it('stays unresolved for a session missing any of project, org, or owner, and for a non-factory session', () => {
+    for (const controller of [
+      { state: { factoryProjectId: 'project_1' }, session: { ownerId: 'user_owner' } },
+      { state: { factoryProjectId: 'project_1', factoryOrgId: 'org_1' }, session: { ownerId: '' } },
+      { state: { factoryProjectId: 'project_1', factoryOrgId: 'org_1' } },
+      { state: { factoryOrgId: 'org_1' }, session: { ownerId: 'user_owner' } },
+    ]) {
+      const ctx = new RequestContext();
+      ctx.set('controller', controller);
+      expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+    }
+  });
+
+  it('never lets session state override a person who is on the request', () => {
+    const ctx = new RequestContext();
+    ctx.set('controller', {
+      state: { factoryProjectId: 'project_1', factoryOrgId: 'org_other' },
+      session: { ownerId: 'user_owner' },
+    });
+    ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+    const bad = new RequestContext();
+    bad.set('controller', {
+      state: { factoryProjectId: 'project_1', factoryOrgId: 'org_1' },
+      session: { ownerId: 'u' },
+    });
+    bad.set('user', 'not-a-user');
+    expect(resolveTenantFromRequestContext(bad)).toBeUndefined();
+  });
+
   it('falls back to the provider id when workosId is absent', () => {
     const ctx = new RequestContext();
     ctx.set('user', { id: 'prov_2' });

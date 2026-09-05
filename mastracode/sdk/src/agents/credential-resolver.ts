@@ -103,6 +103,27 @@ function isFactorySessionContext(requestContext?: RequestContext): boolean {
 }
 
 /**
+ * The tenant a factory-owned session carries on its own state, for turns the
+ * server starts with no person attached (a notification wake, a scheduled
+ * sweep). Trusted factory server code stamps `factoryOrgId` beside
+ * `factoryProjectId` when it creates the session, and the session's owner is
+ * the user the factory chose to run it as (the person who kicked off the run,
+ * or the project's creator for the supervisor). Such a run is org work, so it
+ * resolves org > user, exactly as an interactive turn on the same session
+ * would. Anything short of all three fields stays unresolved (fail closed).
+ */
+function resolveFactorySessionTenant(requestContext?: RequestContext): CredentialTenant | undefined {
+  const controller = requestContext?.get('controller') as
+    | { state?: { factoryProjectId?: unknown; factoryOrgId?: unknown }; session?: { ownerId?: unknown } }
+    | undefined;
+  if (!isFactorySessionContext(requestContext)) return undefined;
+  const orgId = controller?.state?.factoryOrgId;
+  const ownerId = controller?.session?.ownerId;
+  if (typeof orgId !== 'string' || !orgId || typeof ownerId !== 'string' || !ownerId) return undefined;
+  return { orgId, userId: ownerId, orgFirst: true };
+}
+
+/**
  * Derive the calling tenant from a request context, if an authenticated web
  * user was stashed on it. Mirrors the web layer's stable-id resolution
  * (`workosId` falling back to the provider `id`).
@@ -115,6 +136,9 @@ function isFactorySessionContext(requestContext?: RequestContext): boolean {
  */
 export function resolveTenantFromRequestContext(requestContext?: RequestContext): CredentialTenant | undefined {
   const raw = requestContext?.get('user') as (RequestContextUser & RequestContextSession) | undefined;
+  // No person on the request at all: a server-started turn on a factory
+  // session resolves as the session's own tenant; anything else is unresolved.
+  if (raw === undefined) return resolveFactorySessionTenant(requestContext);
   if (!raw || typeof raw !== 'object') return undefined;
 
   // Precedence matches `toFactoryAuthUser` in `@mastra/factory`: a wrapper's org

@@ -10,6 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { NotificationPriority } from '@mastra/core/notifications';
 
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { supervisorResourceId, supervisorThreadId } from './session.js';
 
 /**
@@ -31,6 +32,12 @@ export function supervisorNotificationPriority(kind: string): NotificationPriori
 
 type SupervisorNotifyController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'createSession'>;
 
+export interface SupervisorNotifyDependencies {
+  controller: SupervisorNotifyController;
+  /** Names the session's owner at creation: the supervisor runs as the project's creator. */
+  projects: Pick<FactoryProjectsStorage, 'getById'>;
+}
+
 export interface NotifySupervisorInput {
   projectId: string;
   findingKey: string;
@@ -50,19 +57,28 @@ export interface NotifySupervisorInput {
  * controller, so concurrent emits for a never-created project share one
  * creation, and `hydrateSupervisorSession` (a session-created listener) stamps
  * scope, instructions and factory defaults on the way in.
+ *
+ * The session is owned by the project's creator. A turn the server starts on
+ * it (this very wake) has no person attached, so model credentials resolve
+ * from the session itself: the project's org first, then its owner's own
+ * credentials, the same order a board run uses.
  */
 export async function notifySupervisor(
-  deps: { controller: SupervisorNotifyController },
+  deps: SupervisorNotifyDependencies,
   input: NotifySupervisorInput,
 ): Promise<void> {
   const resourceId = supervisorResourceId(input.projectId);
-  const session =
-    (await deps.controller.getSessionByResource(resourceId)) ??
-    (await deps.controller.createSession({
+  const session = (await deps.controller.getSessionByResource(resourceId)) ?? (await createSupervisorSession());
+  async function createSupervisorSession() {
+    const project = await deps.projects.getById({ id: input.projectId });
+    if (!project) throw new Error(`Factory project ${input.projectId} does not exist`);
+    return deps.controller.createSession({
       id: resourceId,
       resourceId,
       threadId: supervisorThreadId(input.projectId),
-    }));
+      ownerId: project.createdBy,
+    });
+  }
   await session.sendNotificationSignal({
     source: 'factory',
     kind: 'supervisor-finding',

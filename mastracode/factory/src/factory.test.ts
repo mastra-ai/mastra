@@ -750,7 +750,8 @@ describe('MastraFactory.prepare', () => {
 
     const resourceId = `factory-supervisor:${project.id}`;
     expect(getSessionByResource).toHaveBeenCalledWith(resourceId);
-    expect(createSession).toHaveBeenCalledWith({ id: resourceId, resourceId, threadId: resourceId });
+    // Owned by the project's creator so the wake's turn can resolve credentials.
+    expect(createSession).toHaveBeenCalledWith({ id: resourceId, resourceId, threadId: resourceId, ownerId: 'user-1' });
     expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
     expect(sendNotificationSignal.mock.calls[0]![0]).toMatchObject({
       source: 'factory',
