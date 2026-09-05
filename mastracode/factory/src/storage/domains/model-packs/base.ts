@@ -1,5 +1,8 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+
+export type ModelPackThinkingLevels = Partial<Record<'build' | 'plan' | 'fast', ThinkingLevelSetting>>;
 
 /** A saved custom model pack: one model per mode (build / plan / fast). */
 export interface ModelPackRecord {
@@ -8,6 +11,7 @@ export interface ModelPackRecord {
   createdBy: string;
   name: string;
   models: { build: string; plan: string; fast: string };
+  thinkingLevels: ModelPackThinkingLevels;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +19,7 @@ export interface ModelPackRecord {
 export interface UpsertModelPackInput {
   name: string;
   models: { build: string; plan: string; fast: string };
+  thinkingLevels?: ModelPackThinkingLevels;
 }
 
 export interface ActiveModelPackRecord {
@@ -22,6 +27,7 @@ export interface ActiveModelPackRecord {
   userId: string;
   packId: string;
   models: { build: string; plan: string; fast: string };
+  thinkingLevels: ModelPackThinkingLevels;
   updatedAt: Date;
 }
 
@@ -35,6 +41,9 @@ export const MODEL_PACKS_SCHEMA: CollectionSchema = {
     build_model_id: { type: 'text' },
     plan_model_id: { type: 'text' },
     fast_model_id: { type: 'text' },
+    build_thinking_level: { type: 'text', nullable: true },
+    plan_thinking_level: { type: 'text', nullable: true },
+    fast_thinking_level: { type: 'text', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -51,6 +60,9 @@ export const ACTIVE_MODEL_PACKS_SCHEMA: CollectionSchema = {
     build_model_id: { type: 'text' },
     plan_model_id: { type: 'text' },
     fast_model_id: { type: 'text' },
+    build_thinking_level: { type: 'text', nullable: true },
+    plan_thinking_level: { type: 'text', nullable: true },
+    fast_thinking_level: { type: 'text', nullable: true },
     updated_at: { type: 'timestamp' },
   },
   uniqueIndexes: [{ name: 'active_model_packs_org_user_key', columns: ['org_id', 'user_id'] }],
@@ -64,6 +76,9 @@ interface ModelPackDbRow extends Record<string, unknown> {
   build_model_id: string;
   plan_model_id: string;
   fast_model_id: string;
+  build_thinking_level: ThinkingLevelSetting | null;
+  plan_thinking_level: ThinkingLevelSetting | null;
+  fast_thinking_level: ThinkingLevelSetting | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -76,7 +91,22 @@ interface ActiveModelPackDbRow extends Record<string, unknown> {
   build_model_id: string;
   plan_model_id: string;
   fast_model_id: string;
+  build_thinking_level: ThinkingLevelSetting | null;
+  plan_thinking_level: ThinkingLevelSetting | null;
+  fast_thinking_level: ThinkingLevelSetting | null;
   updated_at: Date;
+}
+
+function toThinkingLevels(row: {
+  build_thinking_level: ThinkingLevelSetting | null;
+  plan_thinking_level: ThinkingLevelSetting | null;
+  fast_thinking_level: ThinkingLevelSetting | null;
+}): ModelPackThinkingLevels {
+  return {
+    ...(row.build_thinking_level ? { build: row.build_thinking_level } : {}),
+    ...(row.plan_thinking_level ? { plan: row.plan_thinking_level } : {}),
+    ...(row.fast_thinking_level ? { fast: row.fast_thinking_level } : {}),
+  };
 }
 
 function toModelPack(row: ModelPackDbRow): ModelPackRecord {
@@ -86,6 +116,7 @@ function toModelPack(row: ModelPackDbRow): ModelPackRecord {
     createdBy: row.created_by,
     name: row.name,
     models: { build: row.build_model_id, plan: row.plan_model_id, fast: row.fast_model_id },
+    thinkingLevels: toThinkingLevels(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -97,6 +128,7 @@ function toActiveModelPack(row: ActiveModelPackDbRow): ActiveModelPackRecord {
     userId: row.user_id,
     packId: row.pack_id,
     models: { build: row.build_model_id, plan: row.plan_model_id, fast: row.fast_model_id },
+    thinkingLevels: toThinkingLevels(row),
     updatedAt: row.updated_at,
   };
 }
@@ -139,6 +171,9 @@ export class ModelPacksStorage extends FactoryStorageDomain {
           build_model_id: input.models.build,
           plan_model_id: input.models.plan,
           fast_model_id: input.models.fast,
+          build_thinking_level: input.thinkingLevels?.build ?? null,
+          plan_thinking_level: input.thinkingLevels?.plan ?? null,
+          fast_thinking_level: input.thinkingLevels?.fast ?? null,
           updated_at: now,
         }),
       );
@@ -149,6 +184,9 @@ export class ModelPacksStorage extends FactoryStorageDomain {
           build_model_id: input.models.build,
           plan_model_id: input.models.plan,
           fast_model_id: input.models.fast,
+          build_thinking_level: input.thinkingLevels?.build ?? null,
+          plan_thinking_level: input.thinkingLevels?.plan ?? null,
+          fast_thinking_level: input.thinkingLevels?.fast ?? null,
           updated_at: now,
         },
       );
@@ -161,6 +199,9 @@ export class ModelPacksStorage extends FactoryStorageDomain {
       build_model_id: input.models.build,
       plan_model_id: input.models.plan,
       fast_model_id: input.models.fast,
+      build_thinking_level: input.thinkingLevels?.build ?? null,
+      plan_thinking_level: input.thinkingLevels?.plan ?? null,
+      fast_thinking_level: input.thinkingLevels?.fast ?? null,
       created_at: now,
       updated_at: now,
     });
@@ -186,11 +227,13 @@ export class ModelPacksStorage extends FactoryStorageDomain {
     userId,
     packId,
     models,
+    thinkingLevels = {},
   }: {
     orgId: string;
     userId: string;
     packId: string;
     models: ActiveModelPackRecord['models'];
+    thinkingLevels?: ModelPackThinkingLevels;
   }): Promise<ActiveModelPackRecord> {
     const now = new Date();
     const values = {
@@ -198,6 +241,9 @@ export class ModelPacksStorage extends FactoryStorageDomain {
       build_model_id: models.build,
       plan_model_id: models.plan,
       fast_model_id: models.fast,
+      build_thinking_level: thinkingLevels.build ?? null,
+      plan_thinking_level: thinkingLevels.plan ?? null,
+      fast_thinking_level: thinkingLevels.fast ?? null,
       updated_at: now,
     };
     const updateExisting = () =>

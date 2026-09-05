@@ -22,7 +22,7 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
-import { Session } from './session';
+import { modeThinkingLevelKey, Session } from './session';
 import type { ThreadDataStore } from './session';
 import {
   askUserTool,
@@ -2239,6 +2239,9 @@ export class AgentController<TState = {}> {
     requestContext?: RequestContext,
   ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
+    const modeId = session.mode.get();
+    const modelId = session.model.get();
+    const packThinkingLevel = await session.thread.getSetting({ key: modeThinkingLevelKey(modeId) });
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
@@ -2252,8 +2255,9 @@ export class AgentController<TState = {}> {
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),
-        modeId: session.mode.get(),
-        modelId: session.model.get(),
+        modeId,
+        modelId,
+        packThinkingLevel: typeof packThinkingLevel === 'string' ? packThinkingLevel : undefined,
         state: {
           get: () => session.state.get(),
           set: updates => session.state.set(updates),

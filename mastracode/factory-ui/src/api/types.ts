@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
 import type {
   CustomProviderInfo,
   ModelPackInfo,
@@ -124,6 +125,7 @@ export interface SaveCustomProviderBody {
 export interface SaveModelPackBody {
   name: string;
   models: { build: string; plan: string; fast: string };
+  thinkingLevels?: Partial<Record<'build' | 'plan' | 'fast', ThinkingLevelSetting>>;
 }
 
 export interface ActivateModelPackBody {
