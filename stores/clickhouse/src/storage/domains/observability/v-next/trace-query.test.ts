@@ -52,6 +52,39 @@ describe('ClickHouse advanced trace query', () => {
     expect(compiled.query).toContain('s.traceId = r.traceId');
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR 1`;
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query).not.toContain(key);
+    expect(compiled.query).not.toContain(value);
+    expect(compiled.query).toContain(
+      "coalesce(if(mapContains(r.metadataSearch, {trace_query_3:String}), r.metadataSearch[{trace_query_3:String}], NULL), nullIf(trim(JSONExtractString(r.metadataRaw, {trace_query_3:String})), ''))",
+    );
+    expect(compiled.query).toContain('ifNull(');
+    expect(compiled.query_params).toMatchObject({
+      trace_query_3: key,
+      trace_query_4: value,
+      trace_query_5: 'actorRole',
+      trace_query_6: 'assistant',
+      trace_query_7: 'tool',
+      trace_query_8: 'parentMessageId',
+      trace_query_9: 101,
+    });
+  });
+
   it('deduplicates completed span deliveries without relying on background merges', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({
