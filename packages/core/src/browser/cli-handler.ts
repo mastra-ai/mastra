@@ -199,12 +199,24 @@ export class BrowserCliHandler {
    * chained command string (commands joined by &&, ||, or ;).
    */
   injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
-    if (this.isBrowserUseStdinCommand(command)) {
+    const { header, suffix } = this.getShellHeader(command);
+    const headerParts = splitShellCommand(header);
+    if (headerParts.parts.some(part => this.isBrowserUseStdinCommand(part))) {
+      const modifiedParts = headerParts.parts.map(part => {
+        const trimmed = part.trim();
+        const cliMatch = this.getBrowserCliConfig(trimmed);
+        return cliMatch && !this.isBrowserUseStdinCommand(trimmed)
+          ? this.injectCdpUrlIntoSingleCommand(trimmed, cdpUrl, cliMatch.config, threadId)
+          : part;
+      });
+      const transformed = modifiedParts.some((part, index) => part !== headerParts.parts[index])
+        ? reassembleShellCommand(modifiedParts, headerParts.operators) + suffix
+        : command;
       const name = createHash('sha256')
         .update(JSON.stringify([threadId ?? 'default', cdpUrl]))
         .digest('hex')
         .slice(0, 16);
-      return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(`mastra-${name}`)} sh -c ${shellQuote(command)}`;
+      return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(`mastra-${name}`)} sh -c ${shellQuote(transformed)}`;
     }
 
     const { parts, operators } = splitShellCommand(command);
@@ -278,12 +290,13 @@ export class BrowserCliHandler {
     return warmups;
   }
 
-  private isBrowserUseStdinCommand(command: string): boolean {
+  private getShellHeader(command: string): { header: string; suffix: string } {
     // Join shell continuations in the header only; never inspect a heredoc body.
     let header = '';
     let quote = '';
     const source = command.trimStart();
-    for (let i = 0; i < source.length; i++) {
+    let i = 0;
+    for (; i < source.length; i++) {
       const char = source[i]!;
       if (char === '\\' && quote !== "'" && i + 1 < source.length) {
         const next = source[++i]!;
@@ -295,13 +308,16 @@ export class BrowserCliHandler {
       else if (!quote && (char === "'" || char === '"')) quote = char;
       header += char;
     }
-    const { parts } = splitShellCommand(header);
+    return { header, suffix: source.slice(i) };
+  }
+
+  private isBrowserUseStdinCommand(command: string): boolean {
     const word = String.raw`(?:[^\s<>;&|"'\\]|\\.|"[^"]*"|'[^']*')+`;
     const redirection = String.raw`\d*(?:<<-?|>>?|<|[<>]&|<>|>\|)\s*${word}\s*`;
     const stdinInvocation = new RegExp(
       String.raw`^\s*(?:browser-use|browseruse|browser|bu)(?=\s|[<>]|$)\s*(?:${redirection})*$`,
     );
-    return parts.some(part => stdinInvocation.test(part));
+    return stdinInvocation.test(command);
   }
 
   /**
@@ -321,12 +337,19 @@ export class BrowserCliHandler {
     externalCdpUrl: string | null;
   } {
     // Python on stdin is opaque: shell splitting and flag detection would inspect its contents.
-    if (this.isBrowserUseStdinCommand(command)) {
+    const { header } = this.getShellHeader(command);
+    const headerParts = splitShellCommand(header).parts;
+    if (headerParts.some(part => this.isBrowserUseStdinCommand(part))) {
+      const browserClis = headerParts
+        .map(part => this.getBrowserCliConfig(part.trim()))
+        .filter((match): match is NonNullable<typeof match> => match !== null);
+      const legacyParts = headerParts.filter(part => !this.isBrowserUseStdinCommand(part));
+      const usingExternalCdp = this.hasExternalCdpFlag(legacyParts);
       return {
-        browserClis: [{ name: 'browser-use', config: CLI_CDP_PATTERNS['browser-use']! }],
+        browserClis,
         parts: [command],
-        usingExternalCdp: false,
-        externalCdpUrl: null,
+        usingExternalCdp,
+        externalCdpUrl: usingExternalCdp ? this.extractExternalCdpUrl(legacyParts) : null,
       };
     }
 

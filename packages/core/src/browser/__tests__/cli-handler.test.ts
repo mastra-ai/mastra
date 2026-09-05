@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -77,6 +77,50 @@ describe('BrowserCliHandler', () => {
         expect(endpoint).toBe('ws://localhost/browser');
         expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
         expect(stdin.join('\n')).toBe(payload);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      'agent-browser open https://example.com && browser-use < script.py',
+      'browser-use < script.py && agent-browser open https://example.com',
+      "agent-browser open https://example.com && browser-use <<'PY'\nPAYLOADPY\n",
+      "browser-use <<'PY' && agent-browser open https://example.com\nPAYLOADPY\n",
+    ])('retains both CLI transports and warmup for %s', template => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-mixed-'));
+      const payload = 'print("agent-browser --cdp ws://external; browser-use && bu")\n';
+      const endpoint = 'ws://localhost/managed';
+      try {
+        writeFileSync(join(directory, 'script.py'), payload);
+        writeFileSync(join(directory, 'agent-browser'), '#!/bin/sh\nprintf "%s\\n" "$@" > agent-args\n', {
+          mode: 0o755,
+        });
+        writeFileSync(
+          join(directory, 'browser-use'),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        const command = template.replace('PAYLOAD', payload);
+        const analysis = handler.analyzeCommand(command);
+        expect(analysis.browserClis.map(cli => cli.name).sort()).toEqual(['agent-browser', 'browser-use']);
+        expect(analysis.usingExternalCdp).toBe(false);
+        expect(handler.getWarmupCommands('browser', analysis.browserClis, endpoint, 'thread')).toEqual([
+          { cliName: 'agent-browser', command: `agent-browser --session thread connect ${endpoint}` },
+        ]);
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, endpoint, 'thread')], {
+          cwd: directory,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, cdp, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(cdp).toBe(endpoint);
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+        expect(readFileSync(join(directory, 'agent-args'), 'utf8')).toBe(
+          `--cdp\n${endpoint}\n--session\nthread\nopen\nhttps://example.com\n`,
+        );
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }

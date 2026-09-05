@@ -674,6 +674,37 @@ describe('executeCommandTool browser CLI logic', () => {
       expect(browser.connectToExternalCdp).not.toHaveBeenCalled();
     });
 
+    it('warms up and scopes agent-browser in a mixed Browser Use stdin chain', async () => {
+      const commands: string[] = [];
+      const browser = createMockBrowser();
+      const { context } = createMockContextWithBrowser({
+        browser,
+        executeCommand: async cmd => {
+          commands.push(cmd);
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+      await execute(
+        {
+          command: 'agent-browser open https://example.com && browser-use < script.py',
+          timeout: null,
+          cwd: null,
+          tail: null,
+        },
+        context,
+      );
+      expect(commands).toHaveLength(2);
+      expect(commands[0]).toBe('agent-browser --session test-thread connect ws://localhost:9222/devtools/browser/abc');
+      expect(commands[1]).toContain(
+        'agent-browser --cdp ws://localhost:9222/devtools/browser/abc --session test-thread open',
+      );
+      expect(commands[1]).toContain('BU_CDP_WS=');
+      expect(commands[1]).toContain('BU_NAME=');
+      expect(commands[1]).toContain('browser-use < script.py');
+      expect(commands[1]).not.toContain('--cdp-url');
+      expect(browser.connectToExternalCdp).not.toHaveBeenCalled();
+    });
+
     it('forwards Browser Use stdin transport to background execution', async () => {
       const browser = createMockBrowser();
       const foreground = vi.fn();
