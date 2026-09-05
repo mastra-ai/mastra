@@ -28,7 +28,7 @@ voice.updateSession({
 });
 
 // Connect to the realtime service
-await voice.open();
+await voice.connect();
 
 // Audio data from voice provider
 voice.on('speaking', (audioData: Int16Array) => {
@@ -60,6 +60,27 @@ await voice.send(microphoneStream);
 // Clean up
 voice.close();
 ```
+
+## Connection failures
+
+`connect()` waits for both the WebSocket to open and the server to create a session. It rejects if the connection fails, the server reports an error during the handshake, or the socket closes before the session is ready. A silent handshake times out after 15,000 milliseconds by default.
+
+Use `connectTimeoutMs` to configure the handshake deadline. The value must be a positive, finite number no greater than 2,147,483,647 milliseconds. Catch connection failures directly; an `error` event listener does not replace handling the rejected promise.
+
+```typescript
+const voice = new OpenAIRealtimeVoice({
+  apiKey: process.env.OPENAI_API_KEY,
+  connectTimeoutMs: 30_000,
+});
+
+try {
+  await voice.connect();
+} catch (error) {
+  console.error('Could not connect to the realtime service:', error);
+}
+```
+
+A failed handshake closes its socket and clears its pending waits. You can retry with `connect()` on the same instance. The deadline only applies to connection setup, not to an established session.
 
 ## Documentation
 
