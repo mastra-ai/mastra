@@ -119,6 +119,30 @@ describe('Agent overview page', () => {
       expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
     });
 
+    it('shows "Agent not found" when the agent details response is empty', async () => {
+      installHandlers();
+      server.use(http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(null)));
+      renderAt(`/agents/${AGENT_ID}/overview`);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+    });
+
+    it('renders the request error instead of "Agent not found" when loading agent details fails', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+          HttpResponse.json(
+            { error: 'No model available: this run started without a controller session context' },
+            { status: 500 },
+          ),
+        ),
+      );
+      renderAt(`/agents/${AGENT_ID}/overview`);
+
+      expect(await screen.findByText('Failed to load agent')).not.toBeNull();
+      expect(screen.queryByText('Agent not found')).toBeNull();
+    });
+
     it('shows the Overview tab first and active', async () => {
       installHandlers();
       renderAt(`/agents/${AGENT_ID}/overview`);

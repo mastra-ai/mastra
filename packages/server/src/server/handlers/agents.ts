@@ -999,7 +999,14 @@ async function formatAgent({
   requestContext: RequestContext;
   isStudio: boolean;
 }): Promise<SerializedAgent> {
+  const logger = mastra.getLogger();
   const description = agent.getDescription();
+
+  // Per-agent dynamic getters can throw when their callbacks depend on request
+  // context that isn't present for a plain metadata read (e.g. a dynamic model
+  // resolver that requires a session). Mirror formatAgentList: wrap each
+  // independent getter so one failure doesn't turn the whole detail request
+  // into a 500 — the unresolved fields are simply omitted and the failure logged.
   let metadata: Record<string, unknown> | undefined;
   if (typeof agent.getMetadata === 'function') {
     try {
@@ -1007,7 +1014,12 @@ async function formatAgent({
     } catch {}
   }
 
-  const tools = await agent.listTools({ requestContext });
+  let tools: Record<string, SerializedToolInput | object> = {};
+  try {
+    tools = await agent.listTools({ requestContext });
+  } catch (error) {
+    logger.warn('Error listing tools for agent', { agentName: agent.name, error });
+  }
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -1016,7 +1028,6 @@ async function formatAgent({
   > = {};
 
   if ('listWorkflows' in agent) {
-    const logger = mastra.getLogger();
     try {
       const workflows = await agent.listWorkflows({ requestContext });
 
@@ -1061,20 +1072,53 @@ async function formatAgent({
       })
     : requestContext;
 
-  const instructions = await agent.getInstructions({ requestContext: instructionsRequestContext });
-  const llm = await agent.getLLM({ requestContext });
-  const defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({
-    requestContext,
-  });
-  const defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
-  const defaultOptions = await agent.getDefaultOptions({ requestContext });
+  let instructions: SystemMessage | undefined;
+  try {
+    instructions = await agent.getInstructions({ requestContext: instructionsRequestContext });
+  } catch (error) {
+    logger.warn('Error getting instructions for agent', { agentName: agent.name, error });
+  }
+
+  let llm: Awaited<ReturnType<Agent['getLLM']>> | undefined;
+  try {
+    llm = await agent.getLLM({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting LLM for agent', { agentName: agent.name, error });
+  }
+
+  let defaultGenerateOptionsLegacy: Awaited<ReturnType<Agent['getDefaultGenerateOptionsLegacy']>> | undefined;
+  try {
+    defaultGenerateOptionsLegacy = await agent.getDefaultGenerateOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default generate options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultStreamOptionsLegacy: Awaited<ReturnType<Agent['getDefaultStreamOptionsLegacy']>> | undefined;
+  try {
+    defaultStreamOptionsLegacy = await agent.getDefaultStreamOptionsLegacy({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default stream options for agent', { agentName: agent.name, error });
+  }
+
+  let defaultOptions: Awaited<ReturnType<Agent['getDefaultOptions']>> | undefined;
+  try {
+    defaultOptions = await agent.getDefaultOptions({ requestContext });
+  } catch (error) {
+    logger.warn('Error getting default options for agent', { agentName: agent.name, error });
+  }
 
   const model = llm?.getModel();
   const supportsMemory =
     typeof (agent as Agent & { supportsMemory?: () => boolean }).supportsMemory === 'function'
       ? (agent as Agent & { supportsMemory: () => boolean }).supportsMemory()
       : true;
-  const models = await agent.getModelList(requestContext);
+
+  let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
+  try {
+    models = await agent.getModelList(requestContext);
+  } catch (error) {
+    logger.warn('Error getting model list for agent', { agentName: agent.name, error });
+  }
   const modelList = models?.map(md => ({
     ...md,
     model: {
@@ -1097,13 +1141,13 @@ async function formatAgent({
     serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
     serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
   } catch (error) {
-    mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
+    logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
-  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(logger, agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -1123,7 +1167,7 @@ async function formatAgent({
     try {
       serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
     } catch (error) {
-      mastra.getLogger().error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+      logger.error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
     }
   }
 

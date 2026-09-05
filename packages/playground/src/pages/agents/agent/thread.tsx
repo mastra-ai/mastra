@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
@@ -113,6 +114,10 @@ function AgentThread() {
 
   if (isAgentLoading) {
     return <AgentThreadLoadingSkeleton />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!agent) {

@@ -1,3 +1,4 @@
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
@@ -32,6 +33,10 @@ function Agent() {
 
   if (isAgentLoading) {
     return <AgentViewLoadingSkeleton />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!agent) {

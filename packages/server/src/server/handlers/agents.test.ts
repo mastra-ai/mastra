@@ -829,6 +829,79 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('dynamic getters without execution context', () => {
+    const createDynamicModelAgent = () =>
+      new Agent({
+        id: 'dynamic-model-agent',
+        name: 'dynamic-model-agent',
+        instructions: 'dynamic-instructions',
+        model: ({ requestContext }) => {
+          if (!requestContext.get('controller')) {
+            throw new Error('No model available: this run started without a controller session context');
+          }
+          return {} as any;
+        },
+      });
+
+    it('lists and serializes an agent whose dynamic model resolver throws', async () => {
+      const agent = createDynamicModelAgent();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+
+      const list = await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext() } as any);
+      expect(Object.keys(list)).toContain('dynamic-model-agent');
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(result.instructions).toBe('dynamic-instructions');
+      expect(result.tools).toEqual({});
+      expect(result.modelId).toBeUndefined();
+      expect(result.provider).toBeUndefined();
+      expect(result.modelVersion).toBeUndefined();
+    });
+
+    it('logs a warning when getLLM rejects instead of failing the request', async () => {
+      const agent = createDynamicModelAgent();
+      const warn = vi.fn();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({
+        warn,
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      } as any);
+      vi.spyOn(agent, 'getLLM').mockRejectedValue(new Error('boom'));
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(warn).toHaveBeenCalledWith(
+        'Error getting LLM for agent',
+        expect.objectContaining({ agentName: 'dynamic-model-agent' }),
+      );
+    });
+
+    it('still returns 404 for an unknown agent', async () => {
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': createDynamicModelAgent() }, logger: false });
+
+      await expect(
+        GET_AGENT_BY_ID_ROUTE.handler({
+          mastra,
+          agentId: 'missing-agent',
+          requestContext: new RequestContext(),
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
