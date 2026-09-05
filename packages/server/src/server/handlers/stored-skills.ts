@@ -1,4 +1,4 @@
-import type { StorageSkillFileNode } from '@mastra/core/storage';
+import type { SkillVersionTree, StorageSkillFileNode, StorageSkillSnapshotType } from '@mastra/core/storage';
 import { LocalSkillSource } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
@@ -569,10 +569,10 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
   responseSchema: publishStoredSkillResponseSchema,
   summary: 'Publish stored skill',
   description:
-    'Snapshots the skill directory from the filesystem into content-addressable blob storage, creates a new version with a tree manifest, and marks the skill as published',
+    'Publishes a stored skill by snapshotting its version files into content-addressable blob storage, or from a server filesystem directory when skillPath is provided. Creates a new version with a tree manifest and marks the skill as published.',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, storedSkillId, skillPath }) => {
+  handler: async ({ mastra, requestContext, storedSkillId, skillPath, versionId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -590,14 +590,12 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Blob storage domain is not available' });
       }
 
-      // Verify skill exists. Skill metadata lives on the resolved snapshot.
       const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
-      // Throws 404 if the caller isn't the owner, admin, or `stored-skills:write[:<id>]` holder.
       assertWriteAccess({
         requestContext,
         resource: 'stored-skills',
@@ -606,49 +604,82 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         record: existing,
       });
 
-      // Validate skillPath to prevent path traversal
-      const path = await import('node:path');
-      const fs = await import('node:fs/promises');
-      const resolvedPath = path.default.resolve(skillPath);
-      const allowedBase = path.default.resolve(process.env.SKILLS_BASE_DIR || process.cwd());
-      if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
-        throw new HTTPException(400, {
-          message: `skillPath must be within the allowed directory: ${allowedBase}`,
-        });
-      }
+      let snapshot: Omit<StorageSkillSnapshotType, 'tree'>;
+      let tree: SkillVersionTree;
+      let files: StorageSkillFileNode[];
 
-      // Verify the source directory exists and contains a SKILL.md before attempting
-      // to publish, so callers get a 400 with context instead of a raw 500/ENOENT.
-      try {
-        const stat = await fs.stat(resolvedPath);
-        if (!stat.isDirectory()) {
-          throw new HTTPException(400, { message: `skillPath is not a directory: ${resolvedPath}` });
-        }
-      } catch (err) {
-        if (err instanceof HTTPException) throw err;
-        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      if (skillPath) {
+        const path = await import('node:path');
+        const fs = await import('node:fs/promises');
+        const resolvedPath = path.default.resolve(skillPath);
+        const allowedBase = path.default.resolve(process.env.SKILLS_BASE_DIR || process.cwd());
+        if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
           throw new HTTPException(400, {
-            message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
+            message: `skillPath must be within the allowed directory: ${allowedBase}`,
           });
         }
-        throw err;
-      }
-      try {
-        await fs.stat(path.default.join(resolvedPath, 'SKILL.md'));
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
-          throw new HTTPException(400, {
-            message: `skillPath is missing SKILL.md: ${resolvedPath}`,
+
+        try {
+          const stat = await fs.stat(resolvedPath);
+          if (!stat.isDirectory()) {
+            throw new HTTPException(400, { message: `skillPath is not a directory: ${resolvedPath}` });
+          }
+        } catch (err) {
+          if (err instanceof HTTPException) throw err;
+          if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+            throw new HTTPException(400, {
+              message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
+            });
+          }
+          throw err;
+        }
+        try {
+          await fs.stat(path.default.join(resolvedPath, 'SKILL.md'));
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+            throw new HTTPException(400, {
+              message: `skillPath is missing SKILL.md: ${resolvedPath}`,
+            });
+          }
+          throw err;
+        }
+
+        const source = new LocalSkillSource();
+        const { publishSkillFromSource } = await import('@mastra/core/workspace');
+
+        ({ snapshot, tree, files } = await publishSkillFromSource(source, resolvedPath, blobStore));
+      } else {
+        const version = versionId
+          ? await skillStore.getVersion(versionId)
+          : await skillStore.getLatestVersion(storedSkillId);
+
+        if (!version || version.skillId !== storedSkillId) {
+          throw new HTTPException(404, {
+            message: versionId
+              ? `Version ${versionId} not found for skill ${storedSkillId}`
+              : `No versions found for skill ${storedSkillId}`,
           });
         }
-        throw err;
+
+        if (!version.files || version.files.length === 0) {
+          throw new HTTPException(400, {
+            message:
+              'The selected skill version has no files snapshot to publish. Update the skill with a files tree containing SKILL.md, or provide skillPath to publish from the server filesystem.',
+          });
+        }
+
+        const { publishSkillFromFiles } = await import('@mastra/core/workspace');
+        try {
+          ({ snapshot, tree, files } = await publishSkillFromFiles(version.files, blobStore));
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('SKILL.md not found')) {
+            throw new HTTPException(400, {
+              message: 'The stored skill version is missing SKILL.md in its files snapshot.',
+            });
+          }
+          throw err;
+        }
       }
-
-      // Use LocalSkillSource to read from the server filesystem
-      const source = new LocalSkillSource();
-      const { publishSkillFromSource } = await import('@mastra/core/workspace');
-
-      const { snapshot, tree, files } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
       // Strip undefined keys from the snapshot before passing to update(). The
       // storage layer treats "field present" as "field changed"; forwarding
