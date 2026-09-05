@@ -239,7 +239,7 @@ export interface CreateWorkspaceFactoryOptions {
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
   /** Projects storage used to authorize workspace-free supervisor sessions. */
-  projects?: Pick<FactoryProjectsStorage, 'get'>;
+  projects?: Pick<FactoryProjectsStorage, 'get' | 'getById'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -310,8 +310,23 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
     if (supervisorProjectId) {
-      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
-      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
+      // The supervisor never gets a workspace. An authenticated caller is
+      // still judged here, before the controller session opens: its org must
+      // own the project. A caller with no factory auth at all is the server
+      // itself (the health sweep or dispatcher ensure-creating the session
+      // before it rings, or a notification delivery turn), not a person
+      // reaching for another org's supervisor; the project only has to
+      // exist. Tool registration enforces scope on every turn regardless
+      // (resolveSupervisorScope fails closed).
+      const authUser = getFactoryAuthUserFromContext(requestContext);
+      const orgId = getFactoryAuthOrgId(authUser);
+      const project = authUser
+        ? orgId && projects
+          ? await projects.get({ orgId, id: supervisorProjectId })
+          : null
+        : projects
+          ? await projects.getById({ id: supervisorProjectId })
+          : null;
       if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
       return undefined;
     }

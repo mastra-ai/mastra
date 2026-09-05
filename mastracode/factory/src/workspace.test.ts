@@ -905,6 +905,48 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
+  it('lets the server itself reach a supervisor session with no factory auth, if the project exists', async () => {
+    // The health sweep and the dispatcher ensure-create the supervisor
+    // session before ringing it, and notification delivery turns carry only
+    // the controller context: none of them has a factory auth user.
+    const projects = {
+      get: vi.fn().mockResolvedValue(null),
+      getById: vi.fn(async ({ id }: { id: string }) => (id === 'project-1' ? { id, orgId: 'org-1' } : null)),
+    };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createRequestContext('/unused');
+    requestContext.set('controller', {
+      resourceId: 'factory-supervisor:project-1',
+      threadId: 'factory-supervisor:project-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
+    expect(projects.getById).toHaveBeenCalledWith({ id: 'project-1' });
+    expect(projects.get).not.toHaveBeenCalled();
+
+    const missing = createRequestContext('/unused');
+    missing.set('controller', { resourceId: 'factory-supervisor:project-9', threadId: 'factory-supervisor:project-9' });
+    await expect(resolver({ requestContext: missing } as any)).rejects.toThrow(
+      'Factory supervisor project-9 is not available to the current user',
+    );
+  });
+
+  it('never lets an authenticated caller without an org borrow the unauthenticated path', async () => {
+    const projects = {
+      get: vi.fn().mockResolvedValue(null),
+      getById: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }),
+    };
+    const resolver = createWorkspaceFactory({ projects: projects as any });
+    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
+      workosId: 'user-1',
+    });
+
+    await expect(resolver({ requestContext } as any)).rejects.toThrow(
+      'Factory supervisor project-1 is not available to the current user',
+    );
+    expect(projects.getById).not.toHaveBeenCalled();
+  });
+
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
     const { root, workspace } = await createLocalFactory();
     addProject();
