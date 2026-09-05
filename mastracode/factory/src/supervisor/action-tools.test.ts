@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { builtInFactoryRules } from '../rules/defaults.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createFactorySupervisorActionTools } from './action-tools.js';
 import { computeFactoryHealth } from './health.js';
@@ -34,6 +36,8 @@ async function setup(actor: { type: 'human' | 'agent'; id: string } = { type: 'a
     scope: SCOPE,
     actor,
     workItems: seed.workItems,
+    comments: seed.comments,
+    transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
     audit: seed.audit,
     controller: noSessions,
     now: () => NOW,
@@ -984,5 +988,118 @@ describe('factory_answer_suspension', () => {
     expect(after.occurrence).toBe(published.occurrence);
     expect(after.lastNotifiedAt?.getTime()).toBe(published.lastNotifiedAt?.getTime());
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('factory_create_work_item', () => {
+  const listAudit = (audit: Awaited<ReturnType<typeof setup>>['audit']) =>
+    audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 });
+
+  it('is approval-free and takes no stage: every card enters through intake', async () => {
+    const { tools } = await setup();
+    const tool = tools.factory_create_work_item as { requireApproval?: boolean; inputSchema: { shape: object } };
+    expect(tool.requireApproval).toBeFalsy();
+    expect(Object.keys(tool.inputSchema.shape).sort()).toEqual(['brief', 'title']);
+  });
+
+  it('files the card in intake for the human who asked, with the brief on its feed', async () => {
+    const { tools, workItems, comments, audit } = await setup({ type: 'human', id: 'user-7' });
+
+    const result = await execute<any>(tools.factory_create_work_item, {
+      title: 'Add a retry budget to the dispatcher',
+      brief: 'Runs give up after one failure; we want three attempts with backoff.',
+    });
+
+    expect(result).toMatchObject({
+      title: 'Add a retry budget to the dispatcher',
+      stages: ['intake'],
+      requestedBy: 'user-7',
+      createdBy: 'user-7',
+      briefPosted: true,
+      audited: true,
+    });
+    const item = await workItems.getForProject('org-1', PROJECT_ID, result.workItemId);
+    expect(item).toMatchObject({ stages: ['intake'], createdBy: 'user-7', externalSource: null });
+    // The governed initial entry ran, not a bare insert.
+    expect(item?.stageHistory.map(entry => entry.stage)).toEqual(['intake']);
+    expect(
+      await workItems.getTransitionResultByIngress('org-1', PROJECT_ID, `work-item:${item!.id}:initial-entry`),
+    ).toMatchObject({ status: 'accepted' });
+
+    const feed = await comments.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item!.id });
+    expect(feed.comments.map(comment => ({ body: comment.body, author: comment.author }))).toEqual([
+      {
+        body: 'Runs give up after one failure; we want three attempts with backoff.',
+        author: expect.objectContaining({ kind: 'user', id: 'user-7' }),
+      },
+    ]);
+
+    const event = (await listAudit(audit)).events.find(entry => entry.action === 'factory.work_item.created');
+    expect(event).toMatchObject({
+      actorType: 'human',
+      actorId: 'user-7',
+      targets: [{ type: 'work_item', id: item!.id }],
+      metadata: { cause: 'supervisor', requestedBy: 'user-7', stages: ['intake'], briefPosted: true },
+    });
+  });
+
+  it('on a signal turn files as the agent with no requester, never a human-shaped attribution', async () => {
+    const { tools, workItems, comments, audit } = await setup();
+
+    const result = await execute<any>(tools.factory_create_work_item, {
+      title: 'Follow up on the flaky fixture',
+      brief: 'The worker kept asking which database the fixture uses; pin it in the README.',
+    });
+
+    expect(result).toMatchObject({ requestedBy: null, createdBy: 'agent:thread-1', stages: ['intake'] });
+    const item = await workItems.getForProject('org-1', PROJECT_ID, result.workItemId);
+    expect(item?.createdBy).toBe('agent:thread-1');
+    const feed = await comments.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item!.id });
+    expect(feed.comments[0]?.author).toMatchObject({ kind: 'agent', id: 'agent:thread-1' });
+    const event = (await listAudit(audit)).events.find(entry => entry.action === 'factory.work_item.created');
+    expect(event).toMatchObject({ actorType: 'agent', actorId: 'agent:thread-1', metadata: { requestedBy: null } });
+  });
+
+  it('creates nothing when the factory cannot enter intake', async () => {
+    const seed = await createFactoryStorageForTests();
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'human', id: 'user-7' },
+      workItems: seed.workItems,
+      comments: seed.comments,
+      transitionService: undefined,
+      audit: seed.audit,
+      controller: noSessions,
+      now: () => NOW,
+    });
+
+    await expect(execute(tools.factory_create_work_item, { title: 'Card', brief: 'Brief' })).rejects.toThrow(
+      'cannot accept new work items',
+    );
+    expect((await seed.workItems.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).length).toBe(0);
+  });
+
+  it('reports a brief that failed to post without unfiling the card', async () => {
+    const seed = await createFactoryStorageForTests();
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'human', id: 'user-7' },
+      workItems: seed.workItems,
+      comments: {
+        create: async () => {
+          throw new Error('comments down');
+        },
+      },
+      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      audit: seed.audit,
+      controller: noSessions,
+      now: () => NOW,
+    });
+
+    const result = await execute<any>(tools.factory_create_work_item, { title: 'Card', brief: 'Brief' });
+    expect(result).toMatchObject({ briefPosted: false, briefError: expect.stringContaining('Filed') });
+    expect(await seed.workItems.getForProject('org-1', PROJECT_ID, result.workItemId)).toMatchObject({
+      stages: ['intake'],
+    });
   });
 });

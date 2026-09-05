@@ -597,7 +597,7 @@ describe('MastraFactory.prepare', () => {
     'factory_list_attention',
     'factory_read_session',
   ];
-  const SUPERVISOR_ACTION_TOOLS = ['factory_escalate_finding', 'factory_answer_suspension'];
+  const SUPERVISOR_ACTION_TOOLS = ['factory_escalate_finding', 'factory_answer_suspension', 'factory_create_work_item'];
   const SUPERVISOR_HUMAN_WRITE_TOOLS = [
     'factory_retry_decision',
     'factory_dismiss_decision',

@@ -46,6 +46,7 @@ import {
   WorkItemRelationError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { createFactoryWorkItem } from '../work-item-create.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -711,36 +712,22 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
           await workItems.ensureReady();
           try {
-            const result = await workItems.upsert({
+            const result = await createFactoryWorkItem({
+              workItems,
+              transitionService,
               orgId: resolved.orgId,
-              userId: resolved.userId,
               factoryProjectId: resolved.factoryProjectId,
+              userId: resolved.userId,
+              actor: { type: 'human', id: resolved.userId },
+              ingressType: 'human',
               input,
-              reuseMode: 'non-stage',
             });
-            let item = result.item;
-            if (result.created) {
-              if (!transitionService) {
-                await workItems.delete({ orgId: resolved.orgId, id: item.id });
-                return c.json({ error: 'factory_transitions_unavailable' }, 503);
-              }
-              const entered = await transitionService.transition({
-                orgId: resolved.orgId,
-                factoryProjectId: resolved.factoryProjectId,
-                workItemId: item.id,
-                board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
-                stage: 'intake',
-                expectedRevision: item.revision,
-                actor: { type: 'human', id: resolved.userId },
-                ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
-                cause: 'work_item_created',
-                initialEntry: true,
-              });
-              if (entered.status === 'rejected') {
-                await workItems.delete({ orgId: resolved.orgId, id: item.id });
-                return c.json({ status: 'rejected', code: entered.code, reason: entered.reason }, 422);
-              }
-              item = (await workItems.getForProject(resolved.orgId, resolved.factoryProjectId, item.id)) ?? item;
+            if (result.status === 'unavailable') return c.json({ error: 'factory_transitions_unavailable' }, 503);
+            if (result.status === 'rejected') {
+              return c.json({ status: 'rejected', code: result.code, reason: result.reason }, 422);
+            }
+            const item = result.item;
+            if (result.status === 'created') {
               await audit.emit({
                 context: loose(c),
                 input: {

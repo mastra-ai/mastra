@@ -4,13 +4,16 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
 import { describeParkedTool, FACTORY_DISPATCH_CONSTANTS } from '../rules/dispatcher.js';
+import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { AuditActorType, AuditStorage } from '../storage/domains/audit/base.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryParkedSuspension,
   FactoryRunBindingRecord,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { createFactoryWorkItem } from '../work-item-create.js';
 import {
   decisionFailedFinding,
   decisionIdFromFindingKey,
@@ -66,7 +69,12 @@ interface SupervisorActionDependencies {
     | 'openSupervisorFinding'
     | 'markSupervisorFindingNotified'
     | 'get'
+    | 'upsert'
+    | 'delete'
+    | 'getForProject'
   >;
+  comments: Pick<WorkItemCommentsStorage, 'create'>;
+  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   audit: Pick<AuditStorage, 'record'>;
   /** Session lookup by resource id, the join key persisted with a parked suspension. */
   controller: { getSessionByResource(resourceId: string): Promise<SuspendableSession | undefined> };
@@ -528,6 +536,68 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           answer: resumeData,
           ...audited,
           ...settled,
+        };
+      },
+    }),
+
+    factory_create_work_item: createTool({
+      id: 'factory_create_work_item',
+      description:
+        'File a new work item in this factory on behalf of the person asking, and let the factory drive it: the card enters intake, where the normal lifecycle (triage, approval, work) takes over. Give a short title and a brief that says what is wanted and why; the brief is posted on the card so the worker reads it. Before filing, check the board for an existing item or session covering the same request and point to that instead of creating a duplicate. You never assign, schedule, run, or write code yourself: after filing, you watch the item, answer its questions, and escalate what needs a person.',
+      inputSchema: z.object({
+        title: z.string().trim().min(1).max(200),
+        brief: z.string().trim().min(1).max(4000),
+      }),
+      execute: async ({ title, brief }) => {
+        const requestedBy = deps.actor.type === 'human' ? deps.actor.id : null;
+        const created = await createFactoryWorkItem({
+          workItems: deps.workItems,
+          transitionService: deps.transitionService,
+          orgId: deps.scope.orgId,
+          factoryProjectId: deps.scope.factoryProjectId,
+          userId: deps.actor.id,
+          actor: requestedBy ? { type: 'human', id: requestedBy } : { type: 'system', id: deps.actor.id },
+          ingressType: requestedBy ? 'human' : 'agent',
+          input: { title, stages: ['intake'] },
+        });
+        if (created.status === 'unavailable') throw new Error('This factory cannot accept new work items right now.');
+        if (created.status === 'rejected') {
+          throw new Error(`Intake refused the work item (${created.code}): ${created.reason}`);
+        }
+        const item = created.item;
+        // The kickoff reads the card's feed, so the brief reaches the worker as
+        // the card's first comment, attributed to whoever the turn acts as.
+        let briefPosted = true;
+        try {
+          await deps.comments.create({
+            orgId: deps.scope.orgId,
+            factoryProjectId: deps.scope.factoryProjectId,
+            workItemId: item.id,
+            author: requestedBy ? { kind: 'user', id: requestedBy } : { kind: 'agent', id: deps.actor.id },
+            body: brief,
+          });
+        } catch (error) {
+          briefPosted = false;
+          deps.logger?.warn('Factory supervisor could not post the brief on a new work item', {
+            workItemId: item.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        const audited = await auditAfter(
+          'audited',
+          'factory.work_item.created',
+          { type: 'work_item', id: item.id },
+          { title: item.title, stages: item.stages, requestedBy, briefPosted },
+        );
+        return {
+          workItemId: item.id,
+          title: item.title,
+          stages: item.stages,
+          requestedBy,
+          createdBy: item.createdBy,
+          briefPosted,
+          ...(briefPosted ? {} : { briefError: 'Filed, but posting the brief failed. Add it as a comment instead.' }),
+          ...audited,
         };
       },
     }),

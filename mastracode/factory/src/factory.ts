@@ -828,6 +828,8 @@ export class MastraFactory {
                                 id: `agent:${supervisorThreadId ?? supervisorResourceId(supervisorScope.factoryProjectId)}`,
                               },
                         workItems: workItemsStorage,
+                        comments: workItemCommentsStorage,
+                        transitionService,
                         audit: auditStorage,
                         controller: prepared.base.controller,
                         notifySupervisor: input =>

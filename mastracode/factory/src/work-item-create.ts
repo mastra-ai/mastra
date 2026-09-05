@@ -1,0 +1,75 @@
+/**
+ * The one way a new work item enters a factory: upsert the card, then walk it
+ * through the governed `intake` initial entry so the board's entry rules run.
+ * The HTTP route and the supervisor's `factory_create_work_item` both create
+ * through here; a card written any other way skips the lifecycle.
+ */
+
+import type { FactoryTransitionService } from './rules/transition-service.js';
+import type { FactoryRuleActor } from './rules/types.js';
+import type {
+  CreateWorkItemInput,
+  WorkItemPriorState,
+  WorkItemRow,
+  WorkItemsStorage,
+} from './storage/domains/work-items/base.js';
+
+export type CreateFactoryWorkItemOutcome =
+  | { status: 'created'; item: WorkItemRow }
+  /** The source key matched an existing card, which the input updated instead. */
+  | { status: 'reused'; item: WorkItemRow; previous: WorkItemPriorState }
+  /** Intake entry refused the card; it has been deleted again. */
+  | { status: 'rejected'; code: string; reason: string }
+  /** No transition service is mounted, so nothing can enter intake; the card has been deleted again. */
+  | { status: 'unavailable' };
+
+export interface CreateFactoryWorkItemInput {
+  workItems: Pick<WorkItemsStorage, 'upsert' | 'delete' | 'getForProject'>;
+  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
+  orgId: string;
+  factoryProjectId: string;
+  /** Stamped as the card's creator (`created_by`, stage history). */
+  userId: string;
+  /** Who the initial-entry transition acts as. */
+  actor: FactoryRuleActor;
+  ingressType: 'human' | 'agent';
+  input: CreateWorkItemInput;
+}
+
+export async function createFactoryWorkItem({
+  workItems,
+  transitionService,
+  orgId,
+  factoryProjectId,
+  userId,
+  actor,
+  ingressType,
+  input,
+}: CreateFactoryWorkItemInput): Promise<CreateFactoryWorkItemOutcome> {
+  const result = await workItems.upsert({ orgId, userId, factoryProjectId, input, reuseMode: 'non-stage' });
+  let item = result.item;
+  if (!result.created) return { status: 'reused', item, previous: result.previous };
+
+  if (!transitionService) {
+    await workItems.delete({ orgId, id: item.id });
+    return { status: 'unavailable' };
+  }
+  const entered = await transitionService.transition({
+    orgId,
+    factoryProjectId,
+    workItemId: item.id,
+    board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+    stage: 'intake',
+    expectedRevision: item.revision,
+    actor,
+    ingress: { type: ingressType, identity: `work-item:${item.id}:initial-entry` },
+    cause: 'work_item_created',
+    initialEntry: true,
+  });
+  if (entered.status === 'rejected') {
+    await workItems.delete({ orgId, id: item.id });
+    return { status: 'rejected', code: entered.code, reason: entered.reason };
+  }
+  item = (await workItems.getForProject(orgId, factoryProjectId, item.id)) ?? item;
+  return { status: 'created', item };
+}
