@@ -8,6 +8,7 @@ import { Button } from '@/ds/components/Button';
 const integrations: IntegrationDialogItem[] = integrationsCatalog.integrations.map(entry => ({
   id: entry.id,
   name: entry.displayName,
+  authType: entry.authType ?? undefined,
   logo: entry.logoUrl ? <img src={entry.logoUrl} alt="" /> : undefined,
 }));
 

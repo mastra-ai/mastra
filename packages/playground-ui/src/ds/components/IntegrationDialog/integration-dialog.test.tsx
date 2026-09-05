@@ -10,6 +10,8 @@ const items = [
   { id: 'stripe', name: 'Stripe', disabled: true },
   { id: 'render-mcp', name: 'Render (MCP)' },
   { id: 'sanity-mcp', name: 'Sanity', badge: 'MCP' },
+  { id: 'notion', name: 'Notion', authType: 'OAUTH2' },
+  { id: 'replicate-mcp', name: 'Replicate (MCP)', authType: 'MCP' },
 ];
 
 afterEach(() => cleanup());
@@ -95,6 +97,22 @@ describe('IntegrationDialog badges', () => {
     it('renders it without parsing the name', () => {
       renderDialog();
       expect(screen.getByRole('button', { name: 'Sanity MCP' })).toBeDefined();
+    });
+  });
+});
+
+describe('IntegrationDialog auth type', () => {
+  describe('when an item has an auth type', () => {
+    it('shows a readable label on the right of the row', () => {
+      renderDialog();
+      const button = screen.getByRole('button', { name: 'Notion OAuth' });
+      expect(button.lastElementChild?.textContent).toBe('OAuth');
+      expect(button.lastElementChild?.className).toContain('ml-auto');
+    });
+
+    it('does not repeat MCP next to the name when the auth type already says so', () => {
+      renderDialog();
+      expect(screen.getByRole('button', { name: 'Replicate MCP' })).toBeDefined();
     });
   });
 });

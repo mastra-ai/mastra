@@ -14,8 +14,24 @@ export type IntegrationDialogItem = {
   name: string;
   logo?: ReactNode;
   badge?: string;
+  authType?: string;
   disabled?: boolean;
 };
+
+const AUTH_TYPE_LABELS: Record<string, string> = {
+  OAUTH1: 'OAuth',
+  OAUTH2: 'OAuth',
+  API_KEY: 'API key',
+  BASIC: 'Basic auth',
+  APP: 'App',
+  TBA: 'Token',
+  CUSTOM: 'Custom',
+  MCP: 'MCP',
+};
+
+function authTypeLabel(authType: string) {
+  return AUTH_TYPE_LABELS[authType.toUpperCase()] ?? authType;
+}
 
 export type IntegrationDialogProps = Omit<DialogNewProps, 'variant' | 'children'> & {
   title: ReactNode;
@@ -105,7 +121,11 @@ function IntegrationDialogContent({
         {visibleItems.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {visibleItems.map(item => {
-              const parsed = item.badge ? { name: item.name, badge: item.badge } : parseIntegrationName(item.name);
+              const parsedName = parseIntegrationName(item.name);
+              const parsed = {
+                name: parsedName.name,
+                badge: item.badge ?? (item.authType ? undefined : parsedName.badge),
+              };
               return (
                 <li key={item.id}>
                   <button
@@ -124,6 +144,11 @@ function IntegrationDialogContent({
                       {parsed.name}
                     </span>
                     {parsed.badge ? <Badge size="sm">{parsed.badge}</Badge> : null}
+                    {item.authType ? (
+                      <Badge size="sm" emphasis="muted" className="ml-auto">
+                        {authTypeLabel(item.authType)}
+                      </Badge>
+                    ) : null}
                   </button>
                 </li>
               );
