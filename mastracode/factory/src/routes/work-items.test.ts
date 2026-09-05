@@ -13,6 +13,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 
@@ -426,6 +427,32 @@ describe('PATCH /web/factory/work-items/:id', () => {
       { board: 'release', stages: ['queued'] },
       { board: 'support', stages: ['backlog'] },
     ]).toContainEqual({ board: assigned?.board, stages: assigned?.stages });
+  });
+
+  it('distinguishes a stale revision from an assigned board conflict', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: item.id,
+      userId: 'u2',
+      patch: { title: 'Concurrent edit' },
+    });
+
+    await expect(
+      seed.workItems.update({
+        orgId: 'org1',
+        id: item.id,
+        userId: 'u1',
+        patch: { board: 'release', stages: ['queued'] },
+        expectedBoard: null,
+        expectedRevision: item.revision,
+      }),
+    ).rejects.toMatchObject<WorkItemUpdateConflictError>({ reason: 'revision' });
   });
 
   it('rejects creation outside exclusive intake', async () => {

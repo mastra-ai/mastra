@@ -689,6 +689,10 @@ export class WorkItemRelationError extends Error {
 
 export class WorkItemUpdateConflictError extends Error {
   readonly code = 'work_item_update_conflict';
+
+  constructor(readonly reason: 'board' | 'revision') {
+    super(`Work item ${reason} precondition failed`);
+  }
 }
 
 export function validateParentRelation(
@@ -3045,11 +3049,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       let previous = emptyPrior();
       const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
         previous = priorState(current);
-        if (
-          (expectedRevision !== undefined && current.revision !== expectedRevision) ||
-          (expectedBoard !== undefined && current.board !== expectedBoard)
-        ) {
-          throw new WorkItemUpdateConflictError();
+        if (expectedBoard !== undefined && current.board !== expectedBoard) {
+          throw new WorkItemUpdateConflictError('board');
+        }
+        if (expectedRevision !== undefined && current.revision !== expectedRevision) {
+          throw new WorkItemUpdateConflictError('revision');
         }
         if (patch.parentWorkItemId !== undefined) {
           validateParentRelation(

@@ -937,8 +937,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
             }
-            if (error instanceof WorkItemUpdateConflictError && patch.board !== undefined) {
-              return c.json({ error: 'board_already_assigned' }, 409);
+            if (error instanceof WorkItemUpdateConflictError) {
+              return c.json({ error: error.reason === 'board' ? 'board_already_assigned' : error.code }, 409);
             }
             throw error;
           }
