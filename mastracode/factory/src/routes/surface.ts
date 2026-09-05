@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -113,6 +114,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
+  /** Boards installed for this Factory instance. */
+  boardRegistry: BoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -550,6 +553,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          boardRegistry: deps.boardRegistry,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

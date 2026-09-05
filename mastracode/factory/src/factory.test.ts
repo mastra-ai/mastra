@@ -9,6 +9,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
@@ -223,6 +224,17 @@ describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
+
+  it('rejects duplicate installed board ids at construction time', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).toThrow("board id 'work' is reserved for a built-in board");
+  });
 });
 
 describe('MastraFactory.prepare', () => {
@@ -268,8 +280,8 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
+    expect(blockingCalls).toHaveLength(3);
+    const blockingCall = blockingCalls[1];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -1006,7 +1018,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1049,7 +1061,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
   });
 
   /**

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   createChannelResourceIdResolver,
+  createChannelSessionResolver,
   createChannelSessionStartHook,
   resolveChannelThreadId,
   createHandlers,
@@ -523,6 +524,56 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
 
     await expect(resolve(resolveArgs())).resolves.toBe('channel:slack:C-1:1700.42');
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('channel session creation context (resolveSession)', () => {
+  it('seeds Factory ownership before the controller session is created', async () => {
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' }),
+      },
+      projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'conn-1' }) },
+      connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: 'fp-1' }) },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const requestContext = new RequestContext();
+
+    const session = await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'session-1' },
+      requestContext,
+    } as any);
+
+    expect(session).toEqual({ identity: 'session' });
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'session-1',
+      ownerId: 'code',
+      resourceId: 'session-1',
+      requestContext,
+      tags: { factoryProjectId: 'fp-1' },
+    });
+  });
+
+  it('keeps chat-only sessions free of Factory ownership', async () => {
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn() },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'thread-1', resourceId: 'channel:slack:C-1:1700.42' },
+    } as any);
+
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(controller.createSession.mock.calls[0]?.[0].tags?.factoryProjectId).toBeUndefined();
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'channel:slack:C-1:1700.42',
+      ownerId: 'code',
+      resourceId: 'channel:slack:C-1:1700.42',
+      requestContext: undefined,
+    });
   });
 });
 

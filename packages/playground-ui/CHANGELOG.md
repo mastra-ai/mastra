@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.4
+
+### Patch Changes
+
+- Fixed an Immer prototype pollution vulnerability in Playground UI dependencies. ([#23102](https://github.com/mastra-ai/mastra/pull/23102))
+
+- Updated dependencies [[`fce0b9f`](https://github.com/mastra-ai/mastra/commit/fce0b9f1c3991acdb7ec7c9ada78bc39762319c1), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/memory@1.28.3-alpha.2
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/client-js@1.44.0-alpha.4
+  - @mastra/react@1.4.11-alpha.4
+
 ## 53.0.0-alpha.3
 
 ### Minor Changes

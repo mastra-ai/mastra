@@ -1,6 +1,8 @@
 import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -16,6 +18,7 @@ async function createItem(
     orgId: string;
     source: 'github-issue' | 'github-pr' | 'slack-thread';
     sourceKey: string;
+    board: string;
     stages: string[];
     metadata: Record<string, unknown>;
   }> = {},
@@ -28,6 +31,7 @@ async function createItem(
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
       input: {
+        ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
           integrationId: source === 'slack-thread' ? 'slack' : 'github',
           type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
@@ -1045,5 +1049,53 @@ describe('FactoryTransitionService', () => {
 
     expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['same-effect-key']);
     expect(await ruleDecisionKeys(storage, 'org-2')).toEqual(['same-effect-key']);
+  });
+
+  it('requires legacy items to be assigned before custom-only transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const board = createTestBoard();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-legacy' })),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: expect.stringContaining('Assign an installed board and phase'),
+    });
+  });
+
+  it('validates and runs phase behavior from an installed custom board', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'release', stages: ['queued'] });
+    const onEnter = vi.fn();
+    const board = createTestBoard({ onShipped: onEnter });
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-release' })),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'shipped' });
+    expect(onEnter).toHaveBeenCalledOnce();
+    await expect(
+      service.transition(
+        request(
+          { id: item.id, revision: item.revision + 1 },
+          { board: 'work', stage: 'done', identity: 'work-disabled' },
+        ),
+      ),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The work item belongs to board "release", not "work".',
+    });
   });
 });

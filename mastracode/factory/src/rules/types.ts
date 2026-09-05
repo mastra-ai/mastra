@@ -52,7 +52,7 @@ export function externallyAuthoredWorkItem(item: {
 }
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the
 // seat pipeline order — Resume depth derives from it.
@@ -93,7 +93,7 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
 
 export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
   const stage = stages.length === 1 ? stages[0] : undefined;
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return typeof stage === 'string' && stage.length > 0 ? stage : undefined;
 }
 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
@@ -113,7 +113,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
-export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
+export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
 export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -305,9 +305,7 @@ export interface FactoryLinearRuleLeaf {
   onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
 }
 
-export type FactoryBoardRules = Partial<
-  Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
->;
+export type FactoryBoardRules = Partial<Record<string, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>>;
 
 export interface FactoryRules {
   version: string;
