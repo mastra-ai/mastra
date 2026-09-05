@@ -48,6 +48,40 @@ A deploy transitions through **queued → uploading → starting → running** o
 
 See the [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags and CI/CD usage.
 
+## Authentication
+
+Every Studio deploy on Mastra platform is protected by platform auth. Members of your platform organization sign in with their platform account, and no one else can access the deployed Studio. You don't need to configure anything to get this behavior.
+
+Platform auth applies to the Studio UI only. Your server's API routes are governed by your own [`server.auth`](/docs/studio/auth) configuration, or remain open if you haven't set one.
+
+### Roles and permissions
+
+Platform auth maps your organization roles to Studio permissions:
+
+| Platform role | Studio permissions |
+| - | - |
+| `admin` | Full access (`*`) |
+| `member` | Read, execute, and write workflows |
+| `viewer` | Read-only |
+
+To customize this mapping, set `roleMapping` on `studio.rbac` in your Mastra configuration. When present, your mapping replaces the platform defaults. See [Role-based access control](/docs/studio/auth#role-based-access-control) for the permission format.
+
+### Bring your own auth
+
+To use your own auth provider for the deployed Studio instead of platform auth, set an environment variable on the project:
+
+```bash
+MASTRA_PLATFORM_STUDIO_AUTH=disabled
+```
+
+Add it to the env file you deploy with, or store it on the project through the dashboard, then redeploy. With platform auth disabled, the deploy leaves your auth and RBAC configuration untouched. Your own provider drives the Studio login flow, exactly like a self-hosted deploy. `studio.auth` protects the Studio UI, while `server.auth` protects your API routes. Studio requests fall back to `server.auth` when `studio.auth` isn't set.
+
+:::warning
+Disabling platform auth turns off platform account logins. If you disable it without configuring your own auth provider, the deployed Studio and all API routes are publicly accessible.
+:::
+
+If you keep platform auth enabled and also configure your own `studio.auth`, both providers validate tokens, but the login screen only offers the platform sign-in flow. To sign in through your own provider, disable platform auth.
+
 ## Environment files
 
 A local env file is optional. When a `.env` or `.env.*` file is present in the project directory, the deploy bundles its environment variables.
