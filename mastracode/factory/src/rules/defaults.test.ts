@@ -1224,16 +1224,6 @@ describe('defaultFactoryRules', () => {
     expect(merged.linear.issueObserved).toHaveProperty('onEvent', undefined);
   });
 
-  it('rejects legacy global GitHub configuration with migration guidance', () => {
-    for (const github of [{}, undefined, { issueOpened: { onEvent: passThrough } }]) {
-      const overrides = { github };
-      expect(() => defaultFactoryRules({ version: 'migration', overrides: Object.assign({}, overrides) })).toThrow(
-        /GitHub integration constructor/,
-      );
-      expect(() => mergeFactoryRuleOverrides(Object.assign({}, overrides))).toThrow(/GitHub integration constructor/);
-    }
-  });
-
   it('copies override containers so later mutation cannot replace configured leaves', () => {
     const leaf: FactoryBoardRuleLeaf = { onEnter: passThrough };
     const overrides: FactoryRulesOverrides = { work: { intake: { issue: leaf } } };

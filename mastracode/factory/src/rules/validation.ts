@@ -153,11 +153,6 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  if ('github' in rules) {
-    throw new FactoryRuleValidationError(
-      'Factory rules.github is no longer supported. Configure rules[event] on the GitHub integration constructor instead.',
-    );
-  }
   assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'linear'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');

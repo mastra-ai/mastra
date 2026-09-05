@@ -167,13 +167,6 @@ export function mergeFactoryRuleOverrides(
   base: FactoryRulesOverrides,
   overrides: FactoryRulesOverrides = {},
 ): Omit<FactoryRules, 'version'> {
-  for (const config of [base, overrides]) {
-    if ('github' in config) {
-      throw new FactoryRuleValidationError(
-        'Factory rules.github is no longer supported. Configure rules[event] on the GitHub integration constructor instead.',
-      );
-    }
-  }
   return {
     work: mergeBoardRules(base.work, overrides.work),
     review: mergeBoardRules(base.review, overrides.review),
