@@ -279,7 +279,14 @@ export class BrowserCliHandler {
   }
 
   private isBrowserUseStdinCommand(command: string): boolean {
-    return /^\s*(?:browser-use|browseruse|browser|bu)(?=\s|<|$)\s*(?:<|$)/.test(command);
+    // Only inspect the shell header, never operators or CLI names in a heredoc body.
+    const { parts } = splitShellCommand(command.trimStart().split('\n')[0]!);
+    const word = String.raw`(?:[^\s<>;&|"'\\]|\\.|"[^"]*"|'[^']*')+`;
+    const redirection = String.raw`\d*(?:<<-?|>>?|<|[<>]&|<>|>\|)\s*${word}\s*`;
+    const stdinInvocation = new RegExp(
+      String.raw`^\s*(?:browser-use|browseruse|browser|bu)(?=\s|[<>]|$)\s*(?:${redirection})*$`,
+    );
+    return parts.some(part => stdinInvocation.test(part));
   }
 
   /**

@@ -46,6 +46,39 @@ describe('BrowserCliHandler', () => {
       }
     });
 
+    it.each([
+      'true && browser-use < script.py',
+      'false || browser-use < script.py',
+      'true; browser-use > result.txt < script.py; cat result.txt',
+      'browser-use > result.txt < script.py; cat result.txt',
+      "true && browser-use <<'PY'\nPAYLOADPY\n",
+    ])('preserves stdin and environment for %s', template => {
+      const directory = mkdtempSync(join(tmpdir(), 'browser-use-chain-'));
+      const payload = 'print("a; b && c || d")\nprint("browser-use --cdp-url external")\n';
+      try {
+        writeFileSync(
+          join(directory, 'browser-use'),
+          '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$#" "$BU_CDP_WS" "$BU_NAME"\ncat\n',
+          { mode: 0o755 },
+        );
+        writeFileSync(join(directory, 'script.py'), payload);
+        const command = template.replace('PAYLOAD', payload);
+        expect(handler.analyzeCommand(command).usingExternalCdp).toBe(false);
+        const output = execFileSync('sh', ['-c', handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')], {
+          cwd: directory,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH}` },
+        });
+        const [argc, endpoint, name, ...stdin] = output.split('\n');
+        expect(argc).toBe('0');
+        expect(endpoint).toBe('ws://localhost/browser');
+        expect(name).toMatch(/^mastra-[a-f0-9]{16}$/);
+        expect(stdin.join('\n')).toBe(payload);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
     it.each(['browser-use', 'bu  ', 'browser< script.py', 'browseruse < script.py'])(
       'uses environment transport for %s',
       command => {
@@ -65,12 +98,16 @@ describe('BrowserCliHandler', () => {
       expect(name()).toBe(name('default'));
     });
 
-    it.each(['browser-use-extra', 'browser-use open https://example.com', 'echo browser-use'])(
-      'does not select stdin transport for %s',
-      command => {
-        expect(handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
-      },
-    );
+    it.each([
+      'browser-use-extra',
+      'browser-use open https://example.com',
+      'true && browser-use open https://example.com',
+      'browser-use > result.txt open https://example.com',
+      'echo browser-use',
+      'echo "true && browser-use < script.py"',
+    ])('does not select stdin transport for %s', command => {
+      expect(handler.injectCdpUrl(command, 'ws://localhost/browser', 'thread')).not.toMatch(/^BU_CDP_WS=/);
+    });
   });
 
   describe('getBrowserCliConfig', () => {
