@@ -1,6 +1,7 @@
 import { MastraClient } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo } from 'react';
+import { WorkflowClientContextProvider } from './workflows/workflow-client-context';
 
 export type MastraClientContextType = MastraClient;
 
@@ -42,7 +43,11 @@ export const MastraClientProvider = ({
     [baseUrl, headers, apiPrefix, credentials, customFetch],
   );
 
-  return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
+  return (
+    <MastraClientContext.Provider value={client}>
+      <WorkflowClientContextProvider client={client}>{children}</WorkflowClientContextProvider>
+    </MastraClientContext.Provider>
+  );
 };
 
 export const useMastraClient = () => useContext(MastraClientContext);
