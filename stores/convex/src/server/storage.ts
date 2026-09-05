@@ -505,6 +505,9 @@ export async function handleTypedOperation(
       if (existing) {
         // Update existing - don't include id in patch (it's already set)
         const { id: _, ...updateData } = record;
+        if (convexTable === CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+          updateData.createdAt = existing.createdAt ?? updateData.createdAt;
+        }
         await ctx.db.patch(existing._id, updateData);
       } else {
         // Insert new - include id as a regular field

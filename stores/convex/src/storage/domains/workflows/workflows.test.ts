@@ -24,8 +24,7 @@ type CapturedRequest = Extract<StorageRequest, { op: 'insert' }>;
 
 function createFakeClient() {
   const requests: StorageRequest[] = [];
-  // We mock callStorage directly. Pretend load returns null (no existing row),
-  // so persist takes the "insert new" branch.
+  // Capture storage requests without making network calls.
   const callStorage = vi.fn(async (request: StorageRequest) => {
     requests.push(request);
     if (request.op === 'load') return null;
