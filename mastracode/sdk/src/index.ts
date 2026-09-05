@@ -46,6 +46,9 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
+import { createThreadOwnershipManager } from './agent-connections/ownership.js';
+import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
+import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
@@ -325,6 +328,16 @@ export interface MastraCodeConfig {
   unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
+  /** Agent connection state and discovery options. */
+  agentConnections?: AgentConnectionsSignalProviderOptions;
+  /**
+   * Enable experimental cross-agent communication: thread ownership
+   * advertisement, peer discovery, and the agent connection tools. Defaults to
+   * the `signals.experimentalCrossAgentSignals` global setting (off). This does
+   * not gate the PubSub transport itself — cross-agent communication simply
+   * uses the configured PubSub when enabled.
+   */
+  crossAgentSignals?: boolean;
 }
 
 export function createAuthStorage() {
@@ -510,6 +523,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   if (crossProcessPubSub && !signalsPubSub) {
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
+  // Cross-agent communication is experimental and opt-in. It gates the agent
+  // connections provider/tools and the session thread-ownership lifecycle, but
+  // never the PubSub transport itself.
+  const useCrossAgentSignals =
+    config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
 
   // Storage. An injected instance is used as-is — no connection test, no
   // LibSQL fallback: if the injected store fails, that's a hard error.
@@ -795,9 +813,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     new ProviderHistoryCompat(),
   ];
 
-  // TaskSignalProvider bundles the task tools + TaskStateProcessor (see the
-  // `signals` array below); named here so the plugin lane can reserve its id.
+  // Built-in providers are named so the plugin lane can reserve their ids.
   const taskSignalProvider = new TaskSignalProvider();
+  const agentConnectionsSignalProvider = useCrossAgentSignals
+    ? new AgentConnectionsSignalProvider(config?.agentConnections)
+    : undefined;
 
   const NO_PLUGIN_PROCESSORS: PluginProcessorEntries = { input: [], output: [] };
   let pluginProcessorReadWarned = false;
@@ -810,7 +830,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // through the constructor and are therefore invisible to the lane.
   const pluginSignalLane = pluginManager
     ? new PluginSignalLane({
-        reservedProviderIds: [taskSignalProvider.id, ...(githubSignals ? [githubSignals.id] : [])],
+        reservedProviderIds: [
+          taskSignalProvider.id,
+          ...(agentConnectionsSignalProvider ? [agentConnectionsSignalProvider.id] : []),
+          ...(githubSignals ? [githubSignals.id] : []),
+        ],
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
@@ -849,6 +873,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
       return getDynamicInstructions({ requestContext, hostInstructions, hasSubconscious });
     },
+    maxProcessorRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
@@ -889,7 +914,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [taskSignalProvider, ...(githubSignals ? [githubSignals] : [])],
+    signals: [
+      taskSignalProvider,
+      ...(agentConnectionsSignalProvider ? [agentConnectionsSignalProvider] : []),
+      ...(githubSignals ? [githubSignals] : []),
+    ],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -1174,6 +1203,62 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           release: releaseThreadLock,
         },
   });
+
+  const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
+  // Thread ownership advertisement is part of experimental cross-agent
+  // communication: without it, sessions never claim or advertise their active
+  // thread to peers.
+  if (useCrossAgentSignals) {
+    controller.onSessionCreated(
+      async session => {
+        const threadOwnership = createThreadOwnershipManager(threadId =>
+          controller.getCurrentAgent(session).claimThreadOwnership({
+            threadId,
+            resourceId: session.identity.getResourceId(),
+            streamOptions: () => session.machinery.buildStreamOptions({}),
+            peer: {
+              label: `${project.name} (${threadId})`,
+              title: project.name,
+            },
+          }),
+        );
+
+        const claimThreadOwnership = async (threadId: string) => {
+          try {
+            await threadOwnership.claim(threadId);
+          } catch (error) {
+            console.error(`Failed to claim cross-agent thread ownership for ${threadId}`, error);
+          }
+        };
+        const unsubscribeSession = session.subscribe(event => {
+          if (event.type === 'thread_changed') void claimThreadOwnership(event.threadId);
+          else if (event.type === 'thread_created') void claimThreadOwnership(event.thread.id);
+        });
+        sessionPeerCleanup.set(session, () => {
+          unsubscribeSession();
+          threadOwnership.close();
+        });
+        const initialThreadId = session.thread.getId();
+        if (initialThreadId) {
+          // This listener blocks session creation, so bound the initial claim:
+          // an unsettled PubSub subscription must not hang createSession().
+          // The claim keeps settling in the background either way.
+          await Promise.race([
+            claimThreadOwnership(initialThreadId),
+            new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 5_000);
+              timer.unref?.();
+            }),
+          ]);
+        }
+      },
+      { blocking: true },
+    );
+    controller.onSessionDeleted(session => {
+      sessionPeerCleanup.get(session)?.();
+      sessionPeerCleanup.delete(session);
+    });
+  }
 
   // Publish the controller to the plugin runtime accessors now that it exists.
   pluginRuntimeController = controller;

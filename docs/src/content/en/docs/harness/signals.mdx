@@ -1,9 +1,10 @@
 ---
-title: "Signals | Long-running agents"
-description: "Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior."
+title: 'Signals | Long-running agents'
+description: 'Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior.'
 packages:
-  - "@mastra/core"
-  - "@mastra/client-js"
+  - '@mastra/core'
+  - '@mastra/client-js'
+  - '@mastra/code-sdk'
 ---
 
 # Signals
@@ -329,6 +330,45 @@ Configure a delivery policy on the agent when some notifications should wait for
 Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output. Visit [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for the setup example, input schema, and action behavior.
 
 `sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
+
+## Cross-agent connections in Mastra Code
+
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available. It doesn't affect the pub/sub transport itself.
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  crossAgentSignals: true,
+})
+```
+
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now. It isn't a durable connection or a guarantee that delivery will succeed.
+
+`agent_connections_list` returns one `peers` collection. Each peer includes:
+
+- `relationship`: `none` or `saved`. This is the authoritative durable state for the current sender thread.
+- `presence`: `advertised` or `absent`. This reflects the current discovery pass.
+- `displayStatus`: A derived, presentational value: `discovered`, `connected`, or `saved`.
+- `canAttemptSend`: `true` only when the peer is both saved and currently advertised.
+
+The displayed statuses mean:
+
+| Status | Meaning | Can attempt a send? |
+| - | - | - |
+| `[discovered]` | Advertised now, but not saved by the current sender thread. | No |
+| `[connected]` | Saved by the current sender thread and advertised now. | Yes |
+| `[saved]` | Saved by the current sender thread, but not advertised now. | No |
+
+Use the connection tools for distinct operations:
+
+- `agent_connect` saves a freshly discovered exact peer in the current sender thread.
+- `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that's absent from the current discovery pass isn't sendable.
+
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
+
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
 
 ## Distributed and serverless deployments
 

@@ -347,6 +347,8 @@ export interface SignalSettings {
   unixSocketPubSub: boolean;
   /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
   experimentalGithubSignals: boolean;
+  /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
+  experimentalCrossAgentSignals: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -436,6 +438,7 @@ const DEFAULTS: GlobalSettings = {
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
+    experimentalCrossAgentSignals: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -459,6 +462,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
+    left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -533,6 +537,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalGithubSignals === 'boolean'
         ? raw.experimentalGithubSignals
         : DEFAULTS.signals.experimentalGithubSignals,
+    experimentalCrossAgentSignals:
+      typeof raw.experimentalCrossAgentSignals === 'boolean'
+        ? raw.experimentalCrossAgentSignals
+        : DEFAULTS.signals.experimentalCrossAgentSignals,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
