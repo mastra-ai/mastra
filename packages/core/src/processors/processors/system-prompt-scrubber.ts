@@ -10,6 +10,7 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
@@ -28,6 +29,8 @@ export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   placeholderText?: string;
   /** Model to use for the detection agent */
   model: MastraModelConfig;
+  /** Character threshold for flushing buffered streamed text (default: 200). */
+  bufferSize?: number;
   /**
    * Structured output options used for the detection agent
    */
@@ -76,6 +79,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private model: MastraModelConfig;
   private detectionAgent: Agent;
   private lastMessageOnly: boolean;
+  private bufferSize: number;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
 
   constructor(options: SystemPromptScrubberOptions) {
@@ -89,6 +93,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
+    this.bufferSize = options.bufferSize ?? 200;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
@@ -108,77 +113,94 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     });
   }
 
-  /**
-   * Process streaming chunks to detect and handle system prompts
-   */
+  private async flushStreamBuffer(
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+  ): Promise<ChunkType | null> {
+    const text: string = state._systemPromptBuffer || '';
+    const firstPart = state._systemPromptFirstPart as ChunkType | undefined;
+    state._systemPromptBuffer = '';
+    state._systemPromptFirstPart = undefined;
+    if (!text || !firstPart || firstPart.type !== 'text-delta') return null;
+
+    const combinedPart: ChunkType = {
+      ...firstPart,
+      payload: { ...firstPart.payload, text },
+    };
+    const detectionResult = await this.detectSystemPrompts(text, observabilityContext, requestContext);
+    if (!detectionResult.detections?.length) return combinedPart;
+
+    const detectedTypes = detectionResult.detections.map(detection => detection.type);
+    switch (this.strategy) {
+      case 'block':
+        abort(`System prompt detected: ${detectedTypes.join(', ')}`);
+      case 'filter':
+        return null;
+      case 'warn':
+        console.warn(`[SystemPromptScrubber] System prompt detected in streaming content: ${detectedTypes.join(', ')}`);
+        return combinedPart;
+      case 'redact':
+      default:
+        return {
+          ...combinedPart,
+          payload: {
+            ...combinedPart.payload,
+            text: detectionResult.redacted_content || this.redactText(text, detectionResult.detections),
+          },
+        };
+    }
+  }
+
+  /** Buffer streaming text so LLM detection runs at sentence or size boundaries, not per token. */
   async processOutputStream(
     args: {
       part: ChunkType;
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      writer?: { custom: (data: ChunkType) => Promise<void> };
       requestContext?: RequestContext;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, requestContext, ...rest } = args;
+    const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
-
-    // Only process text-delta chunks
-    if (part.type !== 'text-delta') {
-      return part;
-    }
-
-    const text = part.payload.text;
-    if (!text || text.trim() === '') {
-      return part;
-    }
-
     try {
-      const detectionResult = await this.detectSystemPrompts(text, observabilityContext, requestContext);
-
-      if (detectionResult.detections && detectionResult.detections.length > 0) {
-        const detectedTypes = detectionResult.detections.map(detection => detection.type);
-
-        switch (this.strategy) {
-          case 'block':
-            abort(`System prompt detected: ${detectedTypes.join(', ')}`);
-            break;
-
-          case 'filter':
-            return null; // Don't emit this part
-
-          case 'warn':
-            console.warn(
-              `[SystemPromptScrubber] System prompt detected in streaming content: ${detectedTypes.join(', ')}`,
-            );
-            if (this.includeDetections && detectionResult.detections) {
-              console.warn(`[SystemPromptScrubber] Detections: ${detectionResult.detections.length} items`);
-            }
-            return part; // Allow content through
-
-          case 'redact':
-          default:
-            const redactedText =
-              detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
-            return {
-              ...part,
-              payload: {
-                ...part.payload,
-                text: redactedText,
-              },
-            };
+      if (part.type !== 'text-delta') {
+        if (state._systemPromptBuffer) {
+          const flushed = await this.flushStreamBuffer(state, abort, observabilityContext, requestContext);
+          if (flushed) {
+            if (writer) state[REPROCESS_PART_KEY] = part;
+            else (state._systemPromptPendingNonText ||= []).push(part);
+            return flushed;
+          }
         }
+        return part;
       }
 
-      return part;
-    } catch (error) {
-      // Re-throw tripwire errors, but fail open for other errors
-      if (error instanceof TripWire) {
-        throw error;
+      if (state._systemPromptPendingNonText?.length) {
+        const pending = state._systemPromptPendingNonText.shift();
+        if (!state._systemPromptPendingNonText.length) state._systemPromptPendingNonText = undefined;
+        state._systemPromptBuffer = (state._systemPromptBuffer || '') + part.payload.text;
+        state._systemPromptFirstPart ||= part;
+        return pending;
       }
-      // Fail open - allow content through if detection fails
+
+      if (!part.payload.text) return part;
+      state._systemPromptBuffer = (state._systemPromptBuffer || '') + part.payload.text;
+      state._systemPromptFirstPart ||= part;
+      if (state._systemPromptBuffer.length < this.bufferSize && !/[.!?]\s*$/.test(state._systemPromptBuffer))
+        return null;
+      return await this.flushStreamBuffer(state, abort, observabilityContext, requestContext);
+    } catch (error) {
+      if (error instanceof TripWire) throw error;
       console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
-      return part;
+      const text = state._systemPromptBuffer || (part.type === 'text-delta' ? part.payload.text : '');
+      const firstPart = state._systemPromptFirstPart || part;
+      state._systemPromptBuffer = '';
+      state._systemPromptFirstPart = undefined;
+      return firstPart.type === 'text-delta' ? { ...firstPart, payload: { ...firstPart.payload, text } } : firstPart;
     }
   }
 
