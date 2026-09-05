@@ -48,18 +48,29 @@ function activeSeatbeltProfile(sandbox: LocalSandbox): string {
 }
 
 describe('LocalSandbox explicit sh argv', () => {
-  it('preserves operators, positional arguments, cwd, env and streamed output', async () => {
-    const workingDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra argv test '));
+  it('preserves operators, positional arguments, cwd, env and streamed output', async context => {
+    const configuredShell = process.env.MASTRA_TEST_GIT_SH;
     const shell =
       process.platform === 'win32'
-        ? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'sh.exe')
+        ? (configuredShell ?? path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'bin', 'sh.exe'))
         : 'sh';
+    if (process.platform === 'win32') {
+      try {
+        await fs.access(shell);
+      } catch (error) {
+        if (configuredShell || !(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
+          throw error;
+        }
+        context.skip('Git for Windows is not installed at the default path; set MASTRA_TEST_GIT_SH to its bin/sh.exe');
+        return;
+      }
+    }
+    const workingDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra argv test '));
     const sandbox = new LocalSandbox({ workingDirectory, isolation: 'none' });
     const stdout = vi.fn();
     const stderr = vi.fn();
     try {
       if (process.platform === 'win32') {
-        await fs.access(shell);
         const gitDirectory = path.dirname(path.dirname(shell));
         sandbox.setEnv(env => ({
           ...env,
