@@ -184,6 +184,33 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('does not save a score when the scorer declares the run not scorable', async () => {
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'test-scorer',
+      run: vi.fn().mockResolvedValue({ notScorable: { reason: 'tool never called' } }),
+    };
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+    });
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: 'test-scorer' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+      entityId: 'test-entity',
+      scorerId: 'test-scorer',
+    });
+
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
+    expect(mockMastra.getLogger().error).not.toHaveBeenCalled();
+  });
+
   it('should pass live span correlation context and metadata into scorer.run', async () => {
     const correlationContext = {
       traceId: 'trace-live',

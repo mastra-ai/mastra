@@ -142,7 +142,7 @@ This scores 10% of enterprise-plan traffic and none of the rest. To score differ
 
 Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they're unaffected by durable agent state serialization.
 
-Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run).
+Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run). Filters can't inspect the run's input or output. When a scorer needs to look at the run itself to know whether there is anything to judge, return [`notScorable()`](/reference/evals/not-scorable) from a scorer step instead.
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 

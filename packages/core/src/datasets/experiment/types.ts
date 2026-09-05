@@ -350,6 +350,8 @@ export interface ScorerResult {
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /** Set when the scorer declared the run not scorable; `score` is null and this is not an error */
+  notScorable?: { reason?: string };
   /** Scorer stage that failed, when the scorer exposes stage context */
   failedStep?: ScorerStepName;
   /** Scorer stages that completed before the failure */
