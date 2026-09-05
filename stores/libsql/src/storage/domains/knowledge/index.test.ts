@@ -31,6 +31,20 @@ describe('KnowledgeLibSQL storage isolation', () => {
     expect(new KnowledgeLibSQL({ url: 'file:first.db' }).getStorageIsolationKey()).not.toBe(
       new KnowledgeLibSQL({ url: 'file:second.db' }).getStorageIsolationKey(),
     );
+
+    const firstClient = createClient({ url: 'file:first-client.db' });
+    const secondClient = createClient({ url: 'file:second-client.db' });
+    try {
+      expect(getLibSQLKnowledgeIsolationKey({ client: firstClient })).toBe(
+        getLibSQLKnowledgeIsolationKey({ client: secondClient }),
+      );
+      expect(getLibSQLKnowledgeIsolationKey({ client: firstClient, storageIsolationKey: 'first' })).not.toBe(
+        getLibSQLKnowledgeIsolationKey({ client: secondClient, storageIsolationKey: 'second' }),
+      );
+    } finally {
+      firstClient.close();
+      secondClient.close();
+    }
   });
 });
 
@@ -180,6 +194,103 @@ describe('KnowledgeLibSQL initialization', () => {
       expect(store.getCapabilities()).toMatchObject({ schemaVersion: 2, supportsV2: true });
     } finally {
       client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('reconciles structured scope plans additively and idempotently', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-reconcile-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const plan = {
+        scopes: [
+          {
+            address: 'org:acme',
+            name: 'Acme',
+            grants: [{ scopeRefAddress: 'org:acme', role: 'owner' as const }],
+          },
+          { address: 'org:partner', name: 'Partner' },
+          {
+            address: 'resource:mastra',
+            name: 'Mastra',
+            parentAddresses: ['org:acme', 'org:partner'],
+            grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+          },
+        ],
+      };
+
+      const first = await store.reconcileStructure(plan);
+      const second = await store.reconcileStructure({
+        scopes: plan.scopes.map(scope => ({ ...scope, name: `Changed ${scope.name}` })),
+      });
+
+      expect(first).toMatchObject({ changed: true, accessEpoch: 1 });
+      expect(first.createdScopeIds).toHaveLength(3);
+      expect(second).toMatchObject({ changed: false, accessEpoch: 1, scopes: first.scopes });
+      expect(
+        (await client.execute(`SELECT name FROM mastra_knowledge_nodes WHERE id='${first.scopes['org:acme']}'`))
+          .rows[0],
+      ).toMatchObject({ name: 'Acme' });
+      expect((await client.execute(`SELECT * FROM mastra_knowledge_node_scopes`)).rows).toHaveLength(2);
+      expect((await client.execute(`SELECT * FROM mastra_knowledge_scope_grants`)).rows).toHaveLength(2);
+
+      await client.execute({
+        sql: `UPDATE mastra_knowledge_nodes SET deletedAt=? WHERE id=?`,
+        args: [new Date().toISOString(), first.scopes['org:acme']!],
+      });
+      await expect(store.reconcileStructure(plan)).resolves.toMatchObject({
+        changed: false,
+        deletedScopeAddresses: ['org:acme'],
+      });
+
+      await expect(
+        store.reconcileStructure({
+          scopes: [
+            {
+              address: 'resource:rolled-back',
+              name: 'Rolled Back',
+              grants: [{ scopeRefAddress: 'org:missing', role: 'readonly' }],
+            },
+          ],
+        }),
+      ).rejects.toThrow('Knowledge grant scope does not exist: org:missing');
+      expect(
+        (await client.execute(`SELECT * FROM mastra_knowledge_scope_addresses WHERE address='resource:rolled-back'`))
+          .rows,
+      ).toHaveLength(0);
+      expect(
+        (await client.execute(`SELECT epoch FROM mastra_knowledge_access_state WHERE id='global'`)).rows[0],
+      ).toMatchObject({
+        epoch: 1,
+      });
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes reconciliation across clients sharing one database', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-reconcile-concurrent-'));
+    const url = `file:${join(directory, 'knowledge.db')}`;
+    const firstClient = createClient({ url });
+    const secondClient = createClient({ url });
+    try {
+      const first = new KnowledgeLibSQL({ client: firstClient });
+      const second = new KnowledgeLibSQL({ client: secondClient });
+      await first.init();
+      await second.init();
+      const plan = { scopes: [{ address: 'org:acme', name: 'Acme' }] };
+
+      const results = await Promise.all([first.reconcileStructure(plan), second.reconcileStructure(plan)]);
+
+      expect(results.map(result => result.changed).sort()).toEqual([false, true]);
+      expect(results[0]!.scopes).toEqual(results[1]!.scopes);
+      expect((await firstClient.execute(`SELECT * FROM mastra_knowledge_scope_addresses`)).rows).toHaveLength(1);
+    } finally {
+      firstClient.close();
+      secondClient.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
