@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/prompt-blocks';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'content', 'rules', 'requestContextSchema'] as const;
@@ -146,9 +146,17 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StoragePromptBlockType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StoragePromptBlockType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -246,7 +254,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
 
-      const existingBlock = await this.getById(id);
+      const existingBlock = await this.#getById(this.#db.client, id);
       if (!existingBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND'),
@@ -297,7 +305,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedBlock = await this.getById(id);
+      const updatedBlock = await this.#getById(this.#db.client, id);
       if (!updatedBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),

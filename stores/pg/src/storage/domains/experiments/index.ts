@@ -34,7 +34,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
@@ -406,7 +406,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
     try {
-      const existing = await this.getExperimentById({ id: input.id });
+      const existing = await this.#getExperimentById(this.#db.client, { id: input.id });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
@@ -470,7 +470,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       );
 
       // Re-SELECT to get correctly transformed fields (timestamps, jsonb)
-      const updated = await this.getExperimentById({ id: input.id });
+      const updated = await this.#getExperimentById(this.#db.client, { id: input.id });
       return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -485,21 +485,23 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({
-    id,
-    filters,
-  }: {
-    id: string;
-    filters?: ExperimentTenancyFilters;
-  }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    return this.#getExperimentById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
-        id,
-        ...params,
-      ]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -831,7 +833,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       }
 
       if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
+        const existing = await this.#getExperimentResultById(this.#db.client, { id: input.id });
         if (!existing) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
@@ -878,21 +880,26 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({
-    id,
-    filters,
-  }: {
+  async getExperimentResultById(args: {
     id: string;
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null> {
+    return this.#getExperimentResultById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentResultById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
-        id,
-        ...params,
-      ]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(

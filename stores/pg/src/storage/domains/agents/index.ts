@@ -25,7 +25,7 @@ import type {
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 export class AgentsPG extends AgentsStorage {
@@ -371,10 +371,18 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async getById(id: string): Promise<StorageAgentType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageAgentType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -484,7 +492,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // First, get the existing agent
-      const existingAgent = await this.getById(id);
+      const existingAgent = await this.#getById(this.#db.client, id);
       if (!existingAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND'),
@@ -543,7 +551,7 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       // Return the updated agent
-      const updatedAgent = await this.getById(id);
+      const updatedAgent = await this.#getById(this.#db.client, id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),

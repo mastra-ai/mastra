@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/workspaces';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -145,9 +145,17 @@ export class WorkspacesPG extends WorkspacesStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageWorkspaceType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageWorkspaceType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -248,7 +256,7 @@ export class WorkspacesPG extends WorkspacesStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
 
-      const existingWorkspace = await this.getById(id);
+      const existingWorkspace = await this.#getById(this.#db.client, id);
       if (!existingWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
@@ -272,7 +280,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
 
       if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
+        const latestVersion = await this.#getLatestVersion(this.#db.client, id);
         if (!latestVersion) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NO_VERSIONS'),
@@ -363,7 +371,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         );
       }
 
-      const updatedWorkspace = await this.getById(id);
+      const updatedWorkspace = await this.#getById(this.#db.client, id);
       if (!updatedWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
@@ -616,12 +624,20 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   async getLatestVersion(workspaceId: string): Promise<WorkspaceVersion | null> {
+    return this.#getLatestVersion(this.#db.readClient, workspaceId);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getLatestVersion(client: DbClient, workspaceId: string): Promise<WorkspaceVersion | null> {
     try {
       const tableName = getTableName({
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.readClient.oneOrNone(
+      const result = await client.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [workspaceId],
       );

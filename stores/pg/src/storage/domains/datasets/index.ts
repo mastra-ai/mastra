@@ -41,7 +41,7 @@ import type {
   DatasetTenancyFilters,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
@@ -329,7 +329,7 @@ export class DatasetsPG extends DatasetsStorage {
       };
     } catch (error) {
       if (input.id !== undefined && hasErrorCode(error, new Set(['23505']))) {
-        const existing = await this.getDatasetById({ id: input.id });
+        const existing = await this.#getDatasetById(this.#db.client, { id: input.id });
         if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
       }
       if (error instanceof MastraError) throw error;
@@ -344,21 +344,23 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({
-    id,
-    filters,
-  }: {
-    id: string;
-    filters?: DatasetTenancyFilters;
-  }): Promise<DatasetRecord | null> {
+  async getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null> {
+    return this.#getDatasetById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getDatasetById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: DatasetTenancyFilters },
+  ): Promise<DatasetRecord | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
-        id,
-        ...params,
-      ]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformDatasetRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -374,7 +376,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
+      const existing = await this.#getDatasetById(this.#db.client, { id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -715,7 +717,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
-      const existing = await this.getItemById({ id: args.id });
+      const existing = await this.#getItemById(this.#db.client, { id: args.id });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_ITEM', 'NOT_FOUND'),
@@ -842,7 +844,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
-      const existing = await this.getItemById({ id });
+      const existing = await this.#getItemById(this.#db.client, { id });
       if (!existing) return; // no-op if not found
       if (existing.datasetId !== datasetId) {
         throw new MastraError({
@@ -1037,7 +1039,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
+      const dataset = await this.#getDatasetById(this.#db.client, { id: input.datasetId });
       if (!dataset) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
@@ -1050,7 +1052,7 @@ export class DatasetsPG extends DatasetsStorage {
       // Fetch current items outside tx (same as LibSQL — skip items not found or mismatched)
       const currentItems: DatasetItem[] = [];
       for (const itemId of input.itemIds) {
-        const item = await this.getItemById({ id: itemId });
+        const item = await this.#getItemById(this.#db.client, { id: itemId });
         if (item && item.datasetId === input.datasetId) {
           currentItems.push(item);
         }
@@ -1133,17 +1135,21 @@ export class DatasetsPG extends DatasetsStorage {
   // --- SCD-2 queries ---
 
   async getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
+    return this.#getItemById(this.#db.readClient, args);
+  }
+
+  async #getItemById(client: DbClient, args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       let result;
 
       if (args.datasetVersion !== undefined) {
-        result = await this.#db.readClient.oneOrNone(
+        result = await client.oneOrNone(
           `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $2) AND "isDeleted" = false ORDER BY "datasetVersion" DESC LIMIT 1`,
           [args.id, args.datasetVersion],
         );
       } else {
-        result = await this.#db.readClient.oneOrNone(
+        result = await client.oneOrNone(
           `SELECT * FROM ${tableName} WHERE "id" = $1 AND "validTo" IS NULL AND "isDeleted" = false`,
           [args.id],
         );

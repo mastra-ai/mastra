@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/mcp-clients';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
@@ -134,9 +134,17 @@ export class MCPClientsPG extends MCPClientsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPClientType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageMCPClientType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -237,7 +245,7 @@ export class MCPClientsPG extends MCPClientsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
 
-      const existingClient = await this.getById(id);
+      const existingClient = await this.#getById(this.#db.client, id);
       if (!existingClient) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_CLIENT', 'NOT_FOUND'),
@@ -288,7 +296,7 @@ export class MCPClientsPG extends MCPClientsStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedClient = await this.getById(id);
+      const updatedClient = await this.#getById(this.#db.client, id);
       if (!updatedClient) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_CLIENT', 'NOT_FOUND_AFTER_UPDATE'),

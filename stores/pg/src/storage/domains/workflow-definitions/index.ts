@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
@@ -127,7 +127,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
 
   async upsert(input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput): Promise<WorkflowDefinition> {
     const now = new Date();
-    const existing = await this.get(input.id);
+    const existing = await this.#get(this.#db.client, input.id);
 
     if (!existing) {
       if (!('inputSchema' in input) || !input.inputSchema)
@@ -158,10 +158,10 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       } catch (error) {
         // A concurrent upsert may have created the row after our existence
         // check; fall back to updating it so the upsert stays idempotent.
-        if (!(await this.get(input.id))) throw error;
+        if (!(await this.#get(this.#db.client, input.id))) throw error;
         return this.applyUpdate(input, now);
       }
-      const created = await this.get(input.id);
+      const created = await this.#get(this.#db.client, input.id);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
@@ -187,17 +187,25 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
-    const updated = await this.get(input.id);
+    const updated = await this.#get(this.#db.client, input.id);
     if (!updated) throw new Error(`Failed to update workflow definition "${input.id}".`);
     return updated;
   }
 
   async get(id: string): Promise<WorkflowDefinition | null> {
+    return this.#get(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #get(client: DbClient, id: string): Promise<WorkflowDefinition | null> {
     const tableName = getTableName({
       indexName: TABLE_WORKFLOW_DEFINITIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+    const row = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
     return row ? rowToDefinition(row as Record<string, unknown>) : null;
   }
 

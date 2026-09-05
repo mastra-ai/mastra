@@ -67,6 +67,69 @@ describe('read/write pools', () => {
     }
   });
 
+  it('keeps read-modify-write paths on the writer even when the replica lags', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    // Simulate a replica that never catches up: every read sees an empty table.
+    const readQuery = vi.spyOn(readPool, 'query').mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    const store = new PostgresStore({ id: 'pg-lagging-replica-test', writePool, readPool });
+
+    try {
+      await store.init();
+      const memory = await store.getStore('memory');
+      const agents = await store.getStore('agents');
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const threadId = `lag-thread-${suffix}`;
+      const agentId = `lag-agent-${suffix}`;
+      const now = new Date();
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'lag-resource',
+          title: 'before',
+          metadata: { a: 1 },
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      // Public read goes to the (lagging) reader, so it must not see the thread yet.
+      expect(await memory.getThreadById({ threadId })).toBeNull();
+      expect(readQuery).toHaveBeenCalled();
+
+      // Mutation paths must validate/merge against the writer, not the reader.
+      await memory.saveMessages({
+        messages: [
+          {
+            id: `lag-msg-${suffix}`,
+            threadId,
+            resourceId: 'lag-resource',
+            role: 'user',
+            type: 'text',
+            content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            createdAt: now,
+          },
+        ],
+      });
+      const updated = await memory.updateThread({ id: threadId, title: 'after', metadata: { b: 2 } });
+      expect(updated.title).toBe('after');
+      expect(updated.metadata).toEqual({ a: 1, b: 2 });
+
+      await agents.create({
+        agent: { id: agentId, name: 'lag', instructions: 'x', model: { provider: 'p', name: 'm' } },
+      });
+      expect(await agents.getById(agentId)).toBeNull();
+      const updatedAgent = await agents.update({ id: agentId, metadata: { touched: true } });
+      expect(updatedAgent.metadata).toEqual({ touched: true });
+
+      await memory.deleteThread({ threadId });
+      await agents.delete(agentId);
+    } finally {
+      await store.close();
+      await Promise.all([writePool.end(), readPool.end()]);
+    }
+  });
+
   it('does not close caller-provided reader or writer pools', async () => {
     const writePool = createTestPool();
     const readPool = createTestPool();

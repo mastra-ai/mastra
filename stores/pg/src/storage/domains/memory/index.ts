@@ -102,7 +102,7 @@ import {
   getSchemaName as dbGetSchemaName,
   getTableName as dbGetTableName,
 } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
@@ -481,6 +481,17 @@ export class MemoryPG extends MemoryStorage {
     threadId: string;
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
+    return this.#getThreadById(this.#db.readClient, { threadId, resourceId });
+  }
+
+  /**
+   * Thread lookup against an explicit client. Mutation paths pass the writer so
+   * a lagging read replica cannot produce false not-found or stale metadata.
+   */
+  async #getThreadById(
+    client: DbClient,
+    { threadId, resourceId }: { threadId: string; resourceId?: string },
+  ): Promise<StorageThreadType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
@@ -492,10 +503,7 @@ export class MemoryPG extends MemoryStorage {
         params.push(resourceId);
       }
 
-      const thread = await this.#db.readClient.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        query,
-        params,
-      );
+      const thread = await client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(query, params);
 
       if (!thread) {
         return null;
@@ -713,7 +721,7 @@ export class MemoryPG extends MemoryStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-    const existingThread = await this.getThreadById({ threadId: id });
+    const existingThread = await this.#getThreadById(this.#db.client, { threadId: id });
     if (!existingThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
@@ -1495,7 +1503,7 @@ export class MemoryPG extends MemoryStorage {
       }
 
       for (const threadIdToCheck of threadIds) {
-        const thread = await this.getThreadById({ threadId: threadIdToCheck });
+        const thread = await this.#getThreadById(this.#db.client, { threadId: threadIdToCheck });
         if (!thread) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
@@ -1760,8 +1768,12 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    return this.#getResourceById(this.#db.readClient, resourceId);
+  }
+
+  async #getResourceById(client: DbClient, resourceId: string): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
-    const result = await this.#db.readClient.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
+    const result = await client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
       `SELECT * FROM ${tableName} WHERE id = $1`,
       [resourceId],
     );
@@ -1804,7 +1816,7 @@ export class MemoryPG extends MemoryStorage {
     workingMemory?: string;
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
-    const existingResource = await this.getResourceById({ resourceId });
+    const existingResource = await this.#getResourceById(this.#db.client, resourceId);
 
     if (!existingResource) {
       const newResource: StorageResourceType = {
@@ -1862,7 +1874,7 @@ export class MemoryPG extends MemoryStorage {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
-    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    const sourceThread = await this.#getThreadById(this.#db.client, { threadId: sourceThreadId });
     if (!sourceThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
@@ -1877,7 +1889,7 @@ export class MemoryPG extends MemoryStorage {
     const newThreadId = providedThreadId || crypto.randomUUID();
 
     // Check if the new thread ID already exists
-    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    const existingThread = await this.#getThreadById(this.#db.client, { threadId: newThreadId });
     if (existingThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'CLONE_THREAD', 'THREAD_EXISTS'),

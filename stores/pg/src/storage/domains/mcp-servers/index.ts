@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/mcp-servers';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -146,9 +146,17 @@ export class MCPServersPG extends MCPServersStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPServerType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageMCPServerType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_SERVERS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -249,7 +257,7 @@ export class MCPServersPG extends MCPServersStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_SERVERS, schemaName: getSchemaName(this.#schema) });
 
-      const existingServer = await this.getById(id);
+      const existingServer = await this.#getById(this.#db.client, id);
       if (!existingServer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_SERVER', 'NOT_FOUND'),
@@ -300,7 +308,7 @@ export class MCPServersPG extends MCPServersStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedServer = await this.getById(id);
+      const updatedServer = await this.#getById(this.#db.client, id);
       if (!updatedServer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_SERVER', 'NOT_FOUND_AFTER_UPDATE'),
