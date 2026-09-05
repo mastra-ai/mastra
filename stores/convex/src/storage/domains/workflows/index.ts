@@ -71,12 +71,6 @@ export class WorkflowsConvex extends WorkflowsStorage {
     updatedAt?: Date;
   }): Promise<void> {
     const now = new Date();
-    // Check if a record already exists to preserve createdAt
-    const existing = await this.#db.load<{ createdAt?: string } | null>({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
-    });
-
     await this.#db.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: {
@@ -88,7 +82,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
         // contain $schema/$ref/$defs/$id keys, so we serialize the snapshot here.
         // loadWorkflowSnapshot / ensureSnapshot already handle the string case.
         snapshot: JSON.stringify(snapshot),
-        createdAt: existing?.createdAt ?? (createdAt ? new Date(createdAt).toISOString() : now.toISOString()),
+        createdAt: createdAt ? new Date(createdAt).toISOString() : now.toISOString(),
         updatedAt: updatedAt ? new Date(updatedAt).toISOString() : now.toISOString(),
       },
     });

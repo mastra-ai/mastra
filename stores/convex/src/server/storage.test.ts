@@ -143,6 +143,63 @@ describe('mastraStorage typed load', () => {
   });
 });
 
+describe.each(['insert', 'batchInsert'] as const)('mastraStorage workflow snapshot %s', op => {
+  it.each([
+    ['mastra_workflow_snapshots', TABLE_WORKFLOW_SNAPSHOT, '2026-05-15T00:00:00.000Z', '2026-05-15T00:00:00.000Z'],
+    ['mastra_workflow_snapshots', TABLE_WORKFLOW_SNAPSHOT, undefined, '2026-05-16T00:00:00.000Z'],
+    ['mastra_threads', TABLE_THREADS, '2026-05-15T00:00:00.000Z', '2026-05-16T00:00:00.000Z'],
+  ] as const)('upserts %s (%s) with existing createdAt %s', async (table, tableName, createdAt, expectedCreatedAt) => {
+    const existing = { _id: asConvexId('existing-doc'), id: 'record-1', createdAt };
+    const unique = vi.fn(async () => existing);
+    const withIndex = vi.fn(() => ({ unique }));
+    const patch = vi.fn();
+    const ctx = { db: { query: vi.fn(() => ({ withIndex })), patch } } as unknown as TypedOperationCtx;
+    const record = {
+      id: 'record-1',
+      snapshot: JSON.stringify({ status: 'suspended', value: { checkpoint: 2 } }),
+      createdAt: '2026-05-16T00:00:00.000Z',
+      updatedAt: '2026-05-17T00:00:00.000Z',
+    };
+
+    await handleTypedOperation(ctx, table, {
+      tableName,
+      ...(op === 'insert' ? { op, record } : { op, records: [record] }),
+    });
+
+    expect(withIndex).toHaveBeenCalledWith('by_record_id', expect.any(Function));
+    expect(patch).toHaveBeenCalledExactlyOnceWith(existing._id, {
+      snapshot: record.snapshot,
+      createdAt: expectedCreatedAt,
+      updatedAt: record.updatedAt,
+    });
+  });
+
+  it('retains the supplied creation time on the first snapshot insert', async () => {
+    const insert = vi.fn();
+    const ctx = {
+      db: {
+        query: vi.fn(() => ({ withIndex: vi.fn(() => ({ unique: vi.fn(async () => null) })) })),
+        insert,
+      },
+    } as unknown as TypedOperationCtx;
+    const record = {
+      id: 'workflow-a-run-1',
+      workflow_name: 'workflow-a',
+      run_id: 'run-1',
+      snapshot: '{}',
+      createdAt: '2026-05-15T00:00:00.000Z',
+      updatedAt: '2026-05-16T00:00:00.000Z',
+    };
+
+    await handleTypedOperation(ctx, 'mastra_workflow_snapshots', {
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      ...(op === 'insert' ? { op, record } : { op, records: [record] }),
+    });
+
+    expect(insert).toHaveBeenCalledExactlyOnceWith('mastra_workflow_snapshots', record);
+  });
+});
+
 describe('mastraStorage workflow snapshot merge operations', () => {
   function createWorkflowSnapshotCtx(snapshot: unknown, { missing = false }: { missing?: boolean } = {}) {
     const patches: Array<{ id: GenericId<string>; data: Record<string, unknown> }> = [];
