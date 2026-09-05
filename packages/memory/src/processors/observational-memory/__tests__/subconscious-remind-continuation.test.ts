@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { signalToMastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
 
 import { RemindContinuationProcessor } from '../subconscious/remind-continuation';
@@ -66,7 +67,48 @@ function resultArgs(messages: MastraDBMessage[], steps: unknown[] = []) {
   } as any;
 }
 
+/** Build the row exactly as `agent.sendMessage()` persists it: role `signal`, metadata nested under `signal`. */
+function persistedSignalRow(id: string, contents: string, metadata?: Record<string, unknown>): MastraDBMessage {
+  return signalToMastraDBMessage(
+    { id, type: 'user', tagName: 'user', contents, ...(metadata ? { metadata } : {}) },
+    { threadId: reminderThreadId, resourceId },
+  );
+}
+
 describe('Subconscious reminder continuation', () => {
+  it('finds pending questions in rows persisted by sendMessage (role signal, nested metadata)', async () => {
+    const { processor, sendMessage } = createHarness();
+    // Text deliberately does not match the fallback parser so only the nested metadata can identify the question.
+    const question = persistedSignalRow('question-1', 'What happened?', {
+      [REMIND_MESSAGE_METADATA_KEY]: { type: 'question', replyId: 'reply-1', askedAt: Date.now() },
+    });
+    expect(question.role).toBe('signal');
+    expect(question.content.metadata?.[REMIND_MESSAGE_METADATA_KEY]).toBeUndefined();
+
+    await processor.processOutputResult(resultArgs([question]));
+
+    expect(sendMessage).toHaveBeenCalledOnce();
+    expect(sendMessage.mock.calls[0]![0].metadata[REMIND_MESSAGE_METADATA_KEY]).toEqual({
+      type: 'continuation',
+      replyIds: ['reply-1'],
+      attempt: 1,
+    });
+  });
+
+  it('reconstructs a question from persisted signal text when transport metadata is absent', async () => {
+    const { processor, sendMessage } = createHarness();
+    const question = persistedSignalRow('question-1', 'Memory question reply-1\n\nWhat happened?');
+
+    await processor.processOutputResult(resultArgs([question]));
+
+    expect(sendMessage).toHaveBeenCalledOnce();
+    expect(sendMessage.mock.calls[0]![0].metadata[REMIND_MESSAGE_METADATA_KEY]).toEqual({
+      type: 'continuation',
+      replyIds: ['reply-1'],
+      attempt: 1,
+    });
+  });
+
   it('sends a direct continuation for an unanswered question', async () => {
     const { processor, sendMessage, consumeStream } = createHarness();
     const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
