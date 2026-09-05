@@ -12,6 +12,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
 import { resolveFactoryToolRule } from './resolve.js';
@@ -86,9 +87,11 @@ type ActivePhaseSnapshotBase = {
   status: 'active';
 };
 
-type ActivePhaseSnapshotValue =
-  | (ActivePhaseSnapshotBase & { board: 'work' })
-  | (ActivePhaseSnapshotBase & { board: 'review' } & RuntimeSnapshot);
+type ActivePhaseSnapshotValue = ActivePhaseSnapshotBase & {
+  board: string;
+  modelId?: string;
+  thinkingLevel?: ThinkingLevel;
+};
 
 type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
 
@@ -110,7 +113,7 @@ function workItemSourceKey(item: WorkItemRow): string | null {
 }
 
 function boardForItem(item: WorkItemRow): FactoryRuleBoard {
-  return item.externalSource?.type === 'pull-request' ? 'review' : 'work';
+  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
 }
 
 function boundedError(value: unknown): FactoryRuleJsonValue {
@@ -237,6 +240,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     private readonly options: {
       rules: FactoryRules;
       storage: WorkItemsStorage;
+      boardRegistry?: BoardRegistry;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -317,12 +321,15 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
+    const phaseLabel = this.options.boardRegistry?.get(board)?.phases[stage]?.title ?? PHASE_LABELS[stage] ?? stage;
+    const runtime =
+      value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
-      `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
+      `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
       `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
-      (value.board === 'review'
-        ? `Runtime: model=${escapeText(value.modelId)}, reasoning-setting=${escapeText(value.thinkingLevel)}\n`
+      (runtime
+        ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
       (stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
@@ -343,7 +350,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         stage,
         role: binding.role,
         revision: item.revision,
-        ...(value.board === 'review' ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : {}),
+        ...(runtime ?? {}),
       },
       metadata: { value: { phase: value } },
     };

@@ -431,11 +431,12 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
-    expect(triage).toContain("gh label list --repo mastra-ai/mastra --limit 1000 --json name --jq '.[].name'");
-    expect(triage).toContain("gh label create '@mastra/core' --repo mastra-ai/mastra");
-    expect(triage).toContain('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\'');
-    expect(triage.indexOf("gh label create '@mastra/core'")).toBeLessThan(
-      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'@mastra/core\''),
+    expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
+    expect(triage).toContain(
+      'gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label \'<comma-separated labels selected in Phase 4>\'',
+    );
+    expect(triage.indexOf('gh label create "$LABEL"')).toBeLessThan(
+      triage.indexOf('gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label'),
     );
     expect(triage).toContain('Apply only these label mutations.');
     expect(triage).toContain(

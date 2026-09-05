@@ -48,7 +48,7 @@ import { PostgresStore } from '@mastra/pg';
 
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory } from './agents/memory.js';
+import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -639,6 +639,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  // Only the default memory wiring registers the subconscious tools; a
+  // caller-supplied memory is opaque here, so its prompt must not advertise them.
+  const hasSubconscious =
+    config?.memory === undefined ? (state: MastraCodeState | undefined) => hasSubconsciousTools(vector, state) : false;
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -843,7 +847,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     instructions: async ({ requestContext }) => {
       const configured = config?.hostInstructions;
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
-      return getDynamicInstructions({ requestContext, hostInstructions });
+      return getDynamicInstructions({ requestContext, hostInstructions, hasSubconscious });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.

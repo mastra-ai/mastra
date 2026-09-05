@@ -1110,11 +1110,13 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(controller.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'step-start',
-        payload: expect.not.objectContaining({
-          inputMessages: expect.any(Array),
+        payload: expect.objectContaining({
+          startedAt: expect.any(Number),
         }),
       }),
     );
+    const stepStartChunk = controller.enqueue.mock.calls.find(([chunk]) => chunk.type === 'step-start')?.[0];
+    expect(stepStartChunk?.payload).not.toHaveProperty('inputMessages');
   });
 
   it('stamps step-start.model from the processor-updated model', async () => {

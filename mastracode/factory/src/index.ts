@@ -1,8 +1,20 @@
-export { BoardDefinitionError, defineBoard, reviewBoard, workBoard } from './boards/index.js';
+export {
+  BoardDefinitionError,
+  createBoardRegistry,
+  defaultBoards,
+  defineBoard,
+  reviewBoard,
+  workBoard,
+} from './boards/index.js';
 export type {
   BoardDefinition,
   BoardPhaseDefinition,
+  BoardRegistry,
   BoardTransition,
+  BoardTransitionPolicy,
+  BoardTransitionPolicyContext,
+  BoardTransitionPolicyResult,
+  InstalledBoard,
   ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';

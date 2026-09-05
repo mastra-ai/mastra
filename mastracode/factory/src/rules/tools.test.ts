@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
@@ -388,14 +389,10 @@ describe('factory_transition_work_item', () => {
     await prepareBoundItem(storage);
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: {
-            planning: {
-              issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
-            },
-          },
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createLifecycleTestRegistry({
+        planning: {
+          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
         },
       }),
     });
@@ -417,10 +414,8 @@ describe('factory_transition_work_item', () => {
     const onEnter = vi.fn(() => undefined);
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: { work: { planning: { issue: { onEnter } } } },
-      }),
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards: createLifecycleTestRegistry({ planning: { issue: { onEnter } } }),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });

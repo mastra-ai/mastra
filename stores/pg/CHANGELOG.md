@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.23.0-alpha.1
+
+### Patch Changes
+
+- Fixed trace deletion to cascade to metrics, logs, scores, and feedback while respecting tenant scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
 ## 1.23.0-alpha.0
 
 ### Minor Changes

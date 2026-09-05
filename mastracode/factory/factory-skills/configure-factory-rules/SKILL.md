@@ -1,6 +1,6 @@
 ---
 name: configure-factory-rules
-description: Configure typed Mastra Factory rules and exact-leaf overrides in deployment code
+description: Configure definition-owned board handlers, integration event rules, and global tool-result rules
 ---
 
 # Configure Factory Rules
@@ -9,33 +9,64 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 
 ## Find the configuration
 
-1. Search for `new MastraFactory`, `defaultFactoryRules`, and the `rules` property.
+1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. If the deployment doesn't configure `rules`, start with `defaultFactoryRules({ version, overrides })` and pass the result to `MastraFactory`.
+4. For custom-board handlers, edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
 ## Preserve the public shape
 
-Use one rules tree:
+Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work and Review install automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-- `work.<stage>.<source>.onEnter` or `onExit`
-- `review.<stage>.<source>.onEnter` or `onExit`
-- `tools.<toolName>.onResult`
-- `github.<event>.onEvent`
+Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. The global rules tree contains only `version` and `tools.<toolName>.onResult`.
+
+Work automatic intake requires both `linked_item_materialized` and `autoStartCandidate: true`. Do not remove these guards to reproduce the web deployment's former unconditional intake override. Noncandidate and manual arrivals stay unstarted merely from entering Intake; explicit issue triage and human-approval safeguards remain. Linear Intake and Review retain their existing defaults and guards.
+
+Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
+
+```typescript
+new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+new PlatformLinearIntegration({ rules: { issueClosed: null } });
+```
+
+GitHub and Linear integrations exclusively own their event handlers; configure them through constructor `rules[event]`, not the global Factory rules tree. Move former `rules.linear[event].onEvent` values to the Linear constructor's `rules[event]`. Every built-in handler is enabled automatically; never import or spread defaults just to install an integration. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable authentication, ingestion, or reconciliation bookkeeping. Linear fetch, platform polling, and reconciliation all use the owning instance's handlers.
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
 Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
 
-## Apply exact-leaf overrides
+## Configure board transition policy
 
-An override replaces the exact handler leaf. It does not compose with the built-in handler at that leaf. Sibling leaves remain unchanged.
+Search the installed `defineBoard()` definition for `transitionPolicy`. Read `src/boards/transition-policy.ts` for the public contract and `src/boards/work-transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
+
+Topology declares allowed moves; transition policy adds business restrictions; lifecycle handlers return effects. Add custom restrictions to the board definition, not the generic transition service or global rules:
+
+```typescript
+import type { BoardTransitionPolicy } from '@mastra/factory/boards';
+
+const transitionPolicy: BoardTransitionPolicy = context => {
+  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+  }
+};
+// Pass transitionPolicy to the installed custom defineBoard() definition.
+```
+
+The policy receives a deeply readonly snapshot with ISO-string dates. Return `undefined`, `{ type: 'allow', triageType?, accept?: true }`, or `{ type: 'reject', code, reason }`, never skill calls, transitions, consent overrides, or patches. Classification intents require the existing triage-agent path and must match its requested classification. Acceptance requires both human actor and human ingress. Runtime validates results and commits intents atomically only after successful lifecycle evaluation.
+
+Policies must be side-effect-free and share the lifecycle timeout budget. Initial entry, reentry, and same-stage requests evaluate policy; completed replay does not. Concurrent attempts may evaluate more than once, and timing out does not cancel work started by a callback. Do not access storage or integrations from a policy.
+
+Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Working/resting phase semantics, role routing, terminal cleanup, consent, and kickoff behavior still contain built-in naming assumptions; custom policies do not generalize them. Do not advertise a custom `shipped` phase as terminal or invent built-in replacement APIs.
+
+## Apply supported overrides
+
+Tool-result overrides replace the exact handler leaf. Integration overrides replace one event handler. Neither composes with the built-in handler; siblings remain unchanged. Board handlers belong to their definitions, not this override mechanism.
 
 Before replacing a built-in leaf:
 
-1. Read the built-in handler in `src/web/factory/rules/defaults.ts`.
+1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and tool defaults in `src/rules/defaults.ts` within the Factory package. Inspect Work and Review defaults in `src/boards/work.ts` and `src/boards/review.ts`, and custom handlers in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

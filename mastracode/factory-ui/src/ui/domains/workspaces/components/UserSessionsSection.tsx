@@ -19,9 +19,12 @@ import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWo
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { deleteUserSession, regenerateSessionTitle } from '../services/user-sessions';
 import type { FactoryUserSession } from '../services/user-sessions';
+import { EMPTY_USER_SESSION_FILTERS, filterUserSessions } from '../services/sessionFilters';
+import type { UserSessionFiltersState } from '../services/sessionFilters';
 import { getSessionOwnerDetails, getUserSessionLabel } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import { sessionRowStatus } from '../services/sessionStatus';
+import { UserSessionFilters } from './UserSessionFilters';
 
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
@@ -31,6 +34,7 @@ export function UserSessionsSection() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
+  const [filters, setFilters] = useState<UserSessionFiltersState>(EMPTY_USER_SESSION_FILTERS);
   const { pinnedSessions, setPinned } = usePinnedSessions();
 
   const repository = factoryQuery.data?.repositories[0];
@@ -41,15 +45,30 @@ export function UserSessionsSection() {
   // Pinned rows stay on top; within each pin group the viewer's own sessions
   // sort before sessions started by other org members.
   const isOwn = (session: FactoryUserSession) => Boolean(viewerUserId) && session.userId === viewerUserId;
-  const sessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
+  const allSessions = [...(sessionsQuery.data?.userSessions ?? [])].sort(
     (a, b) =>
       Number(pinnedSessions.has(b.sessionId)) - Number(pinnedSessions.has(a.sessionId)) ||
       Number(isOwn(b)) - Number(isOwn(a)),
   );
   const runningBySessionId = useActiveRunResources({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceIds: sessions.map(session => session.sessionId),
+    resourceIds: allSessions.map(session => session.sessionId),
   });
+  const candidates = allSessions.map(session => ({
+    session,
+    ownerName: getSessionOwnerDetails(session, auth.data?.user).name,
+    status: !session.materializedAt
+      ? ('initializing' as const)
+      : runningBySessionId[session.sessionId] === true
+        ? ('working' as const)
+        : ('idle' as const),
+  }));
+  const sessions = filterUserSessions(candidates, filters, viewerUserId).map(candidate => candidate.session);
+  const ownersById = new Map<string, string>();
+  for (const candidate of candidates) ownersById.set(candidate.session.userId, candidate.ownerName);
+  const owners = [...ownersById]
+    .map(([userId, name]) => ({ userId, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
@@ -104,15 +123,24 @@ export function UserSessionsSection() {
       <SidebarSectionHeading
         icon={<MessageSquare />}
         action={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="New user session"
-            onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-            disabled={pending}
-          >
-            <Plus size={15} />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <UserSessionFilters
+              filters={filters}
+              owners={owners}
+              viewerUserId={viewerUserId}
+              onChange={setFilters}
+              onClear={() => setFilters(EMPTY_USER_SESSION_FILTERS)}
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="New user session"
+              onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+              disabled={pending}
+            >
+              <Plus size={15} />
+            </Button>
+          </div>
         }
       >
         User Sessions
@@ -170,7 +198,7 @@ export function UserSessionsSection() {
         )}
         {sessionsQuery.isSuccess && sessions.length === 0 && (
           <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
-            No sessions yet
+            {allSessions.length === 0 ? 'No sessions yet' : 'No sessions match these filters'}
           </Txt>
         )}
       </div>

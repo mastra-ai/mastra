@@ -38,6 +38,8 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
+import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
+import { resolveLinearRules } from './default-rules.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
@@ -48,8 +50,10 @@ const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
 const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize';
 
-/** Credentials for the Linear OAuth application. All fields are required. */
+/** Credentials and optional event rules for the Linear OAuth application. */
 export interface LinearIntegrationConfig {
+  /** Per-event replacements; omitted events retain defaults, null disables. */
+  rules?: LinearRuleOverrides;
   /** OAuth client id of the Linear application. */
   clientId: string;
   /** OAuth client secret of the Linear application. */
@@ -574,7 +578,14 @@ export class LinearIntegration implements FactoryIntegration {
   readonly #clientId: string;
   readonly #clientSecret: string;
 
+  readonly #rules: LinearEventRules;
+
+  get rules(): LinearEventRules {
+    return this.#rules;
+  }
+
   constructor(config: LinearIntegrationConfig) {
+    this.#rules = resolveLinearRules(config.rules);
     const missing = (['clientId', 'clientSecret'] as const).filter(key => !config[key]);
     if (missing.length > 0) {
       throw new Error(`LinearIntegration is missing required config: ${missing.join(', ')}.`);
@@ -1000,7 +1011,7 @@ export class LinearIntegration implements FactoryIntegration {
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
-      ingestFactoryIssues: attachLinearRules(ctx),
+      ingestFactoryIssues: attachLinearRules(this, ctx),
     });
   }
 
