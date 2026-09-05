@@ -10,16 +10,13 @@ function logo(slug: string) {
 
 const integrations: IntegrationDialogItem[] = [
   { id: 'anthropic', name: 'Anthropic', logo: logo('anthropic') },
-  { id: 'beehiiv', name: 'Beehiiv', logo: logo('beehiiv') },
   { id: 'clerk', name: 'Clerk', logo: logo('clerk') },
   { id: 'cloudflare', name: 'Cloudflare', logo: logo('cloudflare') },
   { id: 'github', name: 'GitHub', logo: logo('github') },
   { id: 'gitlab', name: 'GitLab', logo: logo('gitlab') },
   { id: 'hubspot', name: 'HubSpot', logo: logo('hubspot') },
-  { id: 'linear', name: 'Linear', logo: logo('linear') },
+  { id: 'linear', name: 'Linear', description: 'Issues and projects', logo: logo('linear') },
   { id: 'notion', name: 'Notion', logo: logo('notion') },
-  { id: 'openai', name: 'OpenAI', logo: logo('openai') },
-  { id: 'slack', name: 'Slack', description: 'Workspace', logo: logo('slack') },
   { id: 'stripe', name: 'Stripe', logo: logo('stripe') },
 ];
 

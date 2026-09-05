@@ -120,9 +120,9 @@ function IntegrationDialogContent({
                     <span className="text-ui-md leading-ui-md text-neutral6 block truncate font-medium">
                       {item.name}
                     </span>
-                    <span className="text-ui-sm leading-ui-sm text-neutral3 block truncate">
-                      {item.description ?? item.id}
-                    </span>
+                    {item.description ? (
+                      <span className="text-ui-sm leading-ui-sm text-neutral3 block truncate">{item.description}</span>
+                    ) : null}
                   </span>
                 </button>
               </li>
