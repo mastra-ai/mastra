@@ -61,8 +61,14 @@ export const defaultLinearRules = Object.freeze({
 } satisfies LinearEventRules);
 
 export function resolveLinearRules(overrides?: LinearRuleOverrides): LinearEventRules {
-  if (overrides !== undefined && (overrides === null || typeof overrides !== 'object' || Array.isArray(overrides))) {
-    throw new Error('Linear rules must be an object.');
+  if (
+    overrides !== undefined &&
+    (overrides === null ||
+      typeof overrides !== 'object' ||
+      Array.isArray(overrides) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(overrides)))
+  ) {
+    throw new Error('Linear rules must be a plain object.');
   }
   const rules: Record<string, FactoryRuleHandler<FactoryLinearRuleContext> | null> = { ...defaultLinearRules };
   for (const key of Reflect.ownKeys(overrides ?? {})) {

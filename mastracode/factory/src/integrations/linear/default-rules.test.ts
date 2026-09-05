@@ -33,6 +33,26 @@ describe('Linear rule resolution', () => {
     expect(resolveLinearRules().issueObserved).toBe(defaultLinearRules.issueObserved);
   });
 
+  it('accepts null-prototype rule maps', () => {
+    const overrides = Object.assign(Object.create(null), { issueObserved: null });
+    const resolved = resolveLinearRules(overrides);
+    expect(resolved.issueObserved).toBeNull();
+    expect(resolved.issueClosed).toBe(defaultLinearRules.issueClosed);
+    expect(Object.isFrozen(resolved)).toBe(true);
+  });
+
+  it.each([
+    new Map([['issueObserved', null]]),
+    new Date(0),
+    new Set(['issueObserved']),
+    new (class {
+      issueObserved = null;
+    })(),
+  ])('rejects non-plain rule maps %j', overrides => {
+    // @ts-expect-error Exercise invalid runtime configuration.
+    expect(() => resolveLinearRules(overrides)).toThrow(/plain object/);
+  });
+
   it.each([
     null,
     [],
