@@ -288,42 +288,52 @@ export function execute<OUTPUT = undefined>({
           timeoutMs: modelSettings?.timeout?.stepMs,
           timeoutType: 'step',
         });
-        const { signal: callAbortSignal, cleanup: cleanupFirstChunkTimeout } = createTimeoutAbortSignal({
-          parentSignal: abortSignal,
-          timeoutMs: methodType === 'stream' ? modelSettings?.timeout?.firstChunkMs : undefined,
-          timeoutType: 'firstChunk',
-        });
+        let callAbortSignal = abortSignal;
+        let cleanupFirstChunkTimeout = () => {};
 
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
           .default(
             async () => {
-              const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
+              const firstChunkTimeout = createTimeoutAbortSignal({
+                parentSignal: abortSignal,
+                timeoutMs: methodType === 'stream' ? modelSettings?.timeout?.firstChunkMs : undefined,
+                timeoutType: 'firstChunk',
+              });
+              callAbortSignal = firstChunkTimeout.signal;
+              cleanupFirstChunkTimeout = firstChunkTimeout.cleanup;
 
-              // Cast needed: V2 and V3 call options are structurally compatible but typed differently
-              // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
-              // Raced rather than merely signalled: a provider that ignores `abortSignal`
-              // would otherwise hang straight past its budget.
-              const streamResult = await raceAgainstAbort(
-                (fn as Function)({
-                  ...toolsAndToolChoice,
-                  prompt,
-                  providerOptions: providerOptionsToUse,
-                  abortSignal: callAbortSignal,
-                  includeRawChunks,
-                  responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
-                  ...filteredModelSettings,
-                  headers,
-                }),
-                callAbortSignal,
-              );
+              try {
+                const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
 
-              // We have to cast this because doStream is missing the warnings property in its return type even though it exists
-              return streamResult as unknown as LanguageModelV2StreamResult;
+                // Cast needed: V2 and V3 call options are structurally compatible but typed differently
+                // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
+                // Raced rather than merely signalled: a provider that ignores `abortSignal`
+                // would otherwise hang straight past its budget.
+                const streamResult = await raceAgainstAbort(
+                  (fn as Function)({
+                    ...toolsAndToolChoice,
+                    prompt,
+                    providerOptions: providerOptionsToUse,
+                    abortSignal: callAbortSignal,
+                    includeRawChunks,
+                    responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
+                    ...filteredModelSettings,
+                    headers,
+                  }),
+                  callAbortSignal,
+                );
+
+                // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+                return streamResult as unknown as LanguageModelV2StreamResult;
+              } catch (error) {
+                cleanupFirstChunkTimeout();
+                throw error;
+              }
             },
             {
               retries: modelSettings?.maxRetries ?? 2,
-              signal: callAbortSignal,
+              signal: abortSignal,
               // Pinned to p-retry's own defaults so the backoff it schedules stays
               // unchanged while remaining computable in onFailedAttempt below.
               minTimeout: RETRY_MIN_TIMEOUT_MS,
@@ -343,7 +353,7 @@ export function execute<OUTPUT = undefined>({
                 // Retry-After from wedging the run.
                 const boundedRetryAfterMs = Math.min(retryAfterMs, DEFAULT_MAX_RETRY_AFTER_MS);
                 const scheduledBackoffMs = RETRY_MIN_TIMEOUT_MS * RETRY_BACKOFF_FACTOR ** (context.attemptNumber - 1);
-                await waitDelay(boundedRetryAfterMs - scheduledBackoffMs, callAbortSignal);
+                await waitDelay(boundedRetryAfterMs - scheduledBackoffMs, abortSignal);
               },
               shouldRetry(context) {
                 return isRetryableModelError(context.error);
