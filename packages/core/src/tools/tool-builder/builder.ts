@@ -250,6 +250,17 @@ export class CoreToolBuilder extends MastraBase {
   private originalTool: ToolToConvert;
   private options: ToolOptions;
   private logType?: LogType;
+  /**
+   * Builder-local copy of the user's input schema with the framework-injected
+   * keys (`_background`, `suspendedToolRunId`, `resumeData`) spliced in.
+   *
+   * It must NOT be written back onto `originalTool.inputSchema`: `createTool()`
+   * results are commonly module-level singletons shared across several agents,
+   * while background eligibility is resolved per agent — a write-back would
+   * leak one agent's injected keys into every other agent's model-facing
+   * parameters (issue #22843).
+   */
+  private injectedInputSchema?: StandardSchemaWithJSON;
 
   constructor(input: {
     originalTool: ToolToConvert;
@@ -320,7 +331,7 @@ export class CoreToolBuilder extends MastraBase {
                 .optional(),
             });
           }
-          this.originalTool.inputSchema = toStandardSchema(nextSchema);
+          this.injectedInputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -351,11 +362,7 @@ export class CoreToolBuilder extends MastraBase {
             // `.transform()` / `.default()` / `.refine()` etc.) while exposing
             // the spliced JSON Schema for provider serialization. See
             // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
-            this.originalTool.inputSchema = buildJsonOverrideSchema(
-              schema,
-              { ...jsonSchema, properties },
-              injectedKeys,
-            );
+            this.injectedInputSchema = buildJsonOverrideSchema(schema, { ...jsonSchema, properties }, injectedKeys);
           }
         }
       }
@@ -380,8 +387,10 @@ export class CoreToolBuilder extends MastraBase {
       return schema;
     }
 
-    // For Mastra tools, inputSchema might also be a function
-    let schema = this.originalTool.inputSchema;
+    // For Mastra tools, inputSchema might also be a function. Prefer the
+    // builder-local injected schema (see `injectedInputSchema`) so per-agent
+    // injections never depend on mutation of the shared tool object.
+    let schema = this.injectedInputSchema ?? this.originalTool.inputSchema;
 
     if (isStandardSchemaWithJSON(schema)) {
       return schema;
@@ -759,7 +768,14 @@ export class CoreToolBuilder extends MastraBase {
           result = await executeWithContext({
             span: toolSpan,
             fn: async () => {
-              if (inputValidationSchema) {
+              if (inputValidationSchema || this.injectedInputSchema) {
+                // The injected keys are only declared on the builder-local
+                // schema. `Tool.execute` validates against the user's original
+                // schema, which would strip them (breaking sub-agent/workflow
+                // resume via `suspendedToolRunId`), so once this builder has
+                // validated the args itself — against the injected schema or a
+                // compat-processed version of it — mark the context to skip
+                // that second validation.
                 markBuilderValidatedInput(toolContext);
               }
               return tool?.execute?.(args, toolContext);
