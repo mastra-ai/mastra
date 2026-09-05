@@ -2,11 +2,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationDialog } from './integration-dialog';
+import { parseIntegrationName } from './parse-integration-name';
 
 const items = [
   { id: 'anthropic', name: 'Anthropic' },
   { id: 'slack', name: 'Slack' },
   { id: 'stripe', name: 'Stripe', disabled: true },
+  { id: 'render-mcp', name: 'Render (MCP)' },
+  { id: 'sanity-mcp', name: 'Sanity', badge: 'MCP' },
 ];
 
 afterEach(() => cleanup());
@@ -61,6 +64,37 @@ describe('IntegrationDialog', () => {
     it('shows a custom empty message', () => {
       renderDialog({ items: [], emptyMessage: 'Nothing to connect yet.' });
       expect(screen.getByRole('status').textContent).toBe('Nothing to connect yet.');
+    });
+  });
+});
+
+describe('parseIntegrationName', () => {
+  it('splits a parenthesized suffix into a badge', () => {
+    expect(parseIntegrationName('Render (MCP)')).toEqual({ name: 'Render', badge: 'MCP' });
+  });
+
+  it('leaves plain names alone', () => {
+    expect(parseIntegrationName('Replicate')).toEqual({ name: 'Replicate' });
+  });
+
+  it('ignores parentheses that are not a suffix', () => {
+    expect(parseIntegrationName('(Legacy) Mail')).toEqual({ name: '(Legacy) Mail' });
+  });
+});
+
+describe('IntegrationDialog badges', () => {
+  describe('when a name carries a parenthesized suffix', () => {
+    it('renders the suffix as a badge next to the name', () => {
+      renderDialog();
+      const button = screen.getByRole('button', { name: 'Render MCP' });
+      expect(button.querySelector('span:last-child')?.textContent).toBe('MCP');
+    });
+  });
+
+  describe('when an item sets badge explicitly', () => {
+    it('renders it without parsing the name', () => {
+      renderDialog();
+      expect(screen.getByRole('button', { name: 'Sanity MCP' })).toBeDefined();
     });
   });
 });

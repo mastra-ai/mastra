@@ -1,6 +1,8 @@
 import { BlocksIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { parseIntegrationName } from './parse-integration-name';
+import { Badge } from '@/ds/components/Badge';
 import { DialogNew } from '@/ds/components/DialogNew';
 import type { DialogNewProps } from '@/ds/components/DialogNew';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
@@ -11,6 +13,7 @@ export type IntegrationDialogItem = {
   id: string;
   name: string;
   logo?: ReactNode;
+  badge?: string;
   disabled?: boolean;
 };
 
@@ -101,26 +104,30 @@ function IntegrationDialogContent({
       <DialogNew.Body className="pt-2 pb-5">
         {visibleItems.length > 0 ? (
           <ul className="flex flex-col gap-2">
-            {visibleItems.map(item => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  disabled={item.disabled}
-                  onClick={() => onSelect(item)}
-                  className={cn(
-                    'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border1 px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-surface3 disabled:pointer-events-none disabled:opacity-50',
-                    controlFocusBorderVisible,
-                  )}
-                >
-                  <span className="text-neutral4 grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
-                    {item.logo ?? <BlocksIcon />}
-                  </span>
-                  <span className="text-ui-md leading-ui-md text-neutral6 min-w-0 truncate font-medium">
-                    {item.name}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {visibleItems.map(item => {
+              const parsed = item.badge ? { name: item.name, badge: item.badge } : parseIntegrationName(item.name);
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    disabled={item.disabled}
+                    onClick={() => onSelect(item)}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-border1 px-4 py-3 text-left transition-colors duration-normal ease-out-custom hover:bg-surface3 disabled:pointer-events-none disabled:opacity-50',
+                      controlFocusBorderVisible,
+                    )}
+                  >
+                    <span className="text-neutral4 grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
+                      {item.logo ?? <BlocksIcon />}
+                    </span>
+                    <span className="text-ui-md leading-ui-md text-neutral6 min-w-0 truncate font-medium">
+                      {parsed.name}
+                    </span>
+                    {parsed.badge ? <Badge size="sm">{parsed.badge}</Badge> : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p role="status" className="text-ui-sm text-neutral3 py-8 text-center">

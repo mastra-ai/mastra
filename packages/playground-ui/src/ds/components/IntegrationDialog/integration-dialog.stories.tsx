@@ -1,24 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { integrationsCatalog } from './__fixtures__/integrations-catalog';
 import { IntegrationDialog } from './integration-dialog';
 import type { IntegrationDialogItem } from './integration-dialog';
 import { Button } from '@/ds/components/Button';
 
-function logo(slug: string) {
-  return <img src={`https://thesvg.org/icons/${slug}/mono.svg`} alt="" className="brightness-0 dark:invert" />;
-}
-
-const integrations: IntegrationDialogItem[] = [
-  { id: 'anthropic', name: 'Anthropic', logo: logo('anthropic') },
-  { id: 'clerk', name: 'Clerk', logo: logo('clerk') },
-  { id: 'cloudflare', name: 'Cloudflare', logo: logo('cloudflare') },
-  { id: 'github', name: 'GitHub', logo: logo('github') },
-  { id: 'gitlab', name: 'GitLab', logo: logo('gitlab') },
-  { id: 'hubspot', name: 'HubSpot', logo: logo('hubspot') },
-  { id: 'linear', name: 'Linear', logo: logo('linear') },
-  { id: 'notion', name: 'Notion', logo: logo('notion') },
-  { id: 'stripe', name: 'Stripe', logo: logo('stripe') },
-];
+const integrations: IntegrationDialogItem[] = integrationsCatalog.integrations.map(entry => ({
+  id: entry.id,
+  name: entry.displayName,
+  logo: entry.logoUrl ? <img src={entry.logoUrl} alt="" /> : undefined,
+}));
 
 function Example({ items = integrations }: { items?: IntegrationDialogItem[] }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +44,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Searchable integration picker built on DialogNew. Mirrors the Platform "Add connection" dialog: search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional description and logo; selection is left to the caller.',
+          'Searchable integration picker built on DialogNew, mirroring the Platform "Add connection" dialog. Search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional logo, badge and disabled flag; a parenthesized suffix in the name such as "Render (MCP)" becomes a badge. The Default story uses a snapshot of the integrations.mastra.ai catalog with its Nango logos. Selection is left to the caller.',
       },
     },
   },
