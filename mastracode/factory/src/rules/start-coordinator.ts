@@ -74,7 +74,7 @@ async function resolveSourceSession(
 
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
-  await session.thread.rename({ title: request.threadTitle });
+  await session.thread.rename({ title: request.threadTitle, pin: false });
   await session.thread.setSetting({ key: 'factorySessionId', value: request.sessionId });
   return threadId;
 }

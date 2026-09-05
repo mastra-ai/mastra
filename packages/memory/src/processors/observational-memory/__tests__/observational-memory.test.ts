@@ -16781,7 +16781,7 @@ describe('Async reflection failure should not permanently block future reflectio
 });
 
 describe('Observer output threadTitle propagation', () => {
-  it('should persist threadTitle from observer output to thread metadata', async () => {
+  it.each([false, true])('preserves observer hints with titlePinned=%s', async titlePinned => {
     // This tests the fix: threadTitle extracted by parseObserverOutput must
     // propagate through ObserverRunner.call() → sync strategy process() →
     // persist() → setThreadOMMetadata.
@@ -16849,7 +16849,7 @@ describe('Observer output threadTitle propagation', () => {
         title: 'Test Thread',
         createdAt: new Date('2025-01-01T08:00:00Z'),
         updatedAt: new Date('2025-01-01T08:00:00Z'),
-        metadata: {},
+        metadata: { mastra: { titlePinned } },
       },
     });
     await storage.initializeObservationalMemory({
@@ -16886,22 +16886,27 @@ describe('Observer output threadTitle propagation', () => {
 
     // Check that threadTitle was persisted to thread metadata
     const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe(titlePinned ? 'Test Thread' : 'React Dashboard Project');
     const omMetadata = ((thread?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(omMetadata.threadTitle).toBe('React Dashboard Project');
     expect(omMetadata.currentTask).toBe('Building the dashboard');
     expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
 
     const threadUpdatePart = capturedParts.find(part => part?.type === 'data-om-thread-update');
-    expect(threadUpdatePart).toMatchObject({
-      type: 'data-om-thread-update',
-      data: {
-        threadId,
-        oldTitle: 'Test Thread',
-        newTitle: 'React Dashboard Project',
-      },
-    });
-    expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
-    expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+    if (titlePinned) {
+      expect(threadUpdatePart).toBeUndefined();
+    } else {
+      expect(threadUpdatePart).toMatchObject({
+        type: 'data-om-thread-update',
+        data: {
+          threadId,
+          oldTitle: 'Test Thread',
+          newTitle: 'React Dashboard Project',
+        },
+      });
+      expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
+      expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+    }
     expect(capturedParts.every(part => part.transient === true)).toBe(true);
 
     const after = await storage.listMessages({
@@ -16922,10 +16927,10 @@ describe('Observer output threadTitle propagation', () => {
           part => part.type === 'data-om-thread-update' && (part.data as any)?.newTitle === 'React Dashboard Project',
         ),
       ),
-    ).toBe(true);
+    ).toBe(!titlePinned);
   });
 
-  it('should persist threadTitle from activated buffered chunks to thread record', async () => {
+  it.each([false, true])('respects titlePinned=%s when activating buffered chunks', async titlePinned => {
     const storage = createInMemoryStorage();
     const threadId = 'buf-title-thread';
     const resourceId = 'buf-title-resource';
@@ -16977,12 +16982,15 @@ describe('Observer output threadTitle propagation', () => {
       },
     });
 
+    // A manual rename can happen after the observer has already buffered its title.
+    await storage.patchThread({ id: threadId, metadata: { mastra: { titlePinned } } });
+
     const result = await om.activate({ threadId, resourceId });
     expect(result.activated).toBe(true);
 
     // Verify threadTitle was persisted to the thread record
     const thread = await storage.getThreadById({ threadId });
-    expect(thread?.title).toBe('React Dashboard Project');
+    expect(thread?.title).toBe(titlePinned ? 'New Thread' : 'React Dashboard Project');
 
     // Verify OM metadata includes the threadTitle
     const omMetadata = ((thread?.metadata as any)?.mastra?.om ?? {}) as any;

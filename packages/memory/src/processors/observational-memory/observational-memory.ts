@@ -245,6 +245,7 @@ import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-regis
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
+import { resolveThreadTitleUpdate } from './thread-title';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -3558,12 +3559,10 @@ ${formattedMessages}
           currentTask: lastActivated.currentTask,
           threadTitle: chunkThreadTitle,
         });
-        const oldTitle = thread.title?.trim();
-        const newTitle = chunkThreadTitle?.trim();
-        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, chunkThreadTitle);
         await this.storage.patchThread({
           id: threadId,
-          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
+          ...(newTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
       }

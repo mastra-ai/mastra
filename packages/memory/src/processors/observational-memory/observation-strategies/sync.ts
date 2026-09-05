@@ -17,6 +17,7 @@ import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { resolveThreadTitleUpdate } from '../thread-title';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -201,8 +202,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     if (thread) {
       const oldTitle = thread.title?.trim();
-      const newTitle = processed.threadTitle?.trim();
-      const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
       const previousOmMetadata = getThreadOMMetadata(thread.metadata);
       const metadataUpdate = buildThreadMetadataFromExtractedValues(
         processed.extractors ?? this.observationConfig.extractors,
@@ -220,11 +220,11 @@ export class SyncObservationStrategy extends ObservationStrategy {
       });
       await this.storage.patchThread({
         id: threadId,
-        ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
+        ...(newTitle ? { title: newTitle } : {}),
         metadata: newMetadata,
       });
 
-      if (shouldUpdateThreadTitle) {
+      if (newTitle) {
         threadUpdateMarker = createThreadUpdateMarker({
           cycleId: this.cycleId ?? crypto.randomUUID(),
           threadId,

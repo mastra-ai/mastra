@@ -14,6 +14,7 @@ import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { withRetry } from '../retry';
+import { resolveThreadTitleUpdate } from '../thread-title';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -168,13 +169,12 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
-    const newTitle = processed.threadTitle?.trim();
-    const hasValidThreadTitle = !!newTitle && newTitle.length >= 3;
+    const hasValidThreadTitle = (processed.threadTitle?.trim().length ?? 0) >= 3;
     if (hasValidThreadTitle || processed.extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
+        const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const metadataUpdate = buildThreadMetadataFromExtractedValues(
           processed.extractors ?? this.observationConfig.extractors,
@@ -191,11 +191,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         });
         await this.storage.patchThread({
           id: threadId,
-          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
+          ...(newTitle ? { title: newTitle } : {}),
           metadata: newMetadata,
         });
 
-        if (shouldUpdateThreadTitle) {
+        if (newTitle) {
           const marker = createThreadUpdateMarker({
             cycleId: this.cycleId,
             threadId,
