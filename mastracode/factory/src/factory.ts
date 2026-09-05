@@ -832,7 +832,12 @@ export class MastraFactory {
                         controller: prepared.base.controller,
                         notifySupervisor: input =>
                           notifySupervisor(
-                            { controller: prepared.base.controller, projects: factoryProjectsStorage },
+                            {
+                              controller: prepared.base.controller,
+                              projects: factoryProjectsStorage,
+                              primeCredentials: tenant =>
+                                primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                            },
                             input,
                           ),
                         logger: { warn: (message, meta) => console.warn(`[Factory Supervisor] ${message}`, meta) },
