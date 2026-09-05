@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Preserved dollar-sign substitution tokens literally when replacing values in generated files.
+Fixed file replacements so values containing `$&`, `$$`, `` $` `` or `$'` are written to generated files exactly as provided instead of being expanded.
