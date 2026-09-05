@@ -21,16 +21,28 @@ export type IntegrationDialogItem = {
 const AUTH_TYPE_LABELS: Record<string, string> = {
   OAUTH1: 'OAuth',
   OAUTH2: 'OAuth',
+  OAUTH2_CC: 'OAuth',
+  MCP_OAUTH2: 'OAuth',
+  MCP_OAUTH2_GENERIC: 'OAuth',
   API_KEY: 'API key',
   BASIC: 'Basic auth',
   APP: 'App',
   TBA: 'Token',
+  JWT: 'JWT',
+  TWO_STEP: 'Two-step',
+  SIGNATURE: 'Signature',
+  AWS_SIGV4: 'AWS SigV4',
   CUSTOM: 'Custom',
-  MCP: 'MCP',
+  INSTALL_PLUGIN: 'Plugin',
+  NONE: 'No auth',
 };
 
 function authTypeLabel(authType: string) {
   return AUTH_TYPE_LABELS[authType.toUpperCase()] ?? authType;
+}
+
+function isMcpAuthType(authType: string | undefined) {
+  return authType?.toUpperCase().startsWith('MCP') ?? false;
 }
 
 export type IntegrationDialogProps = Omit<DialogNewProps, 'variant' | 'children'> & {
@@ -122,9 +134,10 @@ function IntegrationDialogContent({
           <ul className="flex flex-col gap-2">
             {visibleItems.map(item => {
               const parsedName = parseIntegrationName(item.name);
+              const isMcp = isMcpAuthType(item.authType);
               const parsed = {
                 name: parsedName.name,
-                badge: item.badge ?? (item.authType ? undefined : parsedName.badge),
+                badge: item.badge ?? (isMcp ? 'MCP' : parsedName.badge),
               };
               return (
                 <li key={item.id}>
@@ -145,9 +158,9 @@ function IntegrationDialogContent({
                     </span>
                     {parsed.badge ? <Badge size="sm">{parsed.badge}</Badge> : null}
                     {item.authType ? (
-                      <Badge size="sm" emphasis="muted" className="ml-auto">
+                      <span className="text-ui-sm leading-ui-sm text-neutral3 ml-auto shrink-0">
                         {authTypeLabel(item.authType)}
-                      </Badge>
+                      </span>
                     ) : null}
                   </button>
                 </li>
