@@ -233,6 +233,8 @@ export interface WorkflowToolExecutionContext<TSuspend, TResume> {
   // Always present when called from workflow context
   runId: string;
   workflowId: string;
+  /** Outermost workflow run. Absent for older snapshots or engines without root identity. */
+  rootRun?: { workflowId: string; runId: string };
   state: any;
   setState: (state: any) => void;
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;

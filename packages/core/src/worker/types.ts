@@ -9,6 +9,7 @@ export interface StepExecutionStrategy {
 export interface StepExecutionParams {
   workflowId: string;
   runId: string;
+  rootRun?: import('../workflows/types').WorkflowRunIdentity;
   stepId: string;
   executionPath: number[];
   stepResults: Record<string, unknown>;

@@ -347,6 +347,7 @@ export async function executeStep(
         runId: nestedRunId ?? runId,
         resourceId,
         workflowId,
+        rootRun: executionContext.rootRun,
         mastra: mastraForStep,
         requestContext,
         actor,

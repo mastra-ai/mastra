@@ -12,6 +12,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   abstract supportsConcurrentUpdates(): boolean;
 
+  /** Whether create-only snapshots and expectedStatus updates are both atomic. */
+  supportsAtomicWorkflowStarts(): boolean {
+    return false;
+  }
+
   abstract updateWorkflowResults({
     workflowName,
     runId,
@@ -43,6 +48,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
+    /** Insert only: an existing run must remain unchanged. Requires supportsAtomicWorkflowStarts(). */
+    createOnly?: boolean;
   }): Promise<void>;
 
   abstract loadWorkflowSnapshot({

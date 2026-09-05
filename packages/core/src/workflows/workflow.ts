@@ -95,6 +95,7 @@ import type {
   WorkflowResult,
   WorkflowType,
   WorkflowRunState,
+  WorkflowRunIdentity,
   WorkflowRunStatus,
   WorkflowState,
   WorkflowStateField,
@@ -2562,6 +2563,8 @@ export class Workflow<
    */
   async createRun(options?: {
     runId?: string;
+    /** @internal Outermost invocation supplied by native nested execution; null means unknown. */
+    rootRun?: WorkflowRunIdentity | null;
     resourceId?: string;
     disableScorers?: boolean;
     /** Optional pubsub instance for streaming events. If not provided, a new EventEmitterPubSub is created. */
@@ -2598,6 +2601,7 @@ export class Workflow<
       this.#runs.get(runIdToUse) ??
       new Run({
         workflowId: this.id,
+        rootRun: options?.rootRun,
         stateSchema: this.stateSchema,
         inputSchema: this.inputSchema,
         requestContextSchema: this.requestContextSchema,
@@ -2654,6 +2658,7 @@ export class Workflow<
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
+        rootRun: run.rootRun,
         status: 'pending',
         value: {},
         // @ts-expect-error - context type mismatch
@@ -2672,6 +2677,7 @@ export class Workflow<
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
+        createOnly: workflowsStore.supportsAtomicWorkflowStarts(),
         snapshot: this.#options.pruneSnapshot
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
@@ -2713,6 +2719,7 @@ export class Workflow<
   // To run a workflow use `.createRun` and then `.start` or `.resume`
   async execute({
     runId,
+    rootRun,
     resourceId,
     inputData,
     resumeData,
@@ -2737,6 +2744,7 @@ export class Workflow<
     ...rest
   }: {
     runId?: string;
+    rootRun?: WorkflowRunIdentity;
     resourceId?: string;
     inputData: TInput;
     resumeData?: unknown;
@@ -2829,8 +2837,8 @@ export class Workflow<
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     const run = isResume
-      ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub })
-      : await this.createRun({ runId, resourceId, pubsub: nestedPubsub });
+      ? await this.createRun({ runId: resume.runId, rootRun: rootRun ?? null, resourceId, pubsub: nestedPubsub })
+      : await this.createRun({ runId, rootRun: rootRun ?? null, resourceId, pubsub: nestedPubsub });
     const nestedAbortCb = () => {
       abort();
     };
@@ -3367,6 +3375,8 @@ export class Run<
 
   readonly workflowEngineType: WorkflowEngineType;
 
+  readonly rootRun?: WorkflowRunIdentity;
+
   /**
    * The storage for this run
    */
@@ -3395,6 +3405,7 @@ export class Run<
   constructor(params: {
     workflowId: string;
     runId: string;
+    rootRun?: WorkflowRunIdentity | null;
     resourceId?: string;
     isInternalWorkflow?: boolean;
     stateSchema?: StandardSchemaWithJSON<TState>;
@@ -3419,6 +3430,8 @@ export class Run<
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.rootRun =
+      params.rootRun === null ? undefined : (params.rootRun ?? { workflowId: params.workflowId, runId: params.runId });
     this.resourceId = params.resourceId;
     this.isInternalWorkflow = params.isInternalWorkflow ?? false;
     this.serializedStepGraph = params.serializedStepGraph;
@@ -3553,6 +3566,100 @@ export class Run<
     return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
+  /** Claim the pending snapshot before any step executes on a persistent native engine. */
+  protected async _claimStart(
+    input: TInput | undefined,
+    state: TState | undefined,
+    requestContext: RequestContext,
+  ): Promise<boolean> {
+    // The outer run owns admission. Its engine may start the same nested run again for a
+    // loop iteration or retry, so nested starts must retain that native execution behavior.
+    if (!this.rootRun || this.rootRun.workflowId !== this.workflowId || this.rootRun.runId !== this.runId) return false;
+    // Other execution engines own their own durable dispatch protocol.
+    if (this.workflowEngineType !== 'default' && this.workflowEngineType !== 'evented') return false;
+    const store = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!store) return false;
+    const persist =
+      this.executionEngine.getRunPersistenceOverride(this.runId) ?? this.executionEngine.options.shouldPersistSnapshot;
+    if (
+      this.workflowEngineType === 'default' &&
+      (!persist({ workflowStatus: 'pending', stepResults: {} }) ||
+        !persist({ workflowStatus: 'running', stepResults: { input } as any }))
+    )
+      return false;
+    if (!store.supportsAtomicWorkflowStarts() || !store.supportsConcurrentUpdates()) {
+      this.#mastra
+        ?.getLogger()
+        ?.warn(
+          `[Workflow ${this.workflowId}] Storage does not support atomic workflow starts; concurrent starts for run ${this.runId} may execute steps more than once.`,
+        );
+      return false;
+    }
+
+    // Save enough data in the claim itself to restart if the process exits before the first
+    // engine checkpoint. Reuse the native first-entry recovery path for nested pending runs.
+    const initial: WorkflowRunState = {
+      runId: this.runId,
+      status: 'pending',
+      value: state as Record<string, any>,
+      rootRun: this.rootRun,
+      context: { input } as WorkflowRunState['context'],
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: this.serializedStepGraph,
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      result: undefined,
+      error: undefined,
+      requestContext: this.executionEngine.serializeRequestContext(requestContext),
+      timestamp: Date.now(),
+    };
+    if (this.executionGraph.steps.length === 0) throw new Error('Cannot start a workflow with an empty graph');
+    // Evented execution always needs a run record for branch aggregation, even when its
+    // snapshot predicate excludes pending. This insert must not overwrite another start.
+    if (this.workflowEngineType === 'evented') {
+      await store.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: initial,
+        createOnly: true,
+      });
+    }
+    const recovery = createRestartExecutionParams({ snapshot: initial, graph: this.executionGraph });
+    const running: WorkflowRunState = {
+      ...initial,
+      status: 'running',
+      activePaths: recovery.activePaths,
+      activeStepsPath: recovery.activeStepsPath,
+    };
+    const snapshot =
+      this.executionEngine.options.pruneSnapshot?.({ snapshot: running, workflowStatus: 'running' }) ?? running;
+    const claimed = await store.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: {
+        status: 'running',
+        expectedStatus: 'pending',
+        context: snapshot.context,
+        value: snapshot.value,
+        requestContext: snapshot.requestContext,
+        timestamp: snapshot.timestamp,
+        activePaths: snapshot.activePaths,
+        activeStepsPath: snapshot.activeStepsPath,
+      },
+    });
+    if (claimed) return true;
+    throw new MastraError({
+      id: 'WORKFLOW_START_ALREADY_CLAIMED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text: `Workflow "${this.workflowId}" run "${this.runId}" is no longer pending. Only one start() may execute a run; read its current state before continuing.`,
+      details: { workflowId: this.workflowId, runId: this.runId, expectedStatus: 'pending' },
+    });
+  }
+
   protected async _start({
     inputData,
     initialState,
@@ -3631,6 +3738,12 @@ export class Run<
         state: validatedState as Record<string, any>,
       });
 
+      await this._claimStart(
+        validatedInput,
+        validatedState,
+        (requestContext ?? new RequestContext()) as RequestContext,
+      );
+
       return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
     })().catch(error => {
       workflowSpan?.error({ error: error as Error });
@@ -3640,6 +3753,7 @@ export class Run<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      rootRun: this.rootRun,
       resourceId: this.resourceId,
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
@@ -4668,6 +4782,7 @@ export class Run<
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        rootRun: snapshot.rootRun,
         resourceId: this.resourceId,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -4831,6 +4946,7 @@ export class Run<
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       restart: restartData,
+      rootRun: snapshot.rootRun,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse as RequestContext,
@@ -4969,6 +5085,7 @@ export class Run<
       disableScorers: this.disableScorers,
       graph: this.executionGraph,
       timeTravel: timeTravelData,
+      rootRun: snapshot ? snapshot.rootRun : this.rootRun,
       serializedStepGraph: this.serializedStepGraph,
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,

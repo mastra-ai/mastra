@@ -380,9 +380,16 @@ export type WorkflowStateField =
   | 'requestContext'
   | 'tracingContext';
 
+/** The outermost workflow invocation, retained across nested workflow runs. */
+export interface WorkflowRunIdentity {
+  workflowId: string;
+  runId: string;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
+  rootRun?: WorkflowRunIdentity;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: SerializedError;
@@ -1175,6 +1182,7 @@ export type SubsetOf<TStepState, TState> =
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
+  rootRun?: WorkflowRunIdentity;
   executionPath: number[];
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;
