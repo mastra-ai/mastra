@@ -168,6 +168,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             entityName: span.entityName,
             entityType: span.entityType as EntityType,
             environment: span.environment,
+            metadata: span.metadata,
             error: span.error as CreateSpanRecord['error'],
           }));
         for (const span of records) await storage.createSpan({ span });
