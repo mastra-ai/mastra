@@ -972,7 +972,16 @@ export class MastraFactory {
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 // A terminal dispatch failure rings the supervisor right away
                 // through the same ensure-create-then-send helper the sweep uses.
-                notifySupervisor: input => notifySupervisor({ controller, projects: factoryProjectsStorage }, input),
+                notifySupervisor: input =>
+                  notifySupervisor(
+                    {
+                      controller,
+                      projects: factoryProjectsStorage,
+                      primeCredentials: tenant =>
+                        primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                    },
+                    input,
+                  ),
                 resolveLinkedWorkItemParentId: async ({ orgId, factoryProjectId, decision }) => {
                   if (decision.source !== 'github-pr') return null;
                   const repositoryId = decision.metadata?.githubRepositoryId;
