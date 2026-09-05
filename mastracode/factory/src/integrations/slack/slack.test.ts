@@ -556,13 +556,17 @@ describe('channel session creation context (resolveSession)', () => {
   });
 
   it('keeps chat-only sessions free of Factory ownership', async () => {
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn() },
+    };
     const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
 
-    await createChannelSessionResolver({} as any)({
+    await createChannelSessionResolver({ sourceControl } as any)({
       controller,
       thread: { id: 'thread-1', resourceId: 'channel:slack:C-1:1700.42' },
     } as any);
 
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
     expect(controller.createSession).toHaveBeenCalledWith({
       id: 'channel:slack:C-1:1700.42',
       ownerId: 'code',
