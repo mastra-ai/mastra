@@ -2345,15 +2345,48 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
+        // The run engine keeps the source message mutable while it folds stream
+        // chunks. Display state applies compact deltas independently, so isolate
+        // text parts once here rather than appending each delta twice.
+        ds.currentMessage = {
+          ...event.message,
+          content: {
+            ...event.message.content,
+            parts: event.message.content.parts.map(part => (part.type === 'text' ? { ...part } : part)),
+          },
+        };
         break;
 
-      case 'message_update':
-        ds.currentMessage = event.message;
+      case 'message_update': {
+        if (ds.currentMessage?.id !== event.id) break;
+
+        const parts = ds.currentMessage.content.parts.map(part => structuredClone(part));
+        if (event.event.type === 'text-delta') {
+          const textIndex = parts.findLastIndex(part => part.type === 'text');
+          const textPart = parts[textIndex];
+          if (textPart?.type === 'text') {
+            textPart.text += event.event.delta;
+          } else {
+            parts.push({ type: 'text', text: event.event.delta });
+          }
+        } else if (event.event.type === 'reasoning-delta') {
+          const reasoningPart = parts[event.event.index];
+          if (reasoningPart?.type === 'reasoning') {
+            reasoningPart.reasoning += event.event.delta;
+            reasoningPart.details = [{ type: 'text', text: reasoningPart.reasoning }];
+          }
+        } else {
+          parts[event.event.index] = structuredClone(event.event.part);
+        }
+
+        ds.currentMessage = {
+          ...ds.currentMessage,
+          content: { ...ds.currentMessage.content, parts },
+        };
         break;
+      }
 
       case 'message_end':
-        ds.currentMessage = event.message;
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────

@@ -111,12 +111,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
@@ -286,26 +281,57 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...state, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
+      return upsertMessage(state, event.message, true);
+
     case 'message_update': {
-      const message = event.message;
-      const next = upsertMessage(state, message, true);
-      if (message.role !== 'assistant') return next;
-      // Only streamed assistant content opens the decode window — empty or
-      // tool-only updates must not count toward tokens/sec.
-      if (!hasAssistantText(next)) {
-        return next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const parts = [...entry.message.content.parts];
+      if (event.event.type === 'text-delta') {
+        if (event.event.delta.length === 0) return state;
+        const partIndex = parts.findLastIndex(part => part.type === 'text');
+        const part = parts[partIndex];
+        if (!part || part.type !== 'text') return state;
+        parts[partIndex] = { ...part, text: part.text + event.event.delta };
+      } else if (event.event.type === 'reasoning-delta') {
+        const part = parts[event.event.index];
+        if (!part || part.type !== 'reasoning') return state;
+        const reasoning = part.reasoning + event.event.delta;
+        parts[event.event.index] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+      } else {
+        parts[event.event.index] = event.event.part;
       }
-      // Mark the start of decoding for the current step on the first streamed
-      // content delta, so tokens/sec is measured over decode time only (it
-      // excludes TTFT before this point and tool gaps between steps). usage_update
-      // at step-finish closes this window and re-arms it for the next step.
-      const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
-      // First streamed assistant content clears the "thinking" pending state.
-      return { ...decoded, pending: false };
+
+      const message = { ...entry.message, content: { ...entry.message.content, parts } };
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+      );
+      const next = { ...state, entries };
+      if (event.event.type !== 'text-delta' || message.role !== 'assistant') return next;
+
+      // The empty shell from message_start does not start decode timing. The
+      // first non-empty assistant delta does, and also clears the pending turn.
+      return {
+        ...next,
+        pending: false,
+        _decodeStartedAt: next._decodeStartedAt > 0 ? next._decodeStartedAt : Date.now(),
+      };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
-      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
+      const entryIndex = state.entries.findIndex(
+        entry => entry.kind === 'message' && (entry.id === event.id || entry.message.id === event.id),
+      );
+      const entry = state.entries[entryIndex];
+      if (!entry || entry.kind !== 'message') return state;
+
+      const entries = state.entries.map((candidate, index) =>
+        index === entryIndex ? { ...entry, streaming: false } : candidate,
+      );
+      return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
 
     case 'tool_input_start':
@@ -567,7 +593,7 @@ export function createInitialTranscript({
   };
 }
 
-function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
+export function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.flatMap(message => [
     toMessageEntry(message, { streaming: false }),
     ...persistedSuspensionPrompts(message),
@@ -891,8 +917,7 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 function isChannelOriginSignal(message: MastraDBMessage): boolean {
   const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
   const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
+    { data?: { providerOptions?: unknown } } | undefined;
 
   for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
     if (!candidate || typeof candidate !== 'object') continue;
@@ -1091,24 +1116,6 @@ function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBM
   }
 
   return { ...message, content: { ...message.content, parts } };
-}
-
-/** True when the most recent assistant entry has any visible text. */
-function hasAssistantText(state: TranscriptState): boolean {
-  const idx = latestAssistantIndex(state.entries);
-  if (idx === -1) return false;
-  const entry = state.entries[idx];
-  if (entry.kind !== 'message' || !Array.isArray(entry.message.content.parts)) return false;
-  return entry.message.content.parts.some(
-    (part: unknown) =>
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      part.type === 'text' &&
-      'text' in part &&
-      typeof part.text === 'string' &&
-      part.text.trim().length > 0,
-  );
 }
 
 /**

@@ -77,8 +77,8 @@ export function ChatSessionConfigProvider({
   }
   const repository = storedSession
     ? factory?.repositories.find(
-        (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
-      )
+      (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
+    )
     : factory?.repositories[0];
   // Entering a session provisions nothing: session sandboxes boot lazily at the
   // first real command. This provider only resolves session metadata.
@@ -142,8 +142,8 @@ export function ChatSessionConfigProvider({
     sessionError,
     retrySession: sessionError
       ? () => {
-          if (sessionQuery.isError) void sessionQuery.refetch();
-        }
+        if (sessionQuery.isError) void sessionQuery.refetch();
+      }
       : undefined,
     projectPath,
     sessionThreadId: storedSession?.sessionId,
@@ -152,9 +152,9 @@ export function ChatSessionConfigProvider({
     factorySessionState:
       factory && repository
         ? {
-            factoryProjectId: factory.id,
-            projectRepositoryId: repository.projectRepositoryId,
-          }
+          factoryProjectId: factory.id,
+          projectRepositoryId: repository.projectRepositoryId,
+        }
         : undefined,
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
@@ -188,7 +188,7 @@ export function ChatSessionBoundary({
   const messages = {
     threadId,
     isPending: Boolean(threadId) && messagesQuery.isPending,
-    error: messagesQuery.data ? undefined : messagesQuery.error,
+    error: messagesQuery.isError ? messagesQuery.error : undefined,
   };
 
   if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
@@ -198,6 +198,7 @@ export function ChatSessionBoundary({
       </ChatThreadMessagesContext.Provider>
     );
   }
+
 
   // Above the transcript so the favicon and the stepper read one pending state.
   return (

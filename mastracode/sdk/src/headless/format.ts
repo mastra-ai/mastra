@@ -3,7 +3,7 @@
  * an event (or a final result) and return strings / plain objects. They never
  * touch `process.*`; the CLI adapter owns the sinks.
  */
-import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 
 import type { RunMCResult } from './types.js';
 
@@ -12,16 +12,9 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '...' : s;
 }
 
-/** Concatenate the text of an assistant message's nested content parts. */
-function messageText(message: MastraDBMessage): string {
-  return message.content.parts
-    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
-    .map(p => p.text)
-    .join('');
-}
-
 /** Mutable per-stream cursor used by {@link formatHuman} to stream assistant text. */
 export interface HumanFormatState {
+  activeAssistantMessageId?: string;
   lastTextLength: number;
 }
 
@@ -46,28 +39,22 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
     case 'agent_start':
       state.lastTextLength = 0;
       return {};
-    case 'message_update': {
-      const fullText = messageText(event.message);
-      if (fullText.length > state.lastTextLength) {
-        const delta = fullText.slice(state.lastTextLength);
-        state.lastTextLength = fullText.length;
-        return { stdout: delta };
+    case 'message_start':
+      if (event.message.role === 'assistant') {
+        state.activeAssistantMessageId = event.message.id;
+        state.lastTextLength = 0;
       }
       return {};
-    }
-    case 'message_end': {
-      // Only assistant messages produce stdout. The controller also emits
-      // message_end for the echoed user prompt (and system messages); emitting
-      // those here would duplicate the prompt to stdout and corrupt the stream.
-      if (event.message.role !== 'assistant') return {};
-      // Emit any assistant text the message_update stream didn't already cover
-      // (e.g. a run that only delivered the final text on message_end), then
-      // terminate the line.
-      const fullText = messageText(event.message);
-      const delta = fullText.length > state.lastTextLength ? fullText.slice(state.lastTextLength) : '';
+    case 'message_update':
+      if (event.event.type !== 'text-delta' || event.id !== state.activeAssistantMessageId || !event.event.delta)
+        return {};
+      state.lastTextLength += event.event.delta.length;
+      return { stdout: event.event.delta };
+    case 'message_end':
+      if (event.id !== state.activeAssistantMessageId) return {};
+      state.activeAssistantMessageId = undefined;
       state.lastTextLength = 0;
-      return { stdout: delta + '\n' };
-    }
+      return { stdout: '\n' };
     case 'tool_start':
       return { stderr: `[tool] ${event.toolName}\n` };
     case 'tool_end':

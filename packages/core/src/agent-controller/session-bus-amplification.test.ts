@@ -47,9 +47,9 @@ function streamTurn() {
   session.emit({ type: 'message_start', message: message as any });
   for (let i = 0; i < DELTA_COUNT; i++) {
     message.content.parts[0]!.text += 'token ';
-    session.emit({ type: 'message_update', message: message as any });
+    session.emit({ type: 'message_update', id: message.id, event: { type: 'text-delta', delta: 'token ' } });
   }
-  session.emit({ type: 'message_end', message: message as any });
+  session.emit({ type: 'message_end', id: message.id });
   session.emit({ type: 'agent_end', reason: 'complete' });
 
   return bytesByType;
@@ -67,15 +67,13 @@ describe('event stream amplification (#19201)', () => {
     expect(snapshotBytes).toBeLessThan(DELTA_COUNT * TOOL_RESULT.length * 0.05);
   });
 
-  it('keeps snapshot traffic below the message traffic it mirrors', () => {
+  it('keeps compact delta traffic linear in the number of emitted tokens', () => {
     const bytesByType = streamTurn();
-    const snapshotBytes = bytesByType.get('display_state_changed') ?? 0;
     const messageBytes = bytesByType.get('message_update') ?? 0;
 
-    // `display_state_changed` carries the same currentMessage as
-    // `message_update`, so per-delta snapshots at minimum double the stream.
-    // Coalescing them must make the mirror cheaper than the thing it mirrors.
-    expect(snapshotBytes).toBeLessThan(messageBytes);
+    // Each update carries only the id and new text, so 500 six-character deltas
+    // stay in the tens of kilobytes rather than serializing the growing message.
+    expect(messageBytes).toBeLessThan(DELTA_COUNT * 100);
   });
 
   it('still delivers a final snapshot carrying the finished state', async () => {

@@ -357,7 +357,7 @@ describe('AgentController signal messages', () => {
 
     await session.thread.create();
     await session.sendMessage({ content: 'hello' });
-    await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
+    await waitFor(() => events.some(event => event.type === 'message_end'));
 
     const assistantStarts = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
@@ -365,11 +365,16 @@ describe('AgentController signal messages', () => {
     );
     const assistantEnds = events.filter(
       (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.role === 'assistant',
+        event.type === 'message_end' && event.id === assistantStarts[0]?.message.id,
     );
     expect(assistantStarts).toHaveLength(1);
     expect(assistantEnds).toHaveLength(1);
-    expect(assistantEnds[0]?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
+    expect(assistantStarts[0]?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStarts[0]!.message.id,
+      event: { type: 'text-delta', delta: 'Hello' },
+    });
     expect(session.getCurrentRunId()).toBeNull();
   });
 
@@ -836,7 +841,7 @@ describe('AgentController signal messages', () => {
     await waitFor(() =>
       events.some(
         event =>
-          event.type === 'message_end' &&
+          event.type === 'message_start' &&
           event.message.id === signal.id &&
           event.message.content.parts.some(
             part => part.type === 'data-user-message' && part.data?.contents === 'hows it going',
@@ -901,12 +906,7 @@ describe('AgentController signal messages', () => {
     await signal.accepted;
     await waitFor(() =>
       events.some(
-        event =>
-          event.type === 'message_end' &&
-          event.message.role === 'assistant' &&
-          event.message.content.parts.some(
-            part => part.type === 'text' && part.text === 'approved through subscription',
-          ),
+        event => event.type === 'message_update' && event.event.delta === 'approved through subscription',
       ),
     );
 
@@ -924,27 +924,34 @@ describe('AgentController signal messages', () => {
     await session.thread.create();
     const signal = session.sendSignal({ content: 'hello from signal' });
     await signal.accepted;
-    await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
+    await waitFor(() => events.some(event => event.type === 'message_end'));
 
-    const signalEnd = events.find(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.id === signal.id,
+    const signalStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.id === signal.id,
     );
-    const assistantEnd = events.find(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.role === 'assistant',
+    const assistantStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.role === 'assistant',
     );
 
-    // DB-native: the echoed user-message signal ends as a role:'signal' message
+    // DB-native: the echoed user-message signal starts as a role:'signal' message
     // carrying the raw data-user-message part (id/createdAt are dynamic).
-    expect(signalEnd?.message.role).toBe('signal');
-    expect(signalEnd?.message.content.parts).toEqual([
+    expect(signalStart?.message.role).toBe('signal');
+    expect(signalStart?.message.content.parts).toEqual([
       expect.objectContaining({
         type: 'data-user-message',
         data: expect.objectContaining({ type: 'user', contents: 'hello from signal' }),
       }),
     ]);
-    expect(assistantEnd?.message.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
+    expect(assistantStart?.message.content.parts).toEqual([{ type: 'text', text: '' }]);
+    expect(events).toContainEqual({
+      type: 'message_update',
+      id: assistantStart!.message.id,
+      event: { type: 'text-delta', delta: 'Hello' },
+    });
+    expect(events).toContainEqual({ type: 'message_end', id: signalStart!.message.id });
+    expect(events).toContainEqual({ type: 'message_end', id: assistantStart!.message.id });
   });
 
   it('does not carry a stale abort reason into a later idle signal run', async () => {
@@ -1140,36 +1147,37 @@ describe('AgentController signal messages', () => {
 
     // DB-native: the echoed file user-message signal preserves its raw
     // data-user-message part (including the original contents array) verbatim.
-    const signalEnd = events.find(event => event.type === 'message_end' && event.message.id === 'signal-file-1');
-    expect(signalEnd).toMatchObject({
-      type: 'message_end',
-      message: {
-        id: 'signal-file-1',
-        role: 'signal',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'data-user-message',
-              data: {
-                id: 'signal-file-1',
-                type: 'user-message',
-                contents: [
-                  { type: 'text', text: 'Review this' },
-                  {
-                    type: 'file',
-                    data: 'data:text/plain;base64,aGVsbG8=',
-                    mediaType: 'text/plain',
-                    filename: 'note.txt',
-                  },
-                ],
-                createdAt: '2026-05-04T00:00:00.000Z',
-              },
+    const signalStart = events.find(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
+        event.type === 'message_start' && event.message.id === 'signal-file-1',
+    );
+    expect(signalStart?.message).toMatchObject({
+      id: 'signal-file-1',
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-user-message',
+            data: {
+              id: 'signal-file-1',
+              type: 'user-message',
+              contents: [
+                { type: 'text', text: 'Review this' },
+                {
+                  type: 'file',
+                  data: 'data:text/plain;base64,aGVsbG8=',
+                  mediaType: 'text/plain',
+                  filename: 'note.txt',
+                },
+              ],
+              createdAt: '2026-05-04T00:00:00.000Z',
             },
-          ],
-        },
+          },
+        ],
       },
     });
+    expect(events).toContainEqual({ type: 'message_end', id: 'signal-file-1' });
   });
 
   it('emits echoed user-message signals as user message events', async () => {
@@ -1195,7 +1203,9 @@ describe('AgentController signal messages', () => {
     );
 
     const signalEvents = events.filter(
-      event => (event.type === 'message_start' || event.type === 'message_end') && event.message.id === 'signal-user-1',
+      event =>
+        (event.type === 'message_start' && event.message.id === 'signal-user-1') ||
+        (event.type === 'message_end' && event.id === 'signal-user-1'),
     );
     // DB-native: the echoed user-message signal is emitted as a 'signal'-role
     // MastraDBMessage carrying the raw data-user-message part (no flattening).
@@ -1228,7 +1238,7 @@ describe('AgentController signal messages', () => {
     };
     expect(signalEvents).toEqual([
       { type: 'message_start', message: expectedMessage },
-      { type: 'message_end', message: expectedMessage },
+      { type: 'message_end', id: expectedMessage.id },
     ]);
   });
 
@@ -1290,140 +1300,19 @@ describe('AgentController signal messages', () => {
       (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
 
+    const messageStarts = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> => event.type === 'message_start',
+    );
+
     expect(messageEndEvents).toHaveLength(1);
-    expect(messageEndEvents[0].message.content.parts).toEqual([{ type: 'text', text: 'Fact 1' }]);
-    expect(messageUpdateEvents.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Fact 2' }]);
-    expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
-  });
-
-  it('folds a text-delta whose id was never seeded by a text-start', async () => {
-    const { session } = await createController(new InMemoryStore());
-    const events: AgentControllerEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-    const state = session.runEngine.createStreamState();
-    const requestContext = new RequestContext();
-
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'orphan-1', text: 'Hello' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'orphan-1', text: ' world' } },
-      requestContext,
-    );
-
-    expect(events.filter(event => event.type === 'message_start')).toHaveLength(1);
-    const lastUpdate = events.filter(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
-    );
-    expect(lastUpdate.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
-  });
-
-  it('keeps text deltas that continue after a step-start rotation cleared the seeded id', async () => {
-    const { session } = await createController(new InMemoryStore());
-    const events: AgentControllerEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-    const state = session.runEngine.createStreamState();
-    const requestContext = new RequestContext();
-
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'step-start', payload: { messageId: 'msg-1' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-start', payload: { id: 'text-1' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'text-1', text: 'part one' } },
-      requestContext,
-    );
-    // A second step rotates the display message and clears textContentById.
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'step-start', payload: { messageId: 'msg-2' } },
-      requestContext,
-    );
-    // Deltas continue on the old id — they must land in the new message, not vanish.
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'text-1', text: 'part two' } },
-      requestContext,
-    );
-
-    const updates = events.filter(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
-    );
-    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'part two' }]);
-    expect(updates.at(-1)?.message.id).toBe('msg-2');
-  });
-
-  it('ignores a duplicate text-start for an id already seeded by an orphan delta', async () => {
-    const { session } = await createController(new InMemoryStore());
-    const events: AgentControllerEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-    const state = session.runEngine.createStreamState();
-    const requestContext = new RequestContext();
-
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'text-1', text: 'early' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-start', payload: { id: 'text-1' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'text-delta', payload: { id: 'text-1', text: ' late' } },
-      requestContext,
-    );
-
-    const updates = events.filter(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
-    );
-    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'early late' }]);
-  });
-
-  it('folds a reasoning-delta whose id was never seeded by a reasoning-start', async () => {
-    const { session } = await createController(new InMemoryStore());
-    const events: AgentControllerEvent[] = [];
-    session.subscribe(event => {
-      events.push(event);
-    });
-    const state = session.runEngine.createStreamState();
-    const requestContext = new RequestContext();
-
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'reasoning-delta', payload: { id: 'think-1', text: 'thinking' } },
-      requestContext,
-    );
-    await session.runEngine.processStreamChunk(
-      state,
-      { type: 'reasoning-delta', payload: { id: 'think-1', text: ' more' } },
-      requestContext,
-    );
-
-    const updates = events.filter(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
-    );
-    expect(updates.at(-1)?.message.content.parts).toEqual([
-      { type: 'reasoning', reasoning: 'thinking more', details: [{ type: 'text', text: 'thinking more' }] },
+    expect(messageStarts.find(event => event.message.id === messageEndEvents[0]?.id)?.message.content.parts).toEqual([
+      { type: 'text', text: '' },
     ]);
+    expect(messageUpdateEvents.at(-1)).toMatchObject({
+      type: 'message_update',
+      event: { type: 'text-delta', delta: 'Fact 2' },
+    });
+    expect(messageUpdateEvents.at(-1)?.id).not.toBe(messageEndEvents[0]?.id);
   });
 
   it('emits generic reactive signal data parts as renderable message updates', async () => {

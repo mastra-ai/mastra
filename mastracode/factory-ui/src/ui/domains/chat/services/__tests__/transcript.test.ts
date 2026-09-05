@@ -198,25 +198,89 @@ describe('transcript reducer message entries', () => {
     expect(steered.role).toBe('signal');
   });
 
-  it('streams message updates without replacing non-message transcript state', () => {
+  it('applies compact text deltas immutably without replacing non-message transcript state', () => {
     const withNotice = transcriptReducer(initialTranscript, {
       type: 'localNotice',
       level: 'info',
       text: 'Command handled',
     });
-
-    const state = transcriptReducer(withNotice, {
+    const started = transcriptReducer(withNotice, {
       type: 'event',
       event: {
-        type: 'message_update',
-        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Streaming text' }]),
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]),
       },
     });
+    const state = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'message_update', id: 'assistant-1', event: { type: 'text-delta', delta: 'Streaming text' } },
+    });
 
+    expect(state).not.toBe(started);
+    expect(state.entries[1]).not.toBe(started.entries[1]);
     expect(state.pending).toBe(false);
     expect(state.entries[0]).toMatchObject({ kind: 'notice', text: 'Command handled' });
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
+  });
+
+  it('reconstructs compact reasoning and tool part updates by their indexes', () => {
+    const started = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]),
+      },
+    });
+    const withReasoning = transcriptReducer(started, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: { type: 'part', index: 1, part: { type: 'reasoning', reasoning: '', details: [] } },
+      },
+    });
+    const withDelta = transcriptReducer(withReasoning, {
+      type: 'event',
+      event: { type: 'message_update', id: 'assistant-1', event: { type: 'reasoning-delta', index: 1, delta: 'Thinking' } },
+    });
+    const state = transcriptReducer(withDelta, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: 'assistant-1',
+        event: {
+          type: 'part',
+          index: 2,
+          part: {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } },
+          },
+        },
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      { type: 'text', text: 'Before' },
+      { type: 'reasoning', reasoning: 'Thinking', details: [{ type: 'text', text: 'Thinking' }] },
+      { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'tool-1', toolName: 'view', args: { path: 'a.ts' } } },
+    ]);
+  });
+
+  it('deduplicates starts and finalizes only the matching assistant message', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]);
+    const started = transcriptReducer(
+      { ...initialTranscript, pending: true },
+      { type: 'event', event: { type: 'message_start', message } },
+    );
+    const duplicate = transcriptReducer(started, { type: 'event', event: { type: 'message_start', message } });
+    const mismatchedEnd = transcriptReducer(duplicate, { type: 'event', event: { type: 'message_end', id: 'assistant-2' } });
+    const ended = transcriptReducer(mismatchedEnd, { type: 'event', event: { type: 'message_end', id: message.id } });
+
+    expect(duplicate.entries).toHaveLength(1);
+    expect(mismatchedEnd).toBe(duplicate);
+    expect(ended.entries[0]).toMatchObject({ id: message.id, streaming: false });
+    expect(ended.pending).toBe(false);
   });
 
   it('retains live signal messages between assistant segments without changing assistant decode state', () => {
@@ -241,10 +305,10 @@ describe('transcript reducer message entries', () => {
       { ...initialTranscript, pending: true },
       {
         type: 'event',
-        event: { type: 'message_update', message: firstAssistant },
+        event: { type: 'message_start', message: firstAssistant },
       },
     );
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: firstAssistant } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: firstAssistant.id } });
     const decodeStartedAt = state._decodeStartedAt;
 
     for (const message of [reminder, summary]) {
@@ -253,7 +317,7 @@ describe('transcript reducer message entries', () => {
       expect(state.pending).toBe(false);
       expect(state._decodeStartedAt).toBe(decodeStartedAt);
 
-      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message } });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: message.id } });
       expect(state.entries.at(-1)).toMatchObject({ kind: 'message', id: message.id, streaming: false });
       expect(state.pending).toBe(false);
       expect(state._decodeStartedAt).toBe(decodeStartedAt);
@@ -261,7 +325,7 @@ describe('transcript reducer message entries', () => {
 
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'message_update', message: secondAssistant },
+      event: { type: 'message_start', message: secondAssistant },
     });
 
     expect(state.entries.map(entry => entry.id)).toEqual(['assistant-1', 'reminder-1', 'summary-1', 'assistant-2']);
@@ -313,7 +377,7 @@ describe('transcript reducer message entries', () => {
     });
     const ended = transcriptReducer(started, {
       type: 'event',
-      event: { type: 'message_end', message: reminder },
+      event: { type: 'message_end', id: reminder.id },
     });
 
     expect(ended.pending).toBe(true);
@@ -349,13 +413,17 @@ describe('transcript reducer message entries', () => {
       { type: 'text', text: 'After question' },
     ]);
 
-    const beforeResume = transcriptReducer(initialTranscript, {
+    let beforeResume = transcriptReducer(initialTranscript, {
       type: 'event',
-      event: { type: 'message_end', message: suspendedMessage },
+      event: { type: 'message_start', message: suspendedMessage },
+    });
+    beforeResume = transcriptReducer(beforeResume, {
+      type: 'event',
+      event: { type: 'message_end', id: suspendedMessage.id },
     });
     const afterResume = transcriptReducer(beforeResume, {
       type: 'event',
-      event: { type: 'message_update', message: resumedMessage },
+      event: { type: 'message_start', message: resumedMessage },
     });
 
     const matchingParts = afterResume.entries.flatMap(entry =>
@@ -394,7 +462,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
@@ -402,7 +470,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [
           {
             type: 'tool-invocation',
@@ -431,7 +499,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
@@ -439,7 +507,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [
           {
             type: 'tool-invocation',
@@ -584,7 +652,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: started },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_update', message: reidentified } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: reidentified } });
 
     expect(state.entries).toHaveLength(1);
     expect(messageParts(state.entries[0])).toEqual(reidentified.content.parts);
@@ -600,7 +668,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: { type: 'message_start', message: first },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: first } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: first.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: '' }]) },
@@ -608,7 +676,7 @@ describe('transcript reducer message entries', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Let me check the tests too' }]),
       },
     });
@@ -664,13 +732,9 @@ describe('transcript reducer mergeWindow', () => {
       messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
     });
     // A message streams in live after mount and persists at the tail.
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: {
-        type: 'message_end',
-        message: dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]),
-      },
-    });
+    const live = dbMessage('live-1', 'assistant', [{ type: 'text', text: 'live reply' }]);
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: live } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: live.id } });
 
     const grown = [
       dbMessage('history-1', 'user', [{ type: 'text', text: 'oldest' }]),
@@ -742,7 +806,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'partial' }]),
       },
     });
@@ -796,7 +860,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-1', 'assistant', [
           { type: 'text', text: 'streamed text' },
           {
@@ -893,7 +957,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('live-1', 'assistant', [
           { type: 'text', text: 'working' },
           {
@@ -954,7 +1018,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('live-1', 'assistant', [
           { type: 'text', text: 'working on it' },
           {
@@ -993,7 +1057,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           {
             type: 'tool-invocation',
@@ -1027,7 +1091,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           {
             type: 'tool-invocation',
@@ -1077,7 +1141,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
       },
     });
@@ -1096,7 +1160,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [
           { type: 'text', text: 'Checking.' },
           {
@@ -1128,7 +1192,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'Almost' }]),
       },
     });
@@ -1181,7 +1245,7 @@ describe('transcript reducer mergeWindow', () => {
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('streamed-turn', 'assistant', [{ type: 'text', text: 'gh is missing here.' }]),
       },
     });
@@ -1343,7 +1407,7 @@ describe('live user-signal events render the same as their persisted copy', () =
   it('gives the live data-user-message event a drawable text part', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: liveUserSignal() } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: liveUserSignal().id } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
@@ -1354,7 +1418,7 @@ describe('live user-signal events render the same as their persisted copy', () =
     // Persisted-shaped copy first, then the live data-part copy with the same id.
     const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: liveUserSignal().id } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
   });
@@ -1375,7 +1439,7 @@ describe('live user-signal events render the same as their persisted copy', () =
     });
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'message_end', message: liveComposerSignal() },
+      event: { type: 'message_end', id: liveComposerSignal().id },
     });
 
     const drawable = state.entries.filter(
@@ -1399,7 +1463,7 @@ describe('live user-signal events render the same as their persisted copy', () =
 
     const delivered = liveComposerSignal({ delivery: 'while-active' });
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: delivered } });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: delivered } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: delivered.id } });
 
     expect(state.entries).toHaveLength(1);
     expect(state.entries[0]).toMatchObject({
@@ -1535,11 +1599,11 @@ describe('live user-signal events render the same as their persisted copy', () =
       type: 'event',
       event: { type: 'message_start', message: sealed },
     });
-    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: sealed } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', id: sealed.id } });
     state = transcriptReducer(state, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('turn-2', 'assistant', [{ type: 'text', text: 'Done. Now the next thing' }]),
       },
     });
@@ -1562,7 +1626,7 @@ describe('transcript reducer entry identity', () => {
     const claimed = transcriptReducer(drawn, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-first', 'assistant', [{ type: 'text', text: 'Read it.' }]),
       },
     });
@@ -1573,7 +1637,7 @@ describe('transcript reducer entry identity', () => {
     const next = transcriptReducer(claimed, {
       type: 'event',
       event: {
-        type: 'message_update',
+        type: 'message_start',
         message: dbMessage('assistant-second', 'assistant', [{ type: 'text', text: 'Now the next one.' }]),
       },
     });

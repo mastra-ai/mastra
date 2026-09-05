@@ -225,6 +225,7 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
+  messageStarted: boolean;
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
@@ -314,10 +315,34 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private startCurrentMessage(state: StreamState): boolean {
+    if (state.messageStarted) return false;
+    this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
+    state.messageStarted = true;
+    return true;
+  }
+
+  private emitMessagePart(state: StreamState, index: number): void {
+    if (this.startCurrentMessage(state)) return;
+    const part = state.currentMessage.content.parts[index];
+    if (!part) return;
+    this.#session.emit({
+      type: 'message_update',
+      id: state.currentMessage.id,
+      event: { type: 'part', index, part: structuredClone(part) },
+    });
+  }
+
+  private finishCurrentMessage(state: StreamState): void {
+    if (!state.messageStarted) return;
+    this.#session.emit({ type: 'message_end', id: state.currentMessage.id });
+    state.messageStarted = false;
+  }
+
   private finishCurrentMessageAndRotate(state: StreamState): void {
     if (!this.hasCurrentMessageContent(state)) return;
     this.setStopReason(state.currentMessage, 'complete');
-    this.#session.emit({ type: 'message_end', message: state.currentMessage });
+    this.finishCurrentMessage(state);
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
     state.textContentById.clear();
@@ -328,6 +353,7 @@ export class SessionRunEngine {
   createStreamState(): StreamState {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
+      messageStarted: false,
       isSuspended: false,
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
@@ -353,6 +379,7 @@ export class SessionRunEngine {
     const { toolCallId, toolName, result, isError, providerMetadata } = outcome;
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, {
         state: 'result' as const,
@@ -378,7 +405,9 @@ export class SessionRunEngine {
         toolInvocationPart.providerMetadata = providerMetadata;
       }
       state.currentMessage.content.parts.push(toolInvocationPart);
+      state.toolPartById.set(toolCallId, partIndex);
     }
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({
       type: 'tool_end',
       toolCallId,
@@ -386,7 +415,6 @@ export class SessionRunEngine {
       isError,
       ...(providerMetadata ? { providerMetadata } : {}),
     });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
@@ -512,66 +540,65 @@ export class SessionRunEngine {
       }
 
       case 'text-start': {
-        // A late start for an id already seeded by an orphan delta must not
-        // create a duplicate part or reset the accumulated text.
-        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: state.currentMessage });
+        this.emitMessagePart(state, textIndex);
         break;
       }
 
       case 'text-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let textState = state.textContentById.get(id);
-        if (!textState) {
-          // Deltas can arrive without a seeded part — e.g. after a step-start
-          // rotation cleared the map mid-text. Seed a part instead of silently
-          // dropping the text, otherwise the folded message loses content.
-          const textIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'text', text: '' });
-          textState = { index: textIndex, text: '' };
-          state.textContentById.set(id, textState);
-          this.#session.emit({ type: 'message_start', message: state.currentMessage });
+        const textState = state.textContentById.get(getString(getPayload(chunk).id) ?? '');
+        if (textState) {
+          const text = getString(getPayload(chunk).text) ?? '';
+          textState.text += getString(getPayload(chunk).text) ?? '';
+          const textContent = state.currentMessage.content.parts[textState.index];
+          if (textContent && textContent.type === 'text') {
+            textContent.text = textState.text;
+          }
+          this.#session.emit({
+            type: 'message_update',
+            id: state.currentMessage.id,
+            event: {
+              type: 'text-delta',
+              delta: text,
+            },
+          });
         }
-        textState.text += getString(getPayload(chunk).text) ?? '';
-        const textContent = state.currentMessage.content.parts[textState.index];
-        if (textContent && textContent.type === 'text') {
-          textContent.text = textState.text;
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'text-end': {
         break;
       }
 
       case 'reasoning-start': {
-        // Mirror text-start: a late start for an already-seeded id is a no-op.
-        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        this.emitMessagePart(state, thinkingIndex);
         break;
       }
 
       case 'reasoning-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let thinkingState = state.thinkingContentById.get(id);
-        if (!thinkingState) {
-          // Same tolerance as text-delta: seed the part rather than silently
-          // dropping reasoning whose start chunk never seeded the id.
-          const thinkingIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-          thinkingState = { index: thinkingIndex, text: '' };
-          state.thinkingContentById.set(id, thinkingState);
+        const thinkingState = state.thinkingContentById.get(getString(getPayload(chunk).id) ?? '');
+        if (thinkingState) {
+          thinkingState.text += getString(getPayload(chunk).text) ?? '';
+          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+          if (thinkingContent && thinkingContent.type === 'reasoning') {
+            thinkingContent.reasoning = thinkingState.text;
+            thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
+          }
+          this.#session.emit({
+            type: 'message_update',
+            id: state.currentMessage.id,
+            event: {
+              type: 'reasoning-delta',
+              index: thinkingState.index,
+              delta: getString(getPayload(chunk).text) ?? '',
+            },
+          });
         }
-        thinkingState.text += getString(getPayload(chunk).text) ?? '';
-        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-        if (thinkingContent && thinkingContent.type === 'reasoning') {
-          thinkingContent.reasoning = thinkingState.text;
-          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -622,13 +649,13 @@ export class SessionRunEngine {
           },
         });
         state.toolPartById.set(toolCallId, toolIndex);
+        this.emitMessagePart(state, toolIndex);
         this.#session.emit({
           type: 'tool_start',
           toolCallId,
           toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -681,14 +708,16 @@ export class SessionRunEngine {
           },
         };
 
+        const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
         if (existing && existing.type === 'tool-invocation') {
           existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
         } else {
           state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+          state.toolPartById.set(toolCallId, partIndex);
         }
 
+        this.emitMessagePart(state, partIndex);
         this.#session.emit({ type: 'tool_end', toolCallId, result: reason, isError: false, denied: true });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
@@ -1074,7 +1103,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-signal', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1084,7 +1113,7 @@ export class SessionRunEngine {
           this.finishCurrentMessageAndRotate(state);
           const message = this.createSignalMessage('data-user-message', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1094,7 +1123,7 @@ export class SessionRunEngine {
         if (payload) {
           const message = this.createSignalMessage('data-system-reminder', payload);
           this.#session.emit({ type: 'message_start', message });
-          this.#session.emit({ type: 'message_end', message });
+          this.#session.emit({ type: 'message_end', id: message.id });
         }
         break;
       }
@@ -1207,19 +1236,21 @@ export class SessionRunEngine {
 
     const toolIndex = state.toolPartById.get(toolCallId);
     const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+    const partIndex = toolIndex ?? state.currentMessage.content.parts.length;
     if (existing && existing.type === 'tool-invocation') {
       existing.toolInvocation = Object.assign(existing.toolInvocation, toolInvocation);
     } else {
       state.currentMessage.content.parts.push({ type: 'tool-invocation', toolInvocation });
+      state.toolPartById.set(toolCallId, partIndex);
     }
 
+    this.emitMessagePart(state, partIndex);
     this.#session.emit({ type: 'tool_end', toolCallId, result: ABORTED_BY_USER_REASON, isError: false, denied: true });
-    this.#session.emit({ type: 'message_update', message: state.currentMessage });
   }
 
   private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
-      this.#session.emit({ type: 'message_end', message: state.currentMessage });
+      this.finishCurrentMessage(state);
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
     }
 
