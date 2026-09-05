@@ -787,11 +787,15 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const attempt = input.attempt ?? 0;
       return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (connection, marker) => {
-        const id = randomUUID();
-        const columns = [
-          'id',
-          'experimentId',
-          'itemId',
+        const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+        const [existingRows] = await connection.execute(
+          `SELECT ${quoteIdentifier('id', 'column name')} FROM ${tableName} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND COALESCE(${quoteIdentifier('attempt', 'column name')}, 0) = ? FOR UPDATE`,
+          [input.experimentId, input.itemId, attempt],
+        );
+        const existingId = Array.isArray(existingRows)
+          ? ((existingRows[0] as { id?: string } | undefined)?.id ?? null)
+          : null;
+        const updateColumns = [
           'itemDatasetVersion',
           'organizationId',
           'projectId',
@@ -807,59 +811,44 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           'traceId',
           'status',
           'tags',
-          'createdAt',
         ];
-        await connection.execute(
-          `INSERT INTO ${formatTableName(TABLE_EXPERIMENT_RESULTS)} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')})
-           VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})
-           ON DUPLICATE KEY UPDATE
-             ${[
-               'itemDatasetVersion',
-               'organizationId',
-               'projectId',
-               'input',
-               'output',
-               'groundTruth',
-               'metadata',
-               'error',
-               'startedAt',
-               'completedAt',
-               'retryCount',
-               'attempt',
-               'traceId',
-               'status',
-               'tags',
-             ]
-               .map(
-                 column =>
-                   `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
-               )
-               .join(', ')}`,
-          [
-            id,
-            input.experimentId,
-            input.itemId,
-            input.itemDatasetVersion ?? null,
-            input.organizationId ?? null,
-            input.projectId ?? null,
-            JSON.stringify(marker ? null : input.input),
-            marker || input.output == null ? null : JSON.stringify(input.output),
-            marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
-            JSON.stringify(marker ?? input.metadata ?? null),
-            marker || input.error == null ? null : JSON.stringify(input.error),
-            input.startedAt,
-            input.completedAt,
-            input.retryCount,
-            attempt,
-            input.traceId ?? null,
-            input.status ?? null,
-            marker || input.tags == null ? null : JSON.stringify(input.tags),
-            new Date(),
-          ],
-        );
+        const updateValues = [
+          input.itemDatasetVersion ?? null,
+          input.organizationId ?? null,
+          input.projectId ?? null,
+          JSON.stringify(marker ? null : input.input),
+          marker || input.output == null ? null : JSON.stringify(input.output),
+          marker || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+          JSON.stringify(marker ?? input.metadata ?? null),
+          marker || input.error == null ? null : JSON.stringify(input.error),
+          input.startedAt,
+          input.completedAt,
+          input.retryCount,
+          attempt,
+          input.traceId ?? null,
+          input.status ?? null,
+          marker || input.tags == null ? null : JSON.stringify(input.tags),
+        ];
+        const id = existingId ?? randomUUID();
+
+        if (existingId) {
+          await connection.execute(
+            `UPDATE ${tableName} SET ${updateColumns
+              .map(column => `${quoteIdentifier(column, 'column name')} = ?`)
+              .join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+            [...updateValues, existingId],
+          );
+        } else {
+          const columns = ['id', 'experimentId', 'itemId', ...updateColumns, 'createdAt'];
+          await connection.execute(
+            `INSERT INTO ${tableName} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')}) VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})`,
+            [id, input.experimentId, input.itemId, ...updateValues, new Date()],
+          );
+        }
+
         const [rows] = await connection.execute(
-          `SELECT * FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND COALESCE(${quoteIdentifier('attempt', 'column name')}, 0) = ?`,
-          [input.experimentId, input.itemId, attempt],
+          `SELECT * FROM ${tableName} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
+          [id],
         );
         const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
         if (!row) {
@@ -867,7 +856,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
             id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
-            text: `Experiment result not found after upsert`,
+            text: `Experiment result ${id} not found after upsert`,
             details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
           });
         }

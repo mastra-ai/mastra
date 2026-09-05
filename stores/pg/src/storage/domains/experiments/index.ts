@@ -659,19 +659,25 @@ export class ExperimentsPG extends ExperimentsStorage {
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
       const row = await this.#db.client.tx(async t => {
-        const purge = await t.oneOrNone<{ purgeMetadata: Record<string, unknown> | null }>(
-          `SELECT (
-             SELECT i."metadata" FROM ${itemsTable} i
-             WHERE i."id" = $2 AND i."datasetId" = e."datasetId" AND i."metadata"->>'__purged' = 'true'
-             LIMIT 1
-           ) AS "purgeMetadata"
-           FROM ${experimentsTable} e
-           JOIN ${datasetsTable} d ON d."id" = e."datasetId"
-           WHERE e."id" = $1
-           FOR UPDATE OF d`,
-          [input.experimentId, input.itemId],
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
         );
-        const purgeMetadata = purge?.purgeMetadata ?? null;
+        let purgeMetadata: Record<string, unknown> | null = null;
+        if (owner?.datasetId) {
+          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+            owner.datasetId,
+          ]);
+          if (dataset) {
+            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [input.itemId, owner.datasetId],
+            );
+            purgeMetadata = purge?.metadata ?? null;
+          }
+        }
         const nowIso = new Date().toISOString();
         return t.one(
           `INSERT INTO ${resultsTable} (
@@ -727,19 +733,25 @@ export class ExperimentsPG extends ExperimentsStorage {
       const attempt = input.attempt ?? 0;
 
       const row = await this.#db.client.tx(async t => {
-        const purge = await t.oneOrNone<{ purgeMetadata: Record<string, unknown> | null }>(
-          `SELECT (
-             SELECT i."metadata" FROM ${itemsTable} i
-             WHERE i."id" = $2 AND i."datasetId" = e."datasetId" AND i."metadata"->>'__purged' = 'true'
-             LIMIT 1
-           ) AS "purgeMetadata"
-           FROM ${experimentsTable} e
-           JOIN ${datasetsTable} d ON d."id" = e."datasetId"
-           WHERE e."id" = $1
-           FOR UPDATE OF d`,
-          [input.experimentId, input.itemId],
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
         );
-        const purgeMetadata = purge?.purgeMetadata ?? null;
+        let purgeMetadata: Record<string, unknown> | null = null;
+        if (owner?.datasetId) {
+          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+            owner.datasetId,
+          ]);
+          if (dataset) {
+            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [input.itemId, owner.datasetId],
+            );
+            purgeMetadata = purge?.metadata ?? null;
+          }
+        }
 
         // Natural key lookup under FOR UPDATE so concurrent retries serialize
         // on the same row instead of inserting duplicates.
@@ -839,7 +851,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
       const row = await this.#db.client.tx(async t => {
-        const owner = await t.oneOrNone<{ datasetId: string; itemId: string }>(
+        const owner = await t.oneOrNone<{ datasetId: string | null; itemId: string }>(
           `SELECT e."datasetId", r."itemId"
            FROM ${tableName} r
            JOIN ${experimentsTable} e ON e."id" = r."experimentId"
@@ -848,13 +860,17 @@ export class ExperimentsPG extends ExperimentsStorage {
         );
         if (!owner) return null;
 
-        await t.one(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [owner.datasetId]);
-        const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
-          `SELECT "metadata" FROM ${itemsTable}
-           WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
-           LIMIT 1`,
-          [owner.itemId, owner.datasetId],
-        );
+        const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+          owner.datasetId,
+        ]);
+        const purge = dataset
+          ? await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [owner.itemId, owner.datasetId],
+            )
+          : null;
 
         return t.oneOrNone(
           `UPDATE ${tableName}

@@ -940,7 +940,8 @@ export class DatasetsPG extends DatasetsStorage {
       const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
 
       await this.#db.client.tx(async t => {
-        await t.one(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+        const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+        if (!dataset) return;
         const item = await t.oneOrNone(
           `SELECT "id" FROM ${itemsTable} WHERE "id" = $1 AND "datasetId" = $2 LIMIT 1 FOR UPDATE`,
           [id, datasetId],
