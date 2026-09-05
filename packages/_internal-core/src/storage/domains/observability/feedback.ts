@@ -16,12 +16,14 @@ import {
   deltaCursorSchema,
   listModeSchema,
   normalizeObservabilityListArgs,
+  organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
   refineObservabilityListMode,
+  resourceIdField,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -203,6 +205,35 @@ export const updateFeedbackReviewStatusArgsSchema = z
 
 /** Arguments for updating a feedback record's review status */
 export type UpdateFeedbackReviewStatusArgs = z.infer<typeof updateFeedbackReviewStatusArgsSchema>;
+
+// ============================================================================
+// Delete Feedback Schemas
+// ============================================================================
+
+const DELETE_FEEDBACK_MAX_IDS = 1000;
+
+/** Schema for deleteFeedback operation arguments */
+export const deleteFeedbackArgsSchema = z
+  .object({
+    feedbackIds: z
+      .array(z.string())
+      .max(DELETE_FEEDBACK_MAX_IDS)
+      .describe(`IDs of the feedback events to delete (maximum ${DELETE_FEEDBACK_MAX_IDS})`),
+    organizationId: organizationIdField.optional().describe('Restrict deletion to feedback in this organization'),
+    resourceId: resourceIdField.optional().describe('Restrict deletion to feedback for this resource'),
+  })
+  .describe('Arguments for deleting feedback by id');
+
+/** Arguments for deleting feedback */
+export type DeleteFeedbackArgs = z.infer<typeof deleteFeedbackArgsSchema>;
+
+/** Schema for deleteFeedback operation response */
+export const deleteFeedbackResponseSchema = z
+  .object({ success: z.boolean() })
+  .describe('Response from deleting feedback');
+
+/** Response from deleting feedback */
+export type DeleteFeedbackResponse = z.infer<typeof deleteFeedbackResponseSchema>;
 
 // ============================================================================
 // Feedback Filter Schema

@@ -23,6 +23,8 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  DeleteScoresArgs,
+  DeleteScoresResponse,
   GetScoreAggregateArgs,
   GetScoreAggregateResponse,
   GetScoreBreakdownArgs,
@@ -36,6 +38,8 @@ import type {
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  DeleteFeedbackArgs,
+  DeleteFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
   FeedbackRecord,
   GetFeedbackAggregateArgs,
@@ -1170,6 +1174,11 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
+    return this.observability.deleteScores(params);
+  }
+
   /** Returns an aggregated score value with optional period-over-period comparison. */
   getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
     return this.observability.getScoreAggregate(params);
@@ -1202,6 +1211,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
+    return this.observability.deleteFeedback(params);
   }
 
   /** Updates a feedback record's review workflow status. */

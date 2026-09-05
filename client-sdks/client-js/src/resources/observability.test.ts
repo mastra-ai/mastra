@@ -1126,6 +1126,74 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('deleteFeedback()', () => {
+    it('should send correct DELETE request with feedback ids', async () => {
+      mockSuccessfulResponse();
+
+      await client.deleteFeedback({ feedbackIds: ['fb-1', 'fb-2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback`,
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ feedbackIds: ['fb-1', 'fb-2'] }),
+        }),
+      );
+    });
+
+    it('should include tenant scope in the request body', async () => {
+      mockSuccessfulResponse();
+
+      await client.deleteFeedback({ feedbackIds: ['fb-1'], organizationId: 'org-1', resourceId: 'res-1' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback`,
+        expect.objectContaining({
+          method: 'DELETE',
+          body: JSON.stringify({ feedbackIds: ['fb-1'], organizationId: 'org-1', resourceId: 'res-1' }),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.deleteFeedback({ feedbackIds: ['fb-1'] })).rejects.toThrow();
+    });
+  });
+
+  describe('deleteScores()', () => {
+    it('should send correct DELETE request with score ids', async () => {
+      mockSuccessfulResponse();
+
+      await client.deleteScores({ scoreIds: ['score-1', 'score-2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/scores`,
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ scoreIds: ['score-1', 'score-2'] }),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.deleteScores({ scoreIds: ['score-1'] })).rejects.toThrow();
+    });
+  });
+
   // ==========================================================================
   // Scores OLAP
   // ==========================================================================

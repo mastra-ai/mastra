@@ -369,6 +369,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.batchCreateScores(...args);
   }
 
+  async deleteScores(
+    ...args: Parameters<ObservabilityStoreImpl['deleteScores']>
+  ): ReturnType<ObservabilityStoreImpl['deleteScores']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteScores(...args);
+  }
+
   async listScores(
     ...args: Parameters<ObservabilityStoreImpl['listScores']>
   ): ReturnType<ObservabilityStoreImpl['listScores']> {
@@ -423,6 +430,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['batchCreateFeedback']> {
     const delegate = await this.requireDelegate();
     return delegate.batchCreateFeedback(...args);
+  }
+
+  async deleteFeedback(
+    ...args: Parameters<ObservabilityStoreImpl['deleteFeedback']>
+  ): ReturnType<ObservabilityStoreImpl['deleteFeedback']> {
+    const delegate = await this.requireDelegate();
+    return delegate.deleteFeedback(...args);
   }
 
   async listFeedback(

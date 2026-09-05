@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createFeedbackArgsSchema,
   createFeedbackRecordSchema,
+  deleteFeedbackArgsSchema,
   feedbackFilterSchema,
   feedbackInputSchema,
   feedbackRecordSchema,
@@ -169,6 +170,21 @@ describe('Feedback Schemas', () => {
       expect(args.feedback.traceId).toBe('trace-1');
       expect(args.feedback.feedbackSource).toBe('user');
       expect(args.feedback.value).toBe(1);
+    });
+  });
+
+  describe('deleteFeedbackArgsSchema', () => {
+    it('limits the number of feedback IDs in a batch', () => {
+      expect(
+        deleteFeedbackArgsSchema.safeParse({
+          feedbackIds: Array.from({ length: 1000 }, (_, index) => `feedback-${index}`),
+        }).success,
+      ).toBe(true);
+      expect(
+        deleteFeedbackArgsSchema.safeParse({
+          feedbackIds: Array.from({ length: 1001 }, (_, index) => `feedback-${index}`),
+        }).success,
+      ).toBe(false);
     });
   });
 

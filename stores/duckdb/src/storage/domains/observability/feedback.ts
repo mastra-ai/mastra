@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   BatchCreateFeedbackArgs,
   CreateFeedbackArgs,
+  DeleteFeedbackArgs,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -365,6 +366,27 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
      VALUES ${tuples.join(',\n       ')}
      ON CONFLICT DO NOTHING`,
   );
+}
+
+/**
+ * Delete feedback events by feedbackId. Optional `organizationId` and
+ * `resourceId` values are ANDed into the predicate to restrict deletion to
+ * records with matching scope fields.
+ */
+export async function deleteFeedback(db: DuckDBConnection, args: DeleteFeedbackArgs): Promise<void> {
+  if (args.feedbackIds.length === 0) return;
+  const placeholders = args.feedbackIds.map(() => '?').join(', ');
+  const conditions = [`feedbackId IN (${placeholders})`];
+  const params: unknown[] = [...args.feedbackIds];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(args.organizationId);
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = ?');
+    params.push(args.resourceId);
+  }
+  await db.execute(`DELETE FROM feedback_events WHERE ${conditions.join(' AND ')}`, params);
 }
 
 /** Update the review workflow status of a single feedback event. */

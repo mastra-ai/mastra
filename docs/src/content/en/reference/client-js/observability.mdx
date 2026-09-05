@@ -158,6 +158,24 @@ const response = await mastraClient.createFeedback({
 })
 ```
 
+### Deleting feedback and scores
+
+Delete feedback or score records by id. Deletion is idempotent, so missing ids are ignored. Optional `organizationId` and `resourceId` fields restrict each deletion to records with matching scope fields:
+
+```typescript
+await mastraClient.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+  organizationId: 'org-1',
+  resourceId: 'resource-1',
+})
+
+await mastraClient.deleteScores({
+  scoreIds: ['score-1', 'score-2'],
+  organizationId: 'org-1',
+  resourceId: 'resource-1',
+})
+```
+
 ### Listing feedback
 
 Retrieve paginated feedback records with optional filters:

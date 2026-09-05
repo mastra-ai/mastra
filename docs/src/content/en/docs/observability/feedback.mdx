@@ -1,9 +1,9 @@
 ---
-title: "Feedback | Observability"
-description: "Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans."
+title: 'Feedback | Observability'
+description: 'Create, list, aggregate, and export human feedback records in Mastra observability, with ratings and comments linked to specific traces and spans.'
 packages:
-  - "@mastra/core"
-  - "@mastra/observability"
+  - '@mastra/core'
+  - '@mastra/observability'
 ---
 
 # Feedback
@@ -123,6 +123,18 @@ await observability!.listFeedback({
   },
 })
 ```
+
+## Delete feedback
+
+Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Deletion is idempotent. The optional `organizationId` and `resourceId` fields restrict the delete to a single tenant's records. In Studio, each comment on a trace or span Feedback tab has a delete action.
+
+```typescript
+await observability!.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+})
+```
+
+Deleted records also disappear from feedback analytics. ClickHouse uses a lightweight delete to hide rows without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
 
 ## Query feedback analytics
 
