@@ -12,6 +12,7 @@ import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
   datasetAndExperimentIdPathParams,
+  experimentIdPathParams,
   datasetExperimentAndItemIdPathParams,
   experimentResultIdPathParams,
   datasetAndItemIdPathParams,
@@ -63,6 +64,21 @@ import { handleError } from './error';
 function assertDatasetsAvailable(): void {
   if (!coreFeatures.has('datasets')) {
     throw new HTTPException(501, { message: 'Datasets require @mastra/core >= 1.4.0' });
+  }
+}
+
+/**
+ * Experiment deletion reaches core through `mastra.datasets.deleteExperiment`,
+ * which is newer than the `datasets` feature itself. A core that predates it
+ * satisfies `assertDatasetsAvailable` and would then fail at call time with
+ * "deleteExperiment is not a function", so gate the newer capability separately
+ * and report the version skew as a 501 rather than a 500.
+ */
+function assertExperimentDeletionAvailable(): void {
+  if (!coreFeatures.has('experiment-deletion')) {
+    throw new HTTPException(501, {
+      message: 'Experiment deletion requires a newer @mastra/core with experiment deletion support.',
+    });
   }
 }
 
@@ -671,6 +687,49 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   },
 });
 
+export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: experimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description:
+    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    assertExperimentDeletionAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const scoped = organizationId !== undefined || projectId !== undefined;
+      // For unscoped deletes, 404 on missing experiments. For scoped deletes,
+      // skip the preflight: a tenancy mismatch must be a silent no-op so
+      // cross-tenant existence is not leaked (mirrors DELETE_DATASET_ROUTE).
+      if (!scoped) {
+        const existing = await mastra.datasets.getExperiment({ experimentId });
+        if (!existing) {
+          throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+        }
+      }
+      // Note: experiment-linked score_events are not cascaded here (tracked separately).
+      await mastra.datasets.deleteExperiment({
+        experimentId,
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
+    }
+  },
+});
+
 export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/datasets/:datasetId/experiments',
@@ -967,6 +1026,38 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error getting experiment');
+    }
+  },
+});
+
+export const DELETE_EXPERIMENT_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  responseSchema: successResponseSchema,
+  summary: 'Delete experiment',
+  description:
+    'Deletes an experiment and its results. Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, experimentId }) => {
+    assertDatasetsAvailable();
+    // An older core still exposes Dataset.deleteExperiment, but it predates the
+    // trace cascade and would report success while leaving the traces behind.
+    // Fail loudly instead.
+    assertExperimentDeletionAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      // deleteExperiment asserts the experiment belongs to this dataset and
+      // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
+      await ds.deleteExperiment({ experimentId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error deleting experiment');
     }
   },
 });
