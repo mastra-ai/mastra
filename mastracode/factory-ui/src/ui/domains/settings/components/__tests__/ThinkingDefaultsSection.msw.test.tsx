@@ -81,6 +81,41 @@ describe('BaseThinkingSection', () => {
     expect(writes).toBe(1);
   });
 
+  it('does not resend a level whose write is still in flight', async () => {
+    let writes = 0;
+    let releaseSecondWrite = () => {};
+    const secondWrite = new Promise<void>(resolve => (releaseSecondWrite = resolve));
+    server.use(
+      http.get(THINKING_URL, () => HttpResponse.json(baseConfig)),
+      http.put(THINKING_URL, async () => {
+        writes += 1;
+        if (writes === 2) await secondWrite;
+        return HttpResponse.json({
+          ok: true,
+          globalDefault: writes === 1 ? 'high' : 'max',
+          modeDefaults: baseConfig.modeDefaults,
+        });
+      }),
+    );
+
+    const { client } = renderWithProviders(<BaseThinkingSection />);
+
+    const base = await screen.findByRole('slider', { name: 'Base thinking level' });
+    dragTo(base, 3);
+    fireEvent.pointerUp(base);
+    dragTo(base, 5);
+    fireEvent.pointerUp(base);
+
+    // The second write is held open, so the blur lands while it is still pending.
+    await waitFor(() => expect(writes).toBe(2));
+    fireEvent.blur(base);
+    releaseSecondWrite();
+
+    await waitForMutationsIdle(client);
+    expect(writes).toBe(2);
+    await waitFor(() => expect(base).toHaveAttribute('aria-valuetext', 'Max'));
+  });
+
   it('renders read-only rows when the deployment refuses writes', async () => {
     let writes = 0;
     server.use(
