@@ -10,7 +10,7 @@ export interface SettingsLayoutProps {
 }
 
 export function SettingsLayout({ title, action, inset = false, children }: SettingsLayoutProps) {
-  if (title === undefined) {
+  if (title === undefined || title === null) {
     return (
       <div
         data-slot="settings-layout-content"

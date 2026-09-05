@@ -32,9 +32,9 @@ describe('SettingsLayout', () => {
     expect(output).toContain('pl-4');
   });
 
-  it('supports content with its own page header', () => {
+  it.each([undefined, null])('supports content with its own page header when title is %s', title => {
     const output = renderToStaticMarkup(
-      <SettingsLayout>
+      <SettingsLayout title={title}>
         <h1>Usage</h1>
         <section>Usage settings</section>
       </SettingsLayout>,
