@@ -1687,8 +1687,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 // step-start timestamp belongs to the original provider call, so omit it
                 // rather than reporting stale inference timing for the replay.
                 let replayChunk = chunk;
-                if (chunk.type === 'step-start') {
-                  const { startedAt: _startedAt, ...payload } = chunk.payload;
+                if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
+                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
                   replayChunk = { ...chunk, payload };
                 }
                 controller.enqueue({

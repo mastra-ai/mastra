@@ -366,7 +366,9 @@ describe('ResponseCache processor (integration via Agent)', () => {
       const firstText = await firstStream.text;
       expect(firstText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
-      expect(firstChunks.find(chunk => chunk.type === 'step-start')?.payload.startedAt).toEqual(expect.any(Number));
+      const firstStepStart = firstChunks.find(chunk => chunk.type === 'step-start');
+      expect(firstStepStart).toBeDefined();
+      expect(firstStepStart?.payload.startedAt).toEqual(expect.any(Number));
 
       await waitForSets(cache, 1);
       expect(cache.sets).toBe(1);
@@ -381,7 +383,9 @@ describe('ResponseCache processor (integration via Agent)', () => {
       expect(secondText).toBe('Cached response text');
       expect(model.doStreamCalls).toHaveLength(1);
       expect(collectedChunks.length).toBeGreaterThan(0);
-      expect(collectedChunks.find(chunk => chunk.type === 'step-start')?.payload).not.toHaveProperty('startedAt');
+      const replayedStepStart = collectedChunks.find(chunk => chunk.type === 'step-start');
+      expect(replayedStepStart).toBeDefined();
+      expect(replayedStepStart?.payload).not.toHaveProperty('startedAt');
     });
 
     it('preserves finishReason and usage on cache hit', async () => {
