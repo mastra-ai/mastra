@@ -319,6 +319,7 @@ describe('MySQLStore tool mocks rejection', () => {
     const { pool, connection } = poolInstances[poolInstances.length - 1];
     pool.execute.mockResolvedValueOnce([[{ c: 2 }]]);
     connection.execute
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{ id: 'i1' }]])
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]]);

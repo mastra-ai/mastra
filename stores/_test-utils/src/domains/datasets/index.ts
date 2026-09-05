@@ -19,8 +19,10 @@ export function createDatasetsTests({
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
   const supportsToolMocks = capabilities.toolMocks !== false;
   const supportsItemIdentity = capabilities.datasetItemIdentity !== false;
+  const supportsItemPurge = capabilities.datasetItemPurge !== false;
   const itItemIdentity = supportsItemIdentity ? it : it.skip;
-  const itExperiments = storage.stores?.experiments ? it : it.skip;
+  const itPurge = supportsItemPurge ? it : it.skip;
+  const itPurgeExperiments = supportsItemPurge && storage.stores?.experiments ? it : it.skip;
 
   let datasetsStorage: DatasetsStorage;
   let experimentsStorage: ExperimentsStorage | undefined;
@@ -861,7 +863,7 @@ export function createDatasetsTests({
         }
       });
 
-      it('purgeItem scrubs every historical row and preserves the SCD-2 skeleton', async () => {
+      itPurge('purgeItem scrubs every historical row and preserves the SCD-2 skeleton', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'scd2-purge' });
         const item = await datasetsStorage.addItem({
           datasetId: ds.id,
@@ -925,13 +927,13 @@ export function createDatasetsTests({
         });
       });
 
-      it('purgeItem is idempotent for an unknown item id', async () => {
+      itPurge('purgeItem is idempotent for an unknown item id', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'purge-missing-item' });
 
         await expect(datasetsStorage.purgeItem({ id: 'missing-item', datasetId: ds.id })).resolves.toBeUndefined();
       });
 
-      it('purgeItem is a silent no-op when the item belongs to another dataset', async () => {
+      itPurge('purgeItem is a silent no-op when the item belongs to another dataset', async () => {
         const sourceDataset = await datasetsStorage.createDataset({ name: 'purge-source-dataset' });
         const otherDataset = await datasetsStorage.createDataset({ name: 'purge-other-dataset' });
         const item = await datasetsStorage.addItem({
@@ -947,7 +949,7 @@ export function createDatasetsTests({
         expect(history[0]).toMatchObject({ input: { patient: 'Alice' }, metadata: { note: 'private' } });
       });
 
-      it('purgeItem is a silent no-op when tenancy filters do not match', async () => {
+      itPurge('purgeItem is a silent no-op when tenancy filters do not match', async () => {
         const ds = await datasetsStorage.createDataset({
           name: 'purge-tenancy',
           organizationId: 'org_a',
@@ -967,7 +969,7 @@ export function createDatasetsTests({
         expect(history[0]!.metadata).toBeUndefined();
       });
 
-      itExperiments('purgeItem scrubs linked experiment result payloads', async () => {
+      itPurgeExperiments('purgeItem scrubs linked experiment result payloads', async () => {
         await experimentsStorage!.dangerouslyClearAll();
         const ds = await datasetsStorage.createDataset({ name: 'purge-experiment-results' });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
@@ -1073,6 +1075,118 @@ export function createDatasetsTests({
         if (supportsToolMocks) {
           expect(otherListed.results[0]!.toolMockReport).toEqual(toolMockReport);
         }
+      });
+
+      itPurgeExperiments('redacts experiment result writes submitted after item purge', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-late-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'late-purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const resultInput = {
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private metadata' },
+          toolMockReport: supportsToolMocks
+            ? { served: [], unconsumed: [], liveCalls: [{ toolName: 'lookup', args: { patient: 'Alice' } }] }
+            : undefined,
+          error: { message: 'Patient Alice failed' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        };
+
+        await datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id });
+        const added = await experimentsStorage!.addExperimentResult(resultInput);
+        const updated = await experimentsStorage!.updateExperimentResult({
+          id: added.id,
+          experimentId: experiment.id,
+          status: 'needs-review',
+          tags: ['patient-alice'],
+          comment: 'Patient Alice requires review',
+        });
+        expect(updated).toMatchObject({ status: 'needs-review', tags: null, comment: null });
+
+        const upserted = await experimentsStorage!.upsertExperimentResult({
+          ...resultInput,
+          output: { diagnosis: 'restored secret' },
+        });
+
+        expect(upserted).toMatchObject({
+          id: added.id,
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: { __purged: true },
+          error: null,
+          status: null,
+          tags: null,
+          comment: null,
+        });
+        expect(upserted.toolMockReport).toBeNull();
+        expect(typeof upserted.metadata?.purgedAt).toBe('string');
+      });
+
+      itPurgeExperiments('keeps result payloads redacted when purge races with result submissions', async () => {
+        await experimentsStorage!.dangerouslyClearAll();
+        const ds = await datasetsStorage.createDataset({ name: 'purge-racing-experiment-results' });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { patient: 'Alice' } });
+        const experiment = await experimentsStorage!.createExperiment({
+          name: 'racing-purge-results',
+          datasetId: ds.id,
+          datasetVersion: item.datasetVersion,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+        const submission = {
+          experimentId: experiment.id,
+          itemId: item.id,
+          itemDatasetVersion: item.datasetVersion,
+          input: { patient: 'Alice' },
+          output: { diagnosis: 'secret' },
+          groundTruth: { expected: 'private' },
+          metadata: { note: 'private' },
+          error: { message: 'Patient Alice failed' },
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        };
+        await experimentsStorage!.upsertExperimentResult(submission);
+
+        await Promise.all([
+          datasetsStorage.purgeItem({ id: item.id, datasetId: ds.id }),
+          ...Array.from({ length: 10 }, () =>
+            experimentsStorage!.upsertExperimentResult({ ...submission, completedAt: new Date() }),
+          ),
+        ]);
+
+        const listed = await experimentsStorage!.listExperimentResults({
+          experimentId: experiment.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results).toHaveLength(1);
+        expect(listed.results[0]).toMatchObject({
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: { __purged: true },
+          error: null,
+          tags: null,
+          comment: null,
+        });
       });
 
       it('deleteItem tombstone inherits tenancy from parent dataset', async () => {

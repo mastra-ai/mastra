@@ -279,7 +279,7 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## purgeDatasetItem()
 
-Permanently scrubs an item's content from every dataset version and linked experiment result, including result tags and comments, while preserving version history, experiment counters, and review status.
+Permanently scrubs an item's content from every dataset version and linked experiment result, including result tags and comments, while preserving version history, experiment counters, and review status. Later result submissions for the item are stored with redacted content.
 
 ```typescript
 await client.purgeDatasetItem('dataset-id', 'item-id', {
@@ -290,7 +290,7 @@ await client.purgeDatasetItem('dataset-id', 'item-id', {
 
 The optional third argument scopes the purge to a tenant organization and project. The server returns `404` when the dataset doesn't belong to that scope.
 
-Returns `Promise<{ success: boolean }>`. The operation is idempotent and can't be undone. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete erasure behavior.
+Returns `Promise<{ success: boolean }>`. The operation is idempotent and can't be undone. MongoDB storage requires a replica set or sharded deployment with transaction support. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete erasure behavior.
 
 ## Related
 

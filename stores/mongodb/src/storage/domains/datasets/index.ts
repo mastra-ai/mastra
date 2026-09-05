@@ -822,6 +822,16 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
     try {
+      if (!(await this.#connector.supportsTransactions())) {
+        throw new MastraError({
+          id: 'MONGODB_DATASET_ITEM_PURGE_REQUIRES_TRANSACTIONS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Dataset item purge requires a MongoDB replica set or sharded deployment with transaction support.',
+          details: { datasetId, itemId: id },
+        });
+      }
+      const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
       const experimentResultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
@@ -832,6 +842,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const metadata = { __purged: true, purgedAt };
 
       await this.#connector.withTransaction(async session => {
+        await datasetsCollection.updateOne({ id: datasetId }, { $inc: { purgeBarrierRevision: 1 } }, { session });
         const item = await itemsCollection.findOne({ id, datasetId }, { projection: { id: 1 }, session });
         if (!item) return;
 

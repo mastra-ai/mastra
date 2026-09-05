@@ -35,9 +35,11 @@ await dataset.purgeItem({ itemId: 'item-id' })
 
 ## Behavior
 
-Purging replaces the item's content fields with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked by `itemId`.
+Purging replaces the item's content fields with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked by `itemId`. Experiment-result writes submitted after the purge are stored with redacted content.
 
 The operation preserves dataset version history, item identity, experiment counters, and experiment review status. It doesn't create a new dataset version. Version-pinned reads can still return the item's row skeleton, but its content is no longer available.
+
+MongoDB storage requires a replica set or sharded deployment with transaction support. If transactions aren't available, the operation fails before changing the item or its experiment results.
 
 `externalId` remains unchanged because Mastra uses it as an identity key. Don't store sensitive data in `externalId`.
 

@@ -938,6 +938,10 @@ export class DatasetsMySQL extends DatasetsStorage {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      await connection.execute(
+        `SELECT ${quoteIdentifier('id', 'column name')} FROM ${formatTableName(TABLE_DATASETS)} WHERE ${quoteIdentifier('id', 'column name')} = ? FOR UPDATE`,
+        [datasetId],
+      );
       const itemsTable = formatTableName(TABLE_DATASET_ITEMS);
       const [rows] = await connection.execute<RowDataPacket[]>(
         `SELECT ${quoteIdentifier('id', 'column name')} FROM ${itemsTable} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ? LIMIT 1 FOR UPDATE`,

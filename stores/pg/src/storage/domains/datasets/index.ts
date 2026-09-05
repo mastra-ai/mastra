@@ -929,6 +929,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
     try {
+      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const experimentResultsTable = getTableName({
@@ -939,6 +940,7 @@ export class DatasetsPG extends DatasetsStorage {
       const purgedMetadata = JSON.stringify({ __purged: true, purgedAt });
 
       await this.#db.client.tx(async t => {
+        await t.one(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
         const item = await t.oneOrNone(
           `SELECT "id" FROM ${itemsTable} WHERE "id" = $1 AND "datasetId" = $2 LIMIT 1 FOR UPDATE`,
           [id, datasetId],
