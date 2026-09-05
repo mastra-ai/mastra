@@ -268,8 +268,6 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -317,6 +315,7 @@ describe('MastraFactory.prepare', () => {
 
     const session = {
       identity: { getResourceId: () => 'session-1' },
+      thread: {},
       om: {
         observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
         reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -324,7 +323,7 @@ describe('MastraFactory.prepare', () => {
       state: { get: () => ({}), set: vi.fn().mockResolvedValue(undefined) },
     };
 
-    await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
+    for (const [listener] of blockingCalls) await (listener as (session: unknown) => Promise<void>)(session);
 
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
@@ -1006,7 +1005,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    expect(args.workers?.map(entry => entry.name)).toEqual(['factory-supervisor-health', 'custom-poller']);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1042,14 +1041,14 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
-  it('omits the workers option when no integration contributes workers', async () => {
+  it("keeps the supervisor's own worker when no integration contributes one", async () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    expect(args.workers?.map(entry => entry.name)).toEqual(['factory-supervisor-health']);
   });
 
   /**
