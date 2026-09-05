@@ -635,6 +635,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       structuredOutput: structuredOutput as any,
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
+      // A tripwire chunk must not terminate the public durable stream: the
+      // durable workflow still emits its final finish chunk (with the tripwire
+      // recorded on the stepResult) after the tripwire.
+      isDurableStream: true,
       outputProcessors,
       returnScorerData,
       requestContext,

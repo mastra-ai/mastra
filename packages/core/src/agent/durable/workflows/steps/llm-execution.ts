@@ -1633,11 +1633,108 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   text: textDeltas.join(''),
                   usage,
                   requestContext,
+                  retryCount: processorRetryCount,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
                 });
               } catch (error) {
                 if (error instanceof TripWire) {
+                  const retryRequested = error.options?.retry === true;
+                  const canRetryProcessor =
+                    maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
+                  const shouldRetryProcessor = retryRequested && canRetryProcessor;
+
+                  if (shouldRetryProcessor) {
+                    // Bounded processor retry, mirroring the regular agent's
+                    // llm-execution-step.ts: drop the rejected response message so
+                    // the LLM does not see it in the next prompt, add the processor
+                    // feedback, and re-run the model call. A processor retry should
+                    // NOT consume a model retry attempt.
+                    //
+                    // Close the rejected attempt as its own step carrying the
+                    // tripwire data (the regular agent pushes a DefaultStepResult
+                    // with tripwire before retrying). Without this boundary the
+                    // rejected attempt's text stays buffered into the accepted
+                    // step and leaks into the final output.text.
+                    if (pubsub && deferredStepFinishChunk) {
+                      const existingSteps = (deferredStepFinishChunk.payload?.output?.steps as any[] | undefined) ?? [];
+                      const rejectedContent: Array<{ type: string; [key: string]: unknown }> = [];
+                      if (textDeltas.length) {
+                        rejectedContent.push({ type: 'text', text: textDeltas.join('') });
+                      }
+                      await emitChunkEvent(pubsub, runId, {
+                        ...deferredStepFinishChunk,
+                        payload: {
+                          ...deferredStepFinishChunk.payload,
+                          _durableStepContent: rejectedContent,
+                          output: {
+                            ...deferredStepFinishChunk.payload?.output,
+                            steps: [
+                              ...existingSteps,
+                              {
+                                tripwire: {
+                                  reason: error.message,
+                                  retry: error.options?.retry,
+                                  metadata: error.options?.metadata,
+                                  processorId: error.processorId,
+                                },
+                              },
+                            ],
+                          },
+                        },
+                      });
+                      deferredStepFinishChunk = null;
+                    }
+                    messageList.removeByIds([currentMessageId]);
+                    messageList.addSystem(
+                      `[Processor Feedback] Your previous response was not accepted: ${error.message}. Please try again with the feedback in mind.`,
+                      'processor-retry-feedback',
+                    );
+                    processorRetryCount++;
+                    attempt--;
+                    continue;
+                  }
+                  if (retryRequested && !canRetryProcessor) {
+                    logger?.warn?.(
+                      `Processor requested retry but maxProcessorRetries (${maxProcessorRetries}) exceeded. Current count: ${processorRetryCount}. Treating as abort.`,
+                      { runId },
+                    );
+                  }
+
+                  // Close the tripped attempt as its own step before the
+                  // terminal tripwire, mirroring the retry boundary above, so
+                  // result.output.steps records why the run stopped instead of
+                  // dropping the attempt entirely.
+                  if (pubsub && deferredStepFinishChunk) {
+                    const existingSteps = (deferredStepFinishChunk.payload?.output?.steps as any[] | undefined) ?? [];
+                    const rejectedContent: Array<{ type: string; [key: string]: unknown }> = [];
+                    if (textDeltas.length) {
+                      rejectedContent.push({ type: 'text', text: textDeltas.join('') });
+                    }
+                    await emitChunkEvent(pubsub, runId, {
+                      ...deferredStepFinishChunk,
+                      payload: {
+                        ...deferredStepFinishChunk.payload,
+                        _durableStepContent: rejectedContent,
+                        output: {
+                          ...deferredStepFinishChunk.payload?.output,
+                          steps: [
+                            ...existingSteps,
+                            {
+                              tripwire: {
+                                reason: error.message,
+                                retry: error.options?.retry,
+                                metadata: error.options?.metadata,
+                                processorId: error.processorId,
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    });
+                    deferredStepFinishChunk = null;
+                  }
+
                   // Emit tripwire chunk and return bail response
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
@@ -1646,8 +1743,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       from: ChunkFrom.AGENT,
                       payload: {
                         reason: error.message,
-                        processorId: error.processorId,
+                        retry: error.options?.retry,
                         metadata: error.options?.metadata,
+                        processorId: error.processorId,
                       },
                     });
                   }
@@ -1662,7 +1760,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     },
                     metadata: { modelId: currentModel.modelId },
                     state: typedInput.state,
-                  };
+                  } satisfies DurableLLMStepOutput;
                 }
                 throw error;
               }
