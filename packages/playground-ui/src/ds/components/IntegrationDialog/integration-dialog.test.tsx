@@ -5,7 +5,7 @@ import { IntegrationDialog } from './integration-dialog';
 
 const items = [
   { id: 'anthropic', name: 'Anthropic' },
-  { id: 'slack', name: 'Slack', description: 'Workspace' },
+  { id: 'slack', name: 'Slack' },
   { id: 'stripe', name: 'Stripe', disabled: true },
 ];
 
@@ -19,11 +19,11 @@ function renderDialog(props: Partial<Parameters<typeof IntegrationDialog>[0]> = 
 
 describe('IntegrationDialog', () => {
   describe('when opened', () => {
-    it('lists every integration with its optional description', () => {
+    it('lists every integration by name', () => {
       renderDialog();
       expect(screen.getByRole('dialog', { name: 'Add connection' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Anthropic' })).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Slack Workspace' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Slack' })).toBeDefined();
     });
 
     it('disables items marked disabled', () => {
@@ -35,7 +35,7 @@ describe('IntegrationDialog', () => {
   describe('when an integration is clicked', () => {
     it('reports the item to the caller', () => {
       const { onSelect } = renderDialog();
-      fireEvent.click(screen.getByRole('button', { name: 'Slack Workspace' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Slack' }));
       expect(onSelect).toHaveBeenCalledWith(items[1]);
     });
   });
@@ -45,7 +45,7 @@ describe('IntegrationDialog', () => {
       renderDialog();
       fireEvent.change(screen.getByRole('textbox', { name: 'Search integrations' }), { target: { value: 'slac' } });
       expect(screen.queryByRole('button', { name: 'Anthropic' })).toBeNull();
-      expect(screen.getByRole('button', { name: 'Slack Workspace' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Slack' })).toBeDefined();
     });
   });
 

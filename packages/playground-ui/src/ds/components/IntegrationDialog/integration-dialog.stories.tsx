@@ -15,7 +15,7 @@ const integrations: IntegrationDialogItem[] = [
   { id: 'github', name: 'GitHub', logo: logo('github') },
   { id: 'gitlab', name: 'GitLab', logo: logo('gitlab') },
   { id: 'hubspot', name: 'HubSpot', logo: logo('hubspot') },
-  { id: 'linear', name: 'Linear', description: 'Issues and projects', logo: logo('linear') },
+  { id: 'linear', name: 'Linear', logo: logo('linear') },
   { id: 'notion', name: 'Notion', logo: logo('notion') },
   { id: 'stripe', name: 'Stripe', logo: logo('stripe') },
 ];

@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 export type IntegrationDialogItem = {
   id: string;
   name: string;
-  description?: string;
   logo?: ReactNode;
   disabled?: boolean;
 };
@@ -28,7 +27,7 @@ export type IntegrationDialogProps = Omit<DialogNewProps, 'variant' | 'children'
 };
 
 function matches(item: IntegrationDialogItem, query: string) {
-  return `${item.name} ${item.id} ${item.description ?? ''}`.toLowerCase().includes(query);
+  return `${item.name} ${item.id}`.toLowerCase().includes(query);
 }
 
 function IntegrationDialog({
@@ -116,13 +115,8 @@ function IntegrationDialogContent({
                   <span className="text-neutral4 grid size-8 shrink-0 place-items-center [&>img]:size-full [&>img]:object-contain [&>svg]:size-4">
                     {item.logo ?? <BlocksIcon />}
                   </span>
-                  <span className="min-w-0">
-                    <span className="text-ui-md leading-ui-md text-neutral6 block truncate font-medium">
-                      {item.name}
-                    </span>
-                    {item.description ? (
-                      <span className="text-ui-sm leading-ui-sm text-neutral3 block truncate">{item.description}</span>
-                    ) : null}
+                  <span className="text-ui-md leading-ui-md text-neutral6 min-w-0 truncate font-medium">
+                    {item.name}
                   </span>
                 </button>
               </li>
