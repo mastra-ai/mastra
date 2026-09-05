@@ -8,8 +8,9 @@
  * 2. `execute` — must call `mastra.addDynamicWorkflow` with the normalized
  *    canonical shape, so the SDK and Core schemas agree end-to-end.
  */
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi } from 'vitest';
-import { saveWorkflowTool } from '../save-workflow.js';
+import { createSaveWorkflowTool, saveWorkflowTool } from '../save-workflow.js';
 
 function invoke(input: unknown, mastra: unknown) {
   // Call the raw execute; callers of the tool are responsible for schema
@@ -135,5 +136,57 @@ describe('save-workflow — execute', () => {
       const mastra = { addDynamicWorkflow } as unknown;
       await expect(invoke(loopGraphWithPredicate, mastra)).rejects.toThrow(/unresolved reference to tool "inc-tool"/);
     });
+  });
+
+  describe('when mastra.addDynamicWorkflow rejects (storage failure)', () => {
+    it('propagates the underlying error unchanged', async () => {
+      const addDynamicWorkflow = vi.fn().mockRejectedValue(new Error('workflow storage unavailable'));
+      const mastra = { addDynamicWorkflow } as unknown;
+      await expect(invoke(loopGraphWithPredicate, mastra)).rejects.toThrow(/workflow storage unavailable/);
+    });
+  });
+});
+
+describe('createSaveWorkflowTool — authorization', () => {
+  it('passes the native request context and a detached definition to the policy', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('tenantId', 'tenant-1');
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    let receivedRequestContext: RequestContext | undefined;
+    let receivedDefinition: unknown;
+    const authorize = vi.fn(({ definition, requestContext: context }) => {
+      receivedRequestContext = context;
+      receivedDefinition = structuredClone(definition);
+      (definition as { id: string }).id = 'attempted-rewrite';
+    });
+    const tool = createSaveWorkflowTool({ authorize });
+
+    const result = await (tool as any).execute(loopGraphWithPredicate, {
+      mastra: { addDynamicWorkflow },
+      requestContext,
+    });
+
+    expect(result).toEqual({ ok: true, id: 'wf-loop' });
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect(receivedRequestContext).toBe(requestContext);
+    expect(receivedDefinition).toStrictEqual(loopGraphWithPredicate);
+    expect(addDynamicWorkflow).toHaveBeenCalledWith(loopGraphWithPredicate);
+  });
+
+  it('does not call Mastra when the policy denies by throwing', async () => {
+    const addDynamicWorkflow = vi.fn().mockResolvedValue(undefined);
+    const tool = createSaveWorkflowTool({
+      authorize: async () => {
+        throw new Error('workflow save not authorized');
+      },
+    });
+
+    await expect(
+      (tool as any).execute(loopGraphWithPredicate, {
+        mastra: { addDynamicWorkflow },
+        requestContext: new RequestContext(),
+      }),
+    ).rejects.toThrow(/workflow save not authorized/);
+    expect(addDynamicWorkflow).not.toHaveBeenCalled();
   });
 });
