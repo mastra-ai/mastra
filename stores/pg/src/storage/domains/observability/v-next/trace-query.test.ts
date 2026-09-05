@@ -89,6 +89,58 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain('r."endedAt" IS NOT NULL');
   });
 
+  it('compiles typed feedback relations with one correlated existence check per clause', () => {
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR TRUE --" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                    { op: 'exists', path: 'comment' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.text.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.text).toContain('s."traceId" IS NOT NULL');
+    expect(compiled.text).toContain('s."traceId" = r."traceId"');
+    expect(compiled.text).toContain('s."valueNumber" IS NOT NULL AND s."valueNumber" <');
+    expect(compiled.text).toContain('s."valueString" IS NOT NULL AND s."valueString" IN');
+    expect(compiled.text).toContain('(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)');
+    expect(compiled.text).toContain('FROM "public"."mastra_feedback_events" s');
+    expect(compiled.text).not.toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain("rating' OR TRUE --");
+    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compilePostgresTraceQuery('public', plan()).text;
+    const feedbackOnly = compilePostgresTraceQuery(
+      'public',
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).text;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('mastra_feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
+  });
+
   it('uses total null semantics for negative predicates', () => {
     const compiled = compilePostgresTraceQuery(
       'public',
