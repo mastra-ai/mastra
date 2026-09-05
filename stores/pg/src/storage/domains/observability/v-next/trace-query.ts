@@ -1,6 +1,7 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
   TraceQueryCanonicalField,
+  TraceQueryFeedbackField,
   TraceQueryField,
   TraceQueryResponse,
   TraceQueryScoreField,
@@ -11,7 +12,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient, TxClient } from '../../../client';
-import { qualifiedTable, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { qualifiedTable, TABLE_FEEDBACK_EVENTS, TABLE_SCORE_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 
 type SqlFragment = { sql: string; values: unknown[] };
 type FieldRegistry<TField extends string> = Record<TField, string>;
@@ -39,6 +40,18 @@ const SCORE_FIELDS = {
   scorerId: 's."scorerId"',
   score: 's."score"',
 } satisfies FieldRegistry<TraceQueryScoreField>;
+
+const FEEDBACK_FIELDS = {
+  feedbackType: 's."feedbackType"',
+  feedbackSource: 's."feedbackSource"',
+  feedbackUserId: 's."feedbackUserId"',
+  sourceId: 's."sourceId"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
+  timestamp: 's."timestamp"',
+  comment: 's."comment"',
+} satisfies FieldRegistry<Exclude<TraceQueryFeedbackField, 'value'>>;
 
 const TRACE_SELECT = `
   r."traceId" AS "traceId",
@@ -114,6 +127,35 @@ function compileScalarPredicate<TField extends string>(
   return { sql: `${field} IS NOT NULL AND ${field} ${operator} ${parameter}`, values: [predicate.value] };
 }
 
+function compileFeedbackScalarPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameterOffset: number,
+): SqlFragment {
+  if (predicate.type === 'boolean') {
+    const values: unknown[] = [];
+    const parts = predicate.args.map(arg => {
+      const compiled = compileFeedbackScalarPredicate(arg, parameterOffset + values.length);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    });
+    return { sql: parts.join(predicate.operator === 'and' ? ' AND ' : ' OR '), values };
+  }
+  if (predicate.type === 'not') {
+    const compiled = compileFeedbackScalarPredicate(predicate.arg, parameterOffset);
+    return { sql: `NOT (${compiled.sql})`, values: compiled.values };
+  }
+  if (predicate.field !== 'value') {
+    return compileScalarPredicate(predicate, FEEDBACK_FIELDS, parameterOffset);
+  }
+  if (predicate.type === 'presence') {
+    const present = `(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)`;
+    return { sql: predicate.operator === 'exists' ? present : `NOT ${present}`, values: [] };
+  }
+  const sample = predicate.type === 'membership' ? predicate.values[0] : predicate.value;
+  const field = typeof sample === 'number' ? 's."valueNumber"' : 's."valueString"';
+  return compileScalarPredicate(predicate, { value: field }, parameterOffset);
+}
+
 function latestRootPredicate(spanTable: string): string {
   return `NOT EXISTS (
     SELECT 1 FROM ${spanTable} newer
@@ -142,8 +184,8 @@ function latestScorePredicate(scoreTable: string): string {
 
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
-  collections = new Set<'spans' | 'scores'>(),
-): Set<'spans' | 'scores'> {
+  collections = new Set<'spans' | 'scores' | 'feedback'>(),
+): Set<'spans' | 'scores' | 'feedback'> {
   if (!predicate) return collections;
   if (predicate.type === 'relation') {
     collections.add(predicate.collection);
@@ -157,12 +199,24 @@ function collectRelationCollections(
 
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset: number): SqlFragment {
   if (predicate.type === 'relation') {
-    const registry = predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS;
-    const compiled = compileScalarPredicate(predicate.predicate, registry, parameterOffset);
-    const table = predicate.collection === 'spans' ? 'current_spans' : 'current_scores';
+    const compiled =
+      predicate.collection === 'feedback'
+        ? compileFeedbackScalarPredicate(predicate.predicate, parameterOffset)
+        : compileScalarPredicate(
+            predicate.predicate,
+            predicate.collection === 'spans' ? SPAN_FIELDS : SCORE_FIELDS,
+            parameterOffset,
+          );
+    const table =
+      predicate.collection === 'spans'
+        ? 'current_spans'
+        : predicate.collection === 'scores'
+          ? 'current_scores'
+          : 'current_feedback';
     const existence = `EXISTS (
       SELECT 1 FROM ${table} s
-      WHERE s."traceId" = r."traceId"
+      WHERE s."traceId" IS NOT NULL
+        AND s."traceId" = r."traceId"
         AND (${compiled.sql})
     )`;
     return {
@@ -197,6 +251,7 @@ export interface CompiledPostgresTraceQuery {
 export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQueryPlan): CompiledPostgresTraceQuery {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
+  const feedbackTable = qualifiedTable(schema, TABLE_FEEDBACK_EVENTS);
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const relationCollections = collectRelationCollections(plan.where);
   const rootConditions = [
@@ -231,6 +286,26 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
       AND ${latestScorePredicate(scoreTable)}
+  )`);
+  }
+  if (relationCollections.has('feedback')) {
+    ctes.push(`current_feedback AS MATERIALIZED (
+    SELECT
+      s."traceId",
+      s."feedbackType",
+      s."feedbackSource",
+      s."feedbackUserId",
+      s."sourceId",
+      s."valueString",
+      s."valueNumber",
+      s."comment",
+      s."timestamp",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
+    FROM ${feedbackTable} s
+    WHERE s."traceId" IS NOT NULL
+      AND s."traceId" IN (SELECT "traceId" FROM root_scope)
   )`);
   }
 
