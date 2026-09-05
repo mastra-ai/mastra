@@ -362,7 +362,8 @@ export class AIV6Adapter {
     const hasTextParts = dbParts.some(part => part.type === 'text');
 
     for (const part of dbParts) {
-      parts.push(AIV6Adapter.toUIPart(part));
+      const uiPart = AIV6Adapter.toUIPart(part);
+      if (uiPart) parts.push(uiPart);
     }
 
     if (!hasToolInvocationParts || !hasReasoningParts || !hasFileParts || !hasTextParts) {
@@ -564,7 +565,7 @@ export class AIV6Adapter {
     };
   }
 
-  private static toUIPart(part: MastraMessagePart): AIV6Type.UIMessage['parts'][number] {
+  private static toUIPart(part: MastraMessagePart): AIV6Type.UIMessage['parts'][number] | undefined {
     if (part.type === 'tool-invocation') {
       const base = withOptionalFields(
         {
@@ -697,17 +698,18 @@ export class AIV6Adapter {
       ) as AIV6Type.UIMessage['parts'][number];
     }
 
-    return AIV6Adapter.toUIPartFromV5(
-      AIV5Adapter.toUIMessage({
-        id: 'tmp',
-        role: 'assistant',
-        createdAt: new Date(),
-        content: {
-          format: 2,
-          parts: [part],
-        },
-      }).parts[0]!,
-    );
+    const v5Part = AIV5Adapter.toUIMessage({
+      id: 'tmp',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [part],
+      },
+    }).parts[0];
+
+    // The v5 bridge omits empty reasoning parts before the first text delta.
+    return v5Part ? AIV6Adapter.toUIPartFromV5(v5Part) : undefined;
   }
 
   private static toUIPartFromV5(part: AIV5Type.UIMessage['parts'][number]): AIV6Type.UIMessage['parts'][number] {

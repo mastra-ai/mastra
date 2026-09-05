@@ -7,6 +7,69 @@ import type { MastraDBMessage } from '../../index';
 import { MessageList } from '../../index';
 
 describe('MessageList AI SDK v6 support', () => {
+  it('projects an opening empty reasoning part without throwing', () => {
+    const message: MastraDBMessage = {
+      id: 'opening-reasoning',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'reasoning', reasoning: '', details: [] }] },
+    };
+
+    const result = new MessageList().add(message, 'memory').get.all.aiV6.ui();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: message.id, role: 'assistant', parts: [] });
+    expect(message.content.parts).toEqual([{ type: 'reasoning', reasoning: '', details: [] }]);
+  });
+
+  it('keeps surrounding text, reasoning metadata and approvals when empty reasoning is omitted', () => {
+    const result = new MessageList()
+      .add(
+        {
+          id: 'mixed-reasoning',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Before' },
+              { type: 'reasoning', reasoning: '', details: [] },
+              {
+                type: 'reasoning',
+                reasoning: '',
+                details: [{ type: 'text', text: 'Preparing the requested task.' }],
+                providerMetadata: { test: { signature: 'test-signature' } },
+              },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: 'read-page',
+                  toolName: 'readPage',
+                  args: { url: 'https://example.com' },
+                  state: 'approval-requested',
+                  approval: { id: 'approve-page' },
+                },
+              },
+              { type: 'text', text: 'After' },
+            ],
+          },
+        } satisfies MastraDBMessage,
+        'memory',
+      )
+      .get.all.aiV6.ui();
+
+    expect(result[0]?.parts).toMatchObject([
+      { type: 'text', text: 'Before' },
+      {
+        type: 'reasoning',
+        text: 'Preparing the requested task.',
+        providerMetadata: { test: { signature: 'test-signature' } },
+      },
+      { type: 'tool-readPage', toolCallId: 'read-page', state: 'approval-requested', approval: { id: 'approve-page' } },
+      { type: 'text', text: 'After' },
+    ]);
+  });
+
   it('projects MastraDBMessage records to AI SDK v6 UI messages', () => {
     const messages: MastraDBMessage[] = [
       {
