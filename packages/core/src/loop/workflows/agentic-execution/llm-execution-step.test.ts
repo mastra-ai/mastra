@@ -1111,7 +1111,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       expect.objectContaining({
         type: 'step-start',
         payload: expect.objectContaining({
-          startedAt: expect.any(Date),
+          startedAt: expect.any(Number),
         }),
       }),
     );
