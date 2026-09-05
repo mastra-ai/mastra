@@ -91,6 +91,37 @@ const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra =>
   };
 };
 
+/**
+ * Normalizes MCP Apps UI metadata for backward compatibility with older hosts:
+ * if `_meta.ui.resourceUri` is set, also set the legacy flat `ui/resourceUri` key,
+ * and vice versa. Returns the input untouched when neither is present.
+ */
+const normalizeUiResourceUriMeta = (meta: Record<string, unknown>): Record<string, unknown> => {
+  const uiMeta = meta.ui as { resourceUri?: string } | undefined;
+  const legacyUri = meta[RESOURCE_URI_META_KEY] as string | undefined;
+  if (uiMeta?.resourceUri && !legacyUri) {
+    return { ...meta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
+  }
+  if (legacyUri && !uiMeta?.resourceUri) {
+    return { ...meta, ui: { ...((meta.ui as object) ?? {}), resourceUri: legacyUri } };
+  }
+  return meta;
+};
+
+/**
+ * Extracts the MCP Apps UI linkage (`ui.resourceUri` in both nested and legacy flat
+ * form) from a tool's descriptor `_meta`, or `undefined` when the tool has no app.
+ * Only the linkage is extracted: the rest of the descriptor `_meta` (e.g.
+ * `mastra.strict`, author-defined keys) describes the tool, not a call result.
+ */
+const getUiResourceUriMeta = (toolMeta: Record<string, unknown> | undefined): Record<string, unknown> | undefined => {
+  if (!toolMeta) return undefined;
+  const normalized = normalizeUiResourceUriMeta(toolMeta);
+  const resourceUri = (normalized.ui as { resourceUri?: string } | undefined)?.resourceUri;
+  if (!resourceUri) return undefined;
+  return { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri };
+};
+
 // RFC 5424 syslog severity ordering used by the MCP logging utility.
 // Higher numbers are more severe; messages below a client's minimum level are dropped.
 const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
@@ -990,17 +1021,7 @@ export class MCPServer extends MCPServerBase {
           }
           const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
           if (toolMeta) {
-            // Normalize UI metadata for backward compatibility with older hosts:
-            // If _meta.ui.resourceUri is set, also set the legacy flat key and vice versa
-            const uiMeta = toolMeta.ui as { resourceUri?: string } | undefined;
-            const legacyUri = toolMeta[RESOURCE_URI_META_KEY] as string | undefined;
-            if (uiMeta?.resourceUri && !legacyUri) {
-              toolSpec._meta = { ...toolMeta, [RESOURCE_URI_META_KEY]: uiMeta.resourceUri };
-            } else if (legacyUri && !uiMeta?.resourceUri) {
-              toolSpec._meta = { ...toolMeta, ui: { ...((toolMeta.ui as object) ?? {}), resourceUri: legacyUri } };
-            } else {
-              toolSpec._meta = toolMeta;
-            }
+            toolSpec._meta = normalizeUiResourceUriMeta(toolMeta);
           }
           return toolSpec;
         }),
@@ -1205,6 +1226,33 @@ export class MCPServer extends MCPServerBase {
               text: typeof result === 'string' ? result : JSON.stringify(result),
             },
           ];
+        }
+
+        // MCP Apps hosts read `_meta.ui.resourceUri` off the call result to open the app
+        // (#21277). Preserve any `_meta` an MCP-aware tool returned alongside
+        // `structuredContent`, and ensure the UI linkage is present in both nested and
+        // legacy form — from the author if they supplied one, else from the descriptor.
+        const authorMeta =
+          result &&
+          typeof result === 'object' &&
+          'structuredContent' in result &&
+          result._meta &&
+          typeof result._meta === 'object' &&
+          !Array.isArray(result._meta)
+            ? (result._meta as Record<string, unknown>)
+            : undefined;
+        // An author-supplied linkage (either form) wins over the descriptor's so nested and
+        // legacy keys never disagree; other author `ui.*` fields are kept.
+        const uiMeta = getUiResourceUriMeta(authorMeta) ?? getUiResourceUriMeta(tool.mcp?._meta);
+        if (uiMeta || authorMeta) {
+          const authorUi = authorMeta?.ui;
+          response._meta = {
+            ...authorMeta,
+            ...uiMeta,
+            ...(uiMeta && authorUi && typeof authorUi === 'object' && !Array.isArray(authorUi)
+              ? { ui: { ...(authorUi as Record<string, unknown>), ...(uiMeta.ui as Record<string, unknown>) } }
+              : {}),
+          };
         }
 
         return response;
