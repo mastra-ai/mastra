@@ -1,5 +1,14 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.7
+
+### Patch Changes
+
+- Stop advertising Bedrock models that cannot be served over Converse. Nine `bedrock-mantle` entries in the models.dev catalog carry a `provider` override pointing at a different endpoint and API shape, but every catalog id is handed to `createAmazonBedrock()`, so they appeared in the `/models` picker and in packs while being unreachable. They are now filtered out of the advertised catalog. ([#23061](https://github.com/mastra-ai/mastra/pull/23061))
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+
 ## 1.7.0-alpha.6
 
 ### Patch Changes
