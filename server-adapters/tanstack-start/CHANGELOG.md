@@ -1,5 +1,14 @@
 # @mastra/tanstack-start
 
+## 0.2.23-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/server@1.65.0-alpha.4
+  - @mastra/hono@1.7.7-alpha.4
+
 ## 0.2.23-alpha.3
 
 ### Patch Changes

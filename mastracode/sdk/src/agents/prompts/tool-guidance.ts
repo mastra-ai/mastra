@@ -8,6 +8,8 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  /** Subconscious knowledge tools are registered (experimental subconscious enabled). */
+  hasSubconscious?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
   /** Workspace-relative directory where plan mode can write plans. */
@@ -134,6 +136,53 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
       sections.push(`
 ${webTools.join(' / ')} — Search the web / extract page content
 - Use for looking up documentation, error messages, package APIs.`);
+    }
+  }
+
+  // --- Subconscious knowledge tools (all modes, conditionally available) ---
+
+  if (options.hasSubconscious) {
+    const knowledgeTools = ['knowledge_search', 'knowledge_read', 'knowledge_browse'].filter(name => !denied.has(name));
+    const hasAskMemory = !denied.has('ask_memory');
+    if (knowledgeTools.length > 0 || hasAskMemory) {
+      const lines = [
+        `
+# Subconscious Memory
+
+A background memory system (the "subconscious") runs alongside you. After conversations, it extracts durable knowledge — decisions, preferences, people, files, repos, work items — into a knowledge graph scoped to this project, visible across your sessions here. It also delivers reminders (\`<remembered>\`) and pinned knowledge into your context on its own; you do not manage those directly.`,
+      ];
+      if (knowledgeTools.length > 0) {
+        const bullets: string[] = [];
+        if (knowledgeTools.includes('knowledge_search')) {
+          bullets.push(
+            "- Use `knowledge_search` for a quick lexical + semantic lookup when you need a specific fact (a past decision, a person's role, what a file is for). Cheaper than re-deriving it from the codebase or asking the user.",
+          );
+        }
+        if (knowledgeTools.includes('knowledge_read')) {
+          bullets.push('- Use `knowledge_read` to open a node by name or ID and see the records about it.');
+        }
+        if (knowledgeTools.includes('knowledge_browse')) {
+          bullets.push(
+            "- Use `knowledge_browse` to list nodes by kind or name prefix, or to walk a node's mentions and backlinks.",
+          );
+        }
+        if (!denied.has('recall')) {
+          bullets.push(
+            '- Prefer these over `recall` when the question is about durable facts rather than what was said in a specific past conversation.',
+          );
+        }
+        lines.push(`
+${knowledgeTools.map(name => `**${name}**`).join(' / ')} — Query the knowledge graph directly
+${bullets.join('\n')}`);
+      }
+      if (hasAskMemory) {
+        lines.push(`
+**ask_memory** — Ask the reminder sidekick a question about existing memory
+- Use only when the answer is not already in your context and a direct search is not enough: open-ended questions ("what did we decide about X and why?") or questions that need synthesis across several memories. It answers from what is already remembered; it does not store anything.
+- It is ASYNCHRONOUS. The tool returns as soon as the question is accepted; the answer arrives later as one or more \`<remind-answer source="subconscious" agent="remind" replyId="…" moreComing="true|false">\` messages in your context. Keep working — do not poll or wait, and do not re-ask the same question.
+- Treat a message with \`moreComing="true"\` as partial; the reply is complete only when \`moreComing="false"\` arrives. Fold the answer into your work and cite it as remembered context rather than as something you verified yourself.`);
+      }
+      sections.push(lines.join('\n'));
     }
   }
 

@@ -474,6 +474,7 @@ export interface WorkItemRow {
   id: string;
   orgId: string;
   factoryProjectId: string;
+  board: string | null;
   externalSource: ExternalWorkItemSource | null;
   parentWorkItemId: string | null;
   title: string;
@@ -512,6 +513,7 @@ export interface WorkItemRow {
 }
 
 export interface CreateWorkItemInput {
+  board?: string;
   externalSource?: ExternalWorkItemSource | null;
   parentWorkItemId?: string | null;
   title: string;
@@ -521,6 +523,7 @@ export interface CreateWorkItemInput {
 }
 
 export interface UpdateWorkItemInput {
+  board?: string;
   parentWorkItemId?: string | null;
   title?: string;
   stages?: WorkItemStage[];
@@ -547,6 +550,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     id: { type: 'uuid-pk' },
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
+    board: { type: 'text', nullable: true },
     external_source: { type: 'json', nullable: true },
     source_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
@@ -594,6 +598,7 @@ interface WorkItemDbRow extends Record<string, unknown> {
   id: string;
   org_id: string;
   factory_project_id: string;
+  board: string | null;
   external_source: ExternalWorkItemSource | null;
   source_key: string | null;
   parent_work_item_id: string | null;
@@ -630,6 +635,7 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     id: row.id,
     orgId: row.org_id,
     factoryProjectId: String(row.factory_project_id),
+    board: row.board ?? null,
     externalSource: row.external_source,
     parentWorkItemId: row.parent_work_item_id,
     title: row.title,
@@ -654,6 +660,7 @@ const toRow = toWorkItem;
 
 function patchColumns(changes: Partial<WorkItemRow>): Partial<WorkItemDbRow> {
   return {
+    ...(changes.board !== undefined ? { board: changes.board } : {}),
     ...(changes.parentWorkItemId !== undefined ? { parent_work_item_id: changes.parentWorkItemId } : {}),
     ...(changes.title !== undefined ? { title: changes.title } : {}),
     ...(changes.stages !== undefined ? { stages: changes.stages } : {}),
@@ -678,6 +685,14 @@ function priorState(row: WorkItemDbRow): WorkItemPriorState {
 
 export class WorkItemRelationError extends Error {
   readonly code = 'invalid_work_item_relation';
+}
+
+export class WorkItemUpdateConflictError extends Error {
+  readonly code = 'work_item_update_conflict';
+
+  constructor(readonly reason: 'board' | 'revision') {
+    super(`Work item ${reason} precondition failed`);
+  }
 }
 
 export function validateParentRelation(
@@ -749,6 +764,7 @@ function applyUpdate({
 }): Partial<WorkItemDbRow> {
   const now = new Date();
   return {
+    ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.stages !== undefined
@@ -2767,6 +2783,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             org_id: input.orgId,
             created_by: input.userId,
             factory_project_id: input.factoryProjectId,
+            board: create.board ?? null,
             external_source: create.externalSource ?? null,
             source_key: externalSourceKey(create.externalSource),
             parent_work_item_id: create.parentWorkItemId ?? null,
@@ -2946,6 +2963,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             );
           }
           return {
+            board: reuseMode === 'non-stage' ? current.board : (input.board ?? current.board ?? null),
             external_source: input.externalSource ?? null,
             ...applyUpdate({ current, userId, input: patch }),
           };
@@ -2967,6 +2985,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const row = await ops.insertOne<WorkItemDbRow>('work_items', {
       org_id: orgId,
       factory_project_id: factoryProjectId,
+      board: input.board ?? null,
       external_source: input.externalSource ?? null,
       source_key: key,
       parent_work_item_id: input.parentWorkItemId ?? null,
@@ -3016,16 +3035,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     id,
     userId,
     patch,
+    expectedRevision,
+    expectedBoard,
   }: {
     orgId: string;
     id: string;
     userId: string;
     patch: UpdateWorkItemInput;
+    expectedRevision?: number;
+    expectedBoard?: string | null;
   }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
       const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
         previous = priorState(current);
+        if (expectedBoard !== undefined && current.board !== expectedBoard) {
+          throw new WorkItemUpdateConflictError('board');
+        }
+        if (expectedRevision !== undefined && current.revision !== expectedRevision) {
+          throw new WorkItemUpdateConflictError('revision');
+        }
         if (patch.parentWorkItemId !== undefined) {
           validateParentRelation(
             await this.#listWithOps(ops, orgId, current.factory_project_id),

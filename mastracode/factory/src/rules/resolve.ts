@@ -1,9 +1,9 @@
+import type { BoardRegistry } from '../boards/index.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleLeaf,
   FactoryLinearEventName,
   FactoryLinearRuleLeaf,
-  FactoryRuleBoard,
   FactoryRuleHandler,
   FactoryRuleSource,
   FactoryRuleStage,
@@ -21,16 +21,23 @@ export interface ResolvedFactoryStageRule {
 export function resolveFactoryStageRules(
   rules: FactoryRules,
   input: {
-    board: FactoryRuleBoard;
+    board: string;
     source: FactoryRuleSource;
     fromStage: FactoryRuleStage;
     toStage: FactoryRuleStage;
     initialEntry?: boolean;
     reenter?: boolean;
   },
+  boardRegistry?: BoardRegistry,
 ): ResolvedFactoryStageRule[] {
   if (input.fromStage === input.toStage && !input.initialEntry && !input.reenter) return [];
-  const boardRules = rules[input.board];
+  const boardRules =
+    input.board === 'work'
+      ? rules.work
+      : input.board === 'review'
+        ? rules.review
+        : boardRegistry?.get(input.board)?.rules;
+  if (!boardRules) return [];
   const resolved: ResolvedFactoryStageRule[] = [];
   // Same-stage reentry re-runs the stage's entry work; the item never left the
   // stage, so its exit rules must not fire.

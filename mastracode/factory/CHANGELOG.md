@@ -1,5 +1,53 @@
 # @mastra/factory
 
+## 0.13.0-alpha.6
+
+### Minor Changes
+
+- Added `workBoard` and `WorkBoardPhase` exports so developers can inspect the built-in Work board phases and validate lifecycle transitions. ([#23078](https://github.com/mastra-ai/mastra/pull/23078))
+
+  ```ts
+  import { workBoard } from '@mastra/factory';
+
+  workBoard.allowsTransition('planning', 'execute');
+  ```
+
+- Added a typed board definition API and migrated the built-in Review board to declare its phases, transitions, and phase behavior through it. This establishes the contract for future custom board installation and Mastra Workflow integration. ([#23029](https://github.com/mastra-ai/mastra/pull/23029))
+
+  ```ts
+  import { defineBoard } from '@mastra/factory';
+
+  const board = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'prepare',
+    phases: {
+      prepare: { title: 'Prepare', next: 'verify' },
+      verify: { title: 'Verify', outcomes: { approved: 'done', rejected: 'prepare' } },
+      done: { title: 'Done' },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Refreshed the live-session marker on board cards. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+  A card with a running session used to show one point of light crawling round its outline. It now shows pools of light resting on that outline.
+
+  - While the agent works, the pools drift along the rim.
+  - Once the session is waiting on you, they park and the whole rim comes up lit.
+
+- Tightened the board card's corner. The radius now lives in one token instead of being repeated on every card-shaped surface, and it is tied to the buttons inside the card: a card's corner is the pill's radius plus the padding around it, so the two stay concentric. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+- Fixed Linear tools being unavailable in Factory board runs. ([#23079](https://github.com/mastra-ai/mastra/pull/23079))
+
+- Fixed board card buttons breaking their labels across two lines. The actions on a card now keep their width and the worker's name gives way instead, so "Re-review" and "Open session" stay on one line in a narrow column. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`aeaf231`](https://github.com/mastra-ai/mastra/commit/aeaf23135d39c92f3174969ddeb0330072f422f0)]:
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/code-sdk@1.7.0-alpha.5
+
 ## 0.13.0-alpha.5
 
 ### Patch Changes

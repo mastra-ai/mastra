@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.65.0-alpha.4
+
+### Minor Changes
+
+- Added tenant-scoped trace deletion arguments for observability storage with a limit of 1,000 trace IDs per batch. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+  ```typescript
+  await storage.batchDeleteTraces({ traceIds: ['trace-1'], organizationId: 'org-1' });
+  ```
+
+### Patch Changes
+
+- Fixed dynamic agent models being resolved repeatedly when an agent uses tools from multiple sources. Each generation or stream now consistently uses a single model snapshot for all tools, including per-call model overrides. ([#23080](https://github.com/mastra-ai/mastra/pull/23080))
+
 ## 1.65.0-alpha.3
 
 ### Minor Changes

@@ -738,6 +738,7 @@ describe('Workspace tools receive workspace via ToolOptions fallback (GH-14203)'
     // workspace baked into ToolOptions at build time (the fix).
     const coreTools = await (agent as any).listWorkspaceTools({
       requestContext: new RequestContext(),
+      getModel: () => agent.getModel(),
     });
 
     const listFilesCoreTool = coreTools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES];

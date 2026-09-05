@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { allowsBuiltInBoardTransition, builtInBoard } from '../boards/index.js';
+import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -59,6 +60,7 @@ export interface FactoryTransitionRequest {
 export interface FactoryTransitionServiceOptions {
   rules: FactoryRules;
   storage: WorkItemsStorage;
+  boards?: BoardRegistry;
   timeoutMs?: number;
   /**
    * Called after a transition commits into a terminal stage (`done` /
@@ -213,6 +215,7 @@ async function withRuleTimeout<T>(operation: Promise<T>, timeoutMs: number): Pro
 
 export class FactoryTransitionService {
   readonly #rules: FactoryRules;
+  readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
@@ -221,6 +224,7 @@ export class FactoryTransitionService {
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
+    this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
@@ -256,7 +260,25 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    if ((request.board === 'review') !== (source === 'pullRequest')) {
+    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    if (item.board === null && !this.#boards.has(legacyBoard)) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'This legacy work item has no assigned board. Assign an installed board and phase through the work-item PATCH endpoint before transitioning it.',
+      );
+    }
+    const itemBoard = item.board ?? legacyBoard;
+    if (request.board !== itemBoard) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        `The work item belongs to board "${itemBoard}", not "${request.board}".`,
+      );
+    }
+    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -264,17 +286,28 @@ export class FactoryTransitionService {
         'The work item does not belong to the requested board.',
       );
     }
-    const fromStage = currentStage(item.stages);
-    if (!fromStage) {
+    const board = this.#boards.get(request.board);
+    if (!board) {
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
-        'The work item does not have one canonical Factory stage.',
+        `Board "${request.board}" is not installed.`,
       );
     }
-    if (!allowsBuiltInBoardTransition(request.board, fromStage, request.stage)) {
-      const board = builtInBoard(request.board);
+    const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
+    if (!fromStage || !Object.prototype.hasOwnProperty.call(board.phases, fromStage)) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'The work item does not have one canonical phase on the requested board.',
+      );
+    }
+    if (
+      !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
+      !board.allowsTransition(fromStage, request.stage)
+    ) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -372,14 +405,18 @@ export class FactoryTransitionService {
       evaluation = await withRuleTimeout(
         (async () => {
           const decisions: FactoryCommitDecision[] = [];
-          for (const rule of resolveFactoryStageRules(this.#rules, {
-            board: request.board,
-            source,
-            fromStage,
-            toStage: request.stage,
-            initialEntry: request.initialEntry,
-            reenter: request.reenter,
-          })) {
+          for (const rule of resolveFactoryStageRules(
+            this.#rules,
+            {
+              board: request.board,
+              source,
+              fromStage,
+              toStage: request.stage,
+              initialEntry: request.initialEntry,
+              reenter: request.reenter,
+            },
+            this.#boards,
+          )) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
               stage: rule.phase === 'exit' ? fromStage : request.stage,

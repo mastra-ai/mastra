@@ -1,5 +1,18 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.5
+
+### Patch Changes
+
+- Improved the agent's guidance for memory tools. ([#23039](https://github.com/mastra-ai/mastra/pull/23039))
+
+- Updated dependencies [[`fce0b9f`](https://github.com/mastra-ai/mastra/commit/fce0b9f1c3991acdb7ec7c9ada78bc39762319c1), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`0c62271`](https://github.com/mastra-ai/mastra/commit/0c622712c3e62fb3108ec6090f2187df38666437), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e)]:
+  - @mastra/memory@1.28.3-alpha.2
+  - @mastra/libsql@1.22.4-alpha.0
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/pg@1.23.0-alpha.1
+  - @mastra/duckdb@1.7.0-alpha.1
+
 ## 1.7.0-alpha.4
 
 ### Patch Changes

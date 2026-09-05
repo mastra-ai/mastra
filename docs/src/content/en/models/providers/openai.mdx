@@ -7,7 +7,7 @@ description: "Browse OpenAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
-Access 47 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 48 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -350,6 +350,18 @@ for await (const chunk of stream) {
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 12
+  },
+  {
+    "model": "openai/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
   },
   {
     "model": "openai/gpt-image-1-mini",
