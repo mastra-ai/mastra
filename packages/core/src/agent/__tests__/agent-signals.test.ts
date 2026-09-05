@@ -3441,20 +3441,198 @@ describe('Agent signals', () => {
     expect(restored[0]).toMatchObject({ contents: 'steer follow-up' });
   });
 
-  it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
+  it('keeps approval suspensions discoverable and blocks idle wake', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new EventEmitterPubSub();
     const agent = {
-      id: `generic-suspended-${toolName}`,
+      id: 'approval-suspended-agent',
       stream: vi.fn(),
     } as unknown as Agent<any, any, any, any>;
     const idleAgent = {
-      id: `idle-agent-${toolName}`,
+      id: 'idle-agent-approval',
       stream: vi.fn(),
     } as unknown as Agent<any, any, any, any>;
-    const runId = `generic-suspended-run-${toolName}`;
-    const threadId = `generic-suspended-thread-${toolName}`;
-    const resourceId = `generic-suspended-user-${toolName}`;
+    const runId = 'approval-suspended-run';
+    const threadId = 'approval-suspended-thread';
+    const resourceId = 'approval-suspended-user';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                payload: { toolCallId: 'tool-call-approval-1', toolName: 'dangerous_tool' },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for approval suspended run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for approval suspended chunk');
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      // Approval suspensions resume through the explicit approve/decline APIs,
+      // which re-enter the parked loop and drain this queue — so the message
+      // stays queued and no follow-up run starts.
+      const queuedForSuspendedRun = runtime.sendMessage(
+        agent,
+        'Resume-adjacent input',
+        { resourceId, threadId },
+        pubsub,
+      );
+      await expect(queuedForSuspendedRun.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      expect((agent as any).stream).not.toHaveBeenCalled();
+
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
+        type: 'user',
+        contents: 'Resume-adjacent input',
+      });
+
+      const idleWake = runtime.sendSignal(
+        idleAgent,
+        createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
+        { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+        pubsub,
+      );
+      await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
+      expect((idleAgent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each(['request_access', 'ask_user'])(
+    'hands the thread to a queued follow-up once a %s (generic) suspension parks',
+    async toolName => {
+      const runtime = new AgentThreadStreamRuntime();
+      const pubsub = new EventEmitterPubSub();
+      const agent = {
+        id: `generic-suspended-${toolName}`,
+        stream: vi.fn().mockResolvedValue({ runId: `follow-up-run-${toolName}` }),
+      } as unknown as Agent<any, any, any, any>;
+      const idleAgent = {
+        id: `idle-agent-${toolName}`,
+        stream: vi.fn(),
+      } as unknown as Agent<any, any, any, any>;
+      const runId = `generic-suspended-run-${toolName}`;
+      const threadId = `generic-suspended-thread-${toolName}`;
+      const resourceId = `generic-suspended-user-${toolName}`;
+      const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+      const events: any[] = [];
+      let finishRun!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finishRun = resolve;
+      });
+      await pubsub.subscribe(topic, event => events.push(event.data));
+      const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+
+      try {
+        runtime.registerRun(
+          agent,
+          {
+            runId,
+            status: 'suspended',
+            fullStream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'start', runId });
+                controller.enqueue({
+                  type: 'tool-call-suspended',
+                  runId,
+                  payload: { toolCallId: `tool-call-${toolName}`, toolName },
+                });
+                controller.close();
+              },
+            }),
+            _waitUntilFinished: () => finished,
+          } as any,
+          { memory: { thread: threadId, resource: resourceId } } as any,
+          pubsub,
+        );
+
+        await withTimeout(iterator.next(), 'Timed out waiting for generic suspended run start');
+        await withTimeout(iterator.next(), 'Timed out waiting for generic suspended chunk');
+        expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+        expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+        // An unrelated agent still cannot steal the thread while the run parks.
+        const idleWake = runtime.sendSignal(
+          idleAgent,
+          createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
+          { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+          pubsub,
+        );
+        await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
+        expect((idleAgent as any).stream).not.toHaveBeenCalled();
+
+        // Queued while the run is still winding down to 'suspended': accepted as
+        // a queued delivery, not started yet.
+        const queuedForSuspendedRun = runtime.sendMessage(
+          agent,
+          'Resume-adjacent input',
+          { resourceId, threadId },
+          pubsub,
+        );
+        await expect(queuedForSuspendedRun.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+        expect((agent as any).stream).not.toHaveBeenCalled();
+
+        // Once the run parks, a generic suspension can never drain the queue
+        // itself (it only resumes through the model), so the runtime hands the
+        // thread to a follow-up run carrying the queued message.
+        finishRun();
+        await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+        await waitForCondition(() => (agent as any).stream.mock.calls.length === 1);
+        expect((agent as any).stream.mock.calls[0][0]).toMatchObject({
+          type: 'user',
+          contents: 'Resume-adjacent input',
+        });
+        expect(runtime.drainPendingSignals(runId, pubsub)).toHaveLength(0);
+      } finally {
+        finishRun();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
+  it('hands the thread to a queueMessage sent after a generic suspension parked', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: 'generic-parked-queue-agent',
+      stream: vi.fn().mockResolvedValue({ runId: 'queued-follow-up-run' }),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'generic-parked-queue-run';
+    const threadId = 'generic-parked-queue-thread';
+    const resourceId = 'generic-parked-queue-user';
     const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
     const events: any[] = [];
     let finishRun!: () => void;
@@ -3477,7 +3655,7 @@ describe('Agent signals', () => {
               controller.enqueue({
                 type: 'tool-call-suspended',
                 runId,
-                payload: { toolCallId: `tool-call-${toolName}`, toolName },
+                payload: { toolCallId: 'tool-call-queue', toolName: 'ask_user' },
               });
               controller.close();
             },
@@ -3488,38 +3666,164 @@ describe('Agent signals', () => {
         pubsub,
       );
 
-      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended run start');
-      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended chunk');
-      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
-      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
-
-      const queuedForSuspendedRun = runtime.sendMessage(
-        agent,
-        'Resume-adjacent input',
-        { resourceId, threadId },
-        pubsub,
-      );
-      await expect(queuedForSuspendedRun.accepted).resolves.toMatchObject({ action: 'deliver', runId });
-      expect((agent as any).stream).not.toHaveBeenCalled();
-      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
-        type: 'user',
-        contents: 'Resume-adjacent input',
-      });
-
+      await withTimeout(iterator.next(), 'Timed out waiting for parked run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for parked run suspended chunk');
       finishRun();
       await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
-      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
-      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
 
-      const idleWake = runtime.sendSignal(
-        idleAgent,
-        createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
-        { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+      // queueMessage against a fully parked generic run: "when the run completes"
+      // is never, so the runtime hands the thread over immediately.
+      const queued = runtime.queueMessage(agent, 'Queued while parked', { resourceId, threadId }, pubsub);
+      await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => (agent as any).stream.mock.calls.length === 1);
+      expect((agent as any).stream.mock.calls[0][0]).toMatchObject({
+        type: 'user',
+        contents: 'Queued while parked',
+      });
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('hands the thread to a cross-process follow-up targeting a parked generic suspension', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: 'generic-parked-remote-agent',
+      stream: vi.fn().mockResolvedValue({ runId: 'remote-follow-up-run' }),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'generic-parked-remote-run';
+    const threadId = 'generic-parked-remote-thread';
+    const resourceId = 'generic-parked-remote-user';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: 'tool-call-remote', toolName: 'ask_user' },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
         pubsub,
       );
-      await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
-      expect((idleAgent as any).stream).not.toHaveBeenCalled();
-      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+
+      await withTimeout(iterator.next(), 'Timed out waiting for parked run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for parked run suspended chunk');
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+
+      // A non-owning instance forwards follow-ups for runs it does not own as
+      // `signal-enqueued` with `preRun: false` — the owning instance must hand
+      // the thread over instead of stranding the signal in the pending queue.
+      await pubsub.publish(topic, {
+        type: 'signal-enqueued',
+        runId,
+        data: {
+          type: 'signal-enqueued',
+          runId,
+          signal: createSignal({ type: 'user-message', contents: 'Cross-pod follow-up' }),
+          sourceId: 'another-instance',
+        },
+      });
+      await waitForCondition(() => (agent as any).stream.mock.calls.length === 1);
+      expect((agent as any).stream.mock.calls[0][0]).toMatchObject({
+        type: 'user',
+        contents: 'Cross-pod follow-up',
+      });
+      expect(runtime.drainPendingSignals(runId, pubsub)).toHaveLength(0);
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps queuing when a run parks on mixed approval and generic suspensions', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: 'mixed-suspended-agent',
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'mixed-suspended-run';
+    const threadId = 'mixed-suspended-thread';
+    const resourceId = 'mixed-suspended-user';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: 'tool-call-generic', toolName: 'ask_user' },
+              });
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                payload: { toolCallId: 'tool-call-approval-mixed', toolName: 'dangerous_tool' },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for mixed suspended run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for mixed generic chunk');
+      await withTimeout(iterator.next(), 'Timed out waiting for mixed approval chunk');
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+
+      // The approval suspension makes approve/decline the resume path, and the
+      // resumed loop drains the queue — so no follow-up run may start.
+      const queued = runtime.sendMessage(agent, 'Waiting on approval', { resourceId, threadId }, pubsub);
+      await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      await new Promise(resolve => setImmediate(resolve));
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
+        type: 'user',
+        contents: 'Waiting on approval',
+      });
     } finally {
       finishRun();
       subscription.unsubscribe();
