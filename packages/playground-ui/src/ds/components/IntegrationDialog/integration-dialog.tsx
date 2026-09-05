@@ -24,17 +24,17 @@ const AUTH_TYPE_LABELS: Record<string, string> = {
   OAUTH2_CC: 'OAuth',
   MCP_OAUTH2: 'OAuth',
   MCP_OAUTH2_GENERIC: 'OAuth',
-  API_KEY: 'API key',
-  BASIC: 'Basic auth',
+  API_KEY: 'API Key',
+  BASIC: 'Basic Auth',
   APP: 'App',
   TBA: 'Token',
   JWT: 'JWT',
-  TWO_STEP: 'Two-step',
+  TWO_STEP: 'Two-Step',
   SIGNATURE: 'Signature',
   AWS_SIGV4: 'AWS SigV4',
   CUSTOM: 'Custom',
   INSTALL_PLUGIN: 'Plugin',
-  NONE: 'No auth',
+  NONE: 'No Auth',
 };
 
 function authTypeLabel(authType: string) {

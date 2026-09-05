@@ -11,6 +11,7 @@ const items = [
   { id: 'render-mcp', name: 'Render (MCP)' },
   { id: 'sanity-mcp', name: 'Sanity', badge: 'MCP' },
   { id: 'notion', name: 'Notion', authType: 'OAUTH2' },
+  { id: 'resend', name: 'Resend', authType: 'API_KEY' },
   { id: 'replicate-mcp', name: 'Replicate (MCP)', authType: 'MCP_OAUTH2' },
 ];
 
@@ -108,6 +109,7 @@ describe('IntegrationDialog auth type', () => {
       const button = screen.getByRole('button', { name: 'Notion OAuth' });
       expect(button.lastElementChild?.textContent).toBe('OAuth');
       expect(button.lastElementChild?.className).toContain('ml-auto');
+      expect(screen.getByRole('button', { name: 'Resend API Key' })).toBeDefined();
     });
 
     it('shows MCP as a badge next to the name and its OAuth method on the right', () => {
