@@ -23,6 +23,7 @@ export interface RawTraceQuerySpan {
   name: string;
   spanType: string;
   attributes: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
   error: unknown | null;
   threadId: string | null;
   resourceId: string | null;
@@ -71,6 +72,7 @@ const span = (
   name: spanId,
   spanType: 'agent_run',
   attributes: null,
+  metadata: null,
   error: null,
   threadId: null,
   resourceId: null,
@@ -123,6 +125,21 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       startedAt: '2026-08-05T10:00:00.000Z',
       endedAt: '2026-08-05T10:00:02.000Z',
       entityName: 'support-agent',
+      metadata: {
+        messageId: 'message-a',
+        parentMessageId: 'message-parent',
+        actorRole: 'assistant',
+        ' actorRole': 'leading-key',
+        'actorRole ': 'trailing-key',
+        threadId: 'metadata-thread-1',
+        api_key: 'metadata-api-key',
+        protocolVersion: 'v2',
+        temporalRunId: 'temporal-a',
+        externalTraceId: 'external-a',
+        emptyValue: '',
+        numericValue: 42,
+        nestedValue: { child: 'value' },
+      },
     }),
     span(11, 'trace-a', 'span-a-tool', {
       parentSpanId: 'root-a',
@@ -403,6 +420,64 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'filters by portable top-level string metadata dimensions',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-a' } },
+          { op: 'eq', left: { path: 'metadata.parentMessageId' }, right: { literal: 'message-parent' } },
+          { op: 'eq', left: { path: 'metadata.actorRole' }, right: { literal: 'assistant' } },
+          { op: 'eq', left: { path: 'metadata.threadId' }, right: { literal: 'metadata-thread-1' } },
+          { op: 'eq', left: { path: 'metadata.api_key' }, right: { literal: 'metadata-api-key' } },
+          { op: 'eq', left: { path: 'metadata.protocolVersion' }, right: { literal: 'v2' } },
+          { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'temporal-a' } },
+          { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'external-a' } },
+          { op: 'notExists', path: 'metadata.emptyValue' },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'preserves exact metadata keys containing whitespace',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'metadata. actorRole' }, right: { literal: 'leading-key' } },
+          { op: 'eq', left: { path: '${metadata.actorRole }' }, right: { literal: 'trailing-key' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not match an exact metadata key through its trimmed spelling',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.actorRole' }, right: { literal: 'leading-key' } },
+    },
+    expected: [],
+  },
+  {
+    name: 'uses total missing semantics for metadata predicates',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'notExists', path: 'metadata.parentMessageId' },
+          { op: 'ne', left: { path: 'metadata.actorRole' }, right: { literal: 'assistant' } },
+          { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
   },
   {
     name: 'binds tool name, failure, identity, and lineage to one current span',
@@ -1008,6 +1083,12 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
 }
 
 function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
+  const metadata = Object.fromEntries(
+    Object.entries(root.metadata ?? {}).flatMap(([key, value]) => {
+      if (typeof value !== 'string' || value.trim() === '') return [];
+      return [[`metadata.${key}`, value.trim()]];
+    }),
+  );
   return {
     traceId: root.traceId,
     threadId: root.threadId,
@@ -1018,6 +1099,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
+    ...metadata,
   };
 }
 
