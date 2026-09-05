@@ -46,6 +46,7 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
   WorkItemRelationError,
+  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
@@ -917,7 +918,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           }
 
           try {
-            const updated = await workItems.update({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
+            const updated = await workItems.update({
+              orgId: tenant.orgId,
+              id,
+              userId: tenant.userId,
+              patch,
+              ...(patch.board !== undefined ? { expectedRevision: existing.revision, expectedBoard: null } : {}),
+            });
             if (!updated) return c.json({ error: 'Work item not found' }, 404);
             await this.#auditWorkItemPatch({
               context: loose(c),
@@ -929,6 +936,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
+            }
+            if (error instanceof WorkItemUpdateConflictError && patch.board !== undefined) {
+              return c.json({ error: 'board_already_assigned' }, 409);
             }
             throw error;
           }

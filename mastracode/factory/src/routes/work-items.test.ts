@@ -377,6 +377,57 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect((await response.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
   });
 
+  it('atomically assigns a legacy item to only one installed board', async () => {
+    const { item } = await seed.workItems.upsert({
+      orgId: 'org1',
+      userId: 'u1',
+      factoryProjectId: PROJECT_ID,
+      input: { title: 'Legacy item', stages: ['intake'], sessions: {} },
+    });
+    const releaseBoard = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: { queued: {} },
+    });
+    const supportBoard = defineBoard({
+      id: 'support',
+      title: 'Support',
+      initialPhase: 'backlog',
+      phases: { backlog: {} },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [releaseBoard, supportBoard], includeDefaultBoards: false }),
+    );
+
+    const responses = await Promise.all([
+      app.request(`/web/factory/work-items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ board: 'release', stages: ['queued'] }),
+      }),
+      app.request(`/web/factory/work-items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ board: 'support', stages: ['backlog'] }),
+      }),
+    ]);
+
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(await responses.find(response => response.status === 409)?.json()).toEqual({
+      error: 'board_already_assigned',
+    });
+    const assigned = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect([
+      { board: 'release', stages: ['queued'] },
+      { board: 'support', stages: ['backlog'] },
+    ]).toContainEqual({ board: assigned?.board, stages: assigned?.stages });
+  });
+
   it('rejects creation outside exclusive intake', async () => {
     const res = await json(
       'POST',

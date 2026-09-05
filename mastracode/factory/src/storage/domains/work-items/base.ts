@@ -687,6 +687,10 @@ export class WorkItemRelationError extends Error {
   readonly code = 'invalid_work_item_relation';
 }
 
+export class WorkItemUpdateConflictError extends Error {
+  readonly code = 'work_item_update_conflict';
+}
+
 export function validateParentRelation(
   projectItems: WorkItemRow[],
   itemId: string | undefined,
@@ -3027,16 +3031,26 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     id,
     userId,
     patch,
+    expectedRevision,
+    expectedBoard,
   }: {
     orgId: string;
     id: string;
     userId: string;
     patch: UpdateWorkItemInput;
+    expectedRevision?: number;
+    expectedBoard?: string | null;
   }): Promise<{ item: WorkItemRow; previous: WorkItemPriorState } | null> {
     const run = async (ops: FactoryStorageOps) => {
       let previous = emptyPrior();
       const row = await ops.updateAtomic<WorkItemDbRow>('work_items', { org_id: orgId, id }, async current => {
         previous = priorState(current);
+        if (
+          (expectedRevision !== undefined && current.revision !== expectedRevision) ||
+          (expectedBoard !== undefined && current.board !== expectedBoard)
+        ) {
+          throw new WorkItemUpdateConflictError();
+        }
         if (patch.parentWorkItemId !== undefined) {
           validateParentRelation(
             await this.#listWithOps(ops, orgId, current.factory_project_id),
