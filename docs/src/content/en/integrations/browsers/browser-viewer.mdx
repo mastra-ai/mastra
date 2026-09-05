@@ -65,7 +65,8 @@ const browserAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
   instructions: `You are a web automation assistant.
-Use browser-use commands to navigate and interact with websites.`,
+Run browser-use with Python on stdin to navigate and interact with websites.
+Read the installed Browser Use skill before writing a command.`,
   memory: new Memory(),
 })
 
@@ -78,7 +79,16 @@ export const mastra = new Mastra({
 })
 ```
 
-When the agent runs a CLI command like `browser-use open https://example.com`, Mastra automatically launches Chrome and injects the CDP connection, plus starts streaming the screencast to Studio.
+The current Browser Use CLI reads Python from stdin. For example, the agent can run this command through `workspace_execute_command`:
+
+```bash
+browser-use <<'PY'
+new_tab("https://example.com")
+print(page_info())
+PY
+```
+
+Mastra launches Chrome and passes its CDP endpoint and an isolated daemon name through `BU_CDP_WS` and `BU_NAME`. The output includes the Example Domain page title. Screencast frames stream to Studio.
 
 ## How it works
 
@@ -116,7 +126,7 @@ pip install browser-use
 npx skills add browser-use/browser-use --skill browser-use
 ```
 
-CDP flag: `--cdp-url`
+Stdin commands use `BU_CDP_WS` and `BU_NAME`, which Mastra injects automatically. CLI 3 removed the `open` subcommand, `--cdp-url`, and `--session`. Mastra still uses those flags for legacy subcommand invocations from older installed CLIs.
 
 ### `browse`
 

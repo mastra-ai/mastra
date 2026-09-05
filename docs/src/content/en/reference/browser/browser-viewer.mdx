@@ -271,7 +271,7 @@ await viewer.injectKeyboardEvent({
 
 ## Supported CLIs
 
-Each CLI must be installed separately. Each also publishes a [skill](/docs/sandbox/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
+Each CLI must be installed separately. Each also publishes a [skill](/docs/sandbox/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the provider's flag or environment variables.
 
 Unlike SDK providers, `BrowserViewer` doesn't provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
 
@@ -286,7 +286,7 @@ npx skills add vercel-labs/agent-browser
 
 ### [`browser-use`](https://pypi.org/project/browser-use/)
 
-Config value: `'browser-use'` · CDP flag: `--cdp-url`
+Config value: `'browser-use'`. Current Python-on-stdin commands receive `BU_CDP_WS` and `BU_NAME`. Legacy subcommands retain `--cdp-url` and `--session` for older installed CLIs.
 
 ```bash
 pip install browser-use

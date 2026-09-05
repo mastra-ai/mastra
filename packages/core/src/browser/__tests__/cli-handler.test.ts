@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { MastraBrowser } from '../browser';
 import { BrowserCliHandler } from '../cli-handler';
+import { shellQuote } from '../../workspace/sandbox/utils';
 
 describe('BrowserCliHandler', () => {
   let handler: BrowserCliHandler;
@@ -183,6 +184,47 @@ describe('BrowserCliHandler', () => {
     });
 
     describe('browser-use', () => {
+      it('uses environment variables for current stdin commands', () => {
+        const command = "browser-use <<'PY'\nprint(page_info())\nPY\n";
+        const result = handler.injectCdpUrl(command, cdpUrl, threadId);
+        expect(result).toMatch(/^BU_CDP_WS=\S+ BU_NAME=mastra-[a-f0-9]{16} sh -c /);
+        expect(result.endsWith(shellQuote(command))).toBe(true);
+        expect(result).not.toContain('--cdp-url');
+        expect(result).not.toContain('--session');
+      });
+
+      it('preserves Python heredoc operators and text that looks like an external CLI', () => {
+        const command = 'browser-use <<\'PY\'\nx = 1; y = 2\nprint("browser --cdp-url wss://example.com")\nPY\n';
+        expect(handler.injectCdpUrl(command, cdpUrl, threadId).endsWith(shellQuote(command))).toBe(true);
+        const analysis = handler.analyzeCommand(command);
+        expect(analysis.parts).toEqual([command]);
+        expect(analysis.usingExternalCdp).toBe(false);
+        expect(analysis.browserClis.map(cli => cli.name)).toEqual(['browser-use']);
+      });
+
+      it('supports redirected files and bare stdin without changing legacy subcommands', () => {
+        for (const alias of ['browser-use', 'browseruse', 'browser', 'bu']) {
+          expect(handler.injectCdpUrl(`${alias} < task.py`, cdpUrl, threadId)).toMatch(/^BU_CDP_WS=/);
+          expect(handler.injectCdpUrl(alias, cdpUrl, threadId)).toMatch(/^BU_CDP_WS=/);
+          expect(handler.injectCdpUrl(`${alias} open google.com`, cdpUrl, threadId)).toContain('--cdp-url');
+        }
+      });
+
+      it('isolates daemon names by thread and browser endpoint', () => {
+        const name = (url: string, thread?: string) =>
+          handler.injectCdpUrl('browser-use', url, thread).match(/BU_NAME=(\S+)/)![1];
+        expect(name(cdpUrl, threadId)).toBe(name(cdpUrl, threadId));
+        expect(name(cdpUrl, threadId)).not.toBe(name(cdpUrl, 'thread-002'));
+        expect(name(cdpUrl, threadId)).not.toBe(name('ws://localhost:9333/devtools/browser/new', threadId));
+        expect(name(cdpUrl)).toMatch(/^mastra-[a-f0-9]{16}$/);
+      });
+
+      it('quotes endpoint values and never puts raw thread IDs into shell commands', () => {
+        const result = handler.injectCdpUrl('browser-use', "ws://localhost:9222/?q=';echo bad", 'thread; echo bad');
+        expect(result).toContain("BU_CDP_WS='ws://localhost:9222/?q='\\'';echo bad'");
+        expect(result).not.toContain('thread; echo bad');
+      });
+
       it('injects CDP URL and session flag', () => {
         const result = handler.injectCdpUrl('browser open google.com', cdpUrl, threadId);
         expect(result).toContain('--cdp-url');

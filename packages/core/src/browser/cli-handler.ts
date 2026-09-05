@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { shellQuote, splitShellCommand, reassembleShellCommand } from '../workspace/sandbox/utils';
 import type { MastraBrowser } from './browser';
 
@@ -87,6 +89,11 @@ export interface BrowserCliProcessResult {
  * Centralizes all browser CLI-specific logic that was previously in execute-command.ts.
  */
 export class BrowserCliHandler {
+  /** CLI 3 reads Python from stdin; older subcommands still use flags. */
+  private isBrowserUseStdinCommand(command: string): boolean {
+    return /^(?:browser-use|browseruse|browser|bu)[ \t]*(?:<|$)/.test(command.trim());
+  }
+
   /**
    * Track which CLI providers have been warmed up per browser instance and thread.
    * Key format: `${browserId}:${cliName}:${threadId}`
@@ -198,6 +205,16 @@ export class BrowserCliHandler {
    * chained command string (commands joined by &&, ||, or ;).
    */
   injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
+    if (this.isBrowserUseStdinCommand(command)) {
+      // Keep the Python input verbatim. Shell splitting can corrupt heredoc bodies.
+      // Include the endpoint so a restarted browser cannot reuse a stale daemon.
+      const name = `mastra-${createHash('sha256')
+        .update(JSON.stringify([threadId ?? 'default', cdpUrl]))
+        .digest('hex')
+        .slice(0, 16)}`;
+      return `BU_CDP_WS=${shellQuote(cdpUrl)} BU_NAME=${shellQuote(name)} sh -c ${shellQuote(command)}`;
+    }
+
     const { parts, operators } = splitShellCommand(command);
 
     const modifiedParts = parts.map((part: string) => {
@@ -285,6 +302,15 @@ export class BrowserCliHandler {
     /** External CDP URL if detected */
     externalCdpUrl: string | null;
   } {
+    if (this.isBrowserUseStdinCommand(command)) {
+      return {
+        browserClis: [{ name: 'browser-use', config: CLI_CDP_PATTERNS['browser-use']! }],
+        parts: [command],
+        usingExternalCdp: false,
+        externalCdpUrl: null,
+      };
+    }
+
     const { parts } = splitShellCommand(command);
 
     const browserClis = parts
