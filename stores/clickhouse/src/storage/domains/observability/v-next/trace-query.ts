@@ -41,7 +41,14 @@ const SPAN_FIELDS = {
 
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'String' },
+  scorerVersion: { sql: 's.scorerVersion', parameterType: 'String' },
+  scoreSource: { sql: 's.scoreSource', parameterType: 'String' },
   score: { sql: 's.score', parameterType: 'Float64' },
+  timestamp: { sql: 's.timestamp', parameterType: "DateTime64(3, 'UTC')" },
+  spanId: { sql: 's.spanId', parameterType: 'String' },
+  entityVersionId: { sql: 's.entityVersionId', parameterType: 'String' },
+  parentEntityVersionId: { sql: 's.parentEntityVersionId', parameterType: 'String' },
+  rootEntityVersionId: { sql: 's.rootEntityVersionId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `
@@ -189,10 +196,22 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS (
-    SELECT traceId, scorerId, score
+    SELECT
+      traceId,
+      spanId,
+      timestamp,
+      scorerId,
+      scorerVersion,
+      scoreSource,
+      score,
+      entityVersionId,
+      parentEntityVersionId,
+      rootEntityVersionId
     FROM ${TABLE_SCORE_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)
+    ORDER BY scoreId, timestamp DESC
+    LIMIT 1 BY scoreId
   )`);
   }
 

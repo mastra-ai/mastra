@@ -88,6 +88,9 @@ describe('QUERY_TRACES', () => {
     );
 
     expect(response).toMatchObject({ traces: [{ traceId: 'trace-a' }] });
+    if (!('traces' in response)) throw new Error('Expected trace results');
+    expect(Object.keys(response.traces[0]!)).toHaveLength(10);
+    expect(response.traces[0]).not.toHaveProperty('scores');
     expect(getStore).toHaveBeenCalledWith('observability');
     expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'traces', limit: 100, binding: expect.any(String) }),
@@ -122,6 +125,47 @@ describe('QUERY_TRACES', () => {
       issues: [{ code: 'field_not_allowed', path: ['where', 'left', 'path'] }],
     });
     expect(JSON.stringify(body)).not.toContain('sensitive search');
+    expect(getStore).not.toHaveBeenCalled();
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid score operators and literals before touching storage', async () => {
+    const { mastra, observabilityStore, getStore } = createHarness();
+    const cases = [
+      {
+        predicate: { op: 'lt', left: { path: 'scoreSource' }, right: { literal: 'sensitive-source' } },
+        issue: { code: 'operator_not_allowed', path: ['where', 'scores', 'some', 'op'] },
+      },
+      {
+        predicate: { op: 'eq', left: { path: 'spanId' }, right: { literal: 'sensitive-span' } },
+        issue: { code: 'operator_not_allowed', path: ['where', 'scores', 'some', 'op'] },
+      },
+      {
+        predicate: { op: 'lt', left: { path: 'score' }, right: { literal: '0.6-sensitive' } },
+        issue: { code: 'invalid_literal', path: ['where', 'scores', 'some', 'right', 'literal'] },
+      },
+      {
+        predicate: { op: 'gte', left: { path: 'timestamp' }, right: { literal: 'sensitive-date' } },
+        issue: { code: 'invalid_literal', path: ['where', 'scores', 'some', 'right', 'literal'] },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const error = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(mastra, {
+            timeRange: TIME_RANGE,
+            where: { scores: { some: testCase.predicate } },
+          }),
+        ),
+      );
+      expect(error.status).toBe(422);
+      const body = await error.getResponse().json();
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID' });
+      expect(body.issues).toContainEqual(expect.objectContaining(testCase.issue));
+      expect(JSON.stringify(body)).not.toContain('sensitive');
+    }
+
     expect(getStore).not.toHaveBeenCalled();
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
