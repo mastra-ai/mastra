@@ -46,8 +46,13 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
 
 const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
 
-function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
+function isWorkflowRunAlreadyClaimedError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    [WORKFLOW_RESUME_ALREADY_CLAIMED_CODE, 'WORKFLOW_START_ALREADY_CLAIMED'].includes(
+      (error as { id?: string }).id ?? '',
+    )
+  );
 }
 
 /**
@@ -111,9 +116,9 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  // A losing concurrent resume is a conflict on run state, not a malformed request, so it maps
+  // A losing concurrent start or resume is a conflict on run state, not a malformed request, so it maps
   // to 409 and clients can distinguish it from a 400/500 and re-read the run.
-  if (isWorkflowResumeAlreadyClaimedError(error)) {
+  if (isWorkflowRunAlreadyClaimedError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,

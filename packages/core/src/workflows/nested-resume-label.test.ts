@@ -65,7 +65,9 @@ describe('resume-label propagation', () => {
       const storage = new MockStore();
       new Mastra({ logger: false, storage, workflows: { 'single-label-wf': workflow } });
 
-      const run = await workflow.createRun();
+      // The workflow fixture is shared, but storage is fresh per test. Use a distinct ID
+      // instead of returning the previous test's cached suspended Run (UUID mocks reset).
+      const run = await workflow.createRun({ runId: 'single-label-resume' });
       await run.start({ inputData: { item: 'widget' } });
 
       // Resume by auto-detecting suspended step (the label-based lookup maps
@@ -192,7 +194,7 @@ describe('resume-label propagation', () => {
         workflows: { 'outer-wf': outerWorkflow, 'inner-wf': innerWorkflow },
       });
 
-      const run = await outerWorkflow.createRun();
+      const run = await outerWorkflow.createRun({ runId: 'nested-label-payload' });
       await run.start({ inputData: { item: 'gadget' } });
 
       const store = await storage.getStore('workflows');

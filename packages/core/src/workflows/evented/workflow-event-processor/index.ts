@@ -555,6 +555,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
     const resourceId = existingRun?.resourceId;
+    const existingSnapshot =
+      typeof existingRun?.snapshot === 'string' ? JSON.parse(existingRun.snapshot) : existingRun?.snapshot;
+    let rootRun = existingSnapshot?.rootRun as WorkflowRunState['rootRun'];
+    if (!rootRun && (parentWorkflow || (!restart && !timeTravel && !resumeSteps?.length))) {
+      rootRun = { workflowId, runId };
+      for (let parent = parentWorkflow; parent; parent = parent.parentWorkflow) {
+        rootRun = { workflowId: parent.workflowId, runId: parent.runId };
+      }
+    }
 
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
@@ -567,6 +576,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (shouldPersist) {
       const runningSnapshot: WorkflowRunState = {
+        rootRun,
         activePaths: [],
         suspendedPaths: {},
         resumeLabels: {},
@@ -1338,9 +1348,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     const nestedWorkflowStep = getEntryWorkflow(leaf);
     if (nestedWorkflowStep) {
       const nestedWorkflow = nestedWorkflowStep;
+      const parentStepResult = stepResults[leafId];
+      const nestedStepResult =
+        step.type === 'foreach' && executionPath[1] !== undefined
+          ? (parentStepResult && 'output' in parentStepResult
+              ? (parentStepResult.output as ForeachIterationResult[])
+              : undefined)?.[executionPath[1]]
+          : parentStepResult;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
       if (resumeSteps?.length === 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
+        const stepData = nestedStepResult;
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
@@ -1438,7 +1455,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
+        const stepData = nestedStepResult;
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
@@ -1729,12 +1746,17 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Get the abort controller for this workflow run
     const abortController = this.getOrCreateAbortController(runId);
 
+    // Read the immutable identity saved when this invocation started. Unlike a request
+    // context key, this also survives detached workers and direct nested-run resume.
+    const rootRun = (await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId }))?.rootRun;
+
     let stepResult: StepResult<any, any, any, any>;
 
     if (this.stepExecutionStrategy) {
       stepResult = await this.stepExecutionStrategy.executeStep({
         workflowId,
         runId,
+        rootRun,
         stepId: leafId,
         executionPath,
         stepResults,
@@ -1754,6 +1776,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowId,
         entry: leaf,
         runId,
+        rootRun,
         stepResults,
         state: currentState,
         requestContext: rc,
@@ -2450,7 +2473,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
               // Collect resume labels
               if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-                Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+                for (const [label, target] of Object.entries(iterResult.suspendPayload.__workflow_meta.resumeLabels)) {
+                  // The outer foreach owns this index. A nested workflow's label refers to
+                  // its own step context and does not know which outer item invoked it.
+                  collectedResumeLabels[label] = { ...(target as { stepId: string }), foreachIndex: i };
+                }
               }
               if (firstSuspendedIterationPayload === undefined) {
                 firstSuspendedIterationPayload = iterResult.suspendPayload;
