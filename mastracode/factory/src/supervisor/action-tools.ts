@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -31,7 +32,11 @@ export type ResumeBoundaryEvent =
 export interface SuspendableSession {
   suspensions: { has(input: { toolCallId: string }): boolean };
   /** Resolves when the resumed run reaches its next boundary: parks again, ends, or errors. */
-  respondToToolSuspension(input: { resumeData: unknown; toolCallId?: string }): Promise<void>;
+  respondToToolSuspension(input: {
+    resumeData: unknown;
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<void>;
   subscribe(listener: (event: ResumeBoundaryEvent) => void): () => void;
 }
 
@@ -67,6 +72,8 @@ interface SupervisorActionDependencies {
   controller: { getSessionByResource(resourceId: string): Promise<SuspendableSession | undefined> };
   /** Rings the supervisor when an answered run parks on a new question. */
   notifySupervisor?: (input: NotifySupervisorInput) => Promise<void>;
+  /** Hydrates the resumed run's tenant credential snapshot, as the dispatcher does before a board run. */
+  primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   logger?: { warn: (message: string, meta?: Record<string, unknown>) => void };
   now?: () => Date;
   /** Test seam for {@link RESUME_ACK_MS}. */
@@ -442,6 +449,21 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           );
         }
 
+        // The resumed run continues as the person who started it, the same
+        // identity the dispatcher seeds: the worker's workspace and model
+        // credentials resolve from that caller, not from the supervisor's
+        // turn (which on a signal wake carries no person at all).
+        const item = await deps.workItems.get({ orgId: deps.scope.orgId, id: binding.workItemId });
+        const startedBy = item?.sessions[binding.role]?.startedBy;
+        if (!startedBy) {
+          return escalate(
+            `The worker asked: ${parked.question} but its run has no recorded owner to resume as; a person needs to answer from the session.`,
+          );
+        }
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: deps.scope.orgId });
+        await deps.primeCredentials?.({ orgId: deps.scope.orgId, userId: startedBy });
+
         const session = await deps.controller.getSessionByResource(binding.resourceId);
         // Not parked any more: a person answered from the session, or the
         // process restarted and the in-memory suspension is gone. Either way
@@ -463,7 +485,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
         // handled whenever it arrives, in the background if need be.
         const boundary = watchResumeBoundary(session);
         const resumed = session
-          .respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId })
+          .respondToToolSuspension({ resumeData, toolCallId: parked.toolCallId, requestContext })
           .then(
             () => boundary.first(),
             (error): ResumeBoundaryEvent => ({ type: 'error', error }),

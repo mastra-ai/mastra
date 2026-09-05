@@ -284,6 +284,10 @@ describe('factory_answer_suspension', () => {
       actor?: { type: 'human' | 'agent'; id: string };
       audit?: { record: () => Promise<never> };
       warn?: ReturnType<typeof vi.fn>;
+      primeCredentials?: ReturnType<typeof vi.fn>;
+      workItems?: (
+        seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>['workItems'],
+      ) => Parameters<typeof createFactorySupervisorActionTools>[0]['workItems'];
     } = {},
   ) {
     const seed = await createFactoryStorageForTests();
@@ -295,10 +299,11 @@ describe('factory_answer_suspension', () => {
     const tools = createFactorySupervisorActionTools({
       scope: SCOPE,
       actor: overrides.actor ?? { type: 'agent', id: 'agent:thread-1' },
-      workItems: seed.workItems,
+      workItems: overrides.workItems ? overrides.workItems(seed.workItems) : seed.workItems,
       audit: overrides.audit ?? seed.audit,
       controller: { getSessionByResource },
       notifySupervisor: notify,
+      ...(overrides.primeCredentials ? { primeCredentials: overrides.primeCredentials } : {}),
       ...(overrides.warn ? { logger: { warn: overrides.warn } } : {}),
       now: () => NOW,
       resumeAckMs: 50,
@@ -336,7 +341,15 @@ describe('factory_answer_suspension', () => {
     expect(after.status).toBe('succeeded');
     expect(computeFactoryHealth({ ...emptyHealthInputs, decisions: [after] }, NOW).findings).toEqual([]);
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1');
-    expect(session.respondToToolSuspension).toHaveBeenCalledWith({ resumeData: 'Use libsql.', toolCallId: 'call-1' });
+    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+      resumeData: 'Use libsql.',
+      toolCallId: 'call-1',
+      requestContext: expect.anything(),
+    });
+    expect(session.respondToToolSuspension.mock.calls[0]![0].requestContext.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+    });
     expect((await events())[0]).toMatchObject({
       action: 'factory.supervisor.suspension_answered',
       actorType: 'agent',
@@ -355,14 +368,63 @@ describe('factory_answer_suspension', () => {
   it('builds a single option or a multi-select list against the offered options', async () => {
     const single = await answerSetup({ options: ['postgres', 'libsql'], selectionMode: 'single_select' });
     await execute(single.tools.factory_answer_suspension, { decisionId: single.decision.id, answer: 'LibSQL' });
-    expect(single.session.respondToToolSuspension).toHaveBeenCalledWith({ resumeData: 'libsql', toolCallId: 'call-1' });
+    expect(single.session.respondToToolSuspension).toHaveBeenCalledWith({
+      resumeData: 'libsql',
+      toolCallId: 'call-1',
+      requestContext: expect.anything(),
+    });
 
     const multi = await answerSetup({ options: ['a', 'b', 'c'], selectionMode: 'multi_select' });
     await execute(multi.tools.factory_answer_suspension, { decisionId: multi.decision.id, answer: ['a', 'c'] });
     expect(multi.session.respondToToolSuspension).toHaveBeenCalledWith({
       resumeData: ['a', 'c'],
       toolCallId: 'call-1',
+      requestContext: expect.anything(),
     });
+  });
+
+  it('resumes the run as the person who started it, with their credentials primed first', async () => {
+    const primeCredentials = vi.fn(async () => {});
+    const { tools, decision, session } = await answerSetup({}, fakeSession(), { primeCredentials });
+
+    await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'Use libsql.' });
+
+    // The worker's workspace and model credentials resolve from the run's
+    // owner, never from the supervisor's (possibly person-less) turn.
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    const call = session.respondToToolSuspension.mock.calls[0]![0];
+    expect(call.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(primeCredentials.mock.invocationCallOrder[0]).toBeLessThan(
+      session.respondToToolSuspension.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('escalates when the run has no recorded owner to resume as', async () => {
+    const { tools, decision, session, workItems } = await answerSetup({}, fakeSession(), {
+      workItems: real => ({
+        escalateSupervisorFinding: real.escalateSupervisorFinding.bind(real),
+        getDeferredDecision: real.getDeferredDecision.bind(real),
+        listRunBindings: real.listRunBindings.bind(real),
+        resolveAnsweredDecision: real.resolveAnsweredDecision.bind(real),
+        reparkDecision: real.reparkDecision.bind(real),
+        openSupervisorFinding: real.openSupervisorFinding.bind(real),
+        markSupervisorFindingNotified: real.markSupervisorFindingNotified.bind(real),
+        get: async (...args: Parameters<typeof real.get>) => {
+          const item = await real.get(...args);
+          return item ? { ...item, sessions: {} } : item;
+        },
+      }),
+    });
+
+    const result = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'x' });
+
+    expect(result).toMatchObject({ outcome: 'escalated' });
+    expect(result.note).toContain('no recorded owner');
+    expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+    const finding = (await workItems.listSupervisorFindingPage({ ...SCOPE, limit: 5 })).rows.find(
+      r => r.findingKey === `decision-failed:${decision.id}`,
+    );
+    expect(finding?.status).toBe('escalated');
   });
 
   it('escalates instead of submitting an answer that is not among the options', async () => {
@@ -633,7 +695,11 @@ describe('factory_answer_suspension', () => {
 
     const again = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: '5433' });
     expect(again).toMatchObject({ outcome: 'answered' });
-    expect(session.respondToToolSuspension).toHaveBeenLastCalledWith({ resumeData: '5433', toolCallId: 'call-2' });
+    expect(session.respondToToolSuspension).toHaveBeenLastCalledWith({
+      resumeData: '5433',
+      toolCallId: 'call-2',
+      requestContext: expect.anything(),
+    });
   });
 
   it('acknowledges a long run as proceeding and records its end when it comes', async () => {
@@ -859,7 +925,9 @@ describe('factory_answer_suspension', () => {
         return () => listeners.delete(listener);
       },
     };
-    // Hold the older refresh: gate `get` (called between reparkDecision and openSupervisorFinding).
+    // Hold the older refresh: gate `get` on its second call (the first resolves
+    // the run's owner before the resume; the second sits between
+    // reparkDecision and openSupervisorFinding).
     let releaseOlder!: () => void;
     const olderHeld = new Promise<void>(resolve => (releaseOlder = resolve));
     let holds = 0;
@@ -883,7 +951,7 @@ describe('factory_answer_suspension', () => {
           seed.workItems.reparkDecision(...args),
         get: async (...args: Parameters<typeof seed.workItems.get>) => {
           holds += 1;
-          if (holds === 1) await olderHeld;
+          if (holds === 2) await olderHeld;
           return seed.workItems.get(...args);
         },
       },
@@ -895,7 +963,7 @@ describe('factory_answer_suspension', () => {
     });
 
     const older = execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'a1' });
-    await vi.waitFor(() => expect(holds).toBe(1));
+    await vi.waitFor(() => expect(holds).toBe(2));
     // q2 is on the decision now; answer it, and let that run park on q3 and publish.
     boundary = q3;
     const newer = await execute<any>(tools.factory_answer_suspension, { decisionId: decision.id, answer: 'a2' });

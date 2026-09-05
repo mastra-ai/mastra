@@ -840,6 +840,8 @@ export class MastraFactory {
                             },
                             input,
                           ),
+                        primeCredentials: tenant =>
+                          primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                         logger: { warn: (message, meta) => console.warn(`[Factory Supervisor] ${message}`, meta) },
                       }),
                     );
