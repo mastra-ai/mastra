@@ -19,3 +19,5 @@ export type { MCPDiscoveryErrorDetails } from './error-utils';
 export * from './oauth-provider';
 export * from './oauth-callback-server';
 export { MCPClientServerProxy } from './server-proxy';
+export { generateToolTypes } from './typegen';
+export type { GenerateToolTypesOptions } from './typegen';

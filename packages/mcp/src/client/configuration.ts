@@ -24,6 +24,8 @@ import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-cal
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
+import { generateToolTypes } from './typegen';
+import type { GenerateToolTypesOptions } from './typegen';
 import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
@@ -1188,6 +1190,27 @@ To fix this you have three different options:
   public async listToolDefinitions(): Promise<SerializableMCPToolCatalog> {
     const result = await this.listToolDefinitionsWithErrors();
     return result.definitions;
+  }
+
+  /**
+   * Discovers every configured server's tools and returns TypeScript source code describing
+   * them: per-tool input/output types compiled from the servers' JSON Schemas, plus an
+   * aggregate `MCPToolTypes` interface and `MCPToolName` union.
+   *
+   * Intended for build-time use (for example via `mastra mcp typegen`), so application code
+   * that calls discovered tools directly can do so with static types instead of `unknown`.
+   * The generated types are compile-time contracts only; servers remain the source of truth
+   * at runtime.
+   *
+   * @example
+   * ```typescript
+   * const source = await mcp.generateTypeDeclarations();
+   * await fs.writeFile('src/mastra/mcp-tools.generated.ts', source);
+   * ```
+   */
+  public async generateTypeDeclarations(options?: GenerateToolTypesOptions): Promise<string> {
+    const catalog = await this.listToolDefinitions();
+    return generateToolTypes(catalog, options);
   }
 
   /**
