@@ -5,6 +5,8 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import { createBoardRegistry, resolvePhaseSemantics } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
@@ -21,7 +23,7 @@ import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
+import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
@@ -244,6 +246,8 @@ export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
+  /** Installed boards; defaults to the built-in Work and Review boards. */
+  boards?: BoardRegistry;
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -320,9 +324,15 @@ function externalActor(actor: FactoryDeferredDecisionRecord['actor']): boolean {
 }
 
 /** A run start asks for consent; an external event asks before pulling a card back into a working lane. */
-function requestsConsent(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): boolean {
+function requestsConsent(
+  boards: BoardRegistry,
+  record: FactoryDeferredDecisionRecord,
+  decision: FactoryCommitDecision,
+): boolean {
   if (decision.type === 'invokeSkill') return true;
-  return decision.type === 'transition' && isWorkingFactoryRuleStage(decision.stage) && externalActor(record.actor);
+  if (decision.type !== 'transition' || !externalActor(record.actor)) return false;
+  // Fail closed: a phase the installed board does not declare is treated as working, so consent is asked.
+  return (resolvePhaseSemantics(boards, decision.board, decision.stage)?.kind ?? 'working') === 'working';
 }
 
 function leaseIdentity(
@@ -376,6 +386,7 @@ async function awaitNotification(
 export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
+  readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -400,6 +411,7 @@ export class FactoryDecisionDispatcher {
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
+    this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
@@ -610,7 +622,7 @@ export class FactoryDecisionDispatcher {
   // Effects a person owns: starting a run (compute + code execution), and an
   // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (record.approvedAt !== null || !requestsConsent(record, decision)) return false;
+    if (record.approvedAt !== null || !requestsConsent(this.#boards, record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.

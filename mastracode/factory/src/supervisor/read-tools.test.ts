@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { defaultFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -30,6 +31,8 @@ async function createItem(storage: WorkItemsStorage, number: number, stage = 'in
     })
   ).item;
 }
+
+const builtInBoards = createBoardRegistry();
 
 /** Queue one invokeSkill decision on a fresh card by moving it into Execute under a rule override. */
 async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
@@ -98,7 +101,7 @@ describe('createFactorySupervisorReadTools', () => {
       factoryProjectId: PROJECT_ID,
       input: { title: 'Other tenant', stages: ['intake'], sessions: {}, metadata: {} },
     });
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed, now: () => NOW });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, now: () => NOW });
 
     const overview = await execute<any>(tools.factory_overview, {});
 
@@ -113,7 +116,7 @@ describe('createFactorySupervisorReadTools', () => {
   it('factory_health_check returns the deterministic report', async () => {
     const seed = await createFactoryStorageForTests();
     await queueFailedPlan(seed.workItems, 1);
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed, now: () => NOW });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, now: () => NOW });
 
     const report = await execute<any>(tools.factory_health_check, {});
 
@@ -138,7 +141,7 @@ describe('createFactorySupervisorReadTools', () => {
       author: { kind: 'user', id: 'user-1', displayName: 'Abhi' },
       body: 'Why is this red?',
     });
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed, now: () => NOW });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, now: () => NOW });
 
     const detail = await execute<any>(tools.factory_inspect_work_item, { number: 22874 });
 
@@ -168,7 +171,7 @@ describe('createFactorySupervisorReadTools', () => {
       factoryProjectId: '99999999-2222-4333-8444-555555555555',
       input: { title: 'Elsewhere', stages: ['intake'], sessions: {}, metadata: {} },
     });
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed });
 
     await expect(execute(tools.factory_inspect_work_item, { id: other.item.id })).rejects.toThrow(/No work item/);
   });
@@ -177,7 +180,7 @@ describe('createFactorySupervisorReadTools', () => {
     const seed = await createFactoryStorageForTests();
     const a = await queueFailedPlan(seed.workItems, 1);
     const b = await queueFailedPlan(seed.workItems, 2);
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed });
 
     const attention = await execute<any>(tools.factory_list_attention, { limit: 10 });
 
@@ -242,7 +245,7 @@ describe('createFactorySupervisorReadTools', () => {
         return { messages, hasMore: true };
       },
     };
-    const tools = createFactorySupervisorReadTools({ scope: SCOPE, ...seed, messageReader });
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, messageReader });
 
     const transcript = await execute<any>(tools.factory_read_session, { number: 5, limit: 2 });
 

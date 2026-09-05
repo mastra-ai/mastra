@@ -12,7 +12,6 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
@@ -1171,6 +1170,9 @@ export interface FactoryAttentionScope {
 
 export class WorkItemsStorage extends FactoryStorageDomain {
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  // Storage does not know boards. Until the host says which phases are terminal,
+  // no card counts as finished, so the boot sweep never supersedes on a guess.
+  #isTerminal: (item: WorkItemRow) => boolean = () => false;
 
   constructor() {
     super('work-items');
@@ -1183,6 +1185,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
     this.#attentionChanged = listener;
+  }
+
+  /**
+   * Wired once at boot, before `init()`. Tells the legacy attention sweep which
+   * cards sit in a phase their installed board declares terminal.
+   */
+  useTerminalPhasePredicate(isTerminal: (item: WorkItemRow) => boolean): void {
+    this.#isTerminal = isTerminal;
   }
 
   async init(): Promise<void> {
@@ -2482,7 +2492,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (inspectedWorkItems.has(itemKey)) continue;
         inspectedWorkItems.add(itemKey);
         const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
-        if (!item || !isTerminalFactoryRuleStage(item.stages)) continue;
+        if (!item || !this.#isTerminal(item)) continue;
         await this.supersedeDecisionsForWorkItem({
           orgId: decision.orgId,
           factoryProjectId: decision.factoryProjectId,

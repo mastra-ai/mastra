@@ -10,19 +10,21 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { runFactoryHealthCheck } from '../supervisor/health.js';
 import { supervisorResourceId, supervisorThreadId } from '../supervisor/session.js';
 
 interface SupervisorRouteDependencies {
   workItems: WorkItemsStorage;
+  boards: BoardRegistry;
   resolveProject(
     context: unknown,
   ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }>;
 }
 
 export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies): ApiRoute[] {
-  const { workItems } = dependencies;
+  const { workItems, boards } = dependencies;
   return [
     // The session is addressed deterministically and created lazily by the
     // agent controller on first reach (see hydrateSupervisorSession), so
@@ -47,7 +49,7 @@ export function buildSupervisorRoutes(dependencies: SupervisorRouteDependencies)
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
         await workItems.ensureReady();
-        const report = await runFactoryHealthCheck(workItems, resolved);
+        const report = await runFactoryHealthCheck(workItems, boards, resolved);
         return context.json(report);
       },
     }),

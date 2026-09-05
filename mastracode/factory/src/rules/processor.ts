@@ -12,6 +12,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
@@ -110,10 +111,6 @@ function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs[
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
   return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
-}
-
-function boardForItem(item: WorkItemRow): FactoryRuleBoard {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
 }
 
 function boundedError(value: unknown): FactoryRuleJsonValue {
@@ -300,7 +297,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linked = allItems
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
-    const board = boardForItem(item);
+    const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
       bindingId: binding.id,
@@ -447,7 +444,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingressId,
     );
     if (prior) return;
-    const board = boardForItem(item);
+    const board = boardForWorkItem(item);
     const context: FactoryToolResultRuleContext = {
       tenant: { orgId: binding.orgId, projectId: binding.factoryProjectId },
       actor: { type: 'agent', bindingId: binding.id, role: binding.role },

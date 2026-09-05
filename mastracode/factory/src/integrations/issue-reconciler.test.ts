@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -44,6 +47,8 @@ async function githubSetup(
     fetchIssue?: GithubIssueFetcher;
     permission?: string;
     rules?: GithubRuleOverrides;
+    board?: string;
+    boards?: BoardRegistry;
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -90,6 +95,7 @@ async function githubSetup(
           url: input.url ?? 'https://github.com/acme/repo/issues/42',
         },
         title: 'Issue 42',
+        ...(input.board ? { board: input.board } : {}),
         stages: input.stages ?? ['planning'],
         sessions: {},
         metadata: { githubRepositoryId: repository.id, githubIssueNumber: 42, ...(input.metadata ?? {}) },
@@ -105,6 +111,7 @@ async function githubSetup(
       projects: seeded.projects,
       storage: seeded.workItems,
       rules: builtInFactoryRules(),
+      boards: input.boards ?? createBoardRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
   );
@@ -265,6 +272,20 @@ describe('issue reconcilers', () => {
     expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
   });
 
+  it('reads terminal from the installed board, so a custom final phase is skipped and an undeclared one is not', async () => {
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const shippedFetch = vi.fn();
+    const shipped = await githubSetup({ board: 'release', stages: ['shipped'], fetchIssue: shippedFetch, boards });
+    await expect(shipped.reconciler([repository])).resolves.toMatchObject({ checked: 0 });
+    expect(shippedFetch).not.toHaveBeenCalled();
+
+    // `done` means nothing on the release board: no guess, the card is still swept.
+    const doneFetch = vi.fn().mockResolvedValue(githubState({}));
+    const done = await githubSetup({ board: 'release', stages: ['done'], fetchIssue: doneFetch, boards });
+    await expect(done.reconciler([repository])).resolves.toMatchObject({ checked: 1 });
+    expect(doneFetch).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['default', 'replacement', 'disabled'] as const)(
     'replays canceled Linear issues with %s instance rules',
     async mode => {
@@ -307,7 +328,7 @@ describe('issue reconcilers', () => {
         },
         {
           storage: { projects: seeded.projects },
-          rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
+          rules: { config: builtInFactoryRules(), workItems: seeded.workItems, boards: createBoardRegistry() },
         } as never,
       );
 

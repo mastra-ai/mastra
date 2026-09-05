@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
@@ -15,7 +16,6 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
-import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -217,15 +217,25 @@ export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
+  boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
     const source = workItemBranchSource(input.item.externalSource);
     const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
-    // Only the Intake exit derives a lane from the role: roles don't own lanes,
+    // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
-    const currentStage = factoryRuleStage(input.item.stages);
-    const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
+    // Both the current phase and the role's lane come from the installed board; an
+    // unknown board or phase yields no destination rather than a guessed one.
+    const board = boards.get(boardForWorkItem(input.item));
+    const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
+    const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
+    const destinationStage =
+      currentKind === undefined
+        ? undefined
+        : currentKind === 'resting'
+          ? board?.phaseForRole(input.role)
+          : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',
@@ -311,6 +321,7 @@ export function buildIntegrationContext(
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
+    boardRegistry: BoardRegistry;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -347,7 +358,9 @@ export function buildIntegrationContext(
       memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
-    ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
+    ...(deps.factoryReady
+      ? { rules: { config: deps.rules, workItems: deps.domains.workItems, boards: deps.boardRegistry } }
+      : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
 }
@@ -483,7 +496,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(githubIntegration
         ? {
             prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(githubIntegration, startCoordinator, deps.domains.projects, input),
+              prepareFactoryRuleBinding(
+                githubIntegration,
+                startCoordinator,
+                deps.domains.projects,
+                deps.boardRegistry,
+                input,
+              ),
           }
         : {}),
     });

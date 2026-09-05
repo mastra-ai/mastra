@@ -24,6 +24,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -134,6 +135,8 @@ export interface IntegrationContext {
   rules?: {
     config: FactoryRules;
     workItems: WorkItemsStorage;
+    /** Installed boards, so integrations read phase semantics instead of matching names. */
+    boards: BoardRegistry;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

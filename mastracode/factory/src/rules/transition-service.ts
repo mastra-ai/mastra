@@ -21,7 +21,6 @@ import {
   externallyAuthoredWorkItem,
   factoryRuleSourceForWorkItem,
   isFactoryRuleStage,
-  isWorkingFactoryRuleStage,
   workItemSource,
 } from './types.js';
 import {
@@ -32,7 +31,6 @@ import {
 
 const RULE_TIMEOUT_MS = 5_000;
 const MAX_REJECTION_REASON = 512;
-const TERMINAL_STAGES: ReadonlySet<FactoryRuleStage> = new Set(['done', 'canceled']);
 /** Longest a committed transition waits for terminal resource cleanup. Cleanup
  * reattaches remote sandboxes, so a hung provider call must not leave the
  * already-committed transition request pending; past this bound the cleanup
@@ -43,7 +41,8 @@ export interface FactoryTransitionRequest {
   orgId: string;
   factoryProjectId: string;
   workItemId: string;
-  board: FactoryRuleBoard;
+  /** Installed board id; the service rejects boards that are not installed. */
+  board: string;
   stage: FactoryRuleStage;
   expectedRevision: number;
   actor: FactoryRuleActor;
@@ -64,8 +63,8 @@ export interface FactoryTransitionServiceOptions {
   boards?: BoardRegistry;
   timeoutMs?: number;
   /**
-   * Called after a transition commits into a terminal stage (`done` /
-   * `canceled`) — the point where the item's sessions stop receiving runs, so
+   * Called after a transition commits into a phase the board declares
+   * terminal — the point where the item's sessions stop receiving runs, so
    * resources they hold (e.g. sandboxes) can be released for reuse. Awaited,
    * but failures are swallowed: releasing resources must never break or roll
    * back the committed transition.
@@ -121,13 +120,6 @@ export function currentStage(stages: readonly string[]): FactoryRuleStage | unde
   return isFactoryRuleStage(stage) ? stage : undefined;
 }
 
-export function roleForStage(board: FactoryRuleBoard, stage: FactoryRuleStage): string {
-  if (board === 'review') return 'review';
-  if (stage === 'triage') return 'triage';
-  if (stage === 'planning') return 'plan';
-  return 'work';
-}
-
 interface TransitionConsentOptions {
   autonomy?: 'arm' | 'disarm';
   consentedBy?: string;
@@ -136,8 +128,8 @@ interface TransitionConsentOptions {
 }
 
 // Entering a resting lane disarms whoever rests it; only a person's move into a working lane arms.
-function transitionConsent(stage: FactoryRuleStage, humanMove: boolean): 'arm' | 'disarm' | undefined {
-  if (!isWorkingFactoryRuleStage(stage)) return 'disarm';
+function transitionConsent(working: boolean, humanMove: boolean): 'arm' | 'disarm' | undefined {
+  if (!working) return 'disarm';
   return humanMove ? 'arm' : undefined;
 }
 
@@ -147,8 +139,12 @@ function bearsConsent(actor: FactoryRuleActor): boolean {
 }
 
 // Rides the transition's own revision-checked commit, so a stale or rejected commit flips nothing.
-function consentEffect(request: FactoryTransitionRequest, humanMove: boolean): TransitionConsentOptions {
-  const autonomy = transitionConsent(request.stage, humanMove);
+function consentEffect(
+  request: FactoryTransitionRequest,
+  working: boolean,
+  humanMove: boolean,
+): TransitionConsentOptions {
+  const autonomy = transitionConsent(working, humanMove);
   return bearsConsent(request.actor) ? { autonomy, consentedBy: actorId(request.actor) } : { autonomy };
 }
 
@@ -300,6 +296,9 @@ export class FactoryTransitionService {
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
     const humanMove = request.actor.type === 'human' && fromStage !== request.stage && request.cause !== 'run_start';
+    // The board, not the phase name, says whether a seat is engaged on either side of this move.
+    const entersWorking = board.isWorking(request.stage);
+    const seatRole = board.roleForPhase(request.stage);
 
     const contextBase = {
       tenant: { orgId: request.orgId, projectId: request.factoryProjectId },
@@ -363,8 +362,8 @@ export class FactoryTransitionService {
           // External content can steer a bound agent; board allowance cannot bypass this guard.
           if (
             request.actor.type === 'agent' &&
-            !isWorkingFactoryRuleStage(fromStage) &&
-            isWorkingFactoryRuleStage(request.stage) &&
+            !board.isWorking(fromStage) &&
+            entersWorking &&
             externallyAuthoredWorkItem(item)
           ) {
             return {
@@ -411,9 +410,7 @@ export class FactoryTransitionService {
                 idleBehavior: 'wake',
                 // Parking a card says stop: no seat is right by construction, so
                 // the notice goes to whichever session is live — or nobody.
-                ...(isWorkingFactoryRuleStage(request.stage)
-                  ? { role: roleForStage(request.board, request.stage), prepareBinding: true }
-                  : {}),
+                ...(entersWorking && seatRole !== undefined ? { role: seatRole, prepareBinding: true } : {}),
               });
             }
           }
@@ -436,7 +433,9 @@ export class FactoryTransitionService {
       request,
       transitionId,
       evaluation,
-      evaluation.outcome === 'accepted' ? { ...consentEffect(request, humanMove), ...evaluation.intents } : {},
+      evaluation.outcome === 'accepted'
+        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
+        : {},
     );
   }
 
@@ -496,7 +495,12 @@ export class FactoryTransitionService {
         console.warn(`[factory] acceptance hook failed for work item ${request.workItemId}:`, error);
       });
     }
-    if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
+    // Only an installed board's declaration releases resources; an unknown board or phase never does.
+    if (
+      this.#onTerminalStage &&
+      result.status === 'accepted' &&
+      this.#boards.get(request.board)?.isTerminal(result.stage) === true
+    ) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const cleanup = Promise.resolve(
