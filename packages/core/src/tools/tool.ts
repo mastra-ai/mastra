@@ -3,7 +3,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
-import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema, InferPublicSchemaInput } from '../schema';
 import type { SuspendOptions } from '../workflows';
 import { consumeBuilderValidatedInput } from './builder-validation-context';
 import type {
@@ -681,6 +681,7 @@ export class Tool<
  */
 type SchemaLike = PublicSchema<any> | undefined;
 type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+type InferSchemaInput<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchemaInput<T> : unknown;
 
 type CreateToolOpts<
   TId extends string,
@@ -706,7 +707,7 @@ type CreateToolOpts<
   outputSchema?: TOutputSchema;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
-  execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchema<TOutputSchema>, TContext, TRequestContext>;
+  execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchemaInput<TOutputSchema>, TContext, TRequestContext>;
 };
 export function createTool<
   TId extends string = string,
