@@ -1022,49 +1022,6 @@ describe('MastraClient', () => {
       );
     });
 
-    it('opts out of the trace cascade when deleteTraces is false', async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
-
-      await client.deleteExperiment('experiment-1', { deleteTraces: false });
-      await client.deleteExperiment('experiment-2', { organizationId: 'org_a', deleteTraces: false });
-      await client.deleteDatasetExperiment('dataset-1', 'experiment-3', { deleteTraces: false });
-
-      expect(global.fetch).toHaveBeenNthCalledWith(
-        1,
-        'http://localhost:4111/api/experiments/experiment-1?deleteTraces=false',
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-      expect(global.fetch).toHaveBeenNthCalledWith(
-        2,
-        'http://localhost:4111/api/experiments/experiment-2?organizationId=org_a&deleteTraces=false',
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-      expect(global.fetch).toHaveBeenNthCalledWith(
-        3,
-        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-3?deleteTraces=false',
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-    });
-
-    it('omits the deleteTraces param when relying on the default cascade', async () => {
-      (global.fetch as any).mockResolvedValue({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
-
-      await client.deleteExperiment('experiment-1', { deleteTraces: true });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:4111/api/experiments/experiment-1',
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-    });
-
     it('posts provenance and grouping when triggering an experiment', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

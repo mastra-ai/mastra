@@ -19,8 +19,6 @@ import {
   datasetItemVersionPathParams,
   paginationQuerySchema,
   tenancyQuerySchema,
-  deleteExperimentQuerySchema,
-  deleteAnyExperimentQuerySchema,
   listItemsQuerySchema,
   listExperimentsQuerySchema,
   createDatasetBodySchema,
@@ -694,22 +692,18 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
   path: '/experiments/:experimentId',
   responseType: 'json',
   pathParamSchema: experimentIdPathParams,
-  queryParamSchema: deleteAnyExperimentQuerySchema,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete experiment',
   description:
-    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). By default this also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs; pass deleteTraces=false to keep them.',
+    'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
   tags: ['Experiments'],
   requiresAuth: true,
   handler: async ({ mastra, experimentId, ...params }) => {
     assertDatasetsAvailable();
     assertExperimentDeletionAvailable();
     try {
-      const {
-        organizationId,
-        projectId,
-        deleteTraces = true,
-      } = params as { organizationId?: string; projectId?: string; deleteTraces?: boolean };
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
       const scoped = organizationId !== undefined || projectId !== undefined;
       // For unscoped deletes, 404 on missing experiments. For scoped deletes,
       // skip the preflight: a tenancy mismatch must be a silent no-op so
@@ -725,7 +719,6 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
         experimentId,
         ...(organizationId !== undefined ? { organizationId } : {}),
         ...(projectId !== undefined ? { projectId } : {}),
-        deleteTraces,
       });
       return { success: true };
     } catch (error) {
@@ -1042,25 +1035,23 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments/:experimentId',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
-  queryParamSchema: deleteExperimentQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete experiment',
   description:
-    'Deletes an experiment and its results. By default this also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs; pass deleteTraces=false to keep them.',
+    'Deletes an experiment and its results. Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentId }) => {
     assertDatasetsAvailable();
     // An older core still exposes Dataset.deleteExperiment, but it predates the
-    // trace cascade and would silently ignore deleteTraces, returning success
-    // while the traces survive. Fail loudly instead.
+    // trace cascade and would report success while leaving the traces behind.
+    // Fail loudly instead.
     assertExperimentDeletionAvailable();
     try {
-      const { deleteTraces = true } = params as { deleteTraces?: boolean };
       const ds = await mastra.datasets.get({ id: datasetId });
       // deleteExperiment asserts the experiment belongs to this dataset and
       // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
-      await ds.deleteExperiment({ experimentId, deleteTraces });
+      await ds.deleteExperiment({ experimentId });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {

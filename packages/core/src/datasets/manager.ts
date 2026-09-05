@@ -248,25 +248,20 @@ export class DatasetsManager {
    * that tenancy: an experiment row in another tenant is a silent no-op (no
    * error) so cross-tenant existence is not leaked via error timing/text.
    *
-   * `deleteTraces` defaults to `true`: an experiment's traces are excluded from
-   * normal trace reads, so leaving them behind makes them invisible but
-   * still-retained data. Stores without an observability domain — or without
-   * tenant-scoped trace deletion — log a warning and skip the trace cascade so
-   * the experiment itself is still deleted.
+   * The experiment's traces are deleted too: they are excluded from normal trace
+   * reads, so leaving them behind would make them invisible but still-retained
+   * data. Stores without an observability domain — or without tenant-scoped trace
+   * deletion — log a warning and skip the trace cascade so the experiment itself
+   * is still deleted.
    */
-  async deleteExperiment(args: {
-    experimentId: string;
-    organizationId?: string;
-    projectId?: string;
-    deleteTraces?: boolean;
-  }) {
+  async deleteExperiment(args: { experimentId: string; organizationId?: string; projectId?: string }) {
     const experimentsStore = await this.#getExperimentsStore();
     const filters = scopeFromArgs(args);
 
     // Must run before the relational delete: that cascade removes the result
     // rows carrying the trace ids.
     const storage = this.#mastra.getStorage();
-    if ((args.deleteTraces ?? true) && storage) {
+    if (storage) {
       await deleteExperimentTraces({
         storage,
         experimentsStore,

@@ -6,12 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import {
-  deleteAnyExperimentQuerySchema,
-  deleteExperimentQuerySchema,
-  listExperimentsQuerySchema,
-  triggerExperimentBodySchema,
-} from '../schemas/datasets';
+import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
@@ -974,18 +969,6 @@ describe('Datasets Handlers', () => {
     });
   });
 
-  describe('deleteTraces query parsing', () => {
-    it.each([deleteExperimentQuerySchema, deleteAnyExperimentQuerySchema])(
-      'defaults to true and accepts the query-string booleans',
-      schema => {
-        expect(schema.parse({}).deleteTraces).toBe(true);
-        expect(schema.parse({ deleteTraces: 'false' }).deleteTraces).toBe(false);
-        expect(schema.parse({ deleteTraces: 'true' }).deleteTraces).toBe(true);
-        expect(schema.parse({ deleteTraces: false }).deleteTraces).toBe(false);
-      },
-    );
-  });
-
   describe('experiment-deletion feature guard', () => {
     // The delete routes reach core through APIs newer than the `datasets`
     // feature itself. Without this guard an older core produces a 500 from
@@ -1094,7 +1077,7 @@ describe('Datasets Handlers', () => {
       return { dataset, experimentId: created.experimentId as string, observabilityStore };
     }
 
-    it('deletes the experiment traces by default', async () => {
+    it('deletes the experiment traces', async () => {
       const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-1');
       expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-1' })).not.toBeNull();
 
@@ -1128,21 +1111,6 @@ describe('Datasets Handlers', () => {
 
       expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-scores' })).toBeNull();
       expect(await observabilityStore.getScoreById('score-linked-to-trace')).toBeNull();
-    });
-
-    it('keeps the traces when deleteTraces is false', async () => {
-      const { dataset, experimentId, observabilityStore } = await createExperimentWithTrace('trace-cascade-2');
-      const experimentsStore = (await mockStorage.getStore('experiments'))!;
-
-      await DELETE_EXPERIMENT_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        datasetId: dataset.id,
-        experimentId,
-        deleteTraces: false,
-      } as any);
-
-      expect(await experimentsStore.getExperimentById({ id: experimentId })).toBeNull();
-      expect(await observabilityStore.getTrace({ traceId: 'trace-cascade-2' })).not.toBeNull();
     });
 
     it('leaves traces from other experiments untouched', async () => {

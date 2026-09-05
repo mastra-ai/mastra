@@ -1098,31 +1098,28 @@ export class Dataset {
    * still cannot delete another tenant's experiment (storage silently no-ops
    * on tenancy mismatch).
    *
-   * @param args.deleteTraces Also delete the observability traces this experiment
-   * produced, cascading to their spans and trace-linked signals. Defaults to `true`:
-   * an experiment's traces are excluded from normal trace reads, so leaving them
-   * behind makes them invisible but still-retained data. Pass `false` to delete only
-   * the relational rows (experiment + results). Stores without an observability
-   * domain (or without tenant-scoped trace deletion) log a warning and skip the
-   * trace cascade so the relational delete still succeeds.
+   * Also deletes the observability traces this experiment produced, cascading to
+   * their spans and trace-linked signals. An experiment's traces are excluded from
+   * normal trace reads, so leaving them behind would make them invisible but
+   * still-retained data. Stores without an observability domain (or without
+   * tenant-scoped trace deletion) log a warning and skip the trace cascade so the
+   * relational delete still succeeds.
    */
-  async deleteExperiment(args: { experimentId: string; deleteTraces?: boolean }) {
+  async deleteExperiment(args: { experimentId: string }) {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
 
     // Must run first: deleting the experiment cascades away the result rows
     // that carry the trace ids.
-    if (args.deleteTraces ?? true) {
-      const storage = this.#mastra.getStorage();
-      if (storage) {
-        await deleteExperimentTraces({
-          storage,
-          experimentsStore,
-          experimentId: args.experimentId,
-          ...(this.#scope !== undefined ? { filters: this.#scope } : {}),
-          logger: this.#mastra.getLogger(),
-        });
-      }
+    const storage = this.#mastra.getStorage();
+    if (storage) {
+      await deleteExperimentTraces({
+        storage,
+        experimentsStore,
+        experimentId: args.experimentId,
+        ...(this.#scope !== undefined ? { filters: this.#scope } : {}),
+        logger: this.#mastra.getLogger(),
+      });
     }
 
     return experimentsStore.deleteExperiment({ id: args.experimentId, filters: this.#scope });

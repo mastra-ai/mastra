@@ -422,9 +422,9 @@ describe('DatasetsManager', () => {
       expect(await mgr.getExperiment({ experimentId: exp.id })).not.toBeNull();
     });
 
-    it('skips the trace cascade when deleteTraces is false', async () => {
+    it('always runs the trace cascade before the relational delete', async () => {
       const exp = await experimentsStorage.createExperiment({
-        name: 'no-trace-cascade',
+        name: 'trace-cascade',
         datasetId: null,
         datasetVersion: null,
         targetType: 'agent',
@@ -432,10 +432,12 @@ describe('DatasetsManager', () => {
         totalItems: 1,
       });
 
+      // The cascade collects trace ids from the experiment's results, which the
+      // relational delete would otherwise have already removed.
       const spy = vi.spyOn(experimentsStorage, 'listExperimentResults');
-      await mgr.deleteExperiment({ experimentId: exp.id, deleteTraces: false });
+      await mgr.deleteExperiment({ experimentId: exp.id });
 
-      expect(spy).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ experimentId: exp.id }));
       expect(await mgr.getExperiment({ experimentId: exp.id })).toBeNull();
     });
   });

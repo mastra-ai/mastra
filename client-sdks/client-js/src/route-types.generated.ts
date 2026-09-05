@@ -18388,14 +18388,7 @@ export type DeleteExperimentsExperimentId_PathParams = {
   experimentId: string;
 };
 
-export type DeleteExperimentsExperimentId_QueryParams = {
-  /** Restrict lookup to the given organization */
-  organizationId?: string | undefined;
-  /** Restrict lookup to the given project */
-  projectId?: string | undefined;
-  /** When true (the default), also delete the observability traces this experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs. Set to false to delete only the experiment and its results. Ignored by stores without an observability domain, which log a warning and keep the traces. */
-  deleteTraces: (boolean | boolean) | undefined;
-};
+export type DeleteExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
 
 export type DeleteExperimentsExperimentId_Response = PostAuthRefresh_Response;
 
@@ -18774,28 +18767,19 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams =
   PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
-export type DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams = {
-  /** When true (the default), also delete the observability traces this experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs. Set to false to delete only the experiment and its results. Ignored by stores without an observability domain, which log a warning and keep the traces. */
-  deleteTraces: (boolean | boolean) | undefined;
-};
-
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_Response = PostAuthRefresh_Response;
 
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
   (DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
     ? {}
     : { params: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
-    (DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams extends never
-      ? {}
-      : {} extends DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams
-        ? { query?: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }
-        : { query: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   pathParams: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams;
-  queryParams: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams;
+  queryParams: never;
   body: never;
   request: DeleteDatasetsDatasetIdExperimentsExperimentId_Request;
   response: DeleteDatasetsDatasetIdExperimentsExperimentId_Response;
