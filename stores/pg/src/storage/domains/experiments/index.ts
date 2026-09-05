@@ -62,8 +62,8 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ExperimentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -496,7 +496,10 @@ export class ExperimentsPG extends ExperimentsStorage {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -571,7 +574,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -585,7 +588,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -886,7 +889,10 @@ export class ExperimentsPG extends ExperimentsStorage {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -931,7 +937,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -945,7 +951,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -1014,7 +1020,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT
           "experimentId",
           COUNT(*)::int as total,

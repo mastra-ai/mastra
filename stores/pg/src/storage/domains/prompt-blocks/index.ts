@@ -39,8 +39,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (PromptBlocksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -148,7 +148,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -386,7 +386,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -403,7 +403,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -497,7 +497,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -524,7 +524,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 AND "versionNumber" = $2`,
         [blockId, versionNumber],
       );
@@ -554,7 +554,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [blockId],
       );
@@ -603,9 +603,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
-        blockId,
-      ]);
+      const countResult = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`,
+        [blockId],
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -619,7 +620,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "blockId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [blockId, limitValue, offset],
       );
@@ -702,7 +703,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
+      const result = await this.#db.readClient.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "blockId" = $1`, [
         blockId,
       ]);
       return parseInt(result.count, 10);

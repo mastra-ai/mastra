@@ -31,6 +31,70 @@ const createTestPool = () => {
   return new Pool({ connectionString });
 };
 
+describe('read/write pools', () => {
+  it('falls back to the writer pool when readPool is omitted', async () => {
+    const writePool = createTestPool();
+    const store = new PostgresStore({ id: 'pg-write-pool-test', writePool });
+
+    try {
+      expect(store.pool).toBe(writePool);
+      expect(store.readPool).toBe(writePool);
+      expect(store.readDb).toBe(store.db);
+    } finally {
+      await store.close();
+      await writePool.end();
+    }
+  });
+
+  it('routes plain reads to readPool and writes to writePool', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    const writeQuery = vi.spyOn(writePool, 'query').mockResolvedValue({ rows: [], rowCount: 1 } as never);
+    const readQuery = vi.spyOn(readPool, 'query').mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    const store = new PostgresStore({ id: 'pg-read-write-pool-test', writePool, readPool });
+    const blobs = await store.getStore('blobs');
+
+    try {
+      await blobs.get('hash');
+      expect(readQuery).toHaveBeenCalledWith(expect.stringContaining('SELECT'), ['hash']);
+      expect(writeQuery).not.toHaveBeenCalled();
+
+      await blobs.delete('hash');
+      expect(writeQuery).toHaveBeenCalledWith(expect.stringContaining('DELETE'), ['hash']);
+    } finally {
+      await store.close();
+      await Promise.all([writePool.end(), readPool.end()]);
+    }
+  });
+
+  it('does not close caller-provided reader or writer pools', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    const writeEnd = vi.spyOn(writePool, 'end');
+    const readEnd = vi.spyOn(readPool, 'end');
+    const store = new PostgresStore({ id: 'pg-read-write-close-test', writePool, readPool });
+
+    await store.close();
+    expect(writeEnd).not.toHaveBeenCalled();
+    expect(readEnd).not.toHaveBeenCalled();
+
+    await Promise.all([writePool.end(), readPool.end()]);
+  });
+
+  it('rejects pool and writePool together', async () => {
+    const pool = createTestPool();
+    const writePool = createTestPool();
+
+    try {
+      expect(() => new PostgresStore({ id: 'pg-invalid-pools-test', pool, writePool } as never)).toThrow(
+        'provide either pool or writePool, not both',
+      );
+    } finally {
+      await Promise.all([pool.end(), writePool.end()]);
+    }
+  });
+});
+
 // Pre-configured pool acceptance tests
 createClientAcceptanceTests({
   storeName: 'PostgresStore',

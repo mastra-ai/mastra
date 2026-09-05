@@ -48,8 +48,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -163,7 +163,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   async getById(id: string): Promise<StorageScorerDefinitionType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -434,7 +434,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -451,7 +451,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -548,7 +548,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         indexName: TABLE_SCORER_DEFINITION_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -575,7 +575,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         indexName: TABLE_SCORER_DEFINITION_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "scorerDefinitionId" = $1 AND "versionNumber" = $2`,
         [scorerDefinitionId, versionNumber],
       );
@@ -605,7 +605,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         indexName: TABLE_SCORER_DEFINITION_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "scorerDefinitionId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [scorerDefinitionId],
       );
@@ -654,7 +654,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "scorerDefinitionId" = $1`,
         [scorerDefinitionId],
       );
@@ -671,7 +671,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "scorerDefinitionId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [scorerDefinitionId, limitValue, offset],
       );
@@ -757,7 +757,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         indexName: TABLE_SCORER_DEFINITION_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(
+      const result = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "scorerDefinitionId" = $1`,
         [scorerDefinitionId],
       );

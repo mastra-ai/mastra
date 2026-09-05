@@ -129,8 +129,8 @@ export class NotificationsPG extends NotificationsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (NotificationsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -359,7 +359,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "updatedAt" DESC${limit}`,
       args,
     );
@@ -388,7 +388,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY CASE WHEN "deliverAt" IS NULL THEN "summaryAt" WHEN "summaryAt" IS NULL THEN "deliverAt" WHEN "deliverAt" <= "summaryAt" THEN "deliverAt" ELSE "summaryAt" END ASC, "updatedAt" ASC${limit}`,
       args,
     );
@@ -399,7 +399,7 @@ export class NotificationsPG extends NotificationsStorage {
   async getNotification(input: { threadId: string; id: string }): Promise<NotificationRecord | null> {
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(
+    const row = await this.#db.readClient.oneOrNone(
       `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "id" = $2 LIMIT 1`,
       [input.threadId, input.id],
     );
@@ -440,7 +440,7 @@ export class NotificationsPG extends NotificationsStorage {
 
     const schemaName = getSchemaName(this.#schema);
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName });
-    const row = await this.#db.client.oneOrNone(
+    const row = await this.#db.readClient.oneOrNone(
       `SELECT * FROM ${tableName} WHERE "threadId" = $1 AND "source" = $2 AND "kind" = $3 AND "status" = $4 AND (("agentId" = $5::text) OR ("agentId" IS NULL AND $5::text IS NULL)) AND (("resourceId" = $6::text) OR ("resourceId" IS NULL AND $6::text IS NULL)) AND (($7::text IS NOT NULL AND "dedupeKey" = $7::text) OR ($8::text IS NOT NULL AND "coalesceKey" = $8::text)) ORDER BY "updatedAt" DESC LIMIT 1`,
       [
         input.threadId,

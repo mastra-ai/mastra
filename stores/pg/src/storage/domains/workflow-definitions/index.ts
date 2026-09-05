@@ -54,8 +54,8 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx =>
@@ -197,7 +197,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       indexName: TABLE_WORKFLOW_DEFINITIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    const row = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+    const row = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
     return row ? rowToDefinition(row as Record<string, unknown>) : null;
   }
 
@@ -217,7 +217,7 @@ export class WorkflowDefinitionsPG extends WorkflowDefinitionsStorage {
       conditions.push(`"authorId" = $${params.length}`);
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const rows = await this.#db.client.manyOrNone(
+    const rows = await this.#db.readClient.manyOrNone(
       `SELECT * FROM ${tableName} ${where} ORDER BY "updatedAt" DESC`,
       params,
     );

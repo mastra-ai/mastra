@@ -116,9 +116,9 @@ export class SchedulesPG extends SchedulesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#client = client;
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (SchedulesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));

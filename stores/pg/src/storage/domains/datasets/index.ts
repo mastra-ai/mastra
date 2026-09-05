@@ -59,8 +59,8 @@ export class DatasetsPG extends DatasetsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (DatasetsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -355,7 +355,10 @@ export class DatasetsPG extends DatasetsStorage {
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [
+        id,
+        ...params,
+      ]);
       return result ? this.transformDatasetRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -579,7 +582,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -593,7 +596,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -1135,12 +1138,12 @@ export class DatasetsPG extends DatasetsStorage {
       let result;
 
       if (args.datasetVersion !== undefined) {
-        result = await this.#db.client.oneOrNone(
+        result = await this.#db.readClient.oneOrNone(
           `SELECT * FROM ${tableName} WHERE "id" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $2) AND "isDeleted" = false ORDER BY "datasetVersion" DESC LIMIT 1`,
           [args.id, args.datasetVersion],
         );
       } else {
-        result = await this.#db.client.oneOrNone(
+        result = await this.#db.readClient.oneOrNone(
           `SELECT * FROM ${tableName} WHERE "id" = $1 AND "validTo" IS NULL AND "isDeleted" = false`,
           [args.id],
         );
@@ -1162,7 +1165,7 @@ export class DatasetsPG extends DatasetsStorage {
   async getItemsByVersion({ datasetId, version }: { datasetId: string; version: number }): Promise<DatasetItem[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "datasetId" = $1 AND "datasetVersion" <= $2 AND ("validTo" IS NULL OR "validTo" > $3) AND "isDeleted" = false ORDER BY "createdAt" DESC, "id" ASC`,
         [datasetId, version, version],
       );
@@ -1182,7 +1185,7 @@ export class DatasetsPG extends DatasetsStorage {
   async getItemHistory(itemId: string): Promise<DatasetItemRow[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "id" = $1 ORDER BY "datasetVersion" DESC`,
         [itemId],
       );
@@ -1245,7 +1248,7 @@ export class DatasetsPG extends DatasetsStorage {
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -1259,7 +1262,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -1316,7 +1319,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { page, perPage: perPageInput } = input.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASET_VERSIONS, schemaName: getSchemaName(this.#schema) });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "datasetId" = $1`,
         [input.datasetId],
       );
@@ -1330,7 +1333,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "datasetId" = $1 ORDER BY "version" DESC LIMIT $2 OFFSET $3`,
         [input.datasetId, limitValue, offset],
       );

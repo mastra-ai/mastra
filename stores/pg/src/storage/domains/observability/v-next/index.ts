@@ -177,7 +177,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   constructor(config: VNextPostgresObservabilityConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
+    const { client, readClient, schemaName } = resolvePgConfig(config);
     this.#client = client;
     this.#schema = schemaName ?? 'public';
     this.#partitioning = config.partitioning ?? {};
