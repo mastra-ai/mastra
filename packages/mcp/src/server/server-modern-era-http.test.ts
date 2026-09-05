@@ -236,6 +236,184 @@ describe('MCPServer with protocolVersion 2026-07-28 (dual-era HTTP)', () => {
     }
   });
 
+  it('manages modern resource subscriptions through one replaceable listen stream', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'mastra-resource-listen-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+    const updated = new Promise<string>(resolve => {
+      client.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
+
+    await client.connect();
+    try {
+      await client.subscribeResource('test://resource');
+      await client.subscribeResource('test://resource');
+      expect(wireMethods.filter(method => method === 'subscriptions/listen')).toHaveLength(1);
+
+      await client.subscribeResource('test://second');
+      await client.unsubscribeResource('test://resource');
+      await client.forceReconnect();
+      await server.resources.notifyUpdated({ uri: 'test://second' });
+      await expect(updated).resolves.toBe('test://second');
+
+      await client.unsubscribeResource('test://second');
+      await client.subscribeResource('test://second');
+    } finally {
+      await client.disconnect();
+    }
+
+    expect(wireMethods.filter(method => method === 'subscriptions/listen')).toHaveLength(5);
+    expect(wireMethods.filter(method => method === 'notifications/cancelled')).toHaveLength(5);
+    expect(wireMethods).not.toContain('resources/subscribe');
+    expect(wireMethods).not.toContain('resources/unsubscribe');
+  });
+
+  it('serializes concurrent subscription mutations and replays only the final filter after reconnect', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'concurrent-resource-listen-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+    const uris = Array.from({ length: 12 }, (_, index) => `test://concurrent/${index}`);
+    const retainedUris = uris.filter((_, index) => index % 2 === 1);
+    const removedUris = uris.filter((_, index) => index % 2 === 0);
+    const updatedUris: string[] = [];
+    client.setResourceUpdatedNotificationHandler(params => updatedUris.push(params.uri));
+
+    await client.connect();
+    try {
+      await Promise.all(uris.map(uri => client.subscribeResource(uri)));
+      await Promise.all(removedUris.map(uri => client.unsubscribeResource(uri)));
+      await client.forceReconnect();
+
+      await server.resources.notifyUpdated({ uri: removedUris[0]! });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(updatedUris).not.toContain(removedUris[0]);
+
+      await server.resources.notifyUpdated({ uri: retainedUris[0]! });
+      await vi.waitFor(() => expect(updatedUris).toContain(retainedUris[0]));
+    } finally {
+      await client.disconnect();
+    }
+
+    const listenCount = wireMethods.filter(method => method === 'subscriptions/listen').length;
+    expect(listenCount).toBeGreaterThan(0);
+    expect(wireMethods.filter(method => method === 'notifications/cancelled')).toHaveLength(listenCount);
+    expect(wireMethods).not.toContain('resources/subscribe');
+    expect(wireMethods).not.toContain('resources/unsubscribe');
+  });
+
+  it('keeps the connection usable when restoring resource subscriptions fails', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'resource-listen-restore-failure-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+      },
+    });
+
+    const updated = new Promise<string>(resolve => {
+      client.setResourceUpdatedNotificationHandler(params => resolve(params.uri));
+    });
+    await client.connect();
+    await client.subscribeResource('test://resource');
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const listenSpy = vi.spyOn(sdkClient, 'listen').mockRejectedValueOnce(new Error('listen restore failed'));
+
+    try {
+      await expect(client.forceReconnect()).resolves.toBeUndefined();
+      expect(sdkClient.transport).toBeDefined();
+      expect(Object.keys(await client.tools())).toContain('echoTool');
+
+      await client.subscribeResource('test://resource');
+      expect(listenSpy).toHaveBeenCalledTimes(2);
+      await server.resources.notifyUpdated({ uri: 'test://resource' });
+      await expect(updated).resolves.toBe('test://resource');
+    } finally {
+      listenSpy.mockRestore();
+      await client.disconnect();
+    }
+  });
+
+  it('rejects a resource subscription the server does not honor', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'resource-listen-declined-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+      },
+    });
+
+    await client.connect();
+    const sdkClient = (client as unknown as { client: Client }).client;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const listenSpy = vi.spyOn(sdkClient, 'listen').mockResolvedValueOnce({
+      honoredFilter: {},
+      close,
+      closed: new Promise(() => {}),
+    });
+
+    try {
+      await expect(client.subscribeResource('test://declined')).rejects.toThrow(
+        'Server declined resource subscriptions for: test://declined',
+      );
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      listenSpy.mockRestore();
+      await client.disconnect();
+    }
+  });
+
+  it('does not emit removed roots notifications on the modern leg', async () => {
+    const wireMethods: string[] = [];
+    const client = new InternalMastraMCPClient({
+      name: 'modern-roots-client',
+      server: {
+        url: baseUrl,
+        protocolVersion: '2026-07-28',
+        roots: [{ uri: 'file:///initial' }],
+        fetch: async (url, init) => {
+          if (typeof init?.body === 'string') {
+            const message = JSON.parse(init.body) as { method?: string };
+            if (message.method) wireMethods.push(message.method);
+          }
+          return fetch(url, init);
+        },
+      },
+    });
+
+    await client.connect();
+    try {
+      await client.setRoots([{ uri: 'file:///updated' }]);
+    } finally {
+      await client.disconnect();
+    }
+
+    expect(wireMethods).not.toContain('notifications/roots/list_changed');
+  });
+
   it('delivers toolsChanged via subscriptions/listen on the modern leg', async () => {
     const client = new Client(
       { name: 'listen-client', version: '1.0.0' },

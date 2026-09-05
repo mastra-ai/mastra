@@ -275,7 +275,7 @@ export type BaseServerOptions = {
    * When configured, the client will:
    * 1. Automatically advertise the `roots` capability to the server
    * 2. Respond to `roots/list` requests with these roots
-   * 3. Send `notifications/roots/list_changed` when roots are updated via `setRoots()`
+   * 3. Send `notifications/roots/list_changed` on legacy connections when roots are updated via `setRoots()`
    *
    * @example
    * ```typescript
