@@ -5,7 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ModelPackInfo } from '../../../../../api/types';
 import { ModelPacksSection } from '../ModelPacksSection';
 
@@ -206,7 +206,7 @@ describe('ModelPacksSection', () => {
       );
 
       const user = userEvent.setup();
-      renderWithProviders(<ModelPacksSection models={models} />);
+      const { client } = renderWithProviders(<ModelPacksSection models={models} />);
 
       await user.click(await screen.findByRole('button', { name: 'New pack' }));
       await user.type(screen.getByPlaceholderText('e.g. my-pack'), 'Latest Models');
@@ -215,17 +215,16 @@ describe('ModelPacksSection', () => {
       await enterCustomModel(user, selects[1]!, 'anthropic/claude-next');
       await enterCustomModel(user, selects[2]!, 'openai/gpt-next-mini');
       await user.click(screen.getByRole('button', { name: 'Add' }));
+      await waitForMutationsIdle(client);
 
-      await waitFor(() =>
-        expect(postBody).toEqual({
-          name: 'Latest Models',
-          models: {
-            build: 'openai/gpt-next',
-            plan: 'anthropic/claude-next',
-            fast: 'openai/gpt-next-mini',
-          },
-        }),
-      );
+      expect(postBody).toEqual({
+        name: 'Latest Models',
+        models: {
+          build: 'openai/gpt-next',
+          plan: 'anthropic/claude-next',
+          fast: 'openai/gpt-next-mini',
+        },
+      });
     });
   });
 
