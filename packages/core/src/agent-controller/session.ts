@@ -2252,6 +2252,11 @@ export class SessionDisplayState {
     this.#state.pendingSuspensions.clear();
   }
 
+  /** Clear the resolved approval prompt; the caller dispatches `display_state_changed`. */
+  clearPendingApproval(): void {
+    this.#state.pendingApproval = null;
+  }
+
   /**
    * Clear the modified-files tally without touching the rest of the snapshot.
    * Used after a clone, which starts the cloned thread with a clean working set
@@ -3234,6 +3239,7 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
+    const wasArmed = this.approval.isArmed();
     this.approval.respond({
       decision,
       toolCallId,
@@ -3244,6 +3250,11 @@ export class Session<TState = unknown> {
         if (category) this.grantCategory(category);
       },
     });
+    // A stale response leaves the gate armed and must keep its prompt visible.
+    if (wasArmed && !this.approval.isArmed()) {
+      this.displayState.clearPendingApproval();
+      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
+    }
   }
 
   // ===========================================================================
