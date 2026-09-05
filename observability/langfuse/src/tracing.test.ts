@@ -414,6 +414,41 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.completion_start_time']).toBeUndefined();
     });
 
+    it.each([
+      {
+        name: 'maps a provider-reported USD total',
+        source: 'provider_reported',
+        cost: 0.0123,
+        expected: JSON.stringify({ total: 0.0123 }),
+      },
+      {
+        name: 'does not map a registry estimate',
+        source: 'pricing_registry',
+        cost: 0.0099,
+        expected: undefined,
+      },
+    ])('$name', async ({ source, cost, expected }) => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: cost,
+              costUnit: 'USD',
+              costMetadata: { source, providerCostFields: ['usage.cost'] },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
+    });
+
     it('maps userId to user.id', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));
