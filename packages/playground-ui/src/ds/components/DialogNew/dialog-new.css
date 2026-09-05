@@ -1,0 +1,111 @@
+.dialog-new-content {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transition:
+    opacity 180ms ease-out,
+    scale 180ms ease-out;
+}
+
+.dialog-new-backdrop {
+  transition: opacity 180ms ease-out;
+}
+
+.dialog-new-content[data-starting-style],
+.dialog-new-content[data-ending-style] {
+  opacity: 0;
+  scale: 0.98;
+}
+
+.dialog-new-backdrop[data-starting-style],
+.dialog-new-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.dialog-new-footer button {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: var(--dialog-new-action-height, var(--spacing-form-md));
+  line-height: var(--dialog-new-action-leading, var(--leading-ui-md));
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.dialog-new-footer [data-dialog-size='xs'] {
+  --dialog-new-action-height: var(--spacing-form-xs);
+  --dialog-new-action-leading: var(--leading-ui-xs);
+}
+
+.dialog-new-footer [data-dialog-size='sm'] {
+  --dialog-new-action-height: var(--spacing-form-sm);
+  --dialog-new-action-leading: var(--leading-ui-sm);
+}
+
+.dialog-new-footer [data-dialog-size='lg'] {
+  --dialog-new-action-height: var(--spacing-form-default);
+}
+
+.dialog-new-hold > button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.dialog-new-hold-progress {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: inherit;
+  background: var(--color-neutral6);
+  color: var(--color-surface1);
+  clip-path: inset(0 100% 0 0);
+  pointer-events: none;
+}
+
+[data-variant='destructive-ghost'] > .dialog-new-hold-progress {
+  background: var(--color-accent2);
+  color: var(--color-white);
+}
+
+[data-completed] > .dialog-new-hold-progress {
+  clip-path: inset(0);
+}
+
+[data-holding] > .dialog-new-hold-progress {
+  animation-name: dialog-new-hold;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes dialog-new-hold {
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@media (width <= 22rem) {
+  .dialog-new-footer > * {
+    width: 100%;
+  }
+
+  .dialog-new-hold > button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-new-content,
+  .dialog-new-backdrop {
+    transition: none;
+  }
+
+  [data-holding] > .dialog-new-hold-progress {
+    animation: none;
+    clip-path: inset(0 50% 0 0);
+  }
+}
