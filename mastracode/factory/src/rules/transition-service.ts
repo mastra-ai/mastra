@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { isReviewBoardPhase, reviewBoard } from '../boards/review.js';
+import { allowsBuiltInBoardTransition, builtInBoard } from '../boards/index.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -273,17 +273,13 @@ export class FactoryTransitionService {
         'The work item does not have one canonical Factory stage.',
       );
     }
-    if (
-      request.board === reviewBoard.id &&
-      (!isReviewBoardPhase(fromStage) ||
-        !isReviewBoardPhase(request.stage) ||
-        !reviewBoard.allowsTransition(fromStage, request.stage))
-    ) {
+    if (!allowsBuiltInBoardTransition(request.board, fromStage, request.stage)) {
+      const board = builtInBoard(request.board);
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
-        `The Review board does not allow moving from ${fromStage} to ${request.stage}.`,
+        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}.`,
       );
     }
 

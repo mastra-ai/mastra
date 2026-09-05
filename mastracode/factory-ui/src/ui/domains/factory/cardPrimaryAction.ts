@@ -39,6 +39,7 @@ const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
+  if (columnStage === 'review' && item.source !== 'github-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
   if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
   return item.source === 'github-pr' ? [REVIEW] : [];

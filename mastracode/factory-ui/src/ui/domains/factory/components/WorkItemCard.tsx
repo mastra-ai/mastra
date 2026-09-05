@@ -223,7 +223,7 @@ export function WorkItemCard({
           if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
         }}
         className={cn(
-          'group relative flex min-h-36 flex-col gap-3 rounded-3xl border border-border1/50 bg-neutral6/5 p-2.5 outline-none transition-colors hover:bg-surface3',
+          'group relative flex min-h-36 flex-col gap-3 rounded-card border border-border1/50 bg-neutral6/5 p-2 outline-none transition-colors hover:bg-surface3',
           // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
           wickStatus ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
           evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
@@ -238,7 +238,7 @@ export function WorkItemCard({
           draggable={false}
           aria-label={`Details for ${item.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-3xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={morph.openDetails}
         />
         <WorkItemCardRows
