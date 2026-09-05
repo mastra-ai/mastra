@@ -1,12 +1,6 @@
-import { reviewBoard } from '../boards/review.js';
-import { workBoard } from '../boards/work.js';
 import type {
-  FactoryBoardRuleLeaf,
-  FactoryBoardRules,
   FactoryRules,
   FactoryRulesOverrides,
-  FactoryRuleSource,
-  FactoryRuleStage,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
 } from './types.js';
@@ -44,39 +38,8 @@ function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
 }
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
-  work: workBoard.rules,
-  review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
 };
-
-function mergeBoardRules(
-  base: FactoryBoardRules | undefined,
-  overrides: FactoryBoardRules | undefined,
-): FactoryBoardRules {
-  const result: FactoryBoardRules = {};
-  const stages = new Set([...Object.keys(base ?? {}), ...Object.keys(overrides ?? {})]) as Set<FactoryRuleStage>;
-  for (const stage of stages) {
-    const baseSources = base?.[stage];
-    const overrideSources = overrides?.[stage];
-    const sources = new Set([
-      ...Object.keys(baseSources ?? {}),
-      ...Object.keys(overrideSources ?? {}),
-    ]) as Set<FactoryRuleSource>;
-    const mergedSources: Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>> = {};
-    for (const source of sources) {
-      const baseLeaf = baseSources?.[source];
-      const overrideLeaf = overrideSources?.[source];
-      mergedSources[source] = {
-        ...(baseLeaf && 'onEnter' in baseLeaf ? { onEnter: baseLeaf.onEnter } : {}),
-        ...(baseLeaf && 'onExit' in baseLeaf ? { onExit: baseLeaf.onExit } : {}),
-        ...(overrideLeaf && 'onEnter' in overrideLeaf ? { onEnter: overrideLeaf.onEnter } : {}),
-        ...(overrideLeaf && 'onExit' in overrideLeaf ? { onExit: overrideLeaf.onExit } : {}),
-      };
-    }
-    result[stage] = mergedSources;
-  }
-  return result;
-}
 
 function mergeToolRules(
   base: Record<string, FactoryToolRuleLeaf> | undefined,
@@ -99,8 +62,6 @@ export function mergeFactoryRuleOverrides(
   overrides: FactoryRulesOverrides = {},
 ): Omit<FactoryRules, 'version'> {
   return {
-    work: mergeBoardRules(base.work, overrides.work),
-    review: mergeBoardRules(base.review, overrides.review),
     tools: mergeToolRules(base.tools, overrides.tools),
   };
 }

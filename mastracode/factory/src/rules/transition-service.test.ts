@@ -1,7 +1,8 @@
 import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
+import type { BoardDefinition } from '../boards/define-board.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -11,6 +12,40 @@ import type { FactoryRuleBoard, FactoryRuleStage, FactoryStageRuleContext } from
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+
+function lifecycleOptions({
+  version,
+  handlers,
+}: {
+  version: string;
+  handlers: BoardDefinition<string, string>['rules'];
+}) {
+  const stages = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+  const board = defineBoard({
+    id: 'lifecycle-test',
+    title: 'Lifecycle test',
+    initialPhase: 'intake',
+    phases: Object.fromEntries(
+      stages.map(stage => [
+        stage,
+        {
+          title: stage,
+          outcomes: Object.fromEntries(stages.filter(next => next !== stage).map(next => [next, next])),
+          onEnter: Object.fromEntries(
+            Object.entries(handlers[stage] ?? {}).map(([source, leaf]) => [source, leaf?.onEnter]),
+          ),
+          onExit: Object.fromEntries(
+            Object.entries(handlers[stage] ?? {}).map(([source, leaf]) => [source, leaf?.onExit]),
+          ),
+        },
+      ]),
+    ),
+  });
+  return {
+    rules: defaultFactoryRules({ version }),
+    boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+  };
+}
 
 async function createItem(
   storage: WorkItemsStorage,
@@ -47,7 +82,7 @@ async function createItem(
 }
 
 function request(
-  item: { id: string; revision: number },
+  item: { id: string; revision: number; board?: string | null },
   overrides: Partial<{
     orgId: string;
     board: FactoryRuleBoard;
@@ -61,7 +96,7 @@ function request(
     orgId: overrides.orgId ?? 'org-1',
     factoryProjectId: PROJECT_ID,
     workItemId: item.id,
-    board: overrides.board ?? ('work' as const),
+    board: overrides.board ?? item.board ?? ('work' as const),
     stage: overrides.stage ?? ('execute' as const),
     expectedRevision: overrides.expectedRevision ?? item.revision,
     actor: { type: 'human' as const, id: 'user-1' },
@@ -78,6 +113,33 @@ async function ruleDecisionKeys(storage: WorkItemsStorage, orgId: string) {
 }
 
 describe('FactoryTransitionService', () => {
+  it.each(['github-issue', 'slack-thread'] as const)(
+    'does not auto-start %s on manual intake entry even with candidate metadata',
+    async source => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { source, metadata: { autoStartCandidate: true } });
+      const service = new FactoryTransitionService({
+        storage,
+        rules: defaultFactoryRules({ version: 'manual-entry' }),
+      });
+      await expect(
+        service.transition({ ...request(item, { stage: 'intake' }), initialEntry: true }),
+      ).resolves.toMatchObject({ status: 'accepted' });
+      expect(await ruleDecisionKeys(storage, 'org-1')).toEqual([]);
+      const entered = await storage.get({ orgId: 'org-1', id: item.id });
+      await expect(
+        service.transition(request(entered!, { stage: 'triage', identity: 'explicit-triage' })),
+      ).resolves.toMatchObject({ status: 'accepted' });
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(row => row.decision.type === 'invokeSkill'),
+      ).toEqual(
+        source === 'github-issue'
+          ? [expect.objectContaining({ decision: expect.objectContaining({ skillName: 'factory-triage' }) })]
+          : [],
+      );
+    },
+  );
+
   it('replays concurrent transitions with the same ingress identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
@@ -95,12 +157,8 @@ describe('FactoryTransitionService', () => {
   it('persists a feature classification without allowing a triage agent into Planning', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const planningRule = vi.fn();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: { work: { planning: { issue: { onEnter: planningRule } } } },
-      }),
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
     });
     const classified = await service.transition({
@@ -120,7 +178,7 @@ describe('FactoryTransitionService', () => {
     });
 
     expect(rejected).toMatchObject({ status: 'rejected', code: 'approval_required' });
-    expect(planningRule).not.toHaveBeenCalled();
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
   });
 
   it('allows a human to approve a classified feature into Planning', async () => {
@@ -143,18 +201,8 @@ describe('FactoryTransitionService', () => {
   it('rejects every non-human ingress at both protected gates even when autonomy is armed', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const planningRule = vi.fn();
-    const executeRule = vi.fn();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: {
-            planning: { issue: { onEnter: planningRule } },
-            execute: { issue: { onEnter: executeRule } },
-          },
-        },
-      }),
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
       storage,
     });
     const classified = await service.transition({
@@ -210,14 +258,22 @@ describe('FactoryTransitionService', () => {
     // the plan agent's own hop into Execute needs no second gesture.
     const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
     expect(acceptedAt).toBeInstanceOf(Date);
-    expect(planningRule).toHaveBeenCalledTimes(1);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+        row => row.decision.type === 'invokeSkill' && row.decision.role === 'plan',
+      ),
+    ).toHaveLength(1);
     const executed = await service.transition({
       ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'agent-execute' }),
       actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
       ingress: { type: 'agent', identity: 'agent-execute' },
     });
     expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
-    expect(executeRule).toHaveBeenCalledTimes(1);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+        row => row.decision.type === 'invokeSkill' && row.decision.role === 'work',
+      ),
+    ).toHaveLength(1);
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
     const reviewed = await service.transition(
       request(
@@ -353,13 +409,13 @@ describe('FactoryTransitionService', () => {
 
   it('does not run GitHub issue rules against a Slack thread card', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { source: 'slack-thread', stages: ['execute'] });
+    const item = await createItem(storage, { board: 'lifecycle-test', source: 'slack-thread', stages: ['execute'] });
     const issueRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'issue-effect', title: 'Issue' }));
     const manualRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'manual-effect', title: 'Manual' }));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
+      ...lifecycleOptions({
         version: 'rules-v1',
-        overrides: { work: { review: { issue: { onEnter: issueRule }, manual: { onEnter: manualRule } } } },
+        handlers: { review: { issue: { onEnter: issueRule }, manual: { onEnter: manualRule } } },
       }),
       storage,
     });
@@ -376,16 +432,16 @@ describe('FactoryTransitionService', () => {
     // came from — are unreachable unless the stamped metadata survives into the
     // context, and a rule reading `undefined` fails silently rather than loudly.
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { metadata: { author: 'octocat' } });
+    const item = await createItem(storage, { board: 'lifecycle-test', metadata: { author: 'octocat' } });
     const rule = vi.fn((_context: FactoryStageRuleContext) => ({
       type: 'notify' as const,
       idempotencyKey: 'effect-1',
       title: 'Ran',
     }));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
+      ...lifecycleOptions({
         version: 'rules-v1',
-        overrides: { work: { execute: { issue: { onEnter: rule } } } },
+        handlers: { execute: { issue: { onEnter: rule } } },
       }),
       storage,
     });
@@ -629,33 +685,31 @@ describe('FactoryTransitionService', () => {
 
   it('runs onExit before onEnter and atomically persists accepted decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     const order: string[] = [];
-    const rules = defaultFactoryRules({
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: {
-          intake: {
-            issue: {
-              onExit: () => {
-                order.push('exit');
-                return { type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving intake' };
-              },
+      handlers: {
+        intake: {
+          issue: {
+            onExit: () => {
+              order.push('exit');
+              return { type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving intake' };
             },
           },
-          execute: {
-            issue: {
-              onEnter: () => {
-                order.push('enter');
-                return { type: 'sendMessage', idempotencyKey: 'message-enter', role: 'work', message: 'Build it.' };
-              },
+        },
+        execute: {
+          issue: {
+            onEnter: () => {
+              order.push('enter');
+              return { type: 'sendMessage', idempotencyKey: 'message-enter', role: 'work', message: 'Build it.' };
             },
           },
         },
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(order).toEqual(['exit', 'enter']);
     expect(result).toMatchObject({ status: 'accepted', revision: 2, stage: 'execute' });
@@ -829,19 +883,17 @@ describe('FactoryTransitionService', () => {
 
   it('still runs the left lane onExit when a run start skips the entered lane', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['triage'] });
-    const rules = defaultFactoryRules({
+    const item = await createItem(storage, { board: 'lifecycle-test', stages: ['triage'] });
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: {
-          triage: {
-            issue: { onExit: () => ({ type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving triage' }) },
-          },
+      handlers: {
+        triage: {
+          issue: { onExit: () => ({ type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving triage' }) },
         },
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition({
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition({
       ...request(item, { stage: 'execute' }),
       cause: 'run_start',
     });
@@ -854,19 +906,17 @@ describe('FactoryTransitionService', () => {
 
   it('persists rule rejection without moving or queuing decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
-    const rules = defaultFactoryRules({
+    const item = await createItem(storage, { board: 'lifecycle-test' });
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: {
-          execute: {
-            issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Approval is required.' }) },
-          },
+      handlers: {
+        execute: {
+          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Approval is required.' }) },
         },
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(result).toMatchObject({ status: 'rejected', code: 'forbidden', reason: 'Approval is required.' });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
@@ -875,15 +925,13 @@ describe('FactoryTransitionService', () => {
 
   it('turns thrown rules into bounded safe rejection', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
-    const rules = defaultFactoryRules({
+    const item = await createItem(storage, { board: 'lifecycle-test' });
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: { execute: { issue: { onEnter: () => Promise.reject(new Error('provider unavailable')) } } },
-      },
+      handlers: { execute: { issue: { onEnter: () => Promise.reject(new Error('provider unavailable')) } } },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(result).toMatchObject({ status: 'rejected', code: 'rule_error' });
     expect(result.status === 'rejected' ? result.reason : '').toContain('provider unavailable');
@@ -891,19 +939,19 @@ describe('FactoryTransitionService', () => {
 
   it('applies one timeout to the full primary evaluation and ignores late resolution', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     let resolveRule!: (value: { type: 'notify'; idempotencyKey: string; title: string }) => void;
     const lateRule = new Promise<{ type: 'notify'; idempotencyKey: string; title: string }>(resolve => {
       resolveRule = resolve;
     });
-    const rules = defaultFactoryRules({
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: { work: { execute: { issue: { onEnter: () => lateRule } } } },
+      handlers: { execute: { issue: { onEnter: () => lateRule } } },
     });
 
     vi.useFakeTimers();
     try {
-      const transition = new FactoryTransitionService({ rules, storage }).transition(request(item));
+      const transition = new FactoryTransitionService({ ...rules, storage }).transition(request(item));
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await transition;
       expect(result).toMatchObject({ status: 'rejected', code: 'timeout' });
@@ -932,18 +980,18 @@ describe('FactoryTransitionService', () => {
 
   it('replays immutable ingress across rule version changes without re-evaluation', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     const first = await new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      ...lifecycleOptions({ version: 'rules-v1', handlers: {} }),
       storage,
     }).transition(request(item));
     const laterRule = vi.fn(() => ({ type: 'reject' as const, code: 'forbidden' as const, reason: 'new policy' }));
-    const rulesV2 = defaultFactoryRules({
+    const rulesV2 = lifecycleOptions({
       version: 'rules-v2',
-      overrides: { work: { execute: { issue: { onEnter: laterRule } } } },
+      handlers: { execute: { issue: { onEnter: laterRule } } },
     });
 
-    const replay = await new FactoryTransitionService({ rules: rulesV2, storage }).transition(
+    const replay = await new FactoryTransitionService({ ...rulesV2, storage }).transition(
       request(item, { stage: 'planning' }),
     );
 
@@ -956,13 +1004,13 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const handler = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'never', title: 'Never' }));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
+      ...lifecycleOptions({
         version: 'rules-v1',
-        overrides: { work: { execute: { issue: { onEnter: handler } } } },
+        handlers: { execute: { issue: { onEnter: handler } } },
       }),
       storage,
     });
-    const missing = { id: '00000000-0000-4000-8000-000000000099', revision: 1 };
+    const missing = { board: 'lifecycle-test', id: '00000000-0000-4000-8000-000000000099', revision: 1 };
 
     const first = await service.transition(request(missing, { identity: 'missing-event' }));
     const replay = await service.transition(request(missing, { identity: 'missing-event', stage: 'done' }));
@@ -1035,14 +1083,18 @@ describe('FactoryTransitionService', () => {
 
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const first = await createItem(storage, { orgId: 'org-1', sourceKey: 'github-issue:one' });
-    const second = await createItem(storage, { orgId: 'org-2', sourceKey: 'github-issue:two' });
-    const handler = () => ({ type: 'notify' as const, idempotencyKey: 'same-effect-key', title: 'Moved' });
-    const rules = defaultFactoryRules({
-      version: 'rules-v1',
-      overrides: { work: { execute: { issue: { onEnter: handler } } } },
+    const first = await createItem(storage, { board: 'lifecycle-test', orgId: 'org-1', sourceKey: 'github-issue:one' });
+    const second = await createItem(storage, {
+      board: 'lifecycle-test',
+      orgId: 'org-2',
+      sourceKey: 'github-issue:two',
     });
-    const service = new FactoryTransitionService({ rules, storage });
+    const handler = () => ({ type: 'notify' as const, idempotencyKey: 'same-effect-key', title: 'Moved' });
+    const rules = lifecycleOptions({
+      version: 'rules-v1',
+      handlers: { execute: { issue: { onEnter: handler } } },
+    });
+    const service = new FactoryTransitionService({ ...rules, storage });
 
     await service.transition(request(first, { identity: 'same-ingress' }));
     await service.transition(request(second, { orgId: 'org-2', identity: 'same-ingress' }));

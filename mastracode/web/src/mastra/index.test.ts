@@ -88,6 +88,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
+    const { factoryRules } = await import('./index.js');
+    expect(factoryRules.version).toBe('mastracode-web-v1');
+    expect(Object.keys(factoryRules).sort()).toEqual(['tools', 'version']);
+    expect(factoryConfigs[0]?.rules).toBe(factoryRules);
+    expect(factoryConfigs[0]?.boards).toBeUndefined();
+    expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
+  });
+
   it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
     await import('./index.js');

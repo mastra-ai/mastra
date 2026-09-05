@@ -29,6 +29,50 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Board lifecycle rules
+
+Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+import type { MastraFactoryConfig } from '@mastra/factory';
+import { defineBoard } from '@mastra/factory/boards';
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', next: 'shipped' },
+    shipped: {
+      title: 'Shipped',
+      onEnter: {
+        manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
+      },
+    },
+  },
+});
+
+export function createFactory(storage: MastraFactoryConfig['storage']) {
+  return new MastraFactory({ storage, boards: [releaseBoard] });
+}
+```
+
+Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To install only custom boards, set `includeDefaultBoards: false`. The IDs `work` and `review` remain reserved; they cannot be used to replace the built-ins.
+
+**Preferred intake behavior:** Work automatically invokes `factory-triage` only for linked-item materialization with `autoStartCandidate: true`. GitHub stamps that eligibility using actor trust and issue creation timing. Manual entry and noncandidate arrivals do not automatically start an investigation just because they enter Intake. Explicit issue triage remains available, and existing human-approval safeguards remain in effect. Linear intake does not automatically investigate; entering Triage invokes its existing investigation behavior. Review retains its guarded automatic first pass and explicit review behavior.
+
+**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. The web deployment now uses the guarded Work default rather than its former unconditional intake handler, so noncandidate or manual arrivals no longer start merely from entering Intake.
+
+Global rules now contain only the shared audit `version` and tool-result handlers:
+
+```typescript
+import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+
+const rules = defaultFactoryRules({ version: 'deployment-v2' });
+// Pass rules to MastraFactory. Optional tool overrides remain under overrides.tools.
+```
+
 ### GitHub event rules
 
 Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.
@@ -60,7 +104,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Work, Review, and tool configuration remain global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+Board definitions own lifecycle handlers; only tool-result configuration remains global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 

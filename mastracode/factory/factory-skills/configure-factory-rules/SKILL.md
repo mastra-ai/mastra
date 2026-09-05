@@ -1,6 +1,6 @@
 ---
 name: configure-factory-rules
-description: Configure typed Mastra Factory rules and exact-leaf overrides in deployment code
+description: Configure definition-owned board handlers, integration event rules, and global tool-result rules
 ---
 
 # Configure Factory Rules
@@ -9,20 +9,20 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 
 ## Find the configuration
 
-1. Search for `new MastraFactory`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
+1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. For board or tool rules, start with `defaultFactoryRules({ version, overrides })` if needed and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
+4. For custom-board handlers, edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
 ## Preserve the public shape
 
-Use the global rules tree for board and tool handlers:
+Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work and Review install automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-- `work.<stage>.<source>.onEnter` or `onExit`
-- `review.<stage>.<source>.onEnter` or `onExit`
-- `tools.<toolName>.onResult`
+Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. The global rules tree contains only `version` and `tools.<toolName>.onResult`.
+
+Work automatic intake requires both `linked_item_materialized` and `autoStartCandidate: true`. Do not remove these guards to reproduce the web deployment's former unconditional intake override. Noncandidate and manual arrivals stay unstarted merely from entering Intake; explicit issue triage and human-approval safeguards remain. Linear Intake and Review retain their existing defaults and guards.
 
 Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
 
@@ -37,13 +37,13 @@ Do not create an `actions` config or execute authoritative policy in React. Each
 
 Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
 
-## Apply exact-leaf overrides
+## Apply supported overrides
 
-An override replaces the exact handler leaf. It does not compose with the built-in handler at that leaf. Sibling leaves remain unchanged.
+Tool-result overrides replace the exact handler leaf. Integration overrides replace one event handler. Neither composes with the built-in handler; siblings remain unchanged. Board handlers belong to their definitions, not this override mechanism.
 
 Before replacing a built-in leaf:
 
-1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and global defaults in `src/rules/defaults.ts` within the Factory package.
+1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and tool defaults in `src/rules/defaults.ts` within the Factory package. Inspect Work and Review defaults in `src/boards/work.ts` and `src/boards/review.ts`, and custom handlers in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

@@ -1,6 +1,5 @@
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_SOURCES, FACTORY_RULE_STAGES } from './types.js';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from './types.js';
 import type {
-  FactoryBoardRules,
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
@@ -133,30 +132,10 @@ function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> 
   return sanitized;
 }
 
-function validateBoardRules(rules: unknown, label: string): asserts rules is FactoryBoardRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError(`${label} must be an object.`);
-  for (const [stage, sources] of Object.entries(rules)) {
-    enumValue(stage, FACTORY_RULE_STAGES, `${label} stage`);
-    if (!isPlainObject(sources)) throw new FactoryRuleValidationError(`${label}.${stage} must be an object.`);
-    for (const [source, leaf] of Object.entries(sources)) {
-      enumValue(source, FACTORY_RULE_SOURCES, `${label}.${stage} source`);
-      if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`${label}.${stage}.${source} must be an object.`);
-      assertExactKeys(leaf, ['onEnter', 'onExit'], `${label}.${stage}.${source}`);
-      for (const handler of Object.values(leaf)) {
-        if (handler !== undefined && typeof handler !== 'function') {
-          throw new FactoryRuleValidationError(`${label}.${stage}.${source} handlers must be functions.`);
-        }
-      }
-    }
-  }
-}
-
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'tools'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
-  validateBoardRules(rules.work, 'Factory rules.work');
-  validateBoardRules(rules.review, 'Factory rules.review');
 
   if (!isPlainObject(rules.tools)) throw new FactoryRuleValidationError('Factory rules.tools must be an object.');
   for (const [toolName, leaf] of Object.entries(rules.tools)) {

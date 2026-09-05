@@ -297,18 +297,12 @@ export interface FactoryToolRuleLeaf {
   onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
 }
 
-export type FactoryBoardRules = Partial<Record<string, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>>;
-
 export interface FactoryRules {
   version: string;
-  work: FactoryBoardRules;
-  review: FactoryBoardRules;
   tools: Record<string, FactoryToolRuleLeaf>;
 }
 
 export interface FactoryRulesOverrides {
-  work?: FactoryBoardRules;
-  review?: FactoryBoardRules;
   tools?: Record<string, FactoryToolRuleLeaf>;
 }
 
