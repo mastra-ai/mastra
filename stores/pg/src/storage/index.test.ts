@@ -122,6 +122,28 @@ describe('read/write pools', () => {
       const updatedAgent = await agents.update({ id: agentId, metadata: { touched: true } });
       expect(updatedAgent.metadata).toEqual({ touched: true });
 
+      // Base-class dataset flows (core DatasetsStorage) gate on a dataset lookup
+      // before delegating to the PG writer; that gate must also use the writer.
+      const datasets = await store.getStore('datasets');
+      const filters = { organizationId: `lag-org-${suffix}`, projectId: `lag-proj-${suffix}` };
+      const dataset = await datasets.createDataset({ name: 'lag', ...filters });
+      expect(await datasets.getDatasetById({ id: dataset.id, filters })).toBeNull();
+      const updatedDataset = await datasets.updateDataset({
+        id: dataset.id,
+        filters,
+        description: 'after',
+        inputSchema: { type: 'object' },
+      });
+      expect(updatedDataset.description).toBe('after');
+      const [item] = await datasets.batchInsertItems({
+        datasetId: dataset.id,
+        filters,
+        items: [{ input: { q: 1 } }],
+      });
+      await datasets.updateItem({ id: item!.id, datasetId: dataset.id, filters, input: { q: 2 } });
+      await datasets.batchDeleteItems({ datasetId: dataset.id, filters, itemIds: [item!.id] });
+      await datasets.deleteDataset({ id: dataset.id, filters });
+
       await memory.deleteThread({ threadId });
       await agents.delete(agentId);
     } finally {

@@ -348,6 +348,17 @@ export class DatasetsPG extends DatasetsStorage {
     return this.#getDatasetById(this.#db.readClient, args);
   }
 
+  protected override getDatasetForMutation(args: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
+    return this.#getDatasetById(this.#db.client, args);
+  }
+
+  protected override listItemsForMutation(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    return this.#listItems(this.#db.client, args);
+  }
+
   /**
    * Same lookup against an explicit client. Mutation paths pass the writer so a
    * lagging read replica cannot yield stale or missing rows mid-update.
@@ -1209,6 +1220,14 @@ export class DatasetsPG extends DatasetsStorage {
   }
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
+    return this.#listItems(this.#db.readClient, args);
+  }
+
+  /**
+   * Same listing against an explicit client. `updateDataset` validates existing
+   * items on the writer so a lagging replica cannot hide freshly inserted rows.
+   */
+  async #listItems(client: DbClient, args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -1254,10 +1273,7 @@ export class DatasetsPG extends DatasetsStorage {
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Count
-      const countResult = await this.#db.readClient.one(
-        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-        queryParams,
-      );
+      const countResult = await client.one(`SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`, queryParams);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -1268,7 +1284,7 @@ export class DatasetsPG extends DatasetsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.readClient.manyOrNone(
+      const rows = await client.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
