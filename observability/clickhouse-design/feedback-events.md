@@ -31,6 +31,7 @@ Entity hierarchy and context:
 - `rootEntityName`
 - `userId`
 - `organizationId`
+- `projectId`
 - `resourceId`
 - `runId`
 - `sessionId`
@@ -88,6 +89,7 @@ Notes:
   - `spanId`
   - `userId`
   - `organizationId`
+  - `projectId`
   - `experimentId`
   - `executionSource`
 - the physical layout intentionally favors trace-scoped feedback access over global recency-first listing in v0

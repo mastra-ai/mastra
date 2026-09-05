@@ -76,6 +76,7 @@ function buildCorrelationContext(
     rootEntityName: nullToUndefined(rootSpan.entityName),
     userId: nullToUndefined(span.userId),
     organizationId: nullToUndefined(span.organizationId),
+    projectId: nullToUndefined(span.projectId),
     resourceId: nullToUndefined(span.resourceId),
     runId: nullToUndefined(span.runId),
     sessionId: nullToUndefined(span.sessionId),

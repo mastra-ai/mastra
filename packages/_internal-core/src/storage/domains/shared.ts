@@ -256,6 +256,8 @@ export const userIdField = z.string().describe('Human end-user who triggered exe
 
 export const organizationIdField = z.string().describe('Multi-tenant organization/account');
 
+export const projectIdField = z.string().describe('Mastra project identifier');
+
 export const resourceIdField = z.string().describe('Broader resource context (Mastra memory compatibility)');
 
 export const runIdField = z.string().describe('Unique execution run identifier');
@@ -331,6 +333,7 @@ const contextFieldsBase = {
   // Identity & tenancy
   userId: userIdField.nullish(),
   organizationId: organizationIdField.nullish(),
+  projectId: projectIdField.nullish(),
   resourceId: resourceIdField.nullish(),
 
   // Correlation IDs
@@ -387,6 +390,7 @@ export const commonFilterFields = {
   rootEntityVersionId: rootEntityVersionIdField.optional(),
   userId: userIdField.optional(),
   organizationId: organizationIdField.optional(),
+  projectId: projectIdField.optional(),
   experimentId: experimentIdField.optional(),
   serviceName: serviceNameField.optional(),
   environment: environmentField.optional(),

@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -223,6 +224,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -315,6 +317,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -516,6 +519,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -552,6 +556,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_projectId projectId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
   INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
@@ -594,6 +599,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -690,6 +696,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -796,6 +803,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
+  projectId          Nullable(String),
   resourceId         Nullable(String),
   runId              Nullable(String),
   sessionId          Nullable(String),
@@ -1159,6 +1167,14 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  // Project context
+  addColumn(TABLE_SPAN_EVENTS, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_ROOTS, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_METRIC_EVENTS, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_LOG_EVENTS, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_SCORE_EVENTS, 'projectId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'projectId', 'Nullable(String)'),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index
@@ -1168,6 +1184,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_resourceId', 'resourceId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_userId', 'userId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_organizationId', 'organizationId'),
+  addBloomIndex(TABLE_METRIC_EVENTS, 'idx_projectId', 'projectId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_experimentId', 'experimentId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
@@ -1185,6 +1202,7 @@ export const METRIC_SKIP_INDEX_NAMES = [
   'idx_resourceId',
   'idx_userId',
   'idx_organizationId',
+  'idx_projectId',
   'idx_experimentId',
   'idx_runId',
   'idx_sessionId',

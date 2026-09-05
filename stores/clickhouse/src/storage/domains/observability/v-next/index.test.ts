@@ -661,6 +661,7 @@ LIMIT 1`,
             entityName: 'fallback-trace-agent',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -700,6 +701,7 @@ LIMIT 1`,
             entityName: 'fallback-trace-agent',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -750,6 +752,7 @@ LIMIT 1`,
               entityName: 'fallback-wf',
               userId: null,
               organizationId: null,
+              projectId: null,
               resourceId: null,
               runId: null,
               sessionId: null,
@@ -781,6 +784,7 @@ LIMIT 1`,
               entityName: 'fallback-branch-agent',
               userId: null,
               organizationId: null,
+              projectId: null,
               resourceId: null,
               runId: null,
               sessionId: null,
@@ -822,6 +826,7 @@ LIMIT 1`,
               entityName: 'fallback-wf',
               userId: null,
               organizationId: null,
+              projectId: null,
               resourceId: null,
               runId: null,
               sessionId: null,
@@ -853,6 +858,7 @@ LIMIT 1`,
               entityName: 'fallback-branch-agent',
               userId: null,
               organizationId: null,
+              projectId: null,
               resourceId: null,
               runId: null,
               sessionId: null,
@@ -1024,6 +1030,7 @@ LIMIT 1`,
           entityName: 'myAgent',
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -1091,6 +1098,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -1191,6 +1199,7 @@ LIMIT 1`,
             entityName: 'orderWorkflow',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -1222,6 +1231,7 @@ LIMIT 1`,
             entityName: 'Observer',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -1253,6 +1263,7 @@ LIMIT 1`,
             entityName: 'Observer',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -1284,6 +1295,7 @@ LIMIT 1`,
             entityName: 'web_search',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -1315,6 +1327,7 @@ LIMIT 1`,
             entityName: 'gpt-4',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -1368,6 +1381,7 @@ LIMIT 1`,
         entityName: 'web_search',
         userId: null,
         organizationId: null,
+        projectId: null,
         resourceId: null,
         runId: null,
         sessionId: null,
@@ -1633,6 +1647,8 @@ LIMIT 1`,
               rootEntityName: 'rootWfA',
               userId: 'user-A',
               organizationId: 'org-A',
+              projectId: 'project-A',
+              resourceId: 'resource-B',
               sessionId: 'sess-A',
               threadId: 'thread-A',
               requestId: 'req-A',
@@ -1654,6 +1670,8 @@ LIMIT 1`,
               entityType: EntityType.TOOL,
               entityName: 'toolB',
               userId: 'user-B',
+              projectId: 'project-B',
+              resourceId: 'resource-A',
               environment: 'production',
               executionSource: 'local',
               serviceName: 'svc-B',
@@ -1694,6 +1712,17 @@ LIMIT 1`,
         const result = await storage.listLogs({ filters: { userId: 'user-A' } });
         expect(result.logs).toHaveLength(1);
         expect(result.logs[0]!.message).toBe('log-A');
+      });
+
+      it('filters by projectId independently from resourceId', async () => {
+        const byProject = await storage.listLogs({ filters: { projectId: 'project-A' } });
+        const byResource = await storage.listLogs({ filters: { resourceId: 'resource-A' } });
+        expect(byProject.logs[0]).toMatchObject({ message: 'log-A', projectId: 'project-A', resourceId: 'resource-B' });
+        expect(byResource.logs[0]).toMatchObject({
+          message: 'log-B',
+          projectId: 'project-B',
+          resourceId: 'resource-A',
+        });
       });
 
       it('filters by sessionId', async () => {
@@ -1796,6 +1825,8 @@ LIMIT 1`,
               rootEntityName: 'rootWfA',
               userId: 'user-A',
               organizationId: 'org-A',
+              projectId: 'project-A',
+              resourceId: 'resource-B',
               sessionId: 'sess-A',
               threadId: 'thread-A',
               requestId: 'req-A',
@@ -1816,6 +1847,8 @@ LIMIT 1`,
               entityType: EntityType.TOOL,
               entityName: 'toolB',
               userId: 'user-B',
+              projectId: 'project-B',
+              resourceId: 'resource-A',
               environment: 'production',
               executionSource: 'local',
               serviceName: 'svc-B',
@@ -1841,6 +1874,13 @@ LIMIT 1`,
         const result = await storage.listMetrics({ filters: { name: ['ft_metric'], userId: 'user-A' } });
         expect(result.metrics).toHaveLength(1);
         expect(result.metrics[0]!.value).toBe(100);
+      });
+
+      it('filters by projectId independently from resourceId', async () => {
+        const byProject = await storage.listMetrics({ filters: { name: ['ft_metric'], projectId: 'project-A' } });
+        const byResource = await storage.listMetrics({ filters: { name: ['ft_metric'], resourceId: 'resource-A' } });
+        expect(byProject.metrics[0]).toMatchObject({ value: 100, projectId: 'project-A', resourceId: 'resource-B' });
+        expect(byResource.metrics[0]).toMatchObject({ value: 200, projectId: 'project-B', resourceId: 'resource-A' });
       });
 
       it('filters by environment', async () => {
@@ -1903,6 +1943,8 @@ LIMIT 1`,
             reason: null,
             experimentId: 'exp-A',
             organizationId: 'org-A',
+            projectId: 'project-A',
+            resourceId: 'resource-B',
             metadata: null,
           },
         });
@@ -1917,6 +1959,8 @@ LIMIT 1`,
             reason: null,
             experimentId: null,
             organizationId: 'org-B',
+            projectId: 'project-B',
+            resourceId: 'resource-A',
             metadata: null,
           },
         });
@@ -1926,6 +1970,21 @@ LIMIT 1`,
         const result = await storage.listScores({ filters: { organizationId: 'org-A' } });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.traceId).toBe('sf-trace-1');
+      });
+
+      it('filters by projectId independently from resourceId', async () => {
+        const byProject = await storage.listScores({ filters: { projectId: 'project-A' } });
+        const byResource = await storage.listScores({ filters: { resourceId: 'resource-A' } });
+        expect(byProject.scores[0]).toMatchObject({
+          traceId: 'sf-trace-1',
+          projectId: 'project-A',
+          resourceId: 'resource-B',
+        });
+        expect(byResource.scores[0]).toMatchObject({
+          traceId: 'sf-trace-2',
+          projectId: 'project-B',
+          resourceId: 'resource-A',
+        });
       });
 
       it('filters by experimentId', async () => {
@@ -1988,6 +2047,8 @@ LIMIT 1`,
             userId: 'user-A',
             sourceId: null,
             organizationId: 'org-A',
+            projectId: 'project-A',
+            resourceId: 'resource-B',
             metadata: null,
           },
         });
@@ -2005,6 +2066,8 @@ LIMIT 1`,
             userId: 'user-B',
             sourceId: null,
             organizationId: 'org-B',
+            projectId: 'project-B',
+            resourceId: 'resource-A',
             metadata: null,
           },
         });
@@ -2014,6 +2077,21 @@ LIMIT 1`,
         const result = await storage.listFeedback({ filters: { organizationId: 'org-A' } });
         expect(result.feedback).toHaveLength(1);
         expect(result.feedback[0]!.traceId).toBe('ff-trace-1');
+      });
+
+      it('filters by projectId independently from resourceId', async () => {
+        const byProject = await storage.listFeedback({ filters: { projectId: 'project-A' } });
+        const byResource = await storage.listFeedback({ filters: { resourceId: 'resource-A' } });
+        expect(byProject.feedback[0]).toMatchObject({
+          traceId: 'ff-trace-1',
+          projectId: 'project-A',
+          resourceId: 'resource-B',
+        });
+        expect(byResource.feedback[0]).toMatchObject({
+          traceId: 'ff-trace-2',
+          projectId: 'project-B',
+          resourceId: 'resource-A',
+        });
       });
 
       it('filters by experimentId', async () => {
@@ -2128,6 +2206,7 @@ LIMIT 1`,
             entityName: 'weatherAgent',
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -2751,6 +2830,7 @@ LIMIT 1`,
         entityName: 'myAgent',
         userId: null,
         organizationId: null,
+        projectId: null,
         resourceId: null,
         runId: null,
         sessionId: null,
@@ -2795,6 +2875,7 @@ LIMIT 1`,
         entityName: 'myAgent',
         userId: null,
         organizationId: null,
+        projectId: null,
         resourceId: null,
         runId: null,
         sessionId: null,
@@ -2846,7 +2927,8 @@ LIMIT 1`,
             entityName: 'myWorkflow',
             userId: null,
             organizationId: null,
-            resourceId: null,
+            projectId: 'platform-project',
+            resourceId: 'memory-resource',
             runId: null,
             sessionId: null,
             threadId: null,
@@ -2877,7 +2959,8 @@ LIMIT 1`,
             entityName: 'myAgent',
             userId: null,
             organizationId: null,
-            resourceId: null,
+            projectId: 'platform-project',
+            resourceId: 'memory-resource',
             runId: null,
             sessionId: null,
             threadId: null,
@@ -2904,12 +2987,23 @@ LIMIT 1`,
       expect(root).not.toBeNull();
       expect(root!.span.spanId).toBe('root-span');
       expect(root!.span.name).toBe('root');
+      expect(root!.span.projectId).toBe('platform-project');
+      expect(root!.span.resourceId).toBe('memory-resource');
+
+      const branches = await storage.listBranches({ filters: { projectId: 'platform-project' } });
+      expect(branches.branches).toHaveLength(2);
+      expect(branches.branches.every(branch => branch.projectId === 'platform-project')).toBe(true);
 
       // listTraces should show exactly 1 trace (the root span)
-      const traces = await storage.listTraces({});
+      const traces = await storage.listTraces({ filters: { projectId: 'platform-project' } });
       expect(traces.spans).toHaveLength(1);
       expect(traces.spans[0]!.traceId).toBe('mv-trace');
       expect(traces.spans[0]!.spanId).toBe('root-span');
+      expect(traces.spans[0]!.projectId).toBe('platform-project');
+      expect(traces.spans[0]!.resourceId).toBe('memory-resource');
+
+      const wrongDimension = await storage.listTraces({ filters: { resourceId: 'platform-project' } });
+      expect(wrongDimension.spans).toHaveLength(0);
     });
 
     it('child spans do NOT appear in trace_roots', async () => {
@@ -2926,6 +3020,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -2980,6 +3075,7 @@ LIMIT 1`,
           entityName: 'myAgent',
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3020,6 +3116,7 @@ LIMIT 1`,
           entityName: 'myAgent',
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3060,6 +3157,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3101,6 +3199,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3132,6 +3231,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3179,6 +3279,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3210,6 +3311,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3246,6 +3348,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3291,6 +3394,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3322,6 +3426,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3377,6 +3482,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3419,6 +3525,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3450,6 +3557,7 @@ LIMIT 1`,
             entityName: null,
             userId: null,
             organizationId: null,
+            projectId: null,
             resourceId: null,
             runId: null,
             sessionId: null,
@@ -3492,6 +3600,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3538,6 +3647,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3591,6 +3701,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3656,6 +3767,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -3740,6 +3852,7 @@ LIMIT 1`,
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -4275,6 +4388,25 @@ LIMIT 1`,
       }
     });
 
+    it('defines nullable projectId columns and additive migrations for all physical event tables', () => {
+      const ddl = buildAllTableDDL().join('\n');
+      expect(ddl.match(/projectId\s+Nullable\(String\)/g)).toHaveLength(7);
+      expect(ddl).toContain('INDEX idx_projectId projectId TYPE bloom_filter(0.01) GRANULARITY 2');
+
+      const projectMigrations = ALL_MIGRATIONS.filter(entry => entry.kind === 'column' && entry.name === 'projectId');
+      expect(projectMigrations.map(entry => entry.table).sort()).toEqual(
+        [
+          'mastra_feedback_events',
+          'mastra_log_events',
+          'mastra_metric_events',
+          'mastra_score_events',
+          'mastra_span_events',
+          'mastra_trace_branches',
+          'mastra_trace_roots',
+        ].sort(),
+      );
+    });
+
     // --- Integration tests: init() must not re-issue applied ALTERs ---
 
     it('re-running init against a current schema emits zero ALTER statements', async () => {
@@ -4375,9 +4507,9 @@ LIMIT 1`,
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
       });
 
-      // Pick a migration we know is additive and safe to drop/re-add.
+      // Pick the project context migration to prove an existing table is upgraded.
       const target = ALL_MIGRATIONS.find(
-        m => m.kind === 'column' && m.table === 'mastra_log_events' && m.name === 'entityVersionId',
+        m => m.kind === 'column' && m.table === 'mastra_log_events' && m.name === 'projectId',
       );
       expect(target).toBeDefined();
 
@@ -4453,6 +4585,7 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -4508,6 +4641,7 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
@@ -4568,6 +4702,7 @@ describe('listTracesLight projection', () => {
           entityName: null,
           userId: null,
           organizationId: null,
+          projectId: null,
           resourceId: null,
           runId: null,
           sessionId: null,
