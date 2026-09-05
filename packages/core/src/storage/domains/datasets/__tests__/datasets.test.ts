@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { ExperimentsInMemory } from '../../experiments/inmemory';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
 
@@ -593,6 +594,111 @@ describe('DatasetsInMemory', () => {
 
       const fetched = await storage.getItemById({ id: item.id });
       expect(fetched).toBeNull();
+    });
+
+    it('purgeItem scrubs every historical row without changing version visibility', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { patient: 'Bob' },
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+      expect(
+        history.every(
+          row =>
+            row.input === null &&
+            row.groundTruth === null &&
+            row.expectedTrajectory === null &&
+            row.toolMocks === null &&
+            row.unmockedToolPolicy === null &&
+            row.scorerIds === null &&
+            row.requestContext === null &&
+            row.source === null,
+        ),
+      ).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+      await expect(storage.getItemById({ id: item.id, datasetVersion: item.datasetVersion })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+      await expect(storage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion })).resolves.toMatchObject(
+        { input: null, metadata: { __purged: true } },
+      );
+    });
+
+    it('redacts in-memory experiment result writes submitted after item purge', async () => {
+      const experiments = new ExperimentsInMemory({ db });
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const experiment = await experiments.createExperiment({
+        name: 'late-result',
+        datasetId: dataset.id,
+        datasetVersion: item.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+      const added = await experiments.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        tags: ['patient-alice'],
+      });
+      const updated = await experiments.updateExperimentResult({
+        id: added.id,
+        experimentId: experiment.id,
+        status: 'needs-review',
+        tags: ['patient-alice'],
+        comment: 'Patient Alice requires review',
+      });
+      const upserted = await experiments.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'restored secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        attempt: 0,
+      });
+
+      expect(added).toMatchObject({ input: null, output: null, metadata: { __purged: true }, tags: null });
+      expect(updated).toMatchObject({ status: 'needs-review', tags: null, comment: null });
+      expect(upserted).toMatchObject({
+        id: added.id,
+        input: null,
+        output: null,
+        groundTruth: null,
+        metadata: { __purged: true },
+        error: null,
+        tags: null,
+        comment: null,
+      });
     });
 
     it('getItemById with datasetVersion returns the row visible in the snapshot (T3.13)', async () => {

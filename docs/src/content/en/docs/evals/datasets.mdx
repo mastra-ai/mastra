@@ -1,8 +1,8 @@
 ---
-title: "Datasets"
-description: "Create versioned Mastra datasets, define item schemas, manage test data through code or Studio, and track experiments against agents and workflows."
+title: 'Datasets'
+description: 'Create versioned Mastra datasets, define item schemas, manage test data through code or Studio, and track experiments against agents and workflows.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Datasets
@@ -126,9 +126,9 @@ await dataset.addItems({
 })
 ```
 
-## Updating and deleting items
+## Updating, deleting, and purging items
 
-[`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) let you modify or remove existing items by `itemId`:
+[`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) create new dataset versions as they modify or remove items:
 
 ```typescript title="src/mastra/datasets/update-delete.ts"
 await dataset.updateItem({
@@ -140,6 +140,16 @@ await dataset.deleteItem({ itemId: 'item-abc-123' })
 
 await dataset.deleteItems({ itemIds: ['item-1', 'item-2'] })
 ```
+
+Deleting an item hides it from the current dataset version but retains its content in historical rows and the deletion tombstone. Use [`purgeItem()`](/reference/datasets/purgeItem) when you must permanently erase the item's stored content:
+
+```typescript title="src/mastra/datasets/purge-item.ts"
+await dataset.purgeItem({ itemId: 'item-abc-123' })
+```
+
+Purging replaces content in every historical row and deletion tombstone with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content. It keeps version, identity, experiment counters, and review status so pinned dataset versions and experiment records remain structurally consistent. Purging doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
+
+MongoDB storage requires a replica set or sharded deployment with transaction support for this operation. Purging fails before changing data when MongoDB transactions aren't available.
 
 ## Listing and searching items
 
@@ -171,7 +181,7 @@ const v2Items = await dataset.listItems({ version: 2 })
 
 ## Versioning
 
-Every mutation to a dataset's items (add, update, or delete) bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
+Adding, updating, or deleting dataset items bumps the dataset version. Purging an item's stored content with [`purgeItem()`](/reference/datasets/purgeItem) doesn't create a new version. This lets you pin experiments to a specific snapshot of the data while erasing sensitive content without changing the version history.
 
 ### Listing versions
 

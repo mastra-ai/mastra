@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   EXPERIMENTS_SCHEMA,
@@ -10,7 +11,6 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
-  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -33,8 +33,13 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
+import type {
+  SqliteClient as Client,
+  SqliteInValue as InValue,
+  SqliteTransaction as Transaction,
+} from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { buildScopedWhere, tenancyWhere } from '../utils';
 
@@ -60,6 +65,37 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     const client = resolveClient(config);
     this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+  }
+
+  async #withPurgeBarrier<T>(
+    experimentId: string,
+    itemId: string,
+    fn: (tx: Transaction, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
+  ): Promise<T> {
+    return withClientWriteLock(this.#client, async () => {
+      const tx = await this.#client.transaction('write');
+      try {
+        const purge = await tx.execute({
+          sql: `SELECT json_extract(i."metadata", '$.__purged') AS "purged",
+                       json_extract(i."metadata", '$.purgedAt') AS "purgedAt"
+                FROM ${TABLE_EXPERIMENTS} e
+                JOIN ${TABLE_DATASET_ITEMS} i ON i."datasetId" = e."datasetId" AND i."id" = ?
+                WHERE e."id" = ? AND json_extract(i."metadata", '$.__purged') = 1
+                LIMIT 1`,
+          args: [itemId, experimentId],
+        });
+        const row = purge.rows[0];
+        const purgeMetadata = row?.purged === 1 ? { __purged: true, purgedAt: row.purgedAt as string } : null;
+        const result = await fn(tx, purgeMetadata);
+        await tx.commit();
+        return result;
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      } finally {
+        tx.close();
+      }
+    });
   }
 
   async init(): Promise<void> {
@@ -586,30 +622,37 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      await this.#db.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: input.input,
-          output: input.output,
-          groundTruth: input.groundTruth,
-          metadata: input.metadata ?? null,
-          error: input.error ?? null,
-          startedAt: input.startedAt.toISOString(),
-          completedAt: input.completedAt.toISOString(),
-          retryCount: input.retryCount,
-          attempt: input.attempt ?? 0,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
-          toolMockReport: input.toolMockReport ?? null,
-          createdAt: nowIso,
-        },
+      const purgeMetadata = await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_EXPERIMENT_RESULTS} (
+            "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+            "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id,
+            input.experimentId,
+            input.itemId,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(marker ? null : input.input),
+            JSON.stringify(marker ? null : (input.output ?? null)),
+            JSON.stringify(marker ? null : (input.groundTruth ?? null)),
+            JSON.stringify(marker ?? input.metadata ?? null),
+            JSON.stringify(marker ? null : (input.error ?? null)),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            input.attempt ?? 0,
+            input.traceId ?? null,
+            input.status ?? null,
+            JSON.stringify(marker ? null : (input.tags ?? null)),
+            JSON.stringify(marker ? null : (input.toolMockReport ?? null)),
+            nowIso,
+          ],
+        });
+        return marker;
       });
 
       return {
@@ -619,19 +662,19 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         itemDatasetVersion: input.itemDatasetVersion,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output,
-        groundTruth: input.groundTruth,
-        metadata: input.metadata ?? null,
-        error: input.error,
+        input: purgeMetadata ? null : input.input,
+        output: purgeMetadata ? null : input.output,
+        groundTruth: purgeMetadata ? null : input.groundTruth,
+        metadata: purgeMetadata ?? input.metadata ?? null,
+        error: purgeMetadata ? null : input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         attempt: input.attempt ?? 0,
         traceId: input.traceId ?? null,
         status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
+        tags: purgeMetadata ? null : (input.tags ?? null),
+        toolMockReport: purgeMetadata ? null : (input.toolMockReport ?? null),
         createdAt: now,
       };
     } catch (error) {
@@ -649,75 +692,60 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
     try {
       const attempt = input.attempt ?? 0;
-      const existing = await this.#client.execute({
-        sql: `SELECT "id" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
-        args: [input.experimentId, input.itemId, attempt],
-      });
-      let existingId = existing.rows[0]?.id as string | undefined;
-
-      if (!existingId) {
-        // The lookup + insert is not atomic: two concurrent submissions can
-        // both miss the read and race into the insert. The unique index on
-        // (experimentId, itemId, attempt) rejects the loser — converge it
-        // onto the winner's row by falling through to the update path.
-        try {
-          return await this.addExperimentResult({ ...input, attempt });
-        } catch (insertError) {
-          if (
-            !hasErrorCode(
-              insertError,
-              new Set(['SQLITE_CONSTRAINT', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'SQLITE_CONSTRAINT_UNIQUE']),
-            )
-          )
-            throw insertError;
-          const winner = await this.#client.execute({
-            sql: `SELECT "id" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
-            args: [input.experimentId, input.itemId, attempt],
-          });
-          existingId = winner.rows[0]?.id as string | undefined;
-          if (!existingId) throw insertError;
-        }
-      }
-
-      // Last write wins on the natural key; keep row id + createdAt stable.
-      await this.#client.execute({
-        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET
-          "itemDatasetVersion" = ?, "organizationId" = ?, "projectId" = ?,
-          "input" = ?, "output" = ?, "groundTruth" = ?, "metadata" = ?, "error" = ?,
-          "startedAt" = ?, "completedAt" = ?, "retryCount" = ?, "attempt" = ?,
-          "traceId" = ?, "status" = ?, "tags" = ?, "toolMockReport" = ?
-        WHERE "id" = ?`,
-        args: [
-          input.itemDatasetVersion ?? null,
-          input.organizationId ?? null,
-          input.projectId ?? null,
-          JSON.stringify(input.input),
-          input.output != null ? JSON.stringify(input.output) : null,
-          input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-          input.metadata != null ? JSON.stringify(input.metadata) : null,
-          input.error != null ? JSON.stringify(input.error) : null,
-          input.startedAt.toISOString(),
-          input.completedAt.toISOString(),
-          input.retryCount,
-          attempt,
-          input.traceId ?? null,
-          input.status ?? null,
-          input.tags != null ? JSON.stringify(input.tags) : null,
-          input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
-          existingId,
-        ],
-      });
-
-      const result = await this.getExperimentResultById({ id: existingId });
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPSERT_EXPERIMENT_RESULT', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { resultId: existingId },
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
+        const id = crypto.randomUUID();
+        await tx.execute({
+          sql: `INSERT INTO ${TABLE_EXPERIMENT_RESULTS} (
+            "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+            "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT("experimentId", "itemId", "attempt") DO UPDATE SET
+            "itemDatasetVersion" = excluded."itemDatasetVersion", "organizationId" = excluded."organizationId",
+            "projectId" = excluded."projectId", "input" = excluded."input", "output" = excluded."output",
+            "groundTruth" = excluded."groundTruth", "metadata" = excluded."metadata", "error" = excluded."error",
+            "startedAt" = excluded."startedAt", "completedAt" = excluded."completedAt",
+            "retryCount" = excluded."retryCount", "attempt" = excluded."attempt", "traceId" = excluded."traceId",
+            "status" = excluded."status", "tags" = excluded."tags", "toolMockReport" = excluded."toolMockReport",
+            "comment" = CASE WHEN ? THEN NULL ELSE "comment" END`,
+          args: [
+            id,
+            input.experimentId,
+            input.itemId,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(marker ? null : input.input),
+            JSON.stringify(marker ? null : (input.output ?? null)),
+            JSON.stringify(marker ? null : (input.groundTruth ?? null)),
+            JSON.stringify(marker ?? input.metadata ?? null),
+            JSON.stringify(marker ? null : (input.error ?? null)),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            attempt,
+            input.traceId ?? null,
+            input.status ?? null,
+            JSON.stringify(marker ? null : (input.tags ?? null)),
+            JSON.stringify(marker ? null : (input.toolMockReport ?? null)),
+            new Date().toISOString(),
+            Boolean(marker),
+          ],
         });
-      }
-      return result;
+        const result = await tx.execute({
+          sql: `SELECT * FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "experimentId" = ? AND "itemId" = ? AND COALESCE("attempt", 0) = ?`,
+          args: [input.experimentId, input.itemId, attempt],
+        });
+        const row = result.rows[0];
+        if (!row) {
+          throw new MastraError({
+            id: createStorageErrorId('LIBSQL', 'UPSERT_EXPERIMENT_RESULT', 'NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+          });
+        }
+        return this.transformExperimentResultRow(row as Record<string, unknown>);
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -733,57 +761,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
-      const setClauses: string[] = [];
-      const values: InValue[] = [];
-
-      if (input.status !== undefined) {
-        setClauses.push(`"status" = ?`);
-        values.push(input.status);
-      }
-      if (input.tags !== undefined) {
-        setClauses.push(`"tags" = ?`);
-        values.push(JSON.stringify(input.tags));
-      }
-      if (input.comment !== undefined) {
-        setClauses.push(`"comment" = ?`);
-        values.push(input.comment);
-      }
-
-      if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
-        if (!existing) {
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { resultId: input.id },
-          });
-        }
-        return existing;
-      }
-
-      values.push(input.id);
-      let whereClause = `"id" = ?`;
-      if (input.experimentId) {
-        values.push(input.experimentId);
-        whereClause += ` AND "experimentId" = ?`;
-      }
-      const updateResult = await this.#client.execute({
-        sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS} SET ${setClauses.join(', ')} WHERE ${whereClause}`,
-        args: values,
+      const owner = await this.#client.execute({
+        sql: `SELECT "experimentId", "itemId" FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "id" = ?${input.experimentId ? ' AND "experimentId" = ?' : ''}`,
+        args: input.experimentId ? [input.id, input.experimentId] : [input.id],
       });
-
-      if (updateResult.rowsAffected === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { resultId: input.id, ...(input.experimentId ? { experimentId: input.experimentId } : {}) },
-        });
-      }
-
-      const result = await this.getExperimentResultById({ id: input.id });
-      if (!result) {
+      const ownerRow = owner.rows[0];
+      if (!ownerRow) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -791,7 +774,45 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           details: { resultId: input.id },
         });
       }
-      return result;
+
+      return await this.#withPurgeBarrier(
+        String(ownerRow.experimentId),
+        String(ownerRow.itemId),
+        async (tx, marker) => {
+          const updateResult = await tx.execute({
+            sql: `UPDATE ${TABLE_EXPERIMENT_RESULTS}
+                SET "status" = CASE WHEN ? THEN ? ELSE "status" END,
+                    "tags" = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE "tags" END,
+                    "comment" = CASE WHEN ? THEN NULL WHEN ? THEN ? ELSE "comment" END
+                WHERE "id" = ?${input.experimentId ? ' AND "experimentId" = ?' : ''}`,
+            args: [
+              input.status !== undefined,
+              input.status ?? null,
+              Boolean(marker),
+              input.tags !== undefined,
+              JSON.stringify(input.tags ?? null),
+              Boolean(marker),
+              input.comment !== undefined,
+              input.comment ?? null,
+              input.id,
+              ...(input.experimentId ? [input.experimentId] : []),
+            ],
+          });
+          if (updateResult.rowsAffected === 0) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { resultId: input.id },
+            });
+          }
+          const result = await tx.execute({
+            sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE "id" = ?`,
+            args: [input.id],
+          });
+          return this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>);
+        },
+      );
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

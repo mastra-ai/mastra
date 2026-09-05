@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -17,6 +18,7 @@ import {
   LIST_DATASETS_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
+  PURGE_ITEM_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
   RUN_EXPERIMENT_ITEM_ROUTE,
   SUBMIT_EXPERIMENT_RESULT_ROUTE,
@@ -1197,6 +1199,108 @@ describe('Datasets Handlers', () => {
       expect(byInput.get('selected')?.scorerIds).toEqual(['quality']);
       expect(byInput.get('disabled')?.scorerIds).toEqual([]);
       expect(byInput.get('inherited')?.scorerIds).toBeUndefined();
+    });
+  });
+
+  describe('PURGE_ITEM_ROUTE', () => {
+    it('returns 501 when dataset item purge is unavailable in core', async () => {
+      coreFeatures.delete('dataset-item-purge');
+
+      try {
+        await expect(
+          PURGE_ITEM_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: 'dataset-id',
+            itemId: 'item-id',
+          } as any),
+        ).rejects.toMatchObject({
+          status: 501,
+          message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+        });
+      } finally {
+        coreFeatures.add('dataset-item-purge');
+      }
+    });
+
+    it('purges item history after the item has been soft deleted', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Purge route dataset' });
+      const item = await dataset.addItem({
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      await dataset.updateItem({ itemId: item.id, input: { patient: 'Bob' } });
+      await dataset.deleteItem({ itemId: item.id });
+
+      const result = await PURGE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: item.id,
+      } as any);
+
+      expect(result).toEqual({ success: true });
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(3);
+      expect(history.every(row => row.input === null)).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+    });
+
+    it('does not purge item or experiment data when tenancy does not match', async () => {
+      const dataset = await mastra.datasets.create({
+        name: 'Tenant-scoped purge dataset',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const item = await dataset.addItem({ input: { patient: 'Alice' } });
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const experiment = await experimentsStore!.createExperiment({
+        datasetId: dataset.id,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+      const experimentResult = await experimentsStore!.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: 1,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'private' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: item.id,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const history = await dataset.getItemHistory({ itemId: item.id });
+      expect(history).toHaveLength(1);
+      expect(history[0]?.input).toEqual({ patient: 'Alice' });
+      const storedResult = await experimentsStore!.getExperimentResultById({ id: experimentResult.id });
+      expect(storedResult?.input).toEqual({ patient: 'Alice' });
+      expect(storedResult?.output).toEqual({ diagnosis: 'private' });
+    });
+
+    it('returns 404 when no item history exists', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Missing purge item dataset' });
+
+      await expect(
+        PURGE_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          itemId: 'missing-item',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 });

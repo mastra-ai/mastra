@@ -3135,22 +3135,28 @@ type Shared_Type_132 = {
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
-  toolMocks?: Shared_Type_130[] | undefined;
+  toolMocks?: (Shared_Type_130[] | undefined) | null;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
-  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-  scorerIds?: string[] | undefined;
+  unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
+  scorerIds?: (string[] | undefined) | null;
   requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
   metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
   /** Source/provenance of this dataset item */
-  source?: Shared_Type_131 | undefined;
+  source?: (Shared_Type_131 | undefined) | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -18169,6 +18175,36 @@ export interface PatchDatasetsDatasetIdItemsItemId_RouteContract {
 }
 
 // ============================================================================
+// Route: DELETE /datasets/:datasetId/items/:itemId/purge
+// ============================================================================
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams = GetDatasetsDatasetIdItemsItemId_PathParams;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_Response = PostAuthRefresh_Response;
+
+export type DeleteDatasetsDatasetIdItemsItemIdPurge_Request = Simplify<
+  (DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams extends never
+    ? {}
+    : { params: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams }) &
+    (DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams
+        ? { query?: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }
+        : { query: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract {
+  pathParams: DeleteDatasetsDatasetIdItemsItemIdPurge_PathParams;
+  queryParams: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams;
+  body: never;
+  request: DeleteDatasetsDatasetIdItemsItemIdPurge_Request;
+  response: DeleteDatasetsDatasetIdItemsItemIdPurge_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: DELETE /datasets/:datasetId/items/:itemId
 // ============================================================================
 export type DeleteDatasetsDatasetIdItemsItemId_PathParams = GetDatasetsDatasetIdItemsItemId_PathParams;
@@ -18247,15 +18283,18 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
-    toolMocks?: Shared_Type_130[] | undefined;
+    toolMocks?: (Shared_Type_130[] | undefined) | null;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
-    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-    scorerIds?: string[] | undefined;
+    unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
+    scorerIds?: (string[] | undefined) | null;
     metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
+      | (
+          | {
+              [key: string]: unknown;
+            }
+          | undefined
+        )
+      | null;
     validTo: number | null;
     isDeleted: boolean;
     createdAt: Date;
@@ -22282,6 +22321,7 @@ export interface RouteTypes {
   'DELETE /datasets/:datasetId/items/batch': DeleteDatasetsDatasetIdItemsBatch_RouteContract;
   'GET /datasets/:datasetId/items/:itemId': GetDatasetsDatasetIdItemsItemId_RouteContract;
   'PATCH /datasets/:datasetId/items/:itemId': PatchDatasetsDatasetIdItemsItemId_RouteContract;
+  'DELETE /datasets/:datasetId/items/:itemId/purge': DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract;
   'DELETE /datasets/:datasetId/items/:itemId': DeleteDatasetsDatasetIdItemsItemId_RouteContract;
   'GET /datasets/:datasetId/versions': GetDatasetsDatasetIdVersions_RouteContract;
   'GET /datasets/:datasetId/items/:itemId/history': GetDatasetsDatasetIdItemsItemIdHistory_RouteContract;
@@ -22780,6 +22820,9 @@ export interface Client {
   };
   '/datasets/:datasetId/items/:itemId/history': {
     GET: GetDatasetsDatasetIdItemsItemIdHistory_RouteContract;
+  };
+  '/datasets/:datasetId/items/:itemId/purge': {
+    DELETE: DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract;
   };
   '/datasets/:datasetId/items/:itemId/versions/:datasetVersion': {
     GET: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract;

@@ -568,6 +568,42 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   },
 });
 
+export const PURGE_ITEM_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/items/:itemId/purge',
+  responseType: 'json',
+  pathParamSchema: datasetAndItemIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: successResponseSchema,
+  summary: 'Purge dataset item data',
+  description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId, ...params }) => {
+    assertDatasetsAvailable();
+    if (!coreFeatures.has('dataset-item-purge')) {
+      throw new HTTPException(501, {
+        message: 'Dataset item purge requires a newer @mastra/core with dataset purge support.',
+      });
+    }
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
+      const history = await ds.getItemHistory({ itemId });
+      if (history.length === 0) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+      await ds.purgeItem({ itemId });
+      return { success: true };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error purging dataset item data');
+    }
+  },
+});
+
 export const DELETE_ITEM_ROUTE = createRoute({
   method: 'DELETE',
   path: '/datasets/:datasetId/items/:itemId',

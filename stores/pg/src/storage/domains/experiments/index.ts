@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -304,7 +306,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      input: safelyParseJSON(row.input),
+      input: row.input === null ? null : safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : null,
@@ -648,57 +650,68 @@ export class ExperimentsPG extends ExperimentsStorage {
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const id = input.id ?? crypto.randomUUID();
-      const now = new Date();
-      const nowIso = now.toISOString();
+      const resultsTable = getTableName({
+        indexName: TABLE_EXPERIMENT_RESULTS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
-      await this.#db.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: input.input,
-          output: input.output ?? null,
-          groundTruth: input.groundTruth ?? null,
-          metadata: input.metadata ?? null,
-          error: input.error ?? null,
-          startedAt: input.startedAt.toISOString(),
-          completedAt: input.completedAt.toISOString(),
-          retryCount: input.retryCount,
-          attempt: input.attempt ?? 0,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ?? null,
-          toolMockReport: input.toolMockReport ?? null,
-          createdAt: nowIso,
-        },
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        let purgeMetadata: Record<string, unknown> | null = null;
+        if (owner?.datasetId) {
+          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+            owner.datasetId,
+          ]);
+          if (dataset) {
+            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [input.itemId, owner.datasetId],
+            );
+            purgeMetadata = purge?.metadata ?? null;
+          }
+        }
+        const nowIso = new Date().toISOString();
+        return t.one(
+          `INSERT INTO ${resultsTable} (
+            "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+            "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          RETURNING *`,
+          [
+            id,
+            input.experimentId,
+            input.itemId,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            input.attempt ?? 0,
+            input.traceId ?? null,
+            input.status ?? null,
+            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+            nowIso,
+          ],
+        );
       });
 
-      return {
-        id,
-        experimentId: input.experimentId,
-        itemId: input.itemId,
-        itemDatasetVersion: input.itemDatasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output ?? null,
-        groundTruth: input.groundTruth ?? null,
-        metadata: input.metadata ?? null,
-        error: input.error ?? null,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        retryCount: input.retryCount,
-        attempt: input.attempt ?? 0,
-        traceId: input.traceId ?? null,
-        status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
-        createdAt: now,
-      };
+      return this.transformExperimentResultRow(row);
     } catch (error) {
       throw new MastraError(
         {
@@ -714,9 +727,32 @@ export class ExperimentsPG extends ExperimentsStorage {
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const attempt = input.attempt ?? 0;
 
       const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        let purgeMetadata: Record<string, unknown> | null = null;
+        if (owner?.datasetId) {
+          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+            owner.datasetId,
+          ]);
+          if (dataset) {
+            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [input.itemId, owner.datasetId],
+            );
+            purgeMetadata = purge?.metadata ?? null;
+          }
+        }
+
         // Natural key lookup under FOR UPDATE so concurrent retries serialize
         // on the same row instead of inserting duplicates.
         // Note: COALESCE("attempt", 0) is an expression predicate, so the
@@ -746,19 +782,19 @@ export class ExperimentsPG extends ExperimentsStorage {
               input.itemDatasetVersion ?? null,
               input.organizationId ?? null,
               input.projectId ?? null,
-              JSON.stringify(input.input),
-              input.output != null ? JSON.stringify(input.output) : null,
-              input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-              input.metadata != null ? JSON.stringify(input.metadata) : null,
-              input.error != null ? JSON.stringify(input.error) : null,
+              JSON.stringify(purgeMetadata ? null : input.input),
+              purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+              purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+              JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+              purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
               input.startedAt.toISOString(),
               input.completedAt.toISOString(),
               input.retryCount,
               attempt,
               input.traceId ?? null,
               input.status ?? null,
-              input.tags != null ? JSON.stringify(input.tags) : null,
-              input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+              purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+              purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
               new Date().toISOString(),
             ],
           );
@@ -777,19 +813,19 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.itemDatasetVersion ?? null,
             input.organizationId ?? null,
             input.projectId ?? null,
-            JSON.stringify(input.input),
-            input.output != null ? JSON.stringify(input.output) : null,
-            input.groundTruth != null ? JSON.stringify(input.groundTruth) : null,
-            input.metadata != null ? JSON.stringify(input.metadata) : null,
-            input.error != null ? JSON.stringify(input.error) : null,
+            JSON.stringify(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
             input.startedAt.toISOString(),
             input.completedAt.toISOString(),
             input.retryCount,
             attempt,
             input.traceId ?? null,
             input.status ?? null,
-            input.tags != null ? JSON.stringify(input.tags) : null,
-            input.toolMockReport != null ? JSON.stringify(input.toolMockReport) : null,
+            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
           ],
         );
       });
@@ -810,47 +846,52 @@ export class ExperimentsPG extends ExperimentsStorage {
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const setClauses: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
-      if (input.status !== undefined) {
-        setClauses.push(`"status" = $${paramIndex++}`);
-        values.push(input.status);
-      }
-      if (input.tags !== undefined) {
-        setClauses.push(`"tags" = $${paramIndex++}`);
-        values.push(JSON.stringify(input.tags));
-      }
-      if (input.comment !== undefined) {
-        setClauses.push(`"comment" = $${paramIndex++}`);
-        values.push(input.comment);
-      }
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null; itemId: string }>(
+          `SELECT e."datasetId", r."itemId"
+           FROM ${tableName} r
+           JOIN ${experimentsTable} e ON e."id" = r."experimentId"
+           WHERE r."id" = $1${input.experimentId ? ' AND r."experimentId" = $2' : ''}`,
+          input.experimentId ? [input.id, input.experimentId] : [input.id],
+        );
+        if (!owner) return null;
 
-      if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
-        if (!existing) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { resultId: input.id },
-          });
-        }
-        return existing;
-      }
+        const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
+          owner.datasetId,
+        ]);
+        const purge = dataset
+          ? await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+              `SELECT "metadata" FROM ${itemsTable}
+               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+               LIMIT 1`,
+              [owner.itemId, owner.datasetId],
+            )
+          : null;
 
-      values.push(input.id);
-      let whereClause = `"id" = $${paramIndex}`;
-      if (input.experimentId) {
-        paramIndex++;
-        values.push(input.experimentId);
-        whereClause += ` AND "experimentId" = $${paramIndex}`;
-      }
-      const row = await this.#db.client.oneOrNone(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
-        values,
-      );
+        return t.oneOrNone(
+          `UPDATE ${tableName}
+           SET "status" = CASE WHEN $2 THEN $3 ELSE "status" END,
+               "tags" = CASE WHEN $4 THEN NULL WHEN $5 THEN $6::jsonb ELSE "tags" END,
+               "comment" = CASE WHEN $4 THEN NULL WHEN $7 THEN $8 ELSE "comment" END
+           WHERE "id" = $1${input.experimentId ? ' AND "experimentId" = $9' : ''}
+           RETURNING *`,
+          [
+            input.id,
+            input.status !== undefined,
+            input.status ?? null,
+            Boolean(purge),
+            input.tags !== undefined,
+            input.tags === undefined ? null : JSON.stringify(input.tags),
+            input.comment !== undefined,
+            input.comment ?? null,
+            input.experimentId,
+          ],
+        );
+      });
 
       if (!row) {
         throw new MastraError({

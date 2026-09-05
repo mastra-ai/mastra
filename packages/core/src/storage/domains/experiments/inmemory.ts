@@ -187,27 +187,37 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   }
 
   // Results (per-item)
+  #getPurgeMetadata(experimentId: string, itemId: string): Record<string, unknown> | null {
+    const datasetId = this.db.experiments.get(experimentId)?.datasetId;
+    if (!datasetId) return null;
+    const purgedRow = this.db.datasetItems
+      .get(itemId)
+      ?.find(row => row.datasetId === datasetId && row.metadata?.__purged === true);
+    return purgedRow?.metadata ?? null;
+  }
+
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     const now = new Date();
+    const purgeMetadata = this.#getPurgeMetadata(input.experimentId, input.itemId);
     const result: ExperimentResult = {
       id: input.id ?? crypto.randomUUID(),
       experimentId: input.experimentId,
       itemId: input.itemId,
       itemDatasetVersion: input.itemDatasetVersion,
-      input: input.input,
-      output: input.output,
-      groundTruth: input.groundTruth,
-      metadata: input.metadata ?? null,
-      error: input.error,
+      input: purgeMetadata ? null : input.input,
+      output: purgeMetadata ? null : input.output,
+      groundTruth: purgeMetadata ? null : input.groundTruth,
+      metadata: purgeMetadata ?? input.metadata ?? null,
+      error: purgeMetadata ? null : input.error,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       attempt: input.attempt ?? 0,
       traceId: input.traceId ?? null,
       status: input.status ?? null,
-      tags: input.tags ?? null,
+      tags: purgeMetadata ? null : (input.tags ?? null),
       comment: null,
-      toolMockReport: input.toolMockReport ?? null,
+      toolMockReport: purgeMetadata ? null : (input.toolMockReport ?? null),
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
       createdAt: now,
@@ -218,6 +228,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
 
   async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
     const attempt = input.attempt ?? 0;
+    const purgeMetadata = this.#getPurgeMetadata(input.experimentId, input.itemId);
     const existing = Array.from(this.db.experimentResults.values()).find(
       r => r.experimentId === input.experimentId && r.itemId === input.itemId && (r.attempt ?? 0) === attempt,
     );
@@ -230,20 +241,20 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       experimentId: input.experimentId,
       itemId: input.itemId,
       itemDatasetVersion: input.itemDatasetVersion,
-      input: input.input,
-      output: input.output,
-      groundTruth: input.groundTruth,
-      metadata: input.metadata ?? null,
-      error: input.error,
+      input: purgeMetadata ? null : input.input,
+      output: purgeMetadata ? null : input.output,
+      groundTruth: purgeMetadata ? null : input.groundTruth,
+      metadata: purgeMetadata ?? input.metadata ?? null,
+      error: purgeMetadata ? null : input.error,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       attempt,
       traceId: input.traceId ?? null,
       status: input.status ?? null,
-      tags: input.tags ?? null,
-      comment: existing.comment ?? null,
-      toolMockReport: input.toolMockReport ?? null,
+      tags: purgeMetadata ? null : (input.tags ?? null),
+      comment: purgeMetadata ? null : (existing.comment ?? null),
+      toolMockReport: purgeMetadata ? null : (input.toolMockReport ?? null),
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
       createdAt: existing.createdAt,
@@ -260,11 +271,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (input.experimentId && existing.experimentId !== input.experimentId) {
       throw new Error(`Experiment result ${input.id} does not belong to experiment ${input.experimentId}`);
     }
+    const purgeMetadata = this.#getPurgeMetadata(existing.experimentId, existing.itemId);
     const updated: ExperimentResult = {
       ...existing,
       status: input.status !== undefined ? input.status : existing.status,
-      tags: input.tags !== undefined ? input.tags : existing.tags,
-      comment: input.comment !== undefined ? input.comment : existing.comment,
+      tags: purgeMetadata ? null : input.tags !== undefined ? input.tags : existing.tags,
+      comment: purgeMetadata ? null : input.comment !== undefined ? input.comment : existing.comment,
     };
     this.db.experimentResults.set(input.id, cloneExperimentResultMetadata(updated));
     return cloneExperimentResultMetadata(updated);

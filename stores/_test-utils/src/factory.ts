@@ -44,6 +44,8 @@ export type TestCapabilities = {
   toolMocks?: boolean;
   /** Whether identity-aware dataset item insertion is supported (defaults to true). */
   datasetItemIdentity?: boolean;
+  /** Whether permanent dataset item purge is supported by the test topology (defaults to true). */
+  datasetItemPurge?: boolean;
   /**
    * Whether batchDeleteTraces supports tenant-scoped deletion via
    * organizationId/resourceId (defaults to false). Adapters without tenant

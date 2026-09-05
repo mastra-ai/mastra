@@ -49,6 +49,52 @@ describe('MongoDB storage — topology-aware transactions', () => {
     }
   });
 
+  test('dataset item purge fails before mutation on standalone MongoDB', async () => {
+    const store = new MongoDBStore({ id: 'tx-purge-standalone', uri: STANDALONE_URI, dbName: DB });
+    try {
+      await store.init();
+      const datasets = await store.getStore('datasets');
+      const experiments = await store.getStore('experiments');
+      if (!datasets || !experiments) throw new Error('Dataset and experiment storage required');
+      await datasets.dangerouslyClearAll();
+      await experiments.dangerouslyClearAll();
+      const dataset = await datasets.createDataset({ name: 'purge-standalone' });
+      const item = await datasets.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const experiment = await experiments.createExperiment({
+        name: 'purge-standalone',
+        datasetId: dataset.id,
+        datasetVersion: item.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+      const result = await experiments.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      await expect(datasets.purgeItem({ id: item.id, datasetId: dataset.id })).rejects.toMatchObject({
+        id: 'MONGODB_DATASET_ITEM_PURGE_REQUIRES_TRANSACTIONS',
+      });
+
+      await expect(datasets.getItemById({ id: item.id })).resolves.toMatchObject({ input: { patient: 'Alice' } });
+      await expect(experiments.getExperimentResultById({ id: result.id })).resolves.toMatchObject({
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+      });
+    } finally {
+      await store.close();
+    }
+  });
+
   test('supportsTransactions() returns true on a replica set', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rs', url: REPLICA_SET_URI, dbName: DB });
     try {

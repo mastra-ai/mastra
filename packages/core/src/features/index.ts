@@ -20,6 +20,8 @@ export const coreFeatures = new Set<string>([
   'request-response-id-rotation',
   'workspaces-v1',
   'datasets',
+  // Dataset item data can be permanently purged from history and linked experiment results.
+  'dataset-item-purge',
   'observability:v1.13.2',
   'observability-delta-polling',
   'channels',
