@@ -358,6 +358,21 @@ export interface DelegationConfig {
   includeSubAgentToolResultsInModelContext?: boolean;
 
   /**
+   * Let a later delegation reuse an earlier subagent's result verbatim.
+   *
+   * When enabled, every successful, non-empty subagent result in this run is
+   * registered under a reference ID and the supervisor model sees a
+   * `[ref: <id>]` line after the subagent's text. The `agent-*` delegation
+   * tools gain a `contextFromRefs` input so the supervisor can name earlier
+   * results; their text is inserted into the next subagent's prompt in labeled
+   * blocks instead of the supervisor restating it. References are in-memory
+   * and scoped to a single supervisor run.
+   *
+   * @default false
+   */
+  enableResultReferences?: boolean;
+
+  /**
    * Callback that controls which parent messages are passed to each subagent as conversation
    * context. Receives the full parent message history along with delegation metadata, and
    * returns the messages that should be forwarded.
