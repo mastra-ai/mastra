@@ -14,7 +14,7 @@ export default defineConfig({
   fixedExtension: false,
   nodeProtocol: 'strip',
   clean: true,
-  dts: true,
+  dts: { build: true },
   treeshake: true,
   sourcemap: true,
 });
