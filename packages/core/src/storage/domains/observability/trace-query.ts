@@ -28,6 +28,7 @@ const predicatePathSchema = z
   .min(1)
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
 const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.null()]);
+const timestampLiteralSchema = z.string().datetime({ offset: true });
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
 const pathOrLiteralSchema = z.union([pathRefSchema, literalRefSchema]);
@@ -214,7 +215,22 @@ export type TraceQueryField =
   | 'entityType'
   | 'environment'
   | 'status';
-export type TraceQuerySpanField = 'spanType' | 'error';
+export type TraceQuerySpanField =
+  | 'name'
+  | 'spanType'
+  | 'model'
+  | 'provider'
+  | 'startedAt'
+  | 'endedAt'
+  | 'durationMs'
+  | 'status'
+  | 'error'
+  | 'entityType'
+  | 'entityId'
+  | 'entityName'
+  | 'entityVersionId'
+  | 'parentEntityVersionId'
+  | 'rootEntityVersionId';
 export type TraceQueryScoreField = 'scorerId' | 'score';
 export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
@@ -356,8 +372,21 @@ const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
 };
 
 const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
+  name: { type: 'string', operators: STRING_OPERATORS },
   spanType: { type: 'string', operators: STRING_OPERATORS },
+  model: { type: 'string', operators: STRING_OPERATORS },
+  provider: { type: 'string', operators: STRING_OPERATORS },
+  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
+  status: { type: 'string', operators: STRING_OPERATORS },
   error: { type: 'presence', operators: PRESENCE_OPERATORS },
+  entityType: { type: 'string', operators: STRING_OPERATORS },
+  entityId: { type: 'string', operators: STRING_OPERATORS },
+  entityName: { type: 'string', operators: STRING_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
 };
 
 const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {
@@ -722,9 +751,8 @@ function normalizePath(path: string): string {
 function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {
   if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   if (rule.type === 'timestamp') {
-    if (typeof value !== 'string') return undefined;
-    const timestamp = new Date(value);
-    return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+    if (typeof value !== 'string' || !timestampLiteralSchema.safeParse(value).success) return undefined;
+    return new Date(value).toISOString();
   }
   if (rule.type === 'string') return typeof value === 'string' ? value : undefined;
   return undefined;
