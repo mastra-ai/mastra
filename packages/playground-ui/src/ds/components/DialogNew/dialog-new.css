@@ -72,7 +72,7 @@
   color: var(--color-white);
 }
 
-[data-confirmed] > .dialog-new-hold-progress {
+[data-completed] > .dialog-new-hold-progress {
   clip-path: inset(0);
 }
 
@@ -88,7 +88,7 @@
   }
 }
 
-@media (max-width: 22rem) {
+@media (width <= 22rem) {
   .dialog-new-footer > * {
     width: 100%;
   }
@@ -106,6 +106,6 @@
 
   [data-holding] > .dialog-new-hold-progress {
     animation: none;
-    clip-path: inset(0);
+    clip-path: inset(0 50% 0 0);
   }
 }

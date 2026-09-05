@@ -152,6 +152,8 @@ describe('Dialog', () => {
 });
 
 describe('DialogNew', () => {
+  afterEach(() => vi.useRealTimers());
+
   describe('when a destructive confirmation is opened', () => {
     it('renders the consequence copy and named actions', () => {
       render(<DialogNewFixture />);
@@ -172,7 +174,6 @@ describe('DialogNew', () => {
       fireEvent.keyUp(button, { key: ' ' });
       act(() => vi.advanceTimersByTime(1500));
       expect(onConfirm).not.toHaveBeenCalled();
-      vi.useRealTimers();
     });
   });
 
@@ -186,18 +187,42 @@ describe('DialogNew', () => {
       fireEvent.keyDown(button, { key: 'Enter', repeat: true });
       act(() => vi.advanceTimersByTime(1500));
       fireEvent.keyDown(button, { key: 'Enter', repeat: true });
-      fireEvent.click(button);
+      fireEvent.click(button, { detail: 1 });
       act(() => vi.advanceTimersByTime(1500));
       expect(onConfirm).toHaveBeenCalledTimes(1);
-      vi.useRealTimers();
     });
   });
 
-  describe('when a hold action receives an ordinary click', () => {
+  describe('when a hold action receives a mouse click', () => {
     it('does not bypass the hold', () => {
       const onConfirm = vi.fn();
       render(<DialogNewFixture onConfirm={onConfirm} hold />);
-      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete workspace' }), { detail: 1 });
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when assistive technology activates a hold action', () => {
+    it('confirms on the second activation', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<DialogNewFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.click(button, { detail: 0 });
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(screen.getByRole('status').textContent).toContain('Activate again');
+      fireEvent.click(button, { detail: 0 });
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('disarms when the second activation is late', () => {
+      vi.useFakeTimers();
+      const onConfirm = vi.fn();
+      render(<DialogNewFixture onConfirm={onConfirm} hold />);
+      const button = screen.getByRole('button', { name: 'Delete workspace' });
+      fireEvent.click(button, { detail: 0 });
+      act(() => vi.advanceTimersByTime(5000));
+      fireEvent.click(button, { detail: 0 });
       expect(onConfirm).not.toHaveBeenCalled();
     });
   });
@@ -321,6 +346,8 @@ describe('DialogNew hold cancellation', () => {
 });
 
 describe('DialogNew hold duration', () => {
+  afterEach(() => vi.useRealTimers());
+
   describe('when holdSeconds is 2.5', () => {
     it('confirms only after the configured duration', () => {
       vi.useFakeTimers();
@@ -331,7 +358,6 @@ describe('DialogNew hold duration', () => {
       expect(onConfirm).not.toHaveBeenCalled();
       act(() => vi.advanceTimersByTime(1));
       expect(onConfirm).toHaveBeenCalledTimes(1);
-      vi.useRealTimers();
     });
   });
 });

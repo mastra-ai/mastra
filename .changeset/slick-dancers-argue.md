@@ -25,4 +25,4 @@ import { DialogNew } from '@mastra/playground-ui/components/DialogNew';
 </DialogNew>;
 ```
 
-The caller closes the dialog after the action succeeds. Storybook includes default, destructive, hold, long-copy, form, and error/retry examples with button-size and hold-duration controls.
+The caller closes the dialog after the action succeeds.

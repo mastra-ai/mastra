@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, PointerEvent } from 'react';
+import type { ComponentProps, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { useDialogNew } from './dialog-new-context';
 import { Button } from '@/ds/components/Button';
 
@@ -9,11 +9,16 @@ export type DialogNewActionProps = Omit<ComponentProps<typeof Button>, 'onClick'
   holdSeconds?: number;
 };
 
+const ARM_WINDOW_MS = 4000;
+
 const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'confirmation'>>(
   ({ onConfirm, children, disabled, holdSeconds = 1.5, ...props }, ref) => {
     const { variant, pending } = useDialogNew();
     const [holding, setHolding] = useState(false);
+    const [completed, setCompleted] = useState(false);
+    const [armed, setArmed] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const armTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const active = useRef(false);
     const hintId = useId();
 
@@ -23,14 +28,34 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
       setHolding(false);
     }
 
+    function disarm() {
+      clearTimeout(armTimer.current);
+      setArmed(false);
+    }
+
+    function complete() {
+      setHolding(false);
+      setCompleted(true);
+      disarm();
+      onConfirm();
+    }
+
     function start() {
       if (disabled || active.current) return;
       active.current = true;
       setHolding(true);
-      timer.current = setTimeout(() => {
-        setHolding(false);
-        onConfirm();
-      }, holdSeconds * 1000);
+      timer.current = setTimeout(complete, holdSeconds * 1000);
+    }
+
+    function onClick(event: MouseEvent<HTMLButtonElement>) {
+      event.preventDefault();
+      if (event.detail !== 0 || disabled) return;
+      if (armed) {
+        complete();
+        return;
+      }
+      setArmed(true);
+      armTimer.current = setTimeout(() => setArmed(false), ARM_WINDOW_MS);
     }
 
     useEffect(() => {
@@ -41,6 +66,7 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
       document.addEventListener('visibilitychange', onVisibilityChange);
       return () => {
         clearTimeout(timer.current);
+        clearTimeout(armTimer.current);
         window.removeEventListener('blur', cancel);
         document.removeEventListener('visibilitychange', onVisibilityChange);
       };
@@ -71,8 +97,8 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
           disabled={disabled}
           aria-describedby={[props['aria-describedby'], hintId].filter(Boolean).join(' ')}
           data-holding={holding || undefined}
-          data-confirmed={pending || undefined}
-          onClick={event => event.preventDefault()}
+          data-completed={completed || pending || undefined}
+          onClick={onClick}
           onPointerDown={onPointerDown}
           onPointerUp={event => {
             cancel();
@@ -109,7 +135,11 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
           </span>
         </Button>
         <span id={hintId} className="sr-only">
-          Hold Space or Enter for {holdSeconds} seconds to confirm. Release to cancel.
+          Hold Space or Enter for {holdSeconds} seconds to confirm. Release to cancel. Screen reader users can activate
+          twice.
+        </span>
+        <span role="status" className="sr-only">
+          {armed ? 'Activate again to confirm.' : ''}
         </span>
       </div>
     );
