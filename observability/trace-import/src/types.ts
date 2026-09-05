@@ -2,7 +2,7 @@ import type { LangfuseObservation } from './providers/langfuse/schema.js';
 import type { CollectorSpan } from './target/collector-schema.js';
 
 export const TRACE_IMPORT_SCHEMA_VERSION = 1;
-export const TRACE_IMPORT_MAPPER_VERSION = 'langfuse-api-v2@1';
+export const TRACE_IMPORT_MAPPER_VERSION = 'langfuse-api-v2@2';
 export const TRACE_IMPORT_ID_ALGORITHM_VERSION = 'langfuse-sha256-v1';
 export const TRACE_IMPORT_SHARD_COUNT = 64;
 export const TRACE_IMPORT_FIELDS = 'core,basic,time,io,metadata,model,usage,prompt,metrics,trace_context';

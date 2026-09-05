@@ -47,6 +47,49 @@ describe('normalizeLangfuseTrace', () => {
     expect(result.unknownTypes).toEqual(['FUTURE_KIND']);
   });
 
+  it.each([
+    ['workflow_run', 'scope.name'],
+    ['model_step', 'resourceAttributes.telemetry.sdk.name'],
+  ] as const)('restores Mastra span type %s from %s provenance', (spanType, provenanceKey) => {
+    const result = normalizeLangfuseTrace(
+      trace(
+        observation('SPAN', {
+          metadata: {
+            [provenanceKey]: '@mastra/langfuse',
+            spanType,
+          },
+        }),
+      ),
+      { importBatchId: crypto.randomUUID() },
+    );
+
+    expect(result.spans[0]?.spanType).toBe(spanType);
+  });
+
+  it('does not trust Mastra span type metadata without Mastra exporter provenance', () => {
+    const result = normalizeLangfuseTrace(trace(observation('SPAN', { metadata: { spanType: 'workflow_run' } })), {
+      importBatchId: crypto.randomUUID(),
+    });
+
+    expect(result.spans[0]?.spanType).toBe('generic');
+  });
+
+  it('falls back to the Langfuse type when exporter span type metadata is invalid', () => {
+    const result = normalizeLangfuseTrace(
+      trace(
+        observation('GENERATION', {
+          metadata: {
+            'scope.name': '@mastra/langfuse',
+            spanType: 'not_a_mastra_span_type',
+          },
+        }),
+      ),
+      { importBatchId: crypto.randomUUID() },
+    );
+
+    expect(result.spans[0]?.spanType).toBe('model_generation');
+  });
+
   it('preserves timestamps, structured I/O, and raw provider metadata', () => {
     const source = observation('GENERATION', {
       input: { question: 'hello' },

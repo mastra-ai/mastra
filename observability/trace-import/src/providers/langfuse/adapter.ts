@@ -1,5 +1,5 @@
 import { createTargetSpanId, createTargetTraceId } from '../../ids.js';
-import { collectorSpanSchema, type CollectorSpan } from '../../target/collector-schema.js';
+import { collectorSpanSchema, mastraSpanTypeSchema, type CollectorSpan } from '../../target/collector-schema.js';
 import type { AssembledTrace } from '../../types.js';
 import type { LangfuseObservation } from './schema.js';
 
@@ -95,6 +95,19 @@ function wrapSourceMetadata(value: unknown): Record<string, unknown> | undefined
   if (value === undefined || value === null) return undefined;
   if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
   return { value };
+}
+
+function restoredMastraSpanType(observation: LangfuseObservation): CollectorSpan['spanType'] | undefined {
+  const metadata = wrapSourceMetadata(observation.metadata);
+  if (!metadata) return undefined;
+
+  const fromMastraExporter =
+    metadata['scope.name'] === '@mastra/langfuse' ||
+    metadata['resourceAttributes.telemetry.sdk.name'] === '@mastra/langfuse';
+  if (!fromMastraExporter) return undefined;
+
+  const result = mastraSpanTypeSchema.safeParse(metadata.spanType);
+  return result.success ? result.data : undefined;
 }
 
 function buildAttributes(observation: LangfuseObservation): Record<string, unknown> | undefined {
@@ -198,7 +211,7 @@ export function normalizeLangfuseTrace(
   const targetTraceId = createTargetTraceId(trace.projectId, trace.sourceTraceId);
   const unknownTypes = new Set<string>();
   const spans = trace.observations.map((observation, index) => {
-    const spanType = TYPE_MAP[observation.type] ?? 'generic';
+    const spanType = restoredMastraSpanType(observation) ?? TYPE_MAP[observation.type] ?? 'generic';
     if (!TYPE_MAP[observation.type]) unknownTypes.add(observation.type);
     const isEvent = observation.type === 'EVENT';
     const span = collectorSpanSchema.parse({

@@ -90,7 +90,7 @@ Because Mastra Platform retention expires spans 30 days after their original end
 
 ## Type and data mapping
 
-Langfuse observation types map conservatively to Mastra span types. Generations, agents, tools, evaluators, and embeddings use corresponding Mastra classifications. Events, spans, chains, retrievers, guardrails, and unknown future types use a generic classification. The exact Langfuse type and original identifiers remain in span metadata.
+Langfuse observation types map conservatively to Mastra span types. Generations, agents, tools, evaluators, and embeddings use corresponding Mastra classifications. Events, spans, chains, retrievers, guardrails, and unknown future types use a generic classification. For traces originally exported by `@mastra/langfuse`, the importer restores a recognized Mastra span type from the exporter's observation metadata; invalid values and metadata without Mastra exporter provenance use the normal Langfuse mapping. The exact Langfuse type and original identifiers remain in span metadata.
 
 Valid JSON input and output strings become JSON values. Other strings remain unchanged. Model, token, cost, pricing-tier ID and name, error, environment, user, session, and source metadata are retained when the target schema supports them.
 
