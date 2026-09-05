@@ -104,6 +104,7 @@ import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
+import { notifySupervisor } from './supervisor/notify.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
 import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
@@ -754,6 +755,15 @@ export class MastraFactory {
                     tools[name] = tool;
                   }
                 };
+                const isSupervisorSession =
+                  typeof requestContext?.get === 'function' &&
+                  parseSupervisorResourceId(
+                    (requestContext.get('controller') as { resourceId?: string } | undefined)?.resourceId,
+                  ) !== null;
+                // A supervisor session is authorized below through its scope;
+                // with the factory domain unavailable nothing can vouch for it,
+                // so it gets no tools rather than the integration set.
+                if (isSupervisorSession && !(workItemsStorage && transitionService)) return tools;
                 if (workItemsStorage && transitionService) {
                   mergeTools(
                     'factory',
@@ -795,7 +805,10 @@ export class MastraFactory {
                         },
                       }),
                     );
-                    if (userId) {
+                    // The approval-gated write tools stamp the human who asked
+                    // (approvedBy, actor.type 'human'); a signal turn has no
+                    // such person, so it never gets them.
+                    if (supervisorScope.via === 'auth' && userId) {
                       mergeTools(
                         'factory-supervisor-write',
                         createFactorySupervisorWriteTools({
@@ -829,6 +842,16 @@ export class MastraFactory {
                         }),
                       );
                     }
+                    // A signal-woken supervisor turn has no human behind it:
+                    // its toolset is exactly the supervisor read tools (plus
+                    // the approval-free v1 tools as they land). Integration
+                    // tools scope by project, not by person, so they would
+                    // otherwise hand an unattributed turn external writes.
+                    if (supervisorScope.via === 'session-state') return tools;
+                  } else if (isSupervisorSession) {
+                    // A supervisor session that cannot prove its scope gets
+                    // nothing at all, integration tools included.
+                    return tools;
                   }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
@@ -1107,7 +1130,16 @@ export class MastraFactory {
     // an unavailable integration must not run.
     const integrationWorkers = [
       ...(factoryReady
-        ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
+        ? [
+            new FactorySupervisorHealthWorker({
+              projects: factoryProjectsStorage,
+              workItems: workItemsStorage,
+              // The sweep's doorbell: ensure-creates the supervisor session
+              // through the controller, then emits via the code agent's
+              // notification stack (same send handle the dispatcher uses).
+              notify: input => notifySupervisor({ controller: prepared.base.controller }, input),
+            }),
+          ]
         : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)

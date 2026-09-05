@@ -24,6 +24,7 @@ import type { MemorySettingsStorage } from './storage/domains/memory-settings/ba
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -268,8 +269,9 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
+    // Supervisor hydration (#23001), OM settings, and model-pack seeding all
+    // register as blocking session-created listeners.
+    expect(blockingCalls).toHaveLength(3);
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -324,7 +326,13 @@ describe('MastraFactory.prepare', () => {
       state: { get: () => ({}), set: vi.fn().mockResolvedValue(undefined) },
     };
 
-    await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
+    // Select the OM-seeding listener by behavior, not registration index: the
+    // supervisor hydration listener no-ops for non-supervisor resource ids, so
+    // invoking in order until the observer model is seeded lands on the right one.
+    for (const call of blockingCalls) {
+      await (call![0] as (session: unknown) => Promise<void>)(session);
+      if (session.om.observer.switchModel.mock.calls.length > 0) break;
+    }
 
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
@@ -578,6 +586,184 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
+  });
+
+  const SUPERVISOR_READ_TOOLS = [
+    'factory_overview',
+    'factory_health_check',
+    'factory_inspect_work_item',
+    'factory_list_attention',
+    'factory_read_session',
+  ];
+  const SUPERVISOR_HUMAN_WRITE_TOOLS = [
+    'factory_retry_decision',
+    'factory_dismiss_decision',
+    'factory_resolve_proposal',
+    'factory_transition_work_item',
+    'factory_reconcile_labels',
+    'factory_revoke_binding',
+    'factory_signal_session',
+  ];
+
+  /**
+   * A notification-woken supervisor turn carries only the controller context
+   * (no factory auth user). It must still get hands: the read tools register
+   * from the hydration-stamped session state, while the human-gated write
+   * tools stay off. An authenticated turn keeps today's full set.
+   */
+  it('registers supervisor read tools on a signal turn from trusted session state, never the human write tools', async () => {
+    const storage = fakeStorage();
+    // A project-scoped integration tool (Linear-style) must reach the
+    // authenticated human turn but never the unattributed signal turn.
+    const integration = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ custom_write: { description: 'writes somewhere' } as never })),
+    });
+    const config = await prepareFactory({ storage, integrations: [integration] });
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'p' } });
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    const controller = (state: Record<string, unknown>) => ({
+      resourceId: `factory-supervisor:${project.id}`,
+      threadId: `factory-supervisor:${project.id}`,
+      scope: '/worktree',
+      state,
+      getState: () => state,
+    });
+
+    // Signal turn: controller context only, state stamped by hydrateSupervisorSession.
+    const signalTurn = new RequestContext();
+    signalTurn.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-1' }));
+    const signalTools = Object.keys(await extraTools({ requestContext: signalTurn }));
+    expect(signalTools.sort()).toEqual([...SUPERVISOR_READ_TOOLS].sort());
+
+    // Forged/foreign state: org does not own the project → no supervisor tools at all.
+    const forged = new RequestContext();
+    forged.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-other' }));
+    expect(await extraTools({ requestContext: forged })).toEqual({});
+
+    // Authenticated human turn: read + the seven approval-gated write tools.
+    const humanTurn = new RequestContext();
+    humanTurn.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    humanTurn.set('controller', controller({ factoryProjectId: project.id, factoryOrgId: 'org-1' }));
+    const humanTools = Object.keys(await extraTools({ requestContext: humanTurn }));
+    expect(humanTools.sort()).toEqual(
+      [...SUPERVISOR_READ_TOOLS, ...SUPERVISOR_HUMAN_WRITE_TOOLS, 'custom_write'].sort(),
+    );
+  });
+
+  it('gives a supervisor session no tools when the factory domain is unavailable, even with tool integrations', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
+    const integration = fakeIntegration({
+      id: 'custom',
+      agentTools: vi.fn(async () => ({ custom_write: { description: 'writes somewhere' } as never })),
+    });
+    const config = await prepareFactory({ storage, integrations: [integration] });
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    const context = (resourceId: string) => {
+      const requestContext = new RequestContext();
+      const state = { factoryProjectId: 'p-1', factoryOrgId: 'org-1' };
+      requestContext.set('controller', { resourceId, threadId: resourceId, scope: '/', state, getState: () => state });
+      return requestContext;
+    };
+    expect(await extraTools({ requestContext: context('factory-supervisor:p-1') })).toEqual({});
+    // A non-supervisor session keeps its integration tools in the degraded state.
+    expect(Object.keys(await extraTools({ requestContext: context('resource-1') }))).toEqual(['custom_write']);
+  });
+
+  /**
+   * The sweep's notify handle must route through the mounted controller:
+   * ensure-create the supervisor session, then send on it. A never-created
+   * session would otherwise wake with no model.
+   */
+  it('wires the health worker to notify the supervisor session through the controller', async () => {
+    const storage = fakeStorage();
+    const factory = new MastraFactory({ secretEncryption, storage });
+    const args = await factory.prepare();
+    const worker = args.workers!.find(
+      (w): w is FactorySupervisorHealthWorker => w instanceof FactorySupervisorHealthWorker,
+    )!;
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const workItems = storage.getDomain<WorkItemsStorage>('work-items');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'p' } });
+    const now = new Date();
+    const { item } = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: { title: 'Fix login', stages: ['building'], sessions: {}, metadata: {} },
+    });
+    await workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: item.id,
+      ingress: { identity: 'wiring-failure', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'sendMessage', role: 'work', message: 'Notify.', idempotencyKey: 'wiring-failure' }],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    await workItems.failDeferredDecision({
+      id: claimed!.id,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active Factory binding for role work.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    const sendNotificationSignal = vi.fn(async () => {});
+    const session = { sendNotificationSignal };
+    const getSessionByResource = vi.fn(async () => undefined);
+    const createSession = vi.fn(async () => session);
+    Object.assign(controllerMock, { getSessionByResource, createSession });
+    try {
+      await worker.init({
+        pubsub: {} as never,
+        storage: {} as never,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      });
+      await worker.start();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await worker.stop();
+    } finally {
+      delete (controllerMock as Record<string, unknown>).getSessionByResource;
+      delete (controllerMock as Record<string, unknown>).createSession;
+    }
+
+    const resourceId = `factory-supervisor:${project.id}`;
+    expect(getSessionByResource).toHaveBeenCalledWith(resourceId);
+    expect(createSession).toHaveBeenCalledWith({ id: resourceId, resourceId, threadId: resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect(sendNotificationSignal.mock.calls[0]![0]).toMatchObject({
+      source: 'factory',
+      kind: 'supervisor-finding',
+      priority: 'high',
+      payload: { kind: 'decision-failed' },
+    });
+    const { rows } = await workItems.listSupervisorFindingPage({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      limit: 10,
+    });
+    expect(rows[0]?.lastNotifiedAt).toBeInstanceOf(Date);
   });
 
   it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {
@@ -1006,7 +1192,10 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    // The factory always contributes its supervisor health worker (#23001)
+    // alongside integration workers.
+    expect(args.workers).toContain(worker);
+    expect(args.workers!.some(w => w instanceof FactorySupervisorHealthWorker)).toBe(true);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1042,14 +1231,16 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
-  it('omits the workers option when no integration contributes workers', async () => {
+  it('contributes only the supervisor health worker when no integration contributes workers', async () => {
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    // #23001: the factory's own supervisor health worker is always present.
+    expect(args.workers).toHaveLength(1);
+    expect(args.workers![0]).toBeInstanceOf(FactorySupervisorHealthWorker);
   });
 
   /**
