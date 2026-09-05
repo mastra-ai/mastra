@@ -4,6 +4,7 @@ import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/cor
 
 import { stripAnsi } from './ansi';
 import type { OMBudgets } from './runtime';
+import { sentByOther } from './message-author';
 
 /**
  * Transcript model + reducer.
@@ -188,7 +189,7 @@ export interface OutgoingFile {
 }
 
 type Action =
-  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'event'; event: AgentControllerEvent; viewerId?: string }
   | { type: 'localUser'; id?: string; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'failLocalUser'; id: string }
   | { type: 'clearPending' }
@@ -266,13 +267,13 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'resolvePrompt':
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
     case 'event':
-      return applyEvent(state, action.event);
+      return applyEvent(state, action.event, action.viewerId);
     default:
       return state;
   }
 }
 
-function applyEvent(state: TranscriptState, event: AgentControllerEvent): TranscriptState {
+function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerId?: string): TranscriptState {
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
@@ -288,7 +289,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
     case 'message_start':
     case 'message_update': {
       const message = event.message;
-      const next = upsertMessage(state, message, true);
+      const next = upsertMessage(state, message, true, viewerId);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
       // tool-only updates must not count toward tokens/sec.
@@ -304,7 +305,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent): Transc
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const next = upsertMessage(state, event.message, false);
+      const next = upsertMessage(state, event.message, false, viewerId);
       return event.message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
@@ -877,34 +878,6 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
 }
 
 /**
- * Channel provenance for a user signal.
- *
- * `agent-channels` stamps `providerOptions.mastra.channels.<platform>` on every
- * inbound channel message, and `toDataPart` carries that onto the live event's
- * data part — so its presence distinguishes a message that arrived from Slack
- * from one typed into the web composer. Messages sent from the composer never
- * carry it.
- *
- * This matters because the two origins need opposite treatment: see
- * `withRenderableSignalText`.
- */
-function isChannelOriginSignal(message: MastraDBMessage): boolean {
-  const signal = message.content.metadata?.signal as { providerOptions?: unknown } | undefined;
-  const dataPart = (message.content.parts ?? []).find(part => part.type === 'data-user-message') as
-    | { data?: { providerOptions?: unknown } }
-    | undefined;
-
-  for (const candidate of [signal?.providerOptions, dataPart?.data?.providerOptions]) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const mastra = (candidate as { mastra?: unknown }).mastra;
-    if (!mastra || typeof mastra !== 'object') continue;
-    const channels = (mastra as { channels?: unknown }).channels;
-    if (channels && typeof channels === 'object' && Object.keys(channels).length > 0) return true;
-  }
-  return false;
-}
-
-/**
  * A user signal reaches us in two shapes. The persisted message carries ordinary
  * `text` parts, but the live `data-user-message` event carries the signal payload
  * as a single data part and keeps the text inside `data.contents`. Only the first
@@ -914,7 +887,7 @@ function isChannelOriginSignal(message: MastraDBMessage): boolean {
  * Project the data part onto the persisted shape so both paths render the same
  * row — and so the live row does not visibly change when history catches up.
  *
- * Applied to channel-origin signals only (see `isChannelOriginSignal`). A message
+ * Applied to signals the viewer did not type here (see `sentByOther`). A message
  * sent from the web composer is already on screen as an optimistic local echo
  * under a `local-…` id, while this event carries the signal's own id — two ids
  * mean `upsertMessage` cannot dedupe them, so drawing both yields a duplicate
@@ -960,6 +933,7 @@ function toMessageEntry(
     steer?: boolean;
     deliveryStatus?: MessageEntry['deliveryStatus'];
     runtimeTools?: Record<string, ToolCall>;
+    viewerId?: string;
   } = {},
 ): MessageEntry {
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
@@ -972,7 +946,8 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const normalized = isUserSignal && isChannelOriginSignal(message) ? withRenderableSignalText(message) : message;
+  const normalized =
+    isUserSignal && sentByOther(message, options.viewerId) ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
   const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
@@ -1003,14 +978,19 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
-function upsertMessage(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
+function upsertMessage(
+  state: TranscriptState,
+  message: MastraDBMessage,
+  streaming: boolean,
+  viewerId?: string,
+): TranscriptState {
   if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
   let idx = entries.findIndex(
     entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
   );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
-  if (message.role === 'signal' && idx === -1 && !isChannelOriginSignal(message)) {
+  if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
@@ -1018,8 +998,8 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const nextMessage =
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
-      : preserveOptimisticUserContent(message, prevEntry?.message);
-  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
+      : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+  const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // An entry the reader is already watching keeps the identity it was drawn with:
   // adopting the server's id here remounts the row and everything it holds — open
   // cards, group state, its entrance. The canonical id still matches on lookup.
@@ -1062,8 +1042,12 @@ function withoutToolPartsDrawnElsewhere(
   return { ...message, content: { ...message.content, parts } };
 }
 
-function preserveOptimisticUserContent(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
-  if (!previous || previous.role !== 'user' || message.role !== 'signal' || isChannelOriginSignal(message)) {
+function preserveOptimisticUserContent(
+  message: MastraDBMessage,
+  previous?: MastraDBMessage,
+  viewerId?: string,
+): MastraDBMessage {
+  if (!previous || previous.role !== 'user' || message.role !== 'signal' || sentByOther(message, viewerId)) {
     return message;
   }
   const hasDrawablePart = message.content.parts.some(part => part.type === 'text' || part.type === 'file');

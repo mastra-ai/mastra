@@ -1,4 +1,6 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { MessageAuthor } from '@mastra/core/agent-controller';
+import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
   registerApiRoute,
   isAuthHttpHandler,
@@ -11,6 +13,7 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 
 import type { RouteAuth } from './routes/route.js';
+import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { timedAboveThreshold } from './timing.js';
 
 /**
@@ -155,6 +158,17 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
   return { orgId: getFactoryAuthOrgId(user), userId };
+}
+
+function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  const actor = actorFromAuthUser(userId, user);
+  return {
+    id: actor.id,
+    ...(actor.displayName ? { name: actor.displayName } : {}),
+    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+  };
 }
 
 /** True when both WorkOS credential env vars are present (legacy env gate). */
@@ -797,7 +811,9 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       // this request (see ensureFactoryAuthUser for the rationale).
       await ensureUserOrg(provider, user);
       c.set(FACTORY_AUTH_USER_KEY, user);
-      c.get('requestContext')?.set('user', user);
+      const requestContext = c.get('requestContext');
+      requestContext?.set('user', user);
+      requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
       return next();
     }
 

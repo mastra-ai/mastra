@@ -1581,3 +1581,50 @@ describe('transcript reducer entry identity', () => {
     expect(next.entries).toHaveLength(2);
   });
 });
+
+describe('live user signals sent by someone else', () => {
+  function liveSignal(id: string, text: string, author: { id: string; name: string }): MastraDBMessage {
+    const payload = {
+      id,
+      type: 'user',
+      tagName: 'user',
+      contents: text,
+      createdAt: '2026-07-27T16:00:00.000Z',
+      providerOptions: { mastra: { author } },
+    };
+    return {
+      id,
+      role: 'signal',
+      createdAt: new Date(payload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        metadata: { signal: payload },
+      },
+    };
+  }
+
+  it('draws a teammate message the moment its live event lands', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-1', 'hello from Ada', { id: 'user_ada', name: 'Ada' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-1');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from Ada' }]);
+  });
+
+  it("keeps the viewer's own message a single bubble behind its optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from me' });
+    const message = liveSignal('sig-2', 'hello from me', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text),
+    );
+    expect(drawable).toHaveLength(1);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+});

@@ -2,7 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
-import { RequestContext } from '../request-context';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -626,7 +626,7 @@ describe('AgentController signal messages', () => {
     await session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
-      'queued follow-up',
+      { contents: 'queued follow-up' },
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
@@ -1603,5 +1603,74 @@ describe('AgentController signal messages', () => {
         }),
       }),
     });
+  });
+});
+
+describe('AgentController message author', () => {
+  const author = { id: 'user-1', name: 'Ada', avatarUrl: 'https://avatars.example/ada.png' };
+
+  async function sentUserMessage(requestContext: RequestContext) {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    await session.thread.create();
+    await session.sendMessage({ content: 'hello', requestContext });
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+    for (const event of events) {
+      if (event.type !== 'message_end') continue;
+      const part = event.message.content.parts.find(part => part.type === 'data-user-message');
+      if (part) return part.data;
+    }
+    throw new Error('no user message was emitted');
+  }
+
+  it('stamps the request author on the sent user message', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+
+    const sent = await sentUserMessage(requestContext);
+
+    expect(sent?.providerOptions).toEqual({ mastra: { author } });
+  });
+
+  it('leaves the sent user message unattributed when the request names no author', async () => {
+    const sent = await sentUserMessage(new RequestContext());
+
+    expect(sent?.contents).toBe('hello');
+    expect(sent?.providerOptions).toBeUndefined();
+  });
+
+  it('carries the author through a follow-up queued behind a running turn', async () => {
+    const agent = new Agent({
+      id: 'authored-follow-up-agent',
+      name: 'authored-follow-up-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    await session.followUp({ content: 'queued follow-up', requestContext });
+    await session.drainFollowUpQueue();
+
+    expect(queueMessage).toHaveBeenCalledWith(
+      { contents: 'queued follow-up', providerOptions: { mastra: { author } } },
+      expect.anything(),
+    );
   });
 });

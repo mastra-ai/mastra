@@ -1,3 +1,4 @@
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -345,6 +346,31 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.json()).toEqual({
       userId: 'user_123',
       organizationId: 'org_123',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
+  });
+
+  it('names the signed-in user as the author of messages sent on this request', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      email: 'user@example.com',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c =>
+      c.json((c.get('requestContext' as never) as RequestContext).get(MASTRA_MESSAGE_AUTHOR_KEY)),
+    );
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: 'user_123',
+      name: 'user@example.com',
       avatarUrl: 'https://avatars.example/user.png',
     });
   });
