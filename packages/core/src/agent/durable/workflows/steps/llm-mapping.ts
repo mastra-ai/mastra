@@ -70,7 +70,7 @@ export function createDurableLLMMappingStep() {
       const { inputData, mastra, requestContext } = params;
       const {
         llmOutput,
-        toolResults,
+        toolResults: rawToolResults,
         runId: _runId,
         agentId: _agentId,
         messageId,
@@ -83,6 +83,9 @@ export function createDurableLLMMappingStep() {
         messageId: string;
         state: SerializableDurableState;
       };
+      // Match the regular agent: canceled calls stay incomplete and are not results
+      // in memory, step events, final processors or completion callbacks.
+      const toolResults = rawToolResults.filter(toolResult => !toolResult.aborted);
 
       // 1. Deserialize message list
       const messageList = new MessageList({
@@ -90,6 +93,31 @@ export function createDurableLLMMappingStep() {
         resourceId: state.resourceId,
       });
       messageList.deserialize(llmOutput.messageListState);
+
+      // This serialized LLM state predates resume-time metadata cleanup. Clear only
+      // calls that reached mapping so recall cannot restore an already closed wait.
+      for (const toolResult of rawToolResults) {
+        const message = messageList.get.all
+          .db()
+          .findLast(message =>
+            message.content.parts.some(
+              part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolResult.toolCallId,
+            ),
+          );
+        for (const key of ['pendingToolApprovals', 'suspendedTools']) {
+          const entries = message?.content.metadata?.[key] as Record<string, { toolCallId?: string }> | undefined;
+          if (!entries) continue;
+          const remaining = Object.fromEntries(
+            Object.entries(entries).filter(
+              ([id, entry]) => id !== toolResult.toolCallId && entry?.toolCallId !== toolResult.toolCallId,
+            ),
+          );
+          if (Object.keys(remaining).length === Object.keys(entries).length) continue;
+          messageList.updateMessageMetadataByToolCallId(toolResult.toolCallId, {
+            [key]: Object.keys(remaining).length ? remaining : undefined,
+          });
+        }
+      }
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
