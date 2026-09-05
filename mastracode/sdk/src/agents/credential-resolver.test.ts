@@ -101,6 +101,17 @@ describe('credential store provider registry', () => {
     expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_owner', orgFirst: true });
   });
 
+  it('runs as the user the factory seeded over the session owner', () => {
+    // A session first opened over HTTP is owned by the controller itself; the
+    // factory names who it runs as (the supervisor: its project's creator).
+    const ctx = new RequestContext();
+    ctx.set('controller', {
+      state: { factoryProjectId: 'project_1', factoryOrgId: 'org_1', factoryRunAsUserId: 'user_creator' },
+      session: { id: 's1', ownerId: 'controller-id' },
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_creator', orgFirst: true });
+  });
+
   it('stays unresolved for a session missing any of project, org, or owner, and for a non-factory session', () => {
     for (const controller of [
       { state: { factoryProjectId: 'project_1' }, session: { ownerId: 'user_owner' } },

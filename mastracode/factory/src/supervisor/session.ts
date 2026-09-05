@@ -111,9 +111,12 @@ export async function hydrateSupervisorSession(
   if (!factoryProjectId) return;
   const project = await deps.projects.getById({ id: factoryProjectId });
   if (!project) return;
+  // A turn the server starts on this session (a notification wake) has no
+  // person on the request; it runs as the project's creator, org-first.
   await session.state.set({
     factoryProjectId,
     factoryOrgId: project.orgId,
+    factoryRunAsUserId: project.createdBy,
   });
   await hydrateFactorySession(session, {
     orgId: project.orgId,

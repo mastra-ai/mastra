@@ -212,7 +212,7 @@ describe('hydrateSupervisorSession', () => {
     };
   }
 
-  it('stamps the project and org and applies the factory default model', async () => {
+  it('stamps the project, org, and the creator it runs as, and applies the factory default model', async () => {
     const { projects, project } = await seedProject();
     const session = sessionDouble(supervisorResourceId(project.id));
 
@@ -221,6 +221,7 @@ describe('hydrateSupervisorSession', () => {
     expect(session.readState()).toMatchObject({
       factoryProjectId: project.id,
       factoryOrgId: 'org-1',
+      factoryRunAsUserId: project.createdBy,
     });
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-sonnet-4' });
   });

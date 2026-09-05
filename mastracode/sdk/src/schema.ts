@@ -23,6 +23,13 @@ export interface MastraCodeState {
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
   /**
+   * The user the factory runs this session as when no person is on the
+   * request (a notification wake, a scheduled sweep): model credentials
+   * resolve org-first, then this user's own. Seeded by factory; the
+   * supervisor runs as its project's creator.
+   */
+  factoryRunAsUserId?: string;
+  /**
    * Factory owns this session but could not resolve its organization. Knowledge
    * capture refuses rather than filing under a substituted identity; without the
    * marker a projectless factory session is indistinguishable from a local one.
@@ -116,6 +123,7 @@ export const stateSchema = z.object({
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
   factoryOrgId: z.string().optional(),
+  factoryRunAsUserId: z.string().optional(),
   factoryOrgUnresolved: z.boolean().optional(),
   projectRepositoryId: z.string().optional(),
   branch: z.string().optional(),
