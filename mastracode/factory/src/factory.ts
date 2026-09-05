@@ -1138,7 +1138,15 @@ export class MastraFactory {
               // through the controller, then emits via the code agent's
               // notification stack (same send handle the dispatcher uses).
               notify: input =>
-                notifySupervisor({ controller: prepared.base.controller, projects: factoryProjectsStorage }, input),
+                notifySupervisor(
+                  {
+                    controller: prepared.base.controller,
+                    projects: factoryProjectsStorage,
+                    primeCredentials: tenant =>
+                      primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                  },
+                  input,
+                ),
             }),
           ]
         : []),

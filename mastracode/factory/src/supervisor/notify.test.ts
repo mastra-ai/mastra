@@ -23,7 +23,9 @@ function makeController(options: { existing?: boolean } = {}) {
     }),
   };
   const projects = {
-    getById: vi.fn(async ({ id }: { id: string }) => (id === 'proj-1' ? { id, createdBy: 'user-creator' } : null)),
+    getById: vi.fn(async ({ id }: { id: string }) =>
+      id === 'proj-1' ? { id, orgId: 'org-1', createdBy: 'user-creator' } : null,
+    ),
   };
   return { controller: controller as never, projects, sent, events, session, calls: controller };
 }
@@ -53,6 +55,27 @@ describe('notifySupervisor', () => {
       `create:${supervisorResourceId('proj-1')}:${supervisorThreadId('proj-1')}:user-creator`,
     ]);
     expect(sent).toHaveLength(1);
+  });
+
+  it("primes the creator's org-first credentials before ringing, and rings even when priming fails", async () => {
+    const { controller, projects, sent } = makeController({ existing: true });
+    const primeCredentials = vi.fn(async () => {});
+    await notifySupervisor({ controller, projects, primeCredentials }, base);
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-creator' });
+    expect(sent).toHaveLength(1);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      primeCredentials.mockRejectedValueOnce(new Error('credentials down'));
+      await notifySupervisor({ controller, projects, primeCredentials }, base);
+      expect(sent).toHaveLength(2);
+      expect(warn).toHaveBeenCalledWith(
+        '[Factory Supervisor] could not prime credentials for the wake',
+        expect.objectContaining({ error: 'credentials down' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('refuses to create a session for a project that does not exist', async () => {

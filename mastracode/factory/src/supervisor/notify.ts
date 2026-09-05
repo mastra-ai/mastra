@@ -36,6 +36,13 @@ export interface SupervisorNotifyDependencies {
   controller: SupervisorNotifyController;
   /** Names the session's owner at creation: the supervisor runs as the project's creator. */
   projects: Pick<FactoryProjectsStorage, 'getById'>;
+  /**
+   * Hydrates the per-tenant credential snapshot the woken turn's model
+   * resolution reads synchronously. A wake is not an HTTP request, so nothing
+   * else primes it; without this the first wake after boot finds an empty
+   * snapshot and fails with "no usable credential".
+   */
+  primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
 }
 
 export interface NotifySupervisorInput {
@@ -68,16 +75,27 @@ export async function notifySupervisor(
   input: NotifySupervisorInput,
 ): Promise<void> {
   const resourceId = supervisorResourceId(input.projectId);
-  const session = (await deps.controller.getSessionByResource(resourceId)) ?? (await createSupervisorSession());
-  async function createSupervisorSession() {
-    const project = await deps.projects.getById({ id: input.projectId });
-    if (!project) throw new Error(`Factory project ${input.projectId} does not exist`);
-    return deps.controller.createSession({
+  const project = await deps.projects.getById({ id: input.projectId });
+  if (!project) throw new Error(`Factory project ${input.projectId} does not exist`);
+  const session =
+    (await deps.controller.getSessionByResource(resourceId)) ??
+    (await deps.controller.createSession({
       id: resourceId,
       resourceId,
       threadId: supervisorThreadId(input.projectId),
       ownerId: project.createdBy,
-    });
+    }));
+  if (deps.primeCredentials) {
+    try {
+      await deps.primeCredentials({ orgId: project.orgId, userId: project.createdBy });
+    } catch (error) {
+      // The ring still goes out: the notification is durable and the turn
+      // reports its own credential failure if the snapshot stays empty.
+      console.warn('[Factory Supervisor] could not prime credentials for the wake', {
+        projectId: input.projectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
   await session.sendNotificationSignal({
     source: 'factory',
