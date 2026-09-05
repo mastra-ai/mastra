@@ -12,7 +12,6 @@ export {
 } from './types.js';
 export type {
   FactoryBoardRuleLeaf,
-  FactoryBoardRules,
   FactoryBoundRuleContext,
   FactoryCommitDecision,
   FactoryGithubEventName,

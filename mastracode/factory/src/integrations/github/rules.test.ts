@@ -549,27 +549,38 @@ describe('GithubRules', () => {
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
   });
 
+  it.each([
+    { permission: 'read', createdAt: '2030-01-01T00:00:00Z' },
+    { permission: 'write', createdAt: '2000-01-01T00:00:00Z' },
+  ])('keeps noncandidate arrivals at Intake ($permission, $createdAt)', async ({ permission, createdAt }) => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
+    const rules = defaultFactoryRules({ version: 'guarded-intake' });
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new GithubRules({ github, sourceControl, integrationStorage, projects, storage: workItems, rules });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService,
+      storage: workItems,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-guard',
+    });
+
+    await service.ingest(issueOpened('noncandidate', createdAt));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ stages: ['intake'], metadata: { autoStartCandidate: false } });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({ status: 'succeeded', decision: { type: 'upsertLinkedWorkItem' } });
+    await expect(service.ingest(issueOpened('noncandidate', createdAt))).resolves.toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
+  });
+
   it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
-    const rules = defaultFactoryRules({
-      version: 'test-web-policy',
-      overrides: {
-        work: {
-          intake: {
-            issue: {
-              onEnter: context => ({
-                type: 'invokeSkill',
-                idempotencyKey: `${context.ingress.id}:factory-triage`,
-                role: 'triage',
-                skillName: 'factory-triage',
-                arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-              }),
-            },
-          },
-        },
-      },
-    });
+    const rules = defaultFactoryRules({ version: 'test-web-policy' });
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
     const service = new GithubRules({
       github,

@@ -242,9 +242,9 @@ describe('Factory rule validation', () => {
     expect(() =>
       assertFactoryRules({
         ...rules,
-        work: { intake: { issue: { onEnter: 'not-a-function' } } },
+        tools: { submit_plan: { onResult: 'not-a-function' } },
       }),
-    ).toThrow(/handlers must be functions/i);
+    ).toThrow(/must be a function/i);
     expect(() =>
       assertFactoryRules({
         ...rules,

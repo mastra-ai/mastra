@@ -405,18 +405,14 @@ export class FactoryTransitionService {
       evaluation = await withRuleTimeout(
         (async () => {
           const decisions: FactoryCommitDecision[] = [];
-          for (const rule of resolveFactoryStageRules(
-            this.#rules,
-            {
-              board: request.board,
-              source,
-              fromStage,
-              toStage: request.stage,
-              initialEntry: request.initialEntry,
-              reenter: request.reenter,
-            },
-            this.#boards,
-          )) {
+          for (const rule of resolveFactoryStageRules(this.#boards, {
+            board: request.board,
+            source,
+            fromStage,
+            toStage: request.stage,
+            initialEntry: request.initialEntry,
+            reenter: request.reenter,
+          })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
               stage: rule.phase === 'exit' ? fromStage : request.stage,
