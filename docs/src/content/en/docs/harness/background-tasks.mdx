@@ -1,9 +1,9 @@
 ---
-title: "Background tasks | Long-running agents"
-description: "Run long-lived Mastra tool calls and subagents as background tasks while streams remain open, with configurable LLM behavior and completion events."
+title: 'Background tasks | Long-running agents'
+description: 'Run long-lived Mastra tool calls and subagents as background tasks while streams remain open, with per-call dispositions, cancellation, and completion events.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Background tasks
@@ -52,12 +52,12 @@ The full set of options is listed in the [backgroundTasks configuration referenc
 
 ## Run a tool in the background
 
-Enabling the manager doesn't run anything in the background by itself as every tool defaults to foreground execution. Tools opt in at one of two layers:
+Enabling the manager doesn't run anything in the background by itself. Tools become eligible at one of two layers:
 
 1. **Tool-level config**: the tool itself declares it as background-eligible.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 
-Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to override the resolved config for a specific call (timeout, retries, or to flip the call back to foreground).
+Eligible tools default to `deferred` execution. Set `defaultDisposition: 'foreground'` at either layer when eligibility should only give the LLM the option to run a call in the background. The LLM can include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
 
 ### Tool-level
 
@@ -74,6 +74,7 @@ export const researchTool = createTool({
   // highlight-start
   background: {
     enabled: true,
+    defaultDisposition: 'deferred',
     timeoutMs: 600_000,
     maxRetries: 1,
   },
@@ -116,11 +117,19 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 ```json
 {
   "topic": "solana",
-  "_background": { "enabled": true, "timeoutMs": 900_000 }
+  "_background": { "disposition": "awaited", "timeoutMs": 900000 }
 }
 ```
 
-The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer, it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+The available dispositions are:
+
+- `foreground`: Run the tool synchronously without background-work lifecycle signals.
+- `deferred`: Dispatch the tool and let the agent continue. The task remains attached to the run, and streams using `untilIdle` wait for it to reconcile.
+- `awaited`: Dispatch the tool through the background task manager, but hold the current branch until its authoritative result has been reconciled.
+
+For compatibility, `_background.enabled: true` selects `deferred`, and `_background.enabled: false` selects `foreground`. An explicit `disposition` takes precedence over `enabled`.
+
+The `_background` override only _modifies_ tools the developer has already opted in at the tool or agent layer. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
 ### Resolution order
 
@@ -128,7 +137,7 @@ When a tool call is dispatched, the resolved background config is computed in th
 
 1. Agent-level `backgroundTasks.tools` entry for the tool.
 1. Tool-level `background` config.
-1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
+1. LLM `_background.disposition` or `_background.enabled` override (only applied when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
@@ -239,9 +248,11 @@ const researchAgent = new Agent({
 })
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no background task configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task.
 
-Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
+
+Which layer to use depends on where consistency matters: subagent-level configuration travels with the agent, so its background behavior stays the same under every supervisor, whereas the supervisor-side opt-in above centralizes that tuning in one place. This boundary stops at a single nested delegation level and has no workflow integration.
 
 ## Suspending and resuming
 
@@ -331,23 +342,23 @@ export const mastra = new Mastra({
 Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts" oxfmt:false
-const bgManager = mastra.backgroundTaskManager
-if (!bgManager) throw new Error('Background tasks are not enabled')
+const bgManager = mastra.backgroundTaskManager;
+if (!bgManager) throw new Error('Background tasks are not enabled');
 
-const controller = new AbortController()
-const stream = bgManager.stream({ abortSignal: controller.signal })
+const controller = new AbortController();
+const stream = bgManager.stream({ abortSignal: controller.signal });
 
 for await (const chunk of stream) {
   switch (chunk.type) {
     case 'background-task-running':
-      console.log('started', chunk.payload.taskId, chunk.payload.toolName)
-      break
+      console.log('started', chunk.payload.taskId, chunk.payload.toolName);
+      break;
     case 'background-task-completed':
-      console.log('done', chunk.payload.taskId, chunk.payload.result)
-      break
+      console.log('done', chunk.payload.taskId, chunk.payload.result);
+      break;
     case 'background-task-failed':
-      console.error('failed', chunk.payload.taskId, chunk.payload.error)
-      break
+      console.error('failed', chunk.payload.taskId, chunk.payload.error);
+      break;
   }
 }
 ```

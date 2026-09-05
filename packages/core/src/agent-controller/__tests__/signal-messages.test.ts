@@ -27,6 +27,7 @@ function createAgentMock(activeRunId: () => string | null) {
     subscribeToThread: vi.fn(async () => createSubscription(activeRunId)),
     sendSignal: vi.fn((signal: any, _options?: any) => ({
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+      persisted: Promise.resolve(),
       signal,
     })),
   };
@@ -73,6 +74,114 @@ describe('AgentController signal messages', () => {
     );
   });
 
+  it('persists an active notification signal without interrupting an armed approval', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const persisted = Promise.resolve();
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted,
+      signal: { id: 'completion-1', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-notification-persist',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    let approvalSettled = false;
+    void session.approval.arm({ toolName: 'request_access' }).then(() => {
+      approvalSettled = true;
+    });
+
+    const result = session.sendSignal(
+      {
+        id: 'completion-1',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      {
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(approvalSettled).toBe(false);
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'completion-1', type: 'notification' }),
+      expect.objectContaining({ ifActive: { behavior: 'persist' } }),
+    );
+    const signalMessages = events
+      .filter(event => event.type === 'message_end')
+      .map(event => event.message)
+      .filter(message => message.role === 'signal');
+    expect(signalMessages).toEqual([
+      expect.objectContaining({
+        id: 'completion-1',
+        role: 'signal',
+        content: expect.objectContaining({
+          metadata: expect.objectContaining({ signal: expect.objectContaining({ type: 'notification' }) }),
+        }),
+      }),
+    ]);
+  });
+
+  it('persists an explicit-thread signal without emitting it into the session current thread', async () => {
+    const agent = createAgentMock(() => null);
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted: Promise.resolve(),
+      signal: { id: 'completion-1', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-explicit-thread',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'current-thread' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignalToThread(
+      {
+        id: 'completion-1',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      { resourceId: 'resource-1', threadId: 'origin-thread' },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true });
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'completion-1', type: 'notification' }),
+      {
+        resourceId: 'resource-1',
+        threadId: 'origin-thread',
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+    expect(events.filter(event => event.type === 'message_end')).toEqual([]);
+  });
+
   it('declines an armed approval with interruption context before delivering a user signal', async () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
@@ -106,6 +215,30 @@ describe('AgentController signal messages', () => {
     expect(agent.sendSignal).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards untilIdle into idle-run stream options', async () => {
+    const agent = createAgentMock(() => null);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-until-idle',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const result = session.sendSignal({ content: 'wait for background work', untilIdle: { maxIdleMs: 1_000 } });
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({ untilIdle: { maxIdleMs: 1_000 } }),
+        }),
+      }),
+    );
+  });
+
   it('starts a fresh run for a signal sent while a deferred abort is still tearing down', async () => {
     const activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
@@ -125,9 +258,6 @@ describe('AgentController signal messages', () => {
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
     void session.approval.arm({ toolName: 'request_access' });
 
-    // Aborting a parked approval gate defers the teardown until the gated call
-    // has been declined, which keeps the AbortController armed — so the run
-    // still looks "running" even though it is on its way out.
     session.abort();
     expect(session.run.isRunning()).toBe(true);
     expect(session.run.isAbortRequested()).toBe(true);
@@ -135,16 +265,11 @@ describe('AgentController signal messages', () => {
 
     await session.sendSignal({ content: 'try again' }).accepted;
 
-    // Joining the dying run would lose the message: `completeDeferredAbort()`
-    // terminates it once the decline lands. Only the new-run path supplies the
-    // stream options the agent needs to start a run, so their presence proves
-    // the signal was not routed onto the run that is going away.
     expect(agent.sendSignal).toHaveBeenCalledTimes(1);
     expect(agent.sendSignal.mock.calls[0]![1]).toEqual(
       expect.objectContaining({ ifIdle: expect.objectContaining({ streamOptions: expect.anything() }) }),
     );
   });
-
   it('surfaces idle signal submission failures instead of waiting forever for agent_end', async () => {
     const agent = createAgentMock(() => null);
     agent.sendSignal.mockReturnValue({
