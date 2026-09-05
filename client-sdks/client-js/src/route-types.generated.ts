@@ -9703,7 +9703,7 @@ export interface PostObservabilityScores_RouteContract {
 // Route: DELETE /observability/scores
 // ============================================================================
 export type DeleteObservabilityScores_Body = {
-  /** IDs of the score events to delete */
+  /** IDs of the score events to delete (maximum 1000) */
   scoreIds: string[];
   /** Restrict deletion to scores in this organization */
   organizationId?: string | undefined;
@@ -10109,7 +10109,7 @@ export interface PostObservabilityFeedback_RouteContract {
 // Route: DELETE /observability/feedback
 // ============================================================================
 export type DeleteObservabilityFeedback_Body = {
-  /** IDs of the feedback events to delete */
+  /** IDs of the feedback events to delete (maximum 1000) */
   feedbackIds: string[];
   /** Restrict deletion to feedback in this organization */
   organizationId?: string | undefined;
