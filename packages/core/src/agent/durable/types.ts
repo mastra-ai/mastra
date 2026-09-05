@@ -561,8 +561,10 @@ export interface RunRegistryEntry {
    * registered on the Mastra instance instead of trusting the entry.
    */
   isPlaceholder?: boolean;
-  /** Resolved tools with execute functions */
+  /** Full resolved tool catalog with execute functions */
   tools: Record<string, CoreTool>;
+  /** Exact tool snapshot exposed to the model for the current LLM step */
+  stepTools?: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
