@@ -1,5 +1,29 @@
 # @mastra/factory
 
+## 0.13.0-alpha.8
+
+### Minor Changes
+
+- Moved Linear event rules into `LinearIntegration` and `PlatformLinearIntegration`. Built-in handlers remain enabled without configuration. Constructor `rules` accept replacements or `null` to disable an event; omitted events retain defaults. ([#23139](https://github.com/mastra-ai/mastra/pull/23139))
+
+  Move former global `rules.linear[event].onEvent` values to the owning integration constructor:
+
+  ```typescript
+  // Before: global Factory overrides
+  const overrides = { linear: { issueClosed: { onEvent: null } } };
+
+  // After: integration constructor options
+  const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
+  ```
+
+  Both direct and platform integrations use their own handlers for fetched issues and reconciliation while preserving shared audit metadata.
+
+### Patch Changes
+
+- Updated dependencies [[`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/code-sdk@1.7.0-alpha.7
+
 ## 0.13.0-alpha.7
 
 ### Minor Changes

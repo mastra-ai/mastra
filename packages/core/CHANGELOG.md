@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.65.0-alpha.6
+
+### Patch Changes
+
+- Fixed unnecessary streaming overhead for final-only output processors. ([#23147](https://github.com/mastra-ai/mastra/pull/23147))
+
 ## 1.65.0-alpha.5
 
 ### Patch Changes
