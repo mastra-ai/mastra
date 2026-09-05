@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultFactoryRules } from './defaults.js';
-import { resolveFactoryLinearRule, resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
+import { resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
 
 describe('Factory rule resolution', () => {
   it('resolves a board stage transition in exit-before-enter order', () => {
@@ -81,19 +81,14 @@ describe('Factory rule resolution', () => {
     ).toEqual([{ phase: 'enter', handler: onEnter }]);
   });
 
-  it('resolves open tool names and closed integration event leaves', () => {
+  it('resolves open tool names', () => {
     const onResult = vi.fn(() => undefined);
-    const onLinearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'resolve-v3',
-      overrides: {
-        tools: { submit_plan: { onResult } },
-        linear: { issueObserved: { onEvent: onLinearEvent } },
-      },
+      overrides: { tools: { submit_plan: { onResult } } },
     });
 
     expect(resolveFactoryToolRule(rules, 'submit_plan')).toBe(onResult);
     expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
-    expect(resolveFactoryLinearRule(rules, 'issueObserved')).toBe(onLinearEvent);
   });
 });

@@ -7,7 +7,7 @@ import { resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
 import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
-import type { LinearIntegration } from './linear/integration.js';
+import { resolveLinearRules } from './linear/default-rules.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
 function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
@@ -265,43 +265,60 @@ describe('issue reconcilers', () => {
     expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
   });
 
-  it('replays canceled Linear issues through rules ingress', async () => {
-    const seeded = await createFactoryStorageForTests();
-    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
-    await seeded.workItems.upsert({
-      orgId: project.orgId,
-      userId: project.createdBy,
-      factoryProjectId: project.id,
-      input: {
-        externalSource: {
-          integrationId: 'linear',
-          type: 'issue',
-          externalId: 'linear:ENG-42',
-          url: 'https://linear.app/acme/issue/ENG-42',
+  it.each(['default', 'replacement', 'disabled'] as const)(
+    'replays canceled Linear issues with %s instance rules',
+    async mode => {
+      const seeded = await createFactoryStorageForTests();
+      const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'linear:ENG-42',
+            url: 'https://linear.app/acme/issue/ENG-42',
+          },
+          title: 'ENG-42: Issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-uuid' },
         },
-        title: 'ENG-42: Issue',
-        stages: ['planning'],
-        sessions: {},
-        metadata: { linearIssueId: 'linear-uuid' },
-      },
-    });
-    const intake = {
-      resolveIntakeDispatch: vi
-        .fn()
-        .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
-      getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
-    } as unknown as Intake;
-    const reconcile = attachLinearIssueReconciler(
-      { intake } as Pick<LinearIntegration, 'intake'>,
-      {
-        storage: { projects: seeded.projects },
-        rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
-      } as never,
-    );
+      });
+      const intake = {
+        resolveIntakeDispatch: vi
+          .fn()
+          .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
+        getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
+      } as unknown as Intake;
+      const replacement = vi.fn(() => ({
+        type: 'notify' as const,
+        idempotencyKey: 'reconciled-linear',
+        title: 'Closed issue',
+      }));
+      const reconcile = attachLinearIssueReconciler(
+        {
+          intake,
+          rules: resolveLinearRules(
+            mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
+          ),
+        },
+        {
+          storage: { projects: seeded.projects },
+          rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
+        } as never,
+      );
 
-    await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
-    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(1);
-    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
-  });
+      await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
+      const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      expect(decisions).toHaveLength(mode === 'disabled' ? 0 : 1);
+      if (mode === 'default') expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
+      if (mode === 'replacement') {
+        expect(replacement).toHaveBeenCalledOnce();
+        expect(decisions[0]?.decision).toMatchObject({ type: 'notify', title: 'Closed issue' });
+      }
+    },
+  );
 });

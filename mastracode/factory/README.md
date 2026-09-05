@@ -60,9 +60,44 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Work, Review, tool, and Linear configuration remain unchanged. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+Work, Review, and tool configuration remain global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
+
+### Linear event rules
+
+Both `LinearIntegration` and `PlatformLinearIntegration` automatically install the built-in `issueObserved` and `issueClosed` handlers. No default-rule imports or configuration are needed, including for `new PlatformLinearIntegration()` or direct construction with credentials only.
+
+```typescript
+import { PlatformLinearIntegration } from '@mastra/factory/integrations/platform/linear/integration';
+
+const linear = new PlatformLinearIntegration({
+  rules: {
+    issueObserved: context => ({
+      type: 'reject',
+      code: 'manual_intake',
+      reason: 'This deployment manages issue intake manually.',
+    }),
+    issueClosed: null,
+  },
+});
+```
+
+Install `linear` in `MastraFactory`'s `integrations` array. The direct `LinearIntegration` accepts the same `rules` option alongside `clientId` and `clientSecret`. A function replaces one default handler without composition; `null` disables that handler, not issue ingestion or reconciliation bookkeeping. Omitted events and `undefined` retain defaults. Both constructors validate event names and handler values, then copy and freeze an isolated resolved map.
+
+**Migration:** Move global `rules.linear[event].onEvent` values into the owning integration constructor's `rules[event]` option:
+
+```typescript
+// Before: global Factory rule overrides
+const overrides = { linear: { issueClosed: { onEvent: null } } };
+
+// After: Linear integration constructor options
+const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
+```
+
+Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
+
+The global rule version remains shared audit metadata for Linear evaluations. Update the deployment-owned version when handler behavior changes; it does not change ingress identity or replay semantics.
 
 ### GitHub review commands
 

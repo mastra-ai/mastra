@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
+import { defaultLinearRules } from '../integrations/linear/default-rules.js';
 import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
   FactoryBoardRuleLeaf,
@@ -150,12 +151,12 @@ describe('defaultFactoryRules', () => {
     expect(defaultGithubRules.pullRequestUpdated).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestReviewRequested).toBeTypeOf('function');
     expect(defaultGithubRules.pullRequestMerged).toBeTypeOf('function');
-    expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
+    expect(defaultLinearRules.issueObserved).toBeTypeOf('function');
     expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
   });
 
   it('materializes observed Linear issues directly in Triage', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+    const rule = defaultLinearRules.issueObserved;
 
     expect(await rule?.(linearContext())).toMatchObject({
       type: 'upsertLinkedWorkItem',
@@ -168,7 +169,7 @@ describe('defaultFactoryRules', () => {
   });
 
   it('does not move an existing Linear issue backward when polling observes an update', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueObserved?.onEvent;
+    const rule = defaultLinearRules.issueObserved;
 
     expect(
       await rule?.({
@@ -226,7 +227,7 @@ describe('defaultFactoryRules', () => {
 
   it('only closes non-terminal linked work-board issue cards', async () => {
     const githubRule = defaultGithubRules.issueClosed;
-    const linearRule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueClosed?.onEvent;
+    const linearRule = defaultLinearRules.issueClosed;
     const github = githubContext('issueClosed');
     const linear = linearContext();
 
@@ -1101,8 +1102,7 @@ describe('defaultFactoryRules', () => {
   });
 
   it('mirrors the Linear assignee under `assignee` and the creator under `author` for provider-agnostic attribution', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
-    expect(await rules.linear.issueObserved?.onEvent?.(linearContext())).toMatchObject({
+    expect(await defaultLinearRules.issueObserved?.(linearContext())).toMatchObject({
       metadata: {
         linearAssignee: 'ada',
         assignee: 'ada',
@@ -1168,14 +1168,12 @@ describe('defaultFactoryRules', () => {
     const workExit = vi.fn(() => undefined);
     const reviewEnter = vi.fn(() => undefined);
     const toolResult = vi.fn(() => undefined);
-    const linearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'deployment-8',
       overrides: {
         work: { planning: { issue: { onEnter: workEnter, onExit: workExit } } },
         review: { intake: { pullRequest: { onEnter: reviewEnter } } },
         tools: { submit_plan: { onResult: toolResult } },
-        linear: { issueObserved: { onEvent: linearEvent } },
       },
     });
 
@@ -1184,7 +1182,6 @@ describe('defaultFactoryRules', () => {
     expect(rules.review.intake?.pullRequest?.onEnter).toBe(reviewEnter);
     expect(rules.tools.submit_plan?.onResult).toBe(toolResult);
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
-    expect(rules.linear.issueObserved?.onEvent).toBe(linearEvent);
   });
 
   it('merges defaults and overrides at each exact handler leaf', () => {
@@ -1213,7 +1210,6 @@ describe('defaultFactoryRules', () => {
       {
         work: { planning: { issue: { onEnter: undefined, onExit: undefined } } },
         tools: { submit_plan: { onResult: undefined } },
-        linear: { issueObserved: { onEvent: undefined } },
       },
       {},
     );
@@ -1221,7 +1217,6 @@ describe('defaultFactoryRules', () => {
     expect(merged.work.planning?.issue).toHaveProperty('onEnter', undefined);
     expect(merged.work.planning?.issue).toHaveProperty('onExit', undefined);
     expect(merged.tools.submit_plan).toHaveProperty('onResult', undefined);
-    expect(merged.linear.issueObserved).toHaveProperty('onEvent', undefined);
   });
 
   it('copies override containers so later mutation cannot replace configured leaves', () => {

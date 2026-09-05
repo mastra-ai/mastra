@@ -1,7 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
 import type {
-  FactoryLinearEventName,
-  FactoryLinearRuleLeaf,
   FactoryRuleHandler,
   FactoryRuleSource,
   FactoryRuleStage,
@@ -50,13 +48,6 @@ export function resolveFactoryStageRules(
 
 export function resolveFactoryToolRule(rules: FactoryRules, toolName: string): FactoryToolRuleLeaf['onResult'] {
   return rules.tools[toolName]?.onResult;
-}
-
-export function resolveFactoryLinearRule(
-  rules: FactoryRules,
-  event: FactoryLinearEventName,
-): FactoryLinearRuleLeaf['onEvent'] {
-  return rules.linear[event]?.onEvent;
 }
 
 export type ResolvedFactoryToolRule = FactoryRuleHandler<FactoryToolResultRuleContext>;

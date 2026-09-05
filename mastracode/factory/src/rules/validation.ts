@@ -1,4 +1,4 @@
-import { FACTORY_LINEAR_EVENTS, FACTORY_RULE_BOARDS, FACTORY_RULE_SOURCES, FACTORY_RULE_STAGES } from './types.js';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_SOURCES, FACTORY_RULE_STAGES } from './types.js';
 import type {
   FactoryBoardRules,
   FactoryCommitDecision,
@@ -153,7 +153,7 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'linear'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'work', 'review', 'tools'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');
   validateBoardRules(rules.review, 'Factory rules.review');
@@ -166,16 +166,6 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
     if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
       throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.linear)) throw new FactoryRuleValidationError('Factory rules.linear must be an object.');
-  for (const [event, leaf] of Object.entries(rules.linear)) {
-    enumValue(event, FACTORY_LINEAR_EVENTS, 'Factory Linear event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.linear.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.linear.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
     }
   }
 }

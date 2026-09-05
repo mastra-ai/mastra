@@ -1,9 +1,9 @@
-import { resolveFactoryLinearRule } from '../../rules/resolve.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from '../../rules/types.js';
 import { validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import type { LinearEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
 
@@ -42,6 +42,7 @@ export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   rules: FactoryRules;
+  linearRules: LinearEventRules;
 }
 
 export interface LinearRulesIngress {
@@ -114,7 +115,7 @@ export class LinearRules {
       issue,
     };
 
-    const rule = resolveFactoryLinearRule(this.options.rules, context.event);
+    const rule = this.options.linearRules[context.event];
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -156,6 +157,7 @@ export class LinearRules {
 }
 
 export function attachLinearRules(
+  linear: { readonly rules: LinearEventRules },
   context: IntegrationContext,
 ): ((input: LinearRulesIngress) => Promise<unknown>) | undefined {
   if (!context.rules) return undefined;
@@ -163,6 +165,7 @@ export function attachLinearRules(
     projects: context.storage.projects,
     storage: context.rules.workItems,
     rules: context.rules.config,
+    linearRules: linear.rules,
   });
   return input => rules.ingest(input);
 }
