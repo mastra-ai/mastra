@@ -45,6 +45,34 @@ function replyToolContext(messages: unknown[] = []) {
   return context;
 }
 
+function signalMessage(
+  replyId: string,
+  metadata:
+    | { type: 'question'; replyId: string; askedAt: number }
+    | { type: 'continuation'; replyIds: string[]; attempt: number },
+): MastraDBMessage {
+  return {
+    id: `${replyId}:signal`,
+    role: 'signal',
+    type: 'user',
+    threadId: `subconscious:${parentThreadId}:remind`,
+    resourceId,
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [],
+      metadata: {
+        signal: {
+          type: 'user',
+          tagName: 'user',
+          contents: `Memory question ${replyId}\n\nWhat did I decide?`,
+          metadata: { [REMIND_MESSAGE_METADATA_KEY]: metadata },
+        },
+      },
+    },
+  };
+}
+
 function questionMessage(replyId: string): MastraDBMessage {
   return {
     id: `${replyId}:message`,
@@ -168,6 +196,39 @@ describe('Subconscious reminder questions', () => {
     const result = await tool.execute?.(
       { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
       replyToolContext([providerMessage]),
+    );
+
+    expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });
+  });
+
+  it('authorizes replies from persisted reminder history when the tool context omits earlier messages', async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const reminderThreadId = `subconscious:${parentThreadId}:remind`;
+    await memory.createThread({ threadId: reminderThreadId, resourceId });
+    await memory.saveMessages({ messages: [questionMessage('reply-1')] });
+    const parentAgent = createParentAgent();
+    const tool = createReplyToMemoryQuestionTool({ memory, parentAgent, parentThreadId, resourceId });
+
+    const result = await tool.execute?.(
+      { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
+      replyToolContext(),
+    );
+
+    expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });
+  });
+
+  it('authorizes replies during continuation runs from user-authored signal metadata', async () => {
+    const parentAgent = createParentAgent();
+    const tool = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });
+    const continuation = signalMessage('reply-1', {
+      type: 'continuation',
+      replyIds: ['reply-1'],
+      attempt: 1,
+    });
+
+    const result = await tool.execute?.(
+      { replyId: 'reply-1', answer: 'January 15.', moreComing: false },
+      replyToolContext([continuation]),
     );
 
     expect(result).toMatchObject({ delivered: true, replyId: 'reply-1', moreComing: false });

@@ -62,6 +62,10 @@ export async function ensureOwnedRemindThread(options: {
   return created;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -90,14 +94,29 @@ function parseMetadata(value: unknown): RemindMessageMetadata | undefined {
   }
 }
 
+export function isUserAuthoredRemindMessage(message: MastraDBMessage): boolean {
+  if (message.role === 'user') return true;
+  if (message.role !== 'signal' || !isRecord(message.content.metadata)) return false;
+  const signal = message.content.metadata.signal;
+  return isRecord(signal) && (signal.type === 'user' || signal.type === 'user-message' || signal.tagName === 'user');
+}
+
 export function getRemindMessageMetadata(message: MastraDBMessage): RemindMessageMetadata | undefined {
-  const metadata = message.content.metadata as Record<string, unknown> | undefined;
-  return parseMetadata(metadata?.[REMIND_MESSAGE_METADATA_KEY]);
+  const metadata = message.content.metadata;
+  if (!isRecord(metadata)) return undefined;
+  const direct = parseMetadata(metadata[REMIND_MESSAGE_METADATA_KEY]);
+  if (direct) return direct;
+  const signal = metadata.signal;
+  if (!isRecord(signal) || !isRecord(signal.metadata)) return undefined;
+  return parseMetadata(signal.metadata[REMIND_MESSAGE_METADATA_KEY]);
 }
 
 export function getRemindMessageText(message: MastraDBMessage): string {
-  return message.content.parts
+  const text = message.content.parts
     .filter((part): part is Extract<typeof part, { type: 'text' }> => part.type === 'text')
     .map(part => part.text)
     .join('\n');
+  if (text || !isRecord(message.content.metadata)) return text;
+  const signal = message.content.metadata.signal;
+  return isRecord(signal) && typeof signal.contents === 'string' ? signal.contents : '';
 }
