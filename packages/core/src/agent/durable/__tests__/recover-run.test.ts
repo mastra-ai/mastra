@@ -318,6 +318,57 @@ describe('DurableAgent.recover(runId)', () => {
     subscription.unsubscribe();
   });
 
+  it('keeps the recovered broadcast when the run suspends and resumes again', async () => {
+    const runId = 'recovered-continuation';
+    await seed(store, runId, 'running', 'agent-A');
+    const publish = vi.spyOn(agent.getPubSub(), 'publish');
+    const restart = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'tool-call-suspended',
+        runId,
+        from: 'AGENT',
+        payload: { toolCallId: 'call-1', toolName: 'read_page', args: {}, suspendPayload: {} },
+      } as any);
+      return { status: 'suspended' as const };
+    });
+    const resume = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { text: 'one recovered answer' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: 'one recovered answer', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, resume, runId })),
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+    const subscription = await agent.subscribeToThread({ threadId: 't', resourceId: 'r' });
+    const parts: any[] = [];
+    const reading = (async () => {
+      for await (const part of subscription.stream) parts.push(part);
+    })();
+    const recovered = await agent.recover(runId);
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    await vi.waitFor(() => expect(parts.some(part => part.type === 'tool-call-suspended')).toBe(true));
+    const resumed = await agent.resume(runId, {}, { toolCallId: 'call-1' });
+    await vi.waitFor(() => expect(parts.some(part => part.type === 'finish')).toBe(true));
+    expect(publish.mock.calls.filter(([, event]) => event.type === 'run-registered')).toHaveLength(1);
+    expect(parts.filter(part => part.type === 'text-delta').map(part => part.payload.text)).toEqual([
+      'one recovered answer',
+    ]);
+    expect(resume).toHaveBeenCalledOnce();
+    subscription.unsubscribe();
+    await reading;
+    resumed.cleanup();
+    recovered.cleanup();
+  });
+
   it('allows only the recovery-lease holder to register and restart a run', async () => {
     const runId = 'run-concurrent-recovery';
     const sharedStore = new InMemoryStore();
