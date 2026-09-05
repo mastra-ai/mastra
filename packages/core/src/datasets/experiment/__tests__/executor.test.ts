@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Agent } from '../../../agent';
+import { Agent, isSupportedLanguageModel } from '../../../agent';
 import { RequestContext } from '../../../request-context';
 import type { Workflow } from '../../../workflows';
 import { executeTarget } from '../executor';
+import { scriptedModel } from './scenarios/scenario-helpers';
 
 // Mock the isSupportedLanguageModel import
 vi.mock('../../../agent', async importOriginal => {
@@ -12,10 +13,6 @@ vi.mock('../../../agent', async importOriginal => {
     isSupportedLanguageModel: vi.fn().mockReturnValue(true),
   };
 });
-
-// Import after mock setup for module-level mocking
-// eslint-disable-next-line import/order
-import { isSupportedLanguageModel } from '../../../agent';
 
 // Helper to create mock agent
 const createMockAgent = (response: string, shouldFail = false): Agent =>
@@ -55,6 +52,50 @@ describe('executeTarget', () => {
   });
 
   describe('agent target', () => {
+    it('resolves a dynamic model with the same supplied context used for generation', async () => {
+      const model = scriptedModel([{ text: 'Selected model response' }]);
+      const resolveModel = vi.fn(({ requestContext }: { requestContext: RequestContext }) => {
+        if (requestContext.get('selection') !== 'selected') throw new Error('Missing model selection');
+        return model;
+      });
+      const agent = new Agent({
+        id: 'dynamic-agent',
+        name: 'Dynamic agent',
+        instructions: 'Reply.',
+        model: resolveModel,
+      });
+      const context = { selection: 'selected' };
+      await expect(
+        agent.getModel({ requestContext: new RequestContext(Object.entries(context)) }),
+      ).resolves.toBeDefined();
+      resolveModel.mockClear();
+      const generate = vi.spyOn(agent, 'generate');
+
+      const result = await executeTarget(agent, 'agent', { input: 'Hello' }, { requestContext: context });
+
+      expect(result.error).toBeNull();
+      expect(result.output).toEqual(expect.objectContaining({ text: 'Selected model response' }));
+      const resolvedContext = resolveModel.mock.calls[0]![0].requestContext;
+      expect(resolvedContext.all).toEqual(context);
+      expect(generate.mock.calls[0]![1]?.requestContext).toBe(resolvedContext);
+    });
+
+    it.each([undefined, {}])('preserves dynamic resolver errors for missing selection (%j)', async requestContext => {
+      const agent = new Agent({
+        id: 'dynamic-agent',
+        name: 'Dynamic agent',
+        instructions: 'Reply.',
+        model: ({ requestContext }) => {
+          if (!requestContext.get('selection')) throw new Error('Missing model selection');
+          return scriptedModel([{ text: 'Unexpected' }]);
+        },
+      });
+      const generate = vi.spyOn(agent, 'generate');
+      const result = await executeTarget(agent, 'agent', { input: 'Hello' }, { requestContext });
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Missing model selection' }));
+      expect(generate).not.toHaveBeenCalled();
+    });
+
     it('handles string input and returns FullOutput', async () => {
       const mockAgent = createMockAgent('Hello response');
 
@@ -163,6 +204,27 @@ describe('executeTarget', () => {
 
       expect(result.output).toBeNull();
       expect(result.error).toEqual(expect.objectContaining({ message: 'Agent error' }));
+    });
+
+    it('shares model-resolution context with legacy generation', async () => {
+      vi.mocked(isSupportedLanguageModel).mockReturnValue(false);
+      try {
+        const generateLegacy = vi.fn().mockResolvedValue({ text: 'Legacy response' });
+        const agent = Object.assign(createMockAgent('Legacy response'), { generateLegacy });
+        const result = await executeTarget(
+          agent,
+          'agent',
+          { input: 'Hello' },
+          { requestContext: { selection: 'legacy' } },
+        );
+        expect(result.error).toBeNull();
+        const context = vi.mocked(agent.getModel).mock.calls[0]![0]?.requestContext;
+        expect(context).toBeInstanceOf(RequestContext);
+        expect(context?.get('selection')).toBe('legacy');
+        expect(generateLegacy.mock.calls[0]![1]?.requestContext).toBe(context);
+      } finally {
+        vi.mocked(isSupportedLanguageModel).mockReturnValue(true);
+      }
     });
 
     it('uses generateLegacy when model is not supported', async () => {
