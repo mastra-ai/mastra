@@ -38,4 +38,20 @@ export abstract class MastraServerCache extends MastraBase {
    * For in-memory: Uses a simple counter map.
    */
   abstract increment(key: string): Promise<number>;
+
+  /**
+   * Atomically allocate the next index from `counterKey` and append `value`
+   * (with `index` set to the 0-based allocated index) to the list at `listKey`.
+   * Returns the assigned index.
+   *
+   * The default implementation composes `increment()` + `listPush()` (two
+   * round-trips). Network-backed caches should override this with a single
+   * atomic server-side operation — it sits on the per-chunk durable stream
+   * publish hot path, where every awaited round-trip directly caps throughput.
+   */
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+    const index = (await this.increment(counterKey)) - 1;
+    await this.listPush(listKey, { ...value, index });
+    return index;
+  }
 }

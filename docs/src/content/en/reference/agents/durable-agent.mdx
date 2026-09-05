@@ -1,6 +1,6 @@
 ---
 title: 'Reference: DurableAgent | Agents'
-description: "DurableAgent wraps an existing Agent with durable execution and resumable streams."
+description: 'DurableAgent wraps an existing Agent with durable execution and resumable streams.'
 packages:
   - '@mastra/core'
 ---
@@ -50,7 +50,7 @@ cleanup()
 
 ### Using the `durable` config flag
 
-Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, or `cleanupTimeoutMs`.
+Set `durable: true` on `AgentConfig` and the agent is automatically wrapped with `createDurableAgent` when it's attached to a `Mastra` instance. Use an object to forward advanced options such as `cache`, `pubsub`, `maxSteps`, `cleanupTimeoutMs`, or `shouldCache`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -127,6 +127,13 @@ Returns: `DurableAgent`
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
   },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
+  },
 ]}
 />
 
@@ -171,6 +178,13 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     type: 'number',
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
+  },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
   },
 ]}
 />
@@ -220,6 +234,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     type: 'number',
     isOptional: true,
     description: 'Maximum number of steps for the agentic loop.',
+  },
+  {
+    name: 'shouldCache',
+    type: '(topic: string) => boolean',
+    isOptional: true,
+    description:
+      'Per-topic opt-out of the replay cache. Return `false` to publish a topic straight to the underlying PubSub without recording it; subscribers of that topic receive live events only and cannot resume from an offset. Useful for trading replay for minimum publish latency on hot topics when the cache is remote (for example, cross-region Redis). Run-local topics are always excluded, regardless of this option.',
   },
   {
     name: 'cleanupTimeoutMs',
