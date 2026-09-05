@@ -1,3 +1,4 @@
+import type { RouteResponse } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
 import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
@@ -12,8 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { useWorkingMemory, WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
+import { useMemoryConfig } from '@/domains/memory/hooks/use-memory';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -110,8 +112,26 @@ const omObservationWithExtractionResponse = () =>
     headers: { 'content-type': 'text/event-stream' },
   });
 
-const workingMemoryResponse = () =>
-  HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
+type WorkingMemoryResponse = RouteResponse<'GET /memory/threads/:threadId/working-memory'>;
+
+const workingMemoryResponse = (
+  workingMemory: unknown = null,
+  options: Partial<WorkingMemoryResponse> = {},
+): WorkingMemoryResponse => ({
+  workingMemory,
+  source: 'thread',
+  workingMemoryTemplate: null,
+  threadExists: false,
+  ...options,
+});
+
+const createDeferred = () => {
+  let resolveRef: (() => void) | undefined;
+  const promise = new Promise<void>(resolve => {
+    resolveRef = () => resolve();
+  });
+  return { promise, resolve: () => resolveRef?.() };
+};
 
 // Background queries fired by the real provider stack (memory config, working
 // memory, thread-signal subscribe). They're not under test here but must be
@@ -119,7 +139,7 @@ const workingMemoryResponse = () =>
 const baseHandlers = (_captured: Captured[]) => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
-  http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => HttpResponse.json(workingMemoryResponse())),
   http.post(
     `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
     () =>
@@ -746,5 +766,184 @@ describe('ChatProvider', () => {
     expect(omRequests.length).toBeGreaterThan(1);
     expect(messageRequests.length).toBeGreaterThan(1);
     expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
+  });
+
+  it('refetches working memory on an OM observation-end event so the provider shows the persisted value without a remount', async () => {
+    // OM can persist working memory server-side with no tool call in the
+    // stream. The endpoint flips once the observation-end event has been
+    // emitted, before buffer-status resolves.
+    let observationEndEmitted = false;
+    let bufferingComplete = false;
+    const wmRequestPhases: string[] = [];
+
+    // Hold the observation-end event until the initial stale response has rendered.
+    const staleWmValueRendered = createDeferred();
+
+    const WorkingMemoryProbe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-data">{workingMemoryData ?? 'no-working-memory'}</div>;
+    };
+
+    // The working-memory overrides need their own use() call; merged into one,
+    // the base param-route handler keeps winning over these literals.
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, () => {
+        bufferingComplete = true;
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () => {
+        wmRequestPhases.push(bufferingComplete ? 'buffered' : observationEndEmitted ? 'observed' : 'mount');
+        return HttpResponse.json(
+          workingMemoryResponse(observationEndEmitted ? 'responseFormat: bullet list' : null, {
+            source: 'resource',
+            threadExists: true,
+          }),
+        );
+      }),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder();
+                await staleWmValueRendered.promise;
+                observationEndEmitted = true;
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: 'data-om-observation-end', data: { operationType: 'observation' } })}\n\n`,
+                  ),
+                );
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                controller.close();
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <WorkingMemoryProbe />
+            <SendOnMount text="trigger WM extraction" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await screen.findByTestId('wm-data');
+    expect(screen.getByTestId('wm-data').textContent).not.toBe('responseFormat: bullet list');
+
+    staleWmValueRendered.resolve();
+
+    await waitFor(() => expect(screen.getByTestId('wm-data').textContent).toBe('responseFormat: bullet list'), {
+      timeout: 2000,
+    });
+    // A fetch in the observed phase can only come from the observation-end
+    // refresh, so it must have fired before buffering completed.
+    expect(wmRequestPhases).toContain('observed');
+  });
+
+  it('refetches working memory after awaited OM buffering completes so the provider shows the persisted value without a remount', async () => {
+    // OM persists working memory asynchronously, after the chat stream ends.
+    // The endpoint serves the stale value until buffer-status resolves, then
+    // the persisted one.
+    let bufferingComplete = false;
+    let observationEndEmitted = false;
+    const wmServedValues: string[] = [];
+
+    // Hold the observation-end event until the initial stale response has
+    // rendered, then hold finish until that event's refetch has been served.
+    const staleWmValueRendered = createDeferred();
+    const obsEndRefetchServedStale = createDeferred();
+
+    const WorkingMemoryProbe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-data">{workingMemoryData ?? 'no-working-memory'}</div>;
+    };
+    // The awaited-buffering path is gated on the memory config having loaded,
+    // so the gate below must not open before that response has landed either.
+    const OmConfigProbe = () => {
+      const { data } = useMemoryConfig('agent-1');
+      return <div data-testid="om-config">{String(data?.config?.observationalMemory)}</div>;
+    };
+
+    // The working-memory overrides need their own use() call; merged into one,
+    // the base param-route handler keeps winning over these literals.
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, () => {
+        bufferingComplete = true;
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, () => {
+        const value = bufferingComplete ? 'responseFormat: bullet list' : null;
+        wmServedValues.push(value === null ? 'stale' : 'fresh');
+        if (observationEndEmitted) {
+          obsEndRefetchServedStale.resolve();
+        }
+        return HttpResponse.json(
+          workingMemoryResponse(value, {
+            source: 'resource',
+            threadExists: true,
+          }),
+        );
+      }),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder();
+                await staleWmValueRendered.promise;
+                observationEndEmitted = true;
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ type: 'data-om-observation-end', data: { operationType: 'observation' } })}\n\n`,
+                  ),
+                );
+                await obsEndRefetchServedStale.promise;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                controller.close();
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <WorkingMemoryProbe />
+            <OmConfigProbe />
+            <SendOnMount text="trigger WM extraction" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await screen.findByTestId('wm-data');
+    expect(screen.getByTestId('wm-data').textContent).not.toBe('responseFormat: bullet list');
+    await screen.findByTestId('om-config');
+    expect(screen.getByTestId('om-config').textContent).toBe('true');
+
+    staleWmValueRendered.resolve();
+
+    await waitFor(() => expect(screen.getByTestId('wm-data').textContent).toBe('responseFormat: bullet list'), {
+      timeout: 2000,
+    });
+    // The persisted value arrived via a separate post-buffering request: the
+    // mount and the observation-end refetch were both served stale.
+    expect(wmServedValues.filter(value => value === 'stale').length).toBeGreaterThanOrEqual(2);
+    expect(wmServedValues.at(-1)).toBe('fresh');
   });
 });
