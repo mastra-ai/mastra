@@ -143,12 +143,12 @@ describe('mastraStorage typed load', () => {
   });
 });
 
-describe('mastraStorage workflow snapshot upsert', () => {
+describe.each(['insert', 'batchInsert'] as const)('mastraStorage workflow snapshot %s', op => {
   it.each([
     ['mastra_workflow_snapshots', TABLE_WORKFLOW_SNAPSHOT, '2026-05-15T00:00:00.000Z', '2026-05-15T00:00:00.000Z'],
     ['mastra_workflow_snapshots', TABLE_WORKFLOW_SNAPSHOT, undefined, '2026-05-16T00:00:00.000Z'],
     ['mastra_threads', TABLE_THREADS, '2026-05-15T00:00:00.000Z', '2026-05-16T00:00:00.000Z'],
-  ] as const)('upserts %s with existing createdAt %s', async (table, tableName, createdAt, expectedCreatedAt) => {
+  ] as const)('upserts %s (%s) with existing createdAt %s', async (table, tableName, createdAt, expectedCreatedAt) => {
     const existing = { _id: asConvexId('existing-doc'), id: 'record-1', createdAt };
     const unique = vi.fn(async () => existing);
     const withIndex = vi.fn(() => ({ unique }));
@@ -161,7 +161,10 @@ describe('mastraStorage workflow snapshot upsert', () => {
       updatedAt: '2026-05-17T00:00:00.000Z',
     };
 
-    await handleTypedOperation(ctx, table, { op: 'insert', tableName, record });
+    await handleTypedOperation(ctx, table, {
+      tableName,
+      ...(op === 'insert' ? { op, record } : { op, records: [record] }),
+    });
 
     expect(withIndex).toHaveBeenCalledWith('by_record_id', expect.any(Function));
     expect(patch).toHaveBeenCalledExactlyOnceWith(existing._id, {
@@ -189,9 +192,8 @@ describe('mastraStorage workflow snapshot upsert', () => {
     };
 
     await handleTypedOperation(ctx, 'mastra_workflow_snapshots', {
-      op: 'insert',
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record,
+      ...(op === 'insert' ? { op, record } : { op, records: [record] }),
     });
 
     expect(insert).toHaveBeenCalledExactlyOnceWith('mastra_workflow_snapshots', record);

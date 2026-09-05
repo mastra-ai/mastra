@@ -527,6 +527,9 @@ export async function handleTypedOperation(
 
         if (existing) {
           const { id: _, ...updateData } = record;
+          if (convexTable === CONVEX_TABLE_WORKFLOW_SNAPSHOTS) {
+            updateData.createdAt = existing.createdAt ?? updateData.createdAt;
+          }
           await ctx.db.patch(existing._id, updateData);
         } else {
           await ctx.db.insert(convexTable, record);
