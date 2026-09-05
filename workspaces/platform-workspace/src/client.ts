@@ -26,6 +26,24 @@ export interface PlatformRequestOptions extends RequestInit {
 export type SandboxProvider = 'railway' | 'e2b';
 
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
+const REGIONAL_PROXY_URLS: Record<'us' | 'eu', string> = {
+  us: 'https://workspaces.us.mastra.ai',
+  eu: 'https://workspaces.eu.mastra.ai',
+};
+
+/**
+ * Resolves the workspace proxy URL, preferring an explicit
+ * `MASTRA_WORKSPACE_PROXY_URL` override, then a regional replica selected by
+ * `MASTRA_PLATFORM_REGION` (case-insensitive `us` or `eu`), then the global
+ * default. Unknown region values fall through to the global default.
+ */
+function resolveProxyUrl(): string {
+  const override = process.env.MASTRA_WORKSPACE_PROXY_URL;
+  if (override) return override;
+  const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
+  if (region === 'us' || region === 'eu') return REGIONAL_PROXY_URLS[region];
+  return DEFAULT_PROXY_URL;
+}
 
 /**
  * Default per-request timeout for calls to the workspace proxy. Applied only
@@ -55,7 +73,7 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
-    proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    proxyUrl: resolveProxyUrl().replace(/\/$/, ''),
     sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
     sessionId: options.sessionId,
     threadId: options.threadId,
