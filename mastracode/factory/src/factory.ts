@@ -203,7 +203,7 @@ export interface MastraFactoryConfig {
    */
   integrations?: FactoryIntegration[];
   /**
-   * Authoritative Factory board, tool-result, and GitHub-event rules. Construct
+   * Authoritative Factory board, tool-result, and Linear-event rules. Construct
    * with `defaultFactoryRules({ version, overrides })` so deployment policy has
    * an explicit version and exact handler leaves replace rather than compose.
    * Omitted → conservative built-in rules for the current deployment.

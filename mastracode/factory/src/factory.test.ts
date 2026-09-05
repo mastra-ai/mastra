@@ -368,9 +368,8 @@ describe('MastraFactory.prepare', () => {
     expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(rules).not.toHaveProperty('github');
+    expect(rules?.linear.issueObserved?.onEvent).toBeTypeOf('function');
   });
 
   it('threads explicitly configured Factory rules without composing handler leaves', async () => {

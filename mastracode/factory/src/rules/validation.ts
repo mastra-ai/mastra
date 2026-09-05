@@ -1,10 +1,4 @@
-import {
-  FACTORY_GITHUB_EVENTS,
-  FACTORY_LINEAR_EVENTS,
-  FACTORY_RULE_BOARDS,
-  FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
-} from './types.js';
+import { FACTORY_LINEAR_EVENTS, FACTORY_RULE_BOARDS, FACTORY_RULE_SOURCES, FACTORY_RULE_STAGES } from './types.js';
 import type {
   FactoryBoardRules,
   FactoryCommitDecision,
@@ -159,7 +153,12 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
+  if ('github' in rules) {
+    throw new FactoryRuleValidationError(
+      'Factory rules.github is no longer supported. Configure rules[event] on the GitHub integration constructor instead.',
+    );
+  }
+  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'linear'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');
   validateBoardRules(rules.review, 'Factory rules.review');
@@ -172,16 +171,6 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
     if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
       throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.github)) throw new FactoryRuleValidationError('Factory rules.github must be an object.');
-  for (const [event, leaf] of Object.entries(rules.github)) {
-    enumValue(event, FACTORY_GITHUB_EVENTS, 'Factory GitHub event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.github.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.github.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.github.${event}.onEvent must be a function.`);
     }
   }
 

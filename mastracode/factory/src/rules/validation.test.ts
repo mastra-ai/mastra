@@ -250,7 +250,8 @@ describe('Factory rule validation', () => {
         ...rules,
         github: { madeUpEvent: { onEvent: () => undefined } },
       }),
-    ).toThrow(/GitHub event is invalid/i);
+    ).toThrow(/GitHub integration constructor/i);
+    expect(() => assertFactoryRules({ ...rules, github: undefined })).toThrow(/GitHub integration constructor/i);
     expect(() =>
       assertFactoryRules({
         ...rules,

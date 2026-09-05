@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import type * as factoryModule from '@mastra/factory';
-import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
 vi.mock('@mastra/factory', async importOriginal => {
@@ -97,8 +96,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
   });
 
-  it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
+  it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
     const { factoryRules } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    expect(github).toBeDefined();
+    if (!github) throw new Error('Expected the configured GitHub integration');
     const item = {
       id: 'issue-42',
       source: 'github-issue' as const,
@@ -120,8 +131,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       itemRevision: 3,
     };
 
-    const issueEdited = resolveFactoryGithubRule(factoryRules, 'issueEdited');
-    const issueCommentCreated = resolveFactoryGithubRule(factoryRules, 'issueCommentCreated');
+    const { issueEdited, issueCommentCreated } = github.rules;
 
     expect(
       issueEdited?.({

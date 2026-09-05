@@ -6,11 +6,13 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
+import { resolveGithubRules } from './default-rules.js';
+import type { GithubRuleOverrides } from './default-rules.js';
 import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
-async function setup(permission: string | undefined) {
+async function setup(permission: string | undefined, rules?: GithubRuleOverrides) {
   const seeded = await createFactoryStorageForTests();
   const workItems = seeded.workItems;
   const sourceControl = seeded.sourceControl.forIntegration('github');
@@ -48,6 +50,7 @@ async function setup(permission: string | undefined) {
     sandboxWorkdir: '/workspace',
   });
   const github = {
+    rules: resolveGithubRules(rules),
     slug: 'factory-app',
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue(permission),
   } as unknown as GithubIntegration;
@@ -136,7 +139,13 @@ function issueComment(
 
 function pullRequestComment(
   deliveryId: string,
-  options: { action?: 'created' | 'edited' | 'deleted'; sender?: string; author?: string; body?: string; state?: string } = {},
+  options: {
+    action?: 'created' | 'edited' | 'deleted';
+    sender?: string;
+    author?: string;
+    body?: string;
+    state?: string;
+  } = {},
 ) {
   const sender = options.sender ?? 'maintainer';
   const author = options.author ?? sender;
@@ -219,6 +228,61 @@ function pullRequest(
 }
 
 describe('GithubRules', () => {
+  it('persists only replacement decisions with the shared audit version', async () => {
+    const handler = vi.fn<NonNullable<GithubRuleOverrides['issueClosed']>>(context => ({
+      type: 'transition',
+      board: 'work',
+      stage: 'canceled',
+      idempotencyKey: `${context.deliveryId}:custom-close`,
+    }));
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
+      issueClosed: handler,
+    });
+    await createLinkedIssue(workItems, project.id);
+    const commitEvaluation = vi.spyOn(workItems, 'commitRuleEvaluation');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: defaultFactoryRules({ version: 'custom-github-v2' }),
+    });
+    await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'replayed' });
+    // Evaluation precedes durable replay detection; only the effects are deduplicated.
+    expect(handler).toHaveBeenCalledTimes(2);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
+    expect(commitEvaluation).toHaveBeenCalledWith(expect.objectContaining({ ruleSetVersion: 'custom-github-v2' }));
+  });
+
+  it('records disabled ingress without decisions and still evaluates unrelated events', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
+      issueOpened: null,
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    await createLinkedIssue(workItems, project.id);
+    await expect(service.ingest(issueClosed('close-after-disabled-open', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
+  });
+
   it('commits one trusted issue intake decision and replays immutable delivery ingress', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const service = new GithubRules({
@@ -796,7 +860,9 @@ describe('GithubRules', () => {
       },
     });
 
-    await expect(service.ingest(reviewRequested('delivery-review-requested'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(reviewRequested('delivery-review-requested'))).resolves.toEqual({
+      status: 'committed',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
@@ -826,7 +892,7 @@ describe('GithubRules', () => {
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
   });
 
-  it('materializes a Review card from Factory\'s exact PR comment command', async () => {
+  it("materializes a Review card from Factory's exact PR comment command", async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const rules = builtInFactoryRules();
     const service = new GithubRules({
@@ -845,7 +911,9 @@ describe('GithubRules', () => {
       ownerId: 'worker-1',
     });
 
-    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({
+      status: 'committed',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
@@ -863,7 +931,9 @@ describe('GithubRules', () => {
       ]),
     );
 
-    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({ status: 'replayed' });
+    await expect(service.ingest(pullRequestComment('delivery-comment-review'))).resolves.toEqual({
+      status: 'replayed',
+    });
     await expect(
       service.ingest(pullRequestComment('delivery-comment-prose', { body: 'Please @factory-app review this PR.' })),
     ).resolves.toEqual({ status: 'committed' });
@@ -1177,7 +1247,9 @@ describe('GithubRules', () => {
     await expect(service.ingest(reviewRequested('delivery-rr-dispatch'))).resolves.toEqual({ status: 'replayed' });
     // A second re-request while the card is already Reviewing is a guarded no-op.
     await expect(service.ingest(reviewRequested('delivery-rr-again'))).resolves.toEqual({ status: 'committed' });
-    await expect(service.ingest(pullRequestComment('delivery-rr-comment-again'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(pullRequestComment('delivery-rr-comment-again'))).resolves.toEqual({
+      status: 'committed',
+    });
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions.filter(entry => entry.decision.type === 'transition')).toHaveLength(1);
     expect(decisions.filter(entry => entry.decision.type === 'invokeSkill')).toHaveLength(1);
@@ -1299,9 +1371,11 @@ describe('GithubRules', () => {
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
-    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
     const seen = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({ version: 'test-1', overrides: { github: { issueOpened: { onEvent: seen } } } });
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission, {
+      issueOpened: seen,
+    });
+    const rules = defaultFactoryRules({ version: 'test-1' });
     const service = new GithubRules({
       github,
       sourceControl,
@@ -2698,7 +2772,10 @@ describe('createGithubPullRequestReconciler', () => {
       },
     });
 
-    await createReconciler(context, vi.fn(async () => mergedState(31)))([repositoryTarget]);
+    await createReconciler(
+      context,
+      vi.fn(async () => mergedState(31)),
+    )([repositoryTarget]);
 
     const stamped = await context.workItems.get({ orgId: 'org-1', id: card.item.id });
     expect(stamped?.metadata?.authorTrusted).toBe(answered ? true : undefined);

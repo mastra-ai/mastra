@@ -18,12 +18,20 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 ## Preserve the public shape
 
-Use one rules tree:
+Use the global rules tree for board, tool, and Linear handlers:
 
 - `work.<stage>.<source>.onEnter` or `onExit`
 - `review.<stage>.<source>.onEnter` or `onExit`
 - `tools.<toolName>.onResult`
-- `github.<event>.onEvent`
+- `linear.<event>.onEvent`
+
+Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor instead:
+
+```typescript
+new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+```
+
+Migrate global `rules.github[event].onEvent` to constructor `rules[event]`. Global GitHub configuration is rejected. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable webhook authentication or reconciliation bookkeeping.
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
@@ -35,7 +43,7 @@ An override replaces the exact handler leaf. It does not compose with the built-
 
 Before replacing a built-in leaf:
 
-1. Read the built-in handler in `src/web/factory/rules/defaults.ts`.
+1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts` within the Factory package; global defaults live in `src/rules/defaults.ts`.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

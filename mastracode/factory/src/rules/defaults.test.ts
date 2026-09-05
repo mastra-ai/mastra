@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { defaultGithubRules } from '../integrations/github/default-rules.js';
 import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
   FactoryBoardRuleLeaf,
@@ -140,15 +141,15 @@ describe('defaultFactoryRules', () => {
     expect(rules.review.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
-    expect(rules.github.issueEdited?.onEvent).toBeTypeOf('function');
-    expect(rules.github.issueCommentCreated?.onEvent).toBeTypeOf('function');
-    expect(rules.github.issueCommentEdited?.onEvent).toBeTypeOf('function');
-    expect(rules.github.issueCommentDeleted?.onEvent).toBeTypeOf('function');
-    expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
-    expect(rules.github.pullRequestUpdated?.onEvent).toBeTypeOf('function');
-    expect(rules.github.pullRequestReviewRequested?.onEvent).toBeTypeOf('function');
-    expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
+    expect(defaultGithubRules.issueEdited).toBeTypeOf('function');
+    expect(defaultGithubRules.issueCommentCreated).toBeTypeOf('function');
+    expect(defaultGithubRules.issueCommentEdited).toBeTypeOf('function');
+    expect(defaultGithubRules.issueCommentDeleted).toBeTypeOf('function');
+    expect(defaultGithubRules.pullRequestOpened).toBeTypeOf('function');
+    expect(defaultGithubRules.pullRequestUpdated).toBeTypeOf('function');
+    expect(defaultGithubRules.pullRequestReviewRequested).toBeTypeOf('function');
+    expect(defaultGithubRules.pullRequestMerged).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
     expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
   });
@@ -185,7 +186,7 @@ describe('defaultFactoryRules', () => {
   });
 
   it('transitions linked GitHub issue cards deterministically on closure', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).github.issueClosed?.onEvent;
+    const rule = defaultGithubRules.issueClosed;
     const github = githubContext('issueClosed');
     const done = await rule?.({
       ...github,
@@ -224,7 +225,7 @@ describe('defaultFactoryRules', () => {
   });
 
   it('only closes non-terminal linked work-board issue cards', async () => {
-    const githubRule = defaultFactoryRules({ version: 'deployment-7' }).github.issueClosed?.onEvent;
+    const githubRule = defaultGithubRules.issueClosed;
     const linearRule = defaultFactoryRules({ version: 'deployment-7' }).linear.issueClosed?.onEvent;
     const github = githubContext('issueClosed');
     const linear = linearContext();
@@ -313,7 +314,7 @@ describe('defaultFactoryRules', () => {
   it.each(['issueEdited', 'issueCommentCreated', 'issueCommentEdited', 'issueCommentDeleted'] as const)(
     're-runs investigation when %s arrives for a linked GitHub issue',
     async event => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github[event]?.onEvent;
+      const rule = defaultGithubRules[event];
       const decision = await rule?.({
         ...githubContext(event),
         item: { ...item, source: 'github-issue' },
@@ -668,7 +669,7 @@ describe('defaultFactoryRules', () => {
     }
 
     it('wakes the authoring Work agent when changes are requested', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewSubmitted;
       const decision = await rule?.(reviewContext());
       expect(decision).toMatchObject({
         type: 'sendMessage',
@@ -682,7 +683,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('stays quiet for reviews that are not asking for changes', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewSubmitted;
       for (const state of ['approved', 'commented', 'dismissed']) {
         expect(
           await rule?.(reviewContext({ review: { id: 99, state, url: 'https://github.test/r' } })),
@@ -693,7 +694,7 @@ describe('defaultFactoryRules', () => {
     it('stays quiet when the pull request is closed or merged', async () => {
       // A closed or merged PR has no branch left to push fixes to, so waking
       // the author would only send them to a dead end.
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewSubmitted;
       const base = reviewContext();
       for (const pullRequest of [
         { ...base.pullRequest!, state: 'closed' },
@@ -706,7 +707,7 @@ describe('defaultFactoryRules', () => {
     it('never fires on the Review card that posted the review', async () => {
       // Only the PR's author can act on the feedback. Reacting on the Review
       // card would loop the reviewer against its own output.
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewSubmitted?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewSubmitted;
       expect(await rule?.(reviewContext({ board: 'review' }))).toBeUndefined();
       expect(await rule?.(reviewContext({ item: undefined, board: undefined }))).toBeUndefined();
       expect(await rule?.(reviewContext({ review: undefined }))).toBeUndefined();
@@ -731,7 +732,7 @@ describe('defaultFactoryRules', () => {
     }
 
     it('wakes the authoring Work agent when someone comments on the pull request', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const rule = defaultGithubRules.pullRequestCommentCreated;
       const decision = await rule?.(commentContext());
       expect(decision).toMatchObject({
         type: 'sendMessage',
@@ -746,7 +747,7 @@ describe('defaultFactoryRules', () => {
       // `factoryAuthored` cannot tell the Work role from the Review role, so
       // reacting to Factory's own comments would let the Work agent's progress
       // notes wake it in a loop.
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const rule = defaultGithubRules.pullRequestCommentCreated;
       expect(
         await rule?.(
           commentContext({
@@ -757,7 +758,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('stays quiet on the Review card and on pull requests that are no longer open', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const rule = defaultGithubRules.pullRequestCommentCreated;
       expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
       expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
       const openPr = commentContext().pullRequest!;
@@ -769,7 +770,7 @@ describe('defaultFactoryRules', () => {
       // GitHub refuses a self-review, so on Factory-authored PRs the verdict
       // arrives as a comment under Factory's own login. It is the handoff, so it
       // has to survive the self-loop guard.
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const rule = defaultGithubRules.pullRequestCommentCreated;
       const decision = await rule?.(
         commentContext({
           actor: { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true },
@@ -785,7 +786,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('ignores a Factory verdict that approves, and a verdict only quoted in the body', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestCommentCreated?.onEvent;
+      const rule = defaultGithubRules.pullRequestCommentCreated;
       const factoryActor = { type: 'github', login: 'factory[bot]', trusted: true, factoryAuthored: true } as const;
       expect(
         await rule?.(
@@ -837,7 +838,7 @@ describe('defaultFactoryRules', () => {
     }
 
     it('re-enters Review when review is re-requested from Factory on a finished card', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewRequested;
       expect(await rule?.(reReviewContext())).toMatchObject({
         type: 'transition',
         idempotencyKey: 'delivery-1:re-review-requested',
@@ -847,7 +848,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('ignores re-requests that do not target Factory or come from untrusted senders', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewRequested;
       for (const context of [
         // Review requested from a human reviewer, not Factory's bot.
         reReviewContext({ reviewRequest: { reviewer: 'ada', factoryReviewer: false } }),
@@ -864,7 +865,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('ignores re-requests on closed or merged pull requests', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestReviewRequested?.onEvent;
+      const rule = defaultGithubRules.pullRequestReviewRequested;
       const closed = reReviewContext();
       closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
       const merged = reReviewContext();
@@ -895,7 +896,7 @@ describe('defaultFactoryRules', () => {
     }
 
     it('re-enters Review when a push arrives for a PR whose card already finished Reviewing', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      const rule = defaultGithubRules.pullRequestUpdated;
       expect(await rule?.(pushContext())).toMatchObject({
         type: 'transition',
         idempotencyKey: 'delivery-1:re-review-updated',
@@ -908,7 +909,7 @@ describe('defaultFactoryRules', () => {
       // The push invalidates whatever the running pass is reading, so it has to
       // start over on the new head. Re-entering the stage is how that pass gets
       // cancelled; dropping the push would strand the review on stale code.
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      const rule = defaultGithubRules.pullRequestUpdated;
       expect(await rule?.(pushContext({ item: { ...prItem, stages: ['review'] } }))).toMatchObject({
         type: 'transition',
         board: 'review',
@@ -920,7 +921,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('does nothing when the PR is still in Intake, is unlinked, or is not on the Review board', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      const rule = defaultGithubRules.pullRequestUpdated;
       for (const context of [
         // Card is still in intake — a review pass has not started yet.
         pushContext({ item: { ...prItem, stages: ['intake'] } }),
@@ -934,7 +935,7 @@ describe('defaultFactoryRules', () => {
     });
 
     it('ignores push events on closed or merged pull requests', async () => {
-      const rule = defaultFactoryRules({ version: 'deployment-7' }).github.pullRequestUpdated?.onEvent;
+      const rule = defaultGithubRules.pullRequestUpdated;
       const closed = pushContext();
       closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
       const merged = pushContext();
@@ -971,7 +972,7 @@ describe('defaultFactoryRules', () => {
         [untrusted, false],
         [factoryAuthored, expectedEligibility.factoryAuthored],
       ] as const) {
-        expect(await rules.github[event]?.onEvent?.(actor)).toMatchObject({
+        expect(await defaultGithubRules[event]?.(actor)).toMatchObject({
           type: 'upsertLinkedWorkItem',
           stage: 'intake',
           metadata: { autoStartCandidate: eligible },
@@ -1039,7 +1040,7 @@ describe('defaultFactoryRules', () => {
       actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
     };
 
-    expect(await rules.github.pullRequestOpened?.onEvent?.(older)).toMatchObject({
+    expect(await defaultGithubRules.pullRequestOpened?.(older)).toMatchObject({
       type: 'upsertLinkedWorkItem',
       stage: 'intake',
       metadata: { autoStartCandidate: false },
@@ -1052,7 +1053,7 @@ describe('defaultFactoryRules', () => {
       const rules = defaultFactoryRules({ version: 'deployment-7' });
       const olderContext = githubContext(event, '2026-05-01T00:00:00Z');
 
-      expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
+      expect(await defaultGithubRules[event]?.(olderContext)).toMatchObject({
         type: 'upsertLinkedWorkItem',
         stage: 'intake',
         metadata: { autoStartCandidate: false },
@@ -1062,11 +1063,11 @@ describe('defaultFactoryRules', () => {
 
   it('uses the same issue and pull-request identities as board Intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
-    expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
+    expect(await defaultGithubRules.issueOpened?.(githubContext('issueOpened'))).toMatchObject({
       source: 'github-issue',
       sourceKey: 'github-issue:42',
     });
-    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+    expect(await defaultGithubRules.pullRequestOpened?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
       sourceKey: 'github-pr:17',
     });
@@ -1076,7 +1077,7 @@ describe('defaultFactoryRules', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestOpened');
     context.pullRequest = { ...context.pullRequest!, draft: true };
-    expect(await rules.github.pullRequestOpened?.onEvent?.(context)).toMatchObject({
+    expect(await defaultGithubRules.pullRequestOpened?.(context)).toMatchObject({
       metadata: {
         state: 'open',
         draft: true,
@@ -1091,10 +1092,10 @@ describe('defaultFactoryRules', () => {
 
   it('stamps the GitHub author login on issue and PR intake metadata', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
-    expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
+    expect(await defaultGithubRules.issueOpened?.(githubContext('issueOpened'))).toMatchObject({
       metadata: { author: 'author' },
     });
-    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+    expect(await defaultGithubRules.pullRequestOpened?.(githubContext('pullRequestOpened'))).toMatchObject({
       metadata: { author: 'author' },
     });
   });
@@ -1118,7 +1119,7 @@ describe('defaultFactoryRules', () => {
     context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
     context.board = 'review';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
-    const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
+    const decision = await defaultGithubRules.pullRequestMerged?.(context);
     expect(decision).toMatchObject({
       type: 'transition',
       board: 'review',
@@ -1133,7 +1134,7 @@ describe('defaultFactoryRules', () => {
     context.item = item;
     context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
-    const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
+    const decision = await defaultGithubRules.pullRequestMerged?.(context);
     expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
     expect(decision).not.toMatchObject({ type: 'transition', stage: 'done' });
   });
@@ -1144,7 +1145,7 @@ describe('defaultFactoryRules', () => {
     context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
     context.board = 'review';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
-    const decision = await rules.github.pullRequestClosed?.onEvent?.(context);
+    const decision = await defaultGithubRules.pullRequestClosed?.(context);
     expect(decision).toMatchObject({
       type: 'transition',
       board: 'review',
@@ -1159,7 +1160,7 @@ describe('defaultFactoryRules', () => {
     context.item = item;
     context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
-    expect(await rules.github.pullRequestClosed?.onEvent?.(context)).toBeUndefined();
+    expect(await defaultGithubRules.pullRequestClosed?.(context)).toBeUndefined();
   });
 
   it('replaces exact handler leaves while preserving siblings', () => {
@@ -1167,7 +1168,6 @@ describe('defaultFactoryRules', () => {
     const workExit = vi.fn(() => undefined);
     const reviewEnter = vi.fn(() => undefined);
     const toolResult = vi.fn(() => undefined);
-    const githubEvent = vi.fn(() => undefined);
     const linearEvent = vi.fn(() => undefined);
     const rules = defaultFactoryRules({
       version: 'deployment-8',
@@ -1175,7 +1175,6 @@ describe('defaultFactoryRules', () => {
         work: { planning: { issue: { onEnter: workEnter, onExit: workExit } } },
         review: { intake: { pullRequest: { onEnter: reviewEnter } } },
         tools: { submit_plan: { onResult: toolResult } },
-        github: { pullRequestMerged: { onEvent: githubEvent } },
         linear: { issueObserved: { onEvent: linearEvent } },
       },
     });
@@ -1184,8 +1183,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.work.planning?.issue?.onExit).toBe(workExit);
     expect(rules.review.intake?.pullRequest?.onEnter).toBe(reviewEnter);
     expect(rules.tools.submit_plan?.onResult).toBe(toolResult);
-    expect(rules.github.pullRequestMerged?.onEvent).toBe(githubEvent);
-    expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
+    expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBe(linearEvent);
   });
 
@@ -1215,7 +1213,6 @@ describe('defaultFactoryRules', () => {
       {
         work: { planning: { issue: { onEnter: undefined, onExit: undefined } } },
         tools: { submit_plan: { onResult: undefined } },
-        github: { pullRequestCommentCreated: { onEvent: undefined } },
         linear: { issueObserved: { onEvent: undefined } },
       },
       {},
@@ -1224,20 +1221,17 @@ describe('defaultFactoryRules', () => {
     expect(merged.work.planning?.issue).toHaveProperty('onEnter', undefined);
     expect(merged.work.planning?.issue).toHaveProperty('onExit', undefined);
     expect(merged.tools.submit_plan).toHaveProperty('onResult', undefined);
-    expect(merged.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
     expect(merged.linear.issueObserved).toHaveProperty('onEvent', undefined);
   });
 
-  it('keeps a disabled built-in disabled across repeated composition', () => {
-    const configured = defaultFactoryRules({
-      version: 'deployment-9',
-      overrides: { github: { pullRequestCommentCreated: { onEvent: undefined } } },
-    });
-    const composed = mergeFactoryRuleOverrides(configured, {});
-    const effective = defaultFactoryRules({ version: 'deployment-10', overrides: composed });
-
-    expect(composed.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
-    expect(effective.github.pullRequestCommentCreated).toHaveProperty('onEvent', undefined);
+  it('rejects legacy global GitHub configuration with migration guidance', () => {
+    for (const github of [{}, undefined, { issueOpened: { onEvent: passThrough } }]) {
+      const overrides = { github };
+      expect(() => defaultFactoryRules({ version: 'migration', overrides: Object.assign({}, overrides) })).toThrow(
+        /GitHub integration constructor/,
+      );
+      expect(() => mergeFactoryRuleOverrides(Object.assign({}, overrides))).toThrow(/GitHub integration constructor/);
+    }
   });
 
   it('copies override containers so later mutation cannot replace configured leaves', () => {

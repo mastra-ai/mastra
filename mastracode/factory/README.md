@@ -29,6 +29,41 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### GitHub event rules
+
+Both `GithubIntegration` and `PlatformGithubIntegration` own their GitHub event handlers. Existing installations retain the defaults without additional configuration.
+
+```typescript
+import { PlatformGithubIntegration } from '@mastra/factory/integrations/platform/github/integration';
+
+const github = new PlatformGithubIntegration({
+  rules: {
+    issueOpened: context => ({
+      type: 'reject',
+      code: 'manual_intake',
+      reason: 'This deployment manages issue intake manually.',
+    }),
+    issueCommentCreated: null,
+  },
+});
+```
+
+Pass the integration in `MastraFactory`'s `integrations` array. The direct `GithubIntegration` accepts the same `rules` option alongside its GitHub App credentials. A function replaces one default handler without composing with it. `null` disables that event's handler, not authentication, webhook ingestion, or reconciliation bookkeeping. Omitted events and `undefined` retain their defaults. Each instance copies and freezes its resolved handler map; unknown event names and invalid handler values are rejected during construction.
+
+**Migration:** Move each global `rules.github[event].onEvent` value to the integration constructor's `rules[event]` option:
+
+```typescript
+// Before: global Factory rule overrides
+const overrides = { github: { issueCommentCreated: { onEvent: null } } };
+
+// After: GitHub integration constructor options
+const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+```
+
+Global GitHub rule configuration now throws a migration error. Work, Review, tool, and Linear configuration remain unchanged. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+
+Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
+
 ### GitHub review commands
 
 A repository maintainer with write or admin access can start a Factory review from a pull-request comment by posting the exact first-line command:

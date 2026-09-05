@@ -297,10 +297,6 @@ export interface FactoryToolRuleLeaf {
   onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
 }
 
-export interface FactoryGithubRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
-}
-
 export interface FactoryLinearRuleLeaf {
   onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
 }
@@ -312,7 +308,6 @@ export interface FactoryRules {
   work: FactoryBoardRules;
   review: FactoryBoardRules;
   tools: Record<string, FactoryToolRuleLeaf>;
-  github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
   linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
@@ -320,7 +315,6 @@ export interface FactoryRulesOverrides {
   work?: FactoryBoardRules;
   review?: FactoryBoardRules;
   tools?: Record<string, FactoryToolRuleLeaf>;
-  github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
   linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 

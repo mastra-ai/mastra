@@ -1,7 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
 import type {
-  FactoryGithubEventName,
-  FactoryGithubRuleLeaf,
   FactoryLinearEventName,
   FactoryLinearRuleLeaf,
   FactoryRuleHandler,
@@ -52,13 +50,6 @@ export function resolveFactoryStageRules(
 
 export function resolveFactoryToolRule(rules: FactoryRules, toolName: string): FactoryToolRuleLeaf['onResult'] {
   return rules.tools[toolName]?.onResult;
-}
-
-export function resolveFactoryGithubRule(
-  rules: FactoryRules,
-  event: FactoryGithubEventName,
-): FactoryGithubRuleLeaf['onEvent'] {
-  return rules.github[event]?.onEvent;
 }
 
 export function resolveFactoryLinearRule(
