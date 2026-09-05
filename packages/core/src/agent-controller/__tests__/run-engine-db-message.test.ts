@@ -173,6 +173,36 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     });
   });
 
+  it('Given a reasoning stream with an id-less reasoning-signature chunk, Then signature is attached to active reasoning part without creating an extra empty part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-signature',
+        signature: 'top_level_sig_789',
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningParts = message.content.parts.filter(part => part.type === 'reasoning');
+    expect(reasoningParts).toHaveLength(1);
+    expect(reasoningParts[0]).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'top_level_sig_789' } },
+    });
+  });
+
   it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

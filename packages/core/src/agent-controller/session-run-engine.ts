@@ -613,27 +613,47 @@ export class SessionRunEngine {
         const signature =
           getString(payload.signature) ??
           (isRecord(chunk) && 'signature' in chunk ? getString(chunk.signature) : undefined);
-        let thinkingState = state.thinkingContentById.get(id);
-        if (!thinkingState) {
-          const thinkingIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-          thinkingState = { index: thinkingIndex, text: '' };
-          state.thinkingContentById.set(id, thinkingState);
-        }
-        if (signature) {
-          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-          if (thinkingContent && thinkingContent.type === 'reasoning') {
-            const existingAnthropic = isRecord(thinkingContent.providerMetadata?.anthropic)
-              ? (thinkingContent.providerMetadata!.anthropic as Record<string, unknown>)
-              : {};
-            thinkingContent.providerMetadata = {
-              ...(thinkingContent.providerMetadata || {}),
-              anthropic: {
-                ...existingAnthropic,
-                signature,
-              },
-            };
+
+        let thinkingContent: (MessageContentPart & { type: 'reasoning' }) | undefined;
+
+        if (id && state.thinkingContentById.has(id)) {
+          const thinkingState = state.thinkingContentById.get(id);
+          const part = thinkingState ? state.currentMessage.content.parts[thinkingState.index] : undefined;
+          if (part && part.type === 'reasoning') {
+            thinkingContent = part;
           }
+        }
+
+        if (!thinkingContent) {
+          const lastReasoningPart = [...state.currentMessage.content.parts]
+            .reverse()
+            .find((p): p is MessageContentPart & { type: 'reasoning' } => p.type === 'reasoning');
+          if (lastReasoningPart) {
+            thinkingContent = lastReasoningPart;
+          } else {
+            const thinkingIndex = state.currentMessage.content.parts.length;
+            const newPart: MessageContentPart & { type: 'reasoning' } = {
+              type: 'reasoning',
+              reasoning: '',
+              details: [],
+            };
+            state.currentMessage.content.parts.push(newPart);
+            state.thinkingContentById.set(id, { index: thinkingIndex, text: '' });
+            thinkingContent = newPart;
+          }
+        }
+
+        if (signature && thinkingContent) {
+          const existingAnthropic = isRecord(thinkingContent.providerMetadata?.anthropic)
+            ? (thinkingContent.providerMetadata!.anthropic as Record<string, unknown>)
+            : {};
+          thinkingContent.providerMetadata = {
+            ...(thinkingContent.providerMetadata || {}),
+            anthropic: {
+              ...existingAnthropic,
+              signature,
+            },
+          };
         }
         this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;

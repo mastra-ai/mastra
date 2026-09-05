@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Preserve reasoning block providerMetadata and cryptographic signatures in session run engine thread history, and omit assistant messages that become empty after stripping reasoning to prevent API replay errors.
+Fix API replay errors with reasoning models (such as Anthropic extended thinking) by preserving provider signatures and reasoning metadata during stream processing, and preventing empty assistant turns from being sent back to model providers on multi-turn conversations.
