@@ -1,5 +1,13 @@
 # mastracode
 
+## 0.38.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/code-sdk@1.7.0-alpha.7
+
 ## 0.38.1-alpha.7
 
 ### Patch Changes

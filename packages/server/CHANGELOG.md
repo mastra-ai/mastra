@@ -1,5 +1,14 @@
 # @mastra/server
 
+## 1.65.0-alpha.6
+
+### Patch Changes
+
+- Fixed A2A send and stream memory persistence by using the task context and honoring authenticated resource IDs. Keep task memory identity stable across follow-up requests and reject conflicting authenticated identities. ([#23146](https://github.com/mastra-ai/mastra/pull/23146))
+
+- Updated dependencies [[`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+
 ## 1.65.0-alpha.5
 
 ### Patch Changes
