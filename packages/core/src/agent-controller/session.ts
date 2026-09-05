@@ -3434,7 +3434,7 @@ export class Session<TState = unknown> {
       // run that is already on its way out. Routing a signal to it would hand
       // the message to a run that `completeDeferredAbort()` then terminates.
       if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
-        this.approval.respond({
+        this.respondToToolApproval({
           decision: 'decline',
           declineContext: {
             reason: 'interrupted_by_user_message',
