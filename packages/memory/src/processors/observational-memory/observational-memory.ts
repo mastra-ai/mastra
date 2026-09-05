@@ -2883,6 +2883,14 @@ ${formattedMessages}
     canActivate: boolean;
     asyncObservationEnabled: boolean;
     asyncReflectionEnabled: boolean;
+    /** Resolved absolute observation blockAfter (only set when async observation is enabled). */
+    observationBlockAfter?: number;
+    /**
+     * Pending tokens are in the threshold→blockAfter band: past the observation
+     * threshold but below blockAfter, so async buffering/activation should be
+     * used instead of a blocking synchronous observation.
+     */
+    inAsyncObservationBand: boolean;
     scope: 'resource' | 'thread';
   }> {
     const { threadId, resourceId, record: providedRecord, messages } = opts;
@@ -2919,10 +2927,17 @@ ${formattedMessages}
     const bufferedChunkCount = bufferedChunks.length;
     const bufferedChunkTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
 
-    // Should buffer? Check interval boundary using DB-backed state
+    // Should buffer? Check interval boundary using DB-backed state.
+    // Buffering is also allowed in the threshold→blockAfter band: reaching the
+    // observation threshold without a buffered chunk must kick off background
+    // buffering (so a chunk becomes activatable) rather than leaving sync
+    // observation as the only way out of the band.
     const asyncObservationEnabled = this.buffering.isAsyncObservationEnabled();
+    const observationBlockAfter = asyncObservationEnabled ? this.observationConfig.blockAfter : undefined;
+    const inAsyncObservationBand =
+      observationBlockAfter !== undefined && pendingTokens >= threshold && pendingTokens < observationBlockAfter;
     let shouldBuffer = false;
-    if (asyncObservationEnabled && pendingTokens < threshold) {
+    if (asyncObservationEnabled && (pendingTokens < threshold || inAsyncObservationBand)) {
       const lockKey = this.buffering.getLockKey(threadId, resourceId);
       shouldBuffer = this.buffering.shouldTriggerAsyncObservation(
         pendingTokens,
@@ -2967,6 +2982,8 @@ ${formattedMessages}
       canActivate,
       asyncObservationEnabled,
       asyncReflectionEnabled: this.buffering.isAsyncReflectionEnabled(),
+      observationBlockAfter,
+      inAsyncObservationBand,
       scope: this.scope,
     };
   }
