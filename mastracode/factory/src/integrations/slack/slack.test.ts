@@ -567,6 +567,7 @@ describe('channel session creation context (resolveSession)', () => {
     } as any);
 
     expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(controller.createSession.mock.calls[0]?.[0].tags?.factoryProjectId).toBeUndefined();
     expect(controller.createSession).toHaveBeenCalledWith({
       id: 'channel:slack:C-1:1700.42',
       ownerId: 'code',
