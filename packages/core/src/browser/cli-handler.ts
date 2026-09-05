@@ -321,7 +321,7 @@ export class BrowserCliHandler {
         continue;
       }
       if (!quote && source.slice(i, i + 2) === '<<') hasHeredoc = true;
-      if (!/\s/.test(char)) continued = !quote && char === '|';
+      if (!/\s/.test(char)) continued = !quote && (char === '|' || char === ';');
       if (char === quote) quote = '';
       else if (!quote && (char === "'" || char === '"')) quote = char;
       header += char;

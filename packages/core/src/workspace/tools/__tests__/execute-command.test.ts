@@ -678,6 +678,8 @@ describe('executeCommandTool browser CLI logic', () => {
       'agent-browser open https://example.com && browser-use < script.py',
       'browser-use < script.py &&\nagent-browser open https://example.com',
       'browser-use < script.py ||\nagent-browser open https://example.com',
+      'browser-use < script.py;\nagent-browser open https://example.com',
+      'agent-browser open https://example.com;\nbrowser-use < script.py',
     ])('warms up and scopes agent-browser in a mixed Browser Use stdin chain: %s', async command => {
       const commands: string[] = [];
       const browser = createMockBrowser();
