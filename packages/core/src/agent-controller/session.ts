@@ -26,6 +26,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { StorageListMessagesOutput } from '../storage/types';
 import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
@@ -221,7 +222,7 @@ export interface ThreadDataStore {
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
-  listMessages(input: { threadId: string; limit?: number }): Promise<MastraDBMessage[]>;
+  listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
   firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>>;
   /** Read a value from a thread's metadata. */
@@ -482,7 +483,7 @@ export class SessionThread {
     if (!this.#store) return [];
     // Only expose messages for threads this session owns.
     await this.#requireOwnedThread({ threadId });
-    return this.#store.listMessages({ threadId, limit });
+    return (await this.#store.listMessages({ threadId, limit })).messages;
   }
 
   /** List messages for the session's active thread (empty when not bound). */

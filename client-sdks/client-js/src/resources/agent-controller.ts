@@ -6,6 +6,7 @@ import type {
 } from '@mastra/core/agent-controller';
 export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
 
 import type {
   AgentControllerActiveRun,
@@ -47,6 +48,31 @@ type WireEventOf<T extends AgentControllerWireEvent['type']> = Extract<AgentCont
 
 /** A `MastraDBMessage` before {@link hydrateMessage} turns its `createdAt` back into a `Date`. */
 type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
+
+type AgentControllerModernListMessagesOptions = Omit<StorageListMessagesInput, 'threadId' | 'resourceId'> & {
+  limit?: never;
+};
+
+type AgentControllerLegacyPagedListMessagesOptions = {
+  /** @deprecated Use `perPage` instead. May only be combined with `page`. */
+  limit: number;
+  page?: number;
+  perPage?: never;
+  orderBy?: never;
+  filter?: never;
+  include?: never;
+};
+
+/** Pagination, ordering, filtering, and include options for an Agent Controller thread's messages. */
+export type AgentControllerListMessagesOptions =
+  AgentControllerModernListMessagesOptions | AgentControllerLegacyPagedListMessagesOptions;
+
+/** A page of hydrated Agent Controller thread messages. */
+export type AgentControllerListMessagesResult = StorageListMessagesOutput;
+
+type SerializedAgentControllerListMessagesResult = Omit<StorageListMessagesOutput, 'messages'> & {
+  messages: SerializedMastraDBMessage[];
+};
 
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
 type SerializedThread = WireEventOf<'thread_created'>['thread'];
@@ -685,13 +711,47 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
-    const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: SerializedMastraDBMessage[] }>(
-      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`),
+  /** List messages for a specific thread, preserving the legacy array-returning limit overload. */
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]>;
+  async listMessages(
+    threadId: string,
+    options: AgentControllerListMessagesOptions,
+  ): Promise<AgentControllerListMessagesResult>;
+  async listMessages(
+    threadId: string,
+    options?: number | AgentControllerListMessagesOptions,
+  ): Promise<MastraDBMessage[] | AgentControllerListMessagesResult> {
+    const queryParams = new URLSearchParams();
+    const legacy = typeof options === 'number' || options === undefined;
+
+    if (typeof options === 'number') {
+      queryParams.set('limit', String(options));
+    } else if (options === undefined) {
+      queryParams.set('perPage', 'false');
+    } else {
+      const { limit, page, perPage, orderBy, filter, include } = options;
+      if (
+        limit !== undefined &&
+        (perPage !== undefined || orderBy !== undefined || filter !== undefined || include !== undefined)
+      ) {
+        throw new Error('limit can only be combined with page; use perPage with orderBy, filter, or include');
+      }
+      if (limit !== undefined) queryParams.set('limit', String(limit));
+      if (page !== undefined) queryParams.set('page', String(page));
+      if (perPage !== undefined) queryParams.set('perPage', String(perPage));
+      if (orderBy) queryParams.set('orderBy', JSON.stringify(orderBy));
+      if (filter) queryParams.set('filter', JSON.stringify(filter));
+      if (include) queryParams.set('include', JSON.stringify(include));
+    }
+
+    const query = queryParams.toString();
+    const body = await this.request<SerializedAgentControllerListMessagesResult>(
+      this.url(`${this.base()}/threads/${encodeURIComponent(threadId)}/messages${query ? `?${query}` : ''}`),
     );
-    return body.messages.map(hydrateMessage);
+    const messages = body.messages.map(hydrateMessage);
+
+    if (legacy) return messages;
+    return { ...body, messages };
   }
 
   /**

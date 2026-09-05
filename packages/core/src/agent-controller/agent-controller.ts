@@ -18,7 +18,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
-import type { ObservationalMemoryRecord } from '../storage/types';
+import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
@@ -172,7 +172,7 @@ const TITLE_WINDOW_MESSAGES = 20;
  * })
  *
  * controller.subscribe((event) => {
- *   if (event.type === "message_update") renderMessage(event.message)
+ *   if (event.type === "message_update") appendText(event.id, event.event.delta)
  * })
  *
  * await controller.init()
@@ -996,7 +996,23 @@ export class AgentController<TState = {}> {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
-      listMessages: ({ threadId, limit }) => this.queryThreadMessages({ threadId, limit }),
+      listMessages: async ({ threadId, limit }) => {
+        if (limit !== undefined) {
+          const result = await this.queryThreadMessages({
+            threadId,
+            perPage: limit,
+            page: 0,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          });
+          return { ...result, messages: result.messages.reverse() };
+        }
+
+        return this.queryThreadMessages({
+          threadId,
+          perPage: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+      },
       firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
@@ -1201,28 +1217,43 @@ export class AgentController<TState = {}> {
 
   /**
    * List messages for a thread directly from storage, without constructing a
-   * {@link Session}. Read-only server endpoints use this so a GET on a thread's
-   * messages doesn't spin up a workspace/sandbox as a side effect of session
-   * creation.
+   * {@link Session}. The session thread-data adapter and read-only server
+   * endpoints use this shared path so message reads never provision a
+   * workspace/sandbox.
    */
-  async queryThreadMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<MastraDBMessage[]> {
+  async queryThreadMessages({
+    threadId,
+    resourceId,
+    perPage,
+    page,
+    orderBy = { field: 'createdAt', direction: 'DESC' },
+    include,
+    filter,
+  }: Omit<StorageListMessagesInput, 'threadId'> & { threadId: string }): Promise<StorageListMessagesOutput> {
     await this.initStorage();
-    if (!this.#resolveStorage()) return [];
-
-    const memoryStorage = await this.getMemoryStorage();
-
-    if (limit) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        perPage: limit,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      return result.messages.map(msg => this.convertToControllerMessage(msg)).reverse();
+    if (!this.#resolveStorage()) {
+      return {
+        messages: [],
+        total: 0,
+        page: page ?? 0,
+        perPage: perPage ?? 40,
+        hasMore: false,
+      };
     }
 
-    const result = await memoryStorage.listMessages({ threadId, perPage: false });
-    return result.messages.map(msg => this.convertToControllerMessage(msg));
+    const result = await (
+      await this.getMemoryStorage()
+    ).listMessages({
+      threadId,
+      ...(resourceId !== undefined ? { resourceId } : {}),
+      ...(perPage !== undefined ? { perPage } : {}),
+      ...(page !== undefined ? { page } : {}),
+      ...(orderBy !== undefined ? { orderBy } : {}),
+      ...(include !== undefined ? { include } : {}),
+      ...(filter !== undefined ? { filter } : {}),
+    });
+
+    return { ...result, messages: result.messages.map(msg => this.convertToControllerMessage(msg)) };
   }
 
   private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>> {
@@ -1280,8 +1311,13 @@ export class AgentController<TState = {}> {
     const thread = await this.queryThreadById({ threadId });
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
 
-    const recent = await this.queryThreadMessages({ threadId, limit: TITLE_WINDOW_MESSAGES });
-    const messages = new MessageList().add(recent, 'memory').get.all.ui();
+    const recent = await this.queryThreadMessages({
+      threadId,
+      perPage: TITLE_WINDOW_MESSAGES,
+      page: 0,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+    });
+    const messages = new MessageList().add(recent.messages.reverse(), 'memory').get.all.ui();
     if (!messages.some(message => message.role === 'user')) {
       throw new Error('This conversation has no message to name it from yet.');
     }
