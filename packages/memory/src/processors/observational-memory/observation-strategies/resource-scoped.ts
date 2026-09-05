@@ -19,6 +19,7 @@ import {
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { resolveThreadTitleUpdate } from '../thread-title';
 import { getMaxThreshold } from '../thresholds';
 
 import { ObservationStrategy } from './base';
@@ -417,8 +418,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         const thread = await this.storage.getThreadById({ threadId: update.threadId });
         if (thread) {
           const oldTitle = thread.title?.trim();
-          const newTitle = update.threadTitle?.trim();
-          const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+          const newTitle = resolveThreadTitleUpdate(thread, update.threadTitle);
           const previousOmMetadata = getThreadOMMetadata(thread.metadata);
           const metadataUpdate = buildThreadMetadataFromExtractedValues(
             update.extractors ?? this.observationConfig.extractors,
@@ -437,11 +437,11 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           });
           await this.storage.patchThread({
             id: update.threadId,
-            ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
+            ...(newTitle ? { title: newTitle } : {}),
             metadata: newMetadata,
           });
 
-          if (shouldUpdateThreadTitle) {
+          if (newTitle) {
             threadUpdateMarkers.push(
               createThreadUpdateMarker({
                 cycleId: this.cycleId ?? crypto.randomUUID(),

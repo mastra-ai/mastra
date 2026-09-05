@@ -13,6 +13,7 @@ import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
+import { setThreadTitlePinned } from '../memory/types';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
@@ -1306,7 +1307,12 @@ export class AgentController<TState = {}> {
     )?.trim();
     if (!title) return undefined;
 
-    await this.persistThreadRow({ ...thread, title, updatedAt: new Date() });
+    await this.persistThreadRow({
+      ...thread,
+      title,
+      metadata: setThreadTitlePinned(thread.metadata, false),
+      updatedAt: new Date(),
+    });
     session?.emit({ type: 'thread_title_updated', threadId, title });
     return title;
   }

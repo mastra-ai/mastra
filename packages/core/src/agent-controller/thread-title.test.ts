@@ -100,6 +100,9 @@ describe('AgentController thread titles', () => {
     const { controller, session, memory } = await startNamedThread();
     const threadId = session.thread.getId()!;
     await session.thread.rename({ title: 'Wrong name' });
+    expect((await memory.getThreadById({ threadId }))?.metadata).toMatchObject({
+      mastra: { titlePinned: true },
+    });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -111,6 +114,9 @@ describe('AgentController thread titles', () => {
 
     expect(title).toBe('Log parser rewrite');
     expect((await memory.getThreadById({ threadId }))?.title).toBe('Log parser rewrite');
+    expect((await memory.getThreadById({ threadId }))?.metadata).toMatchObject({
+      mastra: { titlePinned: false },
+    });
     expect(events).toContainEqual({ type: 'thread_title_updated', threadId, title: 'Log parser rewrite' });
   });
 
@@ -122,6 +128,45 @@ describe('AgentController thread titles', () => {
 
     expect(await controller.generateThreadTitle({ threadId })).toBe('Log parser rewrite');
     expect((await memory.getThreadById({ threadId }))?.title).toBe('Log parser rewrite');
+    expect((await memory.getThreadById({ threadId }))?.metadata).toMatchObject({
+      mastra: { titlePinned: false },
+    });
+  });
+
+  it('lets programmatic renames opt out of pinning without losing other metadata', async () => {
+    const { session, memory } = await startNamedThread();
+    const threadId = session.thread.getId()!;
+    const thread = (await memory.getThreadById({ threadId }))!;
+    await memory.saveThread({
+      thread: { ...thread, metadata: { custom: 'keep', mastra: { om: { currentTask: 'Keep working' } } } },
+    });
+
+    await session.thread.rename({ title: 'My title' });
+    await session.thread.rename({ title: 'Initial task title', pin: false });
+
+    expect(await memory.getThreadById({ threadId })).toMatchObject({
+      title: 'Initial task title',
+      metadata: { custom: 'keep', mastra: { titlePinned: false, om: { currentTask: 'Keep working' } } },
+    });
+  });
+
+  it.each(['empty', 'failed'])('keeps a manual title pinned when regeneration is %s', async outcome => {
+    const { controller, session, memory, agent } = await startNamedThread();
+    const threadId = session.thread.getId()!;
+    await session.thread.rename({ title: 'My title' });
+    const namer = vi.spyOn(agent, 'generateTitleFromUserMessage');
+    if (outcome === 'failed') {
+      namer.mockRejectedValueOnce(new Error('Title generation failed'));
+      await expect(controller.generateThreadTitle({ threadId })).rejects.toThrow('Title generation failed');
+    } else {
+      namer.mockResolvedValueOnce('   ');
+      expect(await controller.generateThreadTitle({ threadId })).toBeUndefined();
+    }
+
+    expect(await memory.getThreadById({ threadId })).toMatchObject({
+      title: 'My title',
+      metadata: { mastra: { titlePinned: true } },
+    });
   });
 
   it('names a thread under the identity the caller supplies', async () => {
