@@ -911,6 +911,7 @@ export class DurableAgent<
         this.getPubSub(),
         {
           strict: true,
+          canContinueAcrossSuspension: stream.isOpen,
           validate: () => recoveryLease.assertOwned(),
         },
       );
@@ -1928,6 +1929,7 @@ export class DurableAgent<
       output,
       cleanup: streamCleanup,
       ready,
+      isOpen,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2013,6 +2015,7 @@ export class DurableAgent<
       output,
       options as AgentExecutionOptions<TOutput>,
       this.getPubSub(),
+      { canContinueAcrossSuspension: () => (options as any)?.[CLOSE_ON_SUSPEND] !== true && isOpen() },
     );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
@@ -2251,6 +2254,13 @@ export class DurableAgent<
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
 
+    // Settle the prior segment before taking its event offset. Otherwise a late
+    // suspension event can be replayed into the new segment and close it early.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+    await priorExecution?.catch(() => {
+      /* errors already handled by the prior segment */
+    });
+
     // Skip events already broadcast by the original run (e.g. the SUSPENDED
     // chunk that paused it). Without this, a resume that closes on suspend
     // (resumeGenerate) would immediately close on the replayed SUSPENDED.
@@ -2313,6 +2323,7 @@ export class DurableAgent<
       output,
       cleanup: streamCleanup,
       ready,
+      isOpen,
     } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
@@ -2351,26 +2362,9 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
 
-    // Capture the prior workflow execution BEFORE creating the new promise.
-    // If we read it inside the `.then()` callback, the global registry will
-    // already point to the NEW promise (assigned synchronously below),
-    // causing a self-referential deadlock.
-    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
 
     const workflowExecution = ready
       .then(async () => {
-        // Wait for the prior workflow execution (stream / previous resume) to
-        // fully settle so the snapshot is persisted as 'suspended' before we
-        // attempt to resume it.  Without this, the pubsub tool-call-suspended
-        // event can arrive (and the consumer can call resumeStream) before the
-        // engine has finished writing the snapshot, leading to
-        // "This workflow run was not suspended".
-        if (priorExecution) {
-          await priorExecution.catch(() => {
-            /* errors already handled by the prior segment */
-          });
-        }
-
         const run = await workflow.createRun({ runId, resourceId: memoryInfo?.resourceId, pubsub: this.pubsub });
         if (this.__getGoalConfig()) {
           await beginGoalActivity({
@@ -2424,6 +2418,7 @@ export class DurableAgent<
       output,
       resumeStreamOptions,
       this.getPubSub(),
+      { canContinueAcrossSuspension: () => (resolvedOptions as any)[CLOSE_ON_SUSPEND] !== true && isOpen() },
     );
 
     const cleanup = () => {
