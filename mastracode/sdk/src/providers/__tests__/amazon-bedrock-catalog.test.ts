@@ -61,6 +61,36 @@ describe('getBedrockModelCatalog', () => {
     ]);
   });
 
+  it.each([
+    { npm: '@ai-sdk/amazon-bedrock/mantle' },
+    { api: 'https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1' },
+    { shape: 'responses' },
+  ])('filters individual transport overrides %j but keeps Converse siblings', async provider => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        'amazon-bedrock': {
+          models: {
+            'openai.gpt-oss-120b': { provider },
+            'openai.gpt-oss-120b-1:0': {},
+            'empty.override': { provider: { npm: '', api: '', shape: '' } },
+          },
+        },
+      }),
+    );
+    const { getBedrockModelCatalog } = await import('../amazon-bedrock.js');
+    expect(await getBedrockModelCatalog()).toEqual([{ id: 'empty.override' }, { id: 'openai.gpt-oss-120b-1:0' }]);
+  });
+
+  it('caches a successful empty catalog without falling back when every model is overridden', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ 'amazon-bedrock': { models: { 'openai.gpt-oss-120b': { provider: { shape: 'responses' } } } } }),
+    );
+    const { getBedrockModelCatalog } = await import('../amazon-bedrock.js');
+    expect(await getBedrockModelCatalog()).toEqual([]);
+    expect(await getBedrockModelCatalog()).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fetches models.dev and returns the amazon-bedrock model ids, sorted', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -128,6 +158,28 @@ describe('AmazonBedrockGateway', () => {
     const { clearBedrockCatalogCache } = await import('../amazon-bedrock.js');
     clearBedrockCatalogCache();
     vi.resetModules();
+  });
+
+  it('fetchProviders advertises only supported transports and preserves Converse siblings', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        'amazon-bedrock': {
+          models: {
+            'openai.gpt-oss-120b': { provider: { shape: 'responses' } },
+            'openai.gpt-oss-120b-1:0': {},
+            [MODEL_TOKENS.__BEDROCK_MODEL_HAIKU_BARE__]: { provider: {} },
+          },
+        },
+      }),
+    );
+    const { createAmazonBedrockGateway } = await import('../amazon-bedrock-gateway.js');
+    const providers = await createAmazonBedrockGateway().fetchProviders();
+    expect(Object.keys(providers)).toEqual(['amazon-bedrock']);
+    expect(providers['amazon-bedrock'].gateway).toBe('amazon-bedrock');
+    expect(providers['amazon-bedrock'].models).toEqual([
+      'openai.gpt-oss-120b-1:0',
+      MODEL_TOKENS.__BEDROCK_MODEL_HAIKU_BARE__,
+    ]);
   });
 
   it('fetchProviders surfaces bedrock models under an unprefixed amazon-bedrock provider key', async () => {
