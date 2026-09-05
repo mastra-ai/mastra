@@ -30,6 +30,7 @@ const predicatePathSchema = z
   .min(1)
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_PATH_BYTES), 'Predicate path is too large');
 const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.null()]);
+const timestampLiteralSchema = z.string().datetime({ offset: true });
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
 const pathOrLiteralSchema = z.union([pathRefSchema, literalRefSchema]);
