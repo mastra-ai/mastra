@@ -6453,6 +6453,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
     "payload": {
       "messageId": "msg-0",
       "request": {},
+      "startedAt": 1704067200000,
       "warnings": [],
     },
     "runId": "test-run-id",
@@ -6801,6 +6802,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
     "payload": {
       "messageId": "msg-0",
       "request": {},
+      "startedAt": 1704067200000,
       "warnings": [],
     },
     "runId": "test-run-id",
@@ -7509,6 +7511,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
     "payload": {
       "messageId": "id-0",
       "request": {},
+      "startedAt": 1704067200000,
       "warnings": [],
     },
     "runId": "test-run-id",
