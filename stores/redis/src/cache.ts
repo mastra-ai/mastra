@@ -10,6 +10,25 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<number | boolean>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
+  /**
+   * EVAL, in whichever shape the client speaks it: classic
+   * `(script, numKeys, ...keysAndArgs)` (ioredis, node-redis v4) or
+   * `(script, { keys, arguments })` (node-redis v5). The cache determines the
+   * shape once per client with a side-effect-free probe script and then calls
+   * real scripts in that shape only — a script is never retried in the other
+   * shape, because some clients (e.g. @redis/client 5.12.1) execute the
+   * wrong-shape call as `EVAL <script> 0` instead of rejecting it. If the
+   * probe rejects both shapes, the result is cached and the cache silently
+   * falls back to sequential commands. Optional: when absent, the same
+   * fallback applies. Clients whose EVAL takes a different shape (e.g.
+   * Upstash REST) should omit it and use the sequential presets to skip the
+   * probe round trips entirely.
+   */
+  eval?(
+    script: string,
+    numKeysOrOptions: number | { keys?: string[]; arguments?: string[] },
+    ...keysAndArgs: unknown[]
+  ): Promise<unknown>;
 }
 
 export interface RedisServerCacheOptions {
@@ -25,6 +44,18 @@ export interface RedisServerCacheOptions {
   getListLength?: (client: RedisClient, key: string) => Promise<number>;
   pushToList?: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   getListRange?: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
+  /**
+   * Increment a counter and refresh its TTL in one round trip. Defaults to a
+   * Lua script on clients that expose classic EVAL (ioredis, node-redis v4+),
+   * falling back to sequential `INCR` + `EXPIRE` otherwise.
+   */
+  incrementWithExpiry?: (client: RedisClient, key: string, seconds: number) => Promise<number>;
+  /**
+   * Push a value onto a list and refresh its TTL in one round trip. Defaults
+   * to a Lua script on clients that expose classic EVAL (ioredis, node-redis
+   * v4+), falling back to sequential `RPUSH` + `EXPIRE` otherwise.
+   */
+  pushToListWithExpiry?: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<void>;
 }
 
 const defaultSetWithExpiry = (client: RedisClient, key: string, value: unknown, seconds: number): Promise<unknown> => {
@@ -52,6 +83,119 @@ const defaultGetListRange = (client: RedisClient, key: string, start: number, st
   return client.lrange(key, start, stop);
 };
 
+// "0" seconds means "no expiry refresh": the guard keeps the scripts usable
+// for ttlSeconds: 0 configurations without a client-side branch. The tonumber
+// guard must stay strictly-positive: Redis 7 deletes a key on a non-positive
+// EXPIRE, so a negative configured TTL must not reach the command.
+const INCREMENT_WITH_EXPIRY_SCRIPT =
+  'local v = redis.call("INCR", KEYS[1]) if tonumber(ARGV[1]) > 0 then redis.call("EXPIRE", KEYS[1], ARGV[1]) end return v';
+
+const PUSH_TO_LIST_WITH_EXPIRY_SCRIPT =
+  'redis.call("RPUSH", KEYS[1], ARGV[1]) if tonumber(ARGV[2]) > 0 then redis.call("EXPIRE", KEYS[1], ARGV[2]) end';
+
+/**
+ * EVAL calling conventions differ across clients: ioredis and node-redis v4
+ * take the classic `(script, numKeys, ...keysAndArgs)` form, node-redis v5
+ * takes `(script, { keys, arguments })`. A wrong-shape call is NOT guaranteed
+ * to fail: @redis/client 5.12.1 serializes the classic form as
+ * `EVAL <script> 0` and executes it, so retrying a mutative script in the
+ * other shape could run INCR/RPUSH twice. The winning shape is therefore
+ * determined with a probe script that only reads KEYS/ARGV (no redis.call,
+ * nothing is written): it returns 'match' only when the client round-tripped
+ * both correctly. The weak map keeps clients garbage-collectable.
+ */
+const evalStyleCache = new WeakMap<RedisClient, EvalStyle>();
+// One shared probe per client: concurrent first calls (durable publishes burst
+// increment + listPush per chunk) must not each pay the probe round trips.
+const evalStyleProbes = new WeakMap<RedisClient, Promise<EvalStyle>>();
+
+// 'malformed' = the shape dropped KEYS/ARGV (e.g. 0-key execution);
+// 'mismatch' = the shape delivered them but garbled. Only 'match' wins.
+const EVAL_PROBE_SCRIPT =
+  "if KEYS[1] == nil or ARGV[1] == nil then return 'malformed' end if KEYS[1] ~= ARGV[1] then return 'mismatch' end return 'match'";
+const EVAL_PROBE_KEY = '__mastra_eval_probe__';
+
+type ClientEval = NonNullable<RedisClient['eval']>;
+type EvalStyle = 'classic' | 'options' | 'unsupported';
+
+// Sentinel telling the callers to take their sequential command path: the
+// client exposes EVAL but speaks neither shape we know.
+const EVAL_UNSUPPORTED = Symbol('eval-unsupported');
+
+async function probeEvalStyle(clientEval: ClientEval): Promise<EvalStyle> {
+  const attempts: Array<{ style: 'classic' | 'options'; call: () => Promise<unknown> }> = [
+    { style: 'classic', call: () => clientEval(EVAL_PROBE_SCRIPT, 1, EVAL_PROBE_KEY, EVAL_PROBE_KEY) },
+    {
+      style: 'options',
+      call: () => clientEval(EVAL_PROBE_SCRIPT, { keys: [EVAL_PROBE_KEY], arguments: [EVAL_PROBE_KEY] }),
+    },
+  ];
+  for (const attempt of attempts) {
+    try {
+      if ((await attempt.call()) === 'match') {
+        return attempt.style;
+      }
+    } catch {
+      // A rejected shape just moves on to the other candidate; if both fail,
+      // the loop yields 'unsupported', callEval returns the EVAL_UNSUPPORTED
+      // sentinel, and callers fall through to their sequential command path.
+    }
+  }
+  return 'unsupported';
+}
+
+async function resolveEvalStyle(client: RedisClient, clientEval: ClientEval): Promise<EvalStyle> {
+  let pending = evalStyleProbes.get(client);
+  if (!pending) {
+    pending = probeEvalStyle(clientEval).then(style => {
+      evalStyleCache.set(client, style);
+      evalStyleProbes.delete(client);
+      return style;
+    });
+    evalStyleProbes.set(client, pending);
+  }
+  return pending;
+}
+
+async function callEval(
+  client: RedisClient,
+  script: string,
+  keys: string[],
+  args: string[],
+): Promise<unknown | typeof EVAL_UNSUPPORTED> {
+  const clientEval = client.eval?.bind(client);
+  if (!clientEval) {
+    throw new Error('client does not expose EVAL');
+  }
+  let style = evalStyleCache.get(client);
+  if (!style) {
+    style = await resolveEvalStyle(client, clientEval);
+  }
+  if (style === 'unsupported') {
+    return EVAL_UNSUPPORTED;
+  }
+  // Single shot in the winning shape: the script may be mutative, so a
+  // rejection after execution must not trigger a second run in the other
+  // shape.
+  return style === 'classic'
+    ? clientEval(script, keys.length, ...keys, ...args)
+    : clientEval(script, { keys, arguments: args });
+}
+
+const defaultIncrementWithExpiry = async (client: RedisClient, key: string, seconds: number): Promise<number> => {
+  if (typeof client.eval === 'function') {
+    const result = await callEval(client, INCREMENT_WITH_EXPIRY_SCRIPT, [key], [String(seconds)]);
+    if (result !== EVAL_UNSUPPORTED) {
+      return Number(result);
+    }
+  }
+  const value = await client.incr(key);
+  if (seconds > 0) {
+    await client.expire(key, seconds);
+  }
+  return value;
+};
+
 export class RedisServerCache extends MastraServerCache {
   private client: RedisClient;
   private keyPrefix: string;
@@ -66,6 +210,8 @@ export class RedisServerCache extends MastraServerCache {
   private getListLength: (client: RedisClient, key: string) => Promise<number>;
   private pushToList: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   private getListRange: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
+  private incrementWithExpiry: (client: RedisClient, key: string, seconds: number) => Promise<number>;
+  private pushToListWithExpiry: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<void>;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
     super({ name: 'RedisServerCache' });
@@ -78,6 +224,28 @@ export class RedisServerCache extends MastraServerCache {
     this.getListLength = options.getListLength ?? defaultGetListLength;
     this.pushToList = options.pushToList ?? defaultPushToList;
     this.getListRange = options.getListRange ?? defaultGetListRange;
+    this.incrementWithExpiry = options.incrementWithExpiry ?? defaultIncrementWithExpiry;
+    // Composed here rather than as a module default so the no-EVAL fallback
+    // goes through the configured `pushToList` (e.g. node-redis camelCase).
+    this.pushToListWithExpiry =
+      options.pushToListWithExpiry ??
+      (async (client, key, value, seconds) => {
+        if (typeof client.eval === 'function') {
+          const result = await callEval(
+            client,
+            PUSH_TO_LIST_WITH_EXPIRY_SCRIPT,
+            [key],
+            [String(value), String(seconds)],
+          );
+          if (result !== EVAL_UNSUPPORTED) {
+            return;
+          }
+        }
+        await this.pushToList(client, key, value);
+        if (seconds > 0) {
+          await client.expire(key, seconds);
+        }
+      });
   }
 
   private getKey(key: string): string {
@@ -85,7 +253,14 @@ export class RedisServerCache extends MastraServerCache {
   }
 
   private serialize(value: unknown): string {
-    return JSON.stringify(value);
+    const serialized = JSON.stringify(value);
+    // JSON.stringify returns undefined for top-level undefined/functions/
+    // symbols; pushing that on would store the literal string "undefined"
+    // and hand it back from listFromTo as if it were data.
+    if (serialized === undefined) {
+      throw new TypeError(`RedisServerCache cannot serialize value: ${typeof value}`);
+    }
+    return serialized;
   }
 
   private deserialize(value: unknown): unknown {
@@ -128,11 +303,7 @@ export class RedisServerCache extends MastraServerCache {
   async listPush(key: string, value: unknown): Promise<void> {
     const fullKey = this.getKey(key);
     const serialized = this.serialize(value);
-    await this.pushToList(this.client, fullKey, serialized);
-
-    if (this.ttlSeconds > 0) {
-      await this.client.expire(fullKey, this.ttlSeconds);
-    }
+    await this.pushToListWithExpiry(this.client, fullKey, serialized, this.ttlSeconds);
   }
 
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {
@@ -163,20 +334,32 @@ export class RedisServerCache extends MastraServerCache {
 
   async increment(key: string): Promise<number> {
     const fullKey = this.getKey(key);
-    const value = await this.client.incr(fullKey);
-
-    if (this.ttlSeconds > 0) {
-      await this.client.expire(fullKey, this.ttlSeconds);
-    }
-
-    return value;
+    return this.incrementWithExpiry(this.client, fullKey, this.ttlSeconds);
   }
 }
 
-export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
+export const upstashPreset: Pick<
+  RedisServerCacheOptions,
+  'setWithExpiry' | 'scanKeys' | 'incrementWithExpiry' | 'pushToListWithExpiry'
+> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { ex: seconds } as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
+  // Upstash REST's EVAL does not take the classic (script, numKeys, ...) form,
+  // so keep the sequential two-command path instead of the Lua fast path.
+  incrementWithExpiry: async (client, key, seconds) => {
+    const value = await client.incr(key);
+    if (seconds > 0) {
+      await client.expire(key, seconds);
+    }
+    return value;
+  },
+  pushToListWithExpiry: async (client, key, value, seconds) => {
+    await client.rpush(key, value as any);
+    if (seconds > 0) {
+      await client.expire(key, seconds);
+    }
+  },
 };
 
 // node-redis v4+ exposes Redis multi-word commands as camelCase only
