@@ -1,5 +1,41 @@
 # @mastra/factory
 
+## 0.13.0-alpha.7
+
+### Minor Changes
+
+- Added per-event rules to GithubIntegration and PlatformGithubIntegration so each installation owns its GitHub behavior. Functions replace defaults, null disables an event handler, and omitted or undefined values retain defaults. Removed global GitHub rule configuration; migrate rules.github[event].onEvent to the integration constructor rules[event]. ([#23135](https://github.com/mastra-ai/mastra/pull/23135))
+
+  ```typescript
+  // Before: global Factory overrides
+  const overrides = { github: { issueCommentCreated: { onEvent: null } } };
+
+  // After: integration constructor
+  const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+  ```
+
+- Added Factory instance board installation. Custom boards can now be installed alongside the built-in Work and Review boards, or the defaults can be disabled for custom-only configurations. ([#23084](https://github.com/mastra-ai/mastra/pull/23084))
+
+  ```ts
+  const factory = new MastraFactory({
+    storage,
+    boards: [releaseBoard],
+    includeDefaultBoards: false,
+  });
+  ```
+
+### Patch Changes
+
+- Added compact session filters to the Factory sidebar so sessions can be searched and narrowed by owner, status, or recent activity without permanently adding controls to the sidebar. ([#23104](https://github.com/mastra-ai/mastra/pull/23104))
+
+- Factory model selectors can now accept a custom model ID when the deployed model catalog has not caught up with a newly released model. The shared combobox exposes this as opt-in behavior, leaving existing selectors unchanged. ([#23105](https://github.com/mastra-ai/mastra/pull/23105))
+
+- Seed Factory ownership when creating repo-backed Slack sessions so plan artifacts use the Factory workspace path. ([#23101](https://github.com/mastra-ai/mastra/pull/23101))
+
+- Updated dependencies [[`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`3873a78`](https://github.com/mastra-ai/mastra/commit/3873a78ab652373f569e00487a6c8cfae4df33e1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11)]:
+  - @mastra/core@1.65.0-alpha.5
+  - @mastra/code-sdk@1.7.0-alpha.6
+
 ## 0.13.0-alpha.6
 
 ### Minor Changes

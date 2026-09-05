@@ -1,5 +1,26 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.5
+
+### Minor Changes
+
+- Added `SettingsLayout` for settings page titles, actions, constrained width, and section spacing. Section headings now align with the card edge by default. Pass `inset` to `SettingsLayout` and `Section.Header` to align headings with row content. ([#23109](https://github.com/mastra-ai/mastra/pull/23109))
+
+  ```tsx
+  <SettingsLayout title="Project Settings">
+    <Section variant="factory">...</Section>
+  </SettingsLayout>
+  ```
+
+### Patch Changes
+
+- Factory model selectors can now accept a custom model ID when the deployed model catalog has not caught up with a newly released model. The shared combobox exposes this as opt-in behavior, leaving existing selectors unchanged. ([#23105](https://github.com/mastra-ai/mastra/pull/23105))
+
+- Updated dependencies [[`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11)]:
+  - @mastra/core@1.65.0-alpha.5
+  - @mastra/client-js@1.44.0-alpha.5
+  - @mastra/react@1.4.11-alpha.5
+
 ## 53.0.0-alpha.4
 
 ### Patch Changes

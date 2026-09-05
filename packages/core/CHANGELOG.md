@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.65.0-alpha.5
+
+### Patch Changes
+
+- Fixed a message history compatibility issue. ([#23093](https://github.com/mastra-ai/mastra/pull/23093))
+
+- Fixed AI SDK v6/v7 message conversion throwing on reasoning parts with no text and no details, which could crash message rendering while a reasoning model streamed. ([#23134](https://github.com/mastra-ai/mastra/pull/23134))
+
 ## 1.65.0-alpha.4
 
 ### Minor Changes
