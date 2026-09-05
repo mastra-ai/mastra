@@ -19,6 +19,7 @@ createObservabilityVNextTests({
     label: 'DuckDB',
     preferredStrategy: 'event-sourced',
     traceQuery: true,
+    traceQueryStrictFeedbackValueTypes: false,
   },
   getStorage: async () => {
     sharedSuiteStore = new DuckDBStore({ path: ':memory:' });

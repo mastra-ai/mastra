@@ -195,6 +195,56 @@ describe('ClickHouse advanced trace query', () => {
     expect(repeated.match(/FROM current_scores s/g)).toHaveLength(2);
   });
 
+  it('compiles typed feedback relations with one correlated existence check per clause', () => {
+    const compiled = compileClickHouseTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            {
+              feedback: {
+                some: {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'feedbackType' }, right: { literal: "rating' OR 1" } },
+                    { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+                    { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-01-01T14:00:00+02:00' } },
+                    { op: 'exists', path: 'value' },
+                    { op: 'exists', path: 'comment' },
+                  ],
+                },
+              },
+            },
+            { feedback: { none: { op: 'in', value: { path: 'value' }, set: ['bad', 'worse'] } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.query.match(/current_feedback AS/g)).toHaveLength(1);
+    expect(compiled.query.match(/FROM current_feedback s/g)).toHaveLength(2);
+    expect(compiled.query).toContain('isNotNull(s.traceId)');
+    expect(compiled.query).toContain('s.traceId = r.traceId');
+    expect(compiled.query).toMatch(/s\.valueNumber < \{trace_query_\d+:Float64\}/);
+    expect(compiled.query).toMatch(/s\.valueString IN \(\{trace_query_\d+:String\}/);
+    expect(compiled.query).toContain('(isNotNull(s.valueString) OR isNotNull(s.valueNumber))');
+    expect(compiled.query).toContain('FROM mastra_feedback_events FINAL');
+    expect(compiled.query).not.toContain("rating' OR 1");
+    expect(Object.values(compiled.query_params)).toContain("rating' OR 1");
+    expect(Object.values(compiled.query_params)).toContain('2026-01-01 12:00:00.000');
+  });
+
+  it('emits feedback scope only when referenced', () => {
+    const traceOnly = compileClickHouseTraceQuery(plan()).query;
+    const feedbackOnly = compileClickHouseTraceQuery(
+      plan({ where: { feedback: { some: { op: 'exists', path: 'value' } } } }),
+    ).query;
+
+    expect(traceOnly).not.toContain('current_feedback AS');
+    expect(traceOnly).not.toContain('mastra_feedback_events');
+    expect(feedbackOnly.match(/current_feedback AS/g)).toHaveLength(1);
+  });
+
   it('uses total nullable semantics for negative predicates', () => {
     const compiled = compileClickHouseTraceQuery(
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
