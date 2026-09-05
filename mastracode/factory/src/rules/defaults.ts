@@ -3,9 +3,6 @@ import { workBoard } from '../boards/work.js';
 import type {
   FactoryBoardRuleLeaf,
   FactoryBoardRules,
-  FactoryLinearEventName,
-  FactoryLinearRuleContext,
-  FactoryLinearRuleLeaf,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleSource,
@@ -46,59 +43,10 @@ function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   } as const;
 }
 
-function linearIssueObserved(context: FactoryLinearRuleContext) {
-  if (context.item) return;
-  return {
-    type: 'upsertLinkedWorkItem',
-    idempotencyKey: `${context.ingress.id}:issue-triage`,
-    board: 'work',
-    source: 'linear-issue',
-    sourceKey: `linear:${context.issue.identifier}`,
-    title: `${context.issue.identifier}: ${context.issue.title}`,
-    url: context.issue.url,
-    stage: 'triage',
-    metadata: {
-      linearIssueId: context.issue.id,
-      identifier: context.issue.identifier,
-      sourceCreatedAt: context.issue.createdAt,
-      linearState: context.issue.state,
-      linearStateType: context.issue.stateType,
-      linearPriority: context.issue.priorityLabel,
-      linearAssignee: context.issue.assignee,
-      linearCreator: context.issue.creator,
-      linearTeam: context.issue.team,
-      labels: [...context.issue.labels] as string[],
-      ...(context.issue.assignee ? { assignee: context.issue.assignee } : {}),
-      ...(context.issue.creator ? { creator: context.issue.creator, author: context.issue.creator } : {}),
-    },
-  } as const;
-}
-
-function linearIssueClosed(context: FactoryLinearRuleContext) {
-  if (!context.item || context.item.source !== 'linear-issue') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
-  // Only terminal state types trigger close.
-  const stateType = context.issue.stateType;
-  if (stateType !== 'completed' && stateType !== 'canceled') return;
-  const canceled = stateType === 'canceled';
-  return {
-    type: 'transition',
-    idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
-    message: {
-      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
-    },
-  } as const;
-}
-
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: workBoard.rules,
   review: reviewBoard.rules,
   tools: { submit_plan: { onResult: advanceApprovedPlan } },
-  linear: { issueObserved: { onEvent: linearIssueObserved }, issueClosed: { onEvent: linearIssueClosed } },
 };
 
 function mergeBoardRules(
@@ -146,23 +94,6 @@ function mergeToolRules(
   return result;
 }
 
-function mergeLinearRules(
-  base: FactoryRulesOverrides['linear'],
-  overrides: FactoryRulesOverrides['linear'],
-): NonNullable<FactoryRulesOverrides['linear']> {
-  const result: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>> = {};
-  const events = new Set([...Object.keys(base ?? {}), ...Object.keys(overrides ?? {})]) as Set<FactoryLinearEventName>;
-  for (const event of events) {
-    const baseLeaf = base?.[event];
-    const overrideLeaf = overrides?.[event];
-    result[event] = {
-      ...(baseLeaf && 'onEvent' in baseLeaf ? { onEvent: baseLeaf.onEvent } : {}),
-      ...(overrideLeaf && 'onEvent' in overrideLeaf ? { onEvent: overrideLeaf.onEvent } : {}),
-    };
-  }
-  return result;
-}
-
 export function mergeFactoryRuleOverrides(
   base: FactoryRulesOverrides,
   overrides: FactoryRulesOverrides = {},
@@ -171,7 +102,6 @@ export function mergeFactoryRuleOverrides(
     work: mergeBoardRules(base.work, overrides.work),
     review: mergeBoardRules(base.review, overrides.review),
     tools: mergeToolRules(base.tools, overrides.tools),
-    linear: mergeLinearRules(base.linear, overrides.linear),
   };
 }
 

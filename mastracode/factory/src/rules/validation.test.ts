@@ -257,6 +257,6 @@ describe('Factory rule validation', () => {
         ...rules,
         linear: { madeUpEvent: { onEvent: () => undefined } },
       }),
-    ).toThrow(/Linear event is invalid/i);
+    ).toThrow(/unsupported field/i);
   });
 });

@@ -297,10 +297,6 @@ export interface FactoryToolRuleLeaf {
   onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
 }
 
-export interface FactoryLinearRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
-}
-
 export type FactoryBoardRules = Partial<Record<string, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>>;
 
 export interface FactoryRules {
@@ -308,14 +304,12 @@ export interface FactoryRules {
   work: FactoryBoardRules;
   review: FactoryBoardRules;
   tools: Record<string, FactoryToolRuleLeaf>;
-  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export interface FactoryRulesOverrides {
   work?: FactoryBoardRules;
   review?: FactoryBoardRules;
   tools?: Record<string, FactoryToolRuleLeaf>;
-  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =
