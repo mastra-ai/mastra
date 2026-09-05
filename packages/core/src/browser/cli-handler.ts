@@ -294,16 +294,34 @@ export class BrowserCliHandler {
     // Join shell continuations in the header only; never inspect a heredoc body.
     let header = '';
     let quote = '';
+    let continued = false;
+    let hasHeredoc = false;
     const source = command.trimStart();
     let i = 0;
     for (; i < source.length; i++) {
       const char = source[i]!;
       if (char === '\\' && quote !== "'" && i + 1 < source.length) {
         const next = source[++i]!;
-        if (next !== '\n') header += char + next;
+        if (next !== '\n') {
+          header += char + next;
+          continued = false;
+        }
         continue;
       }
-      if (char === '\n' && !quote) break;
+      if (char === '\n' && !quote) {
+        // A pending heredoc starts its payload here, even after a shell operator.
+        if (hasHeredoc || !continued) break;
+        header += ' ';
+        continue;
+      }
+      if (!quote && (source.slice(i, i + 2) === '&&' || source.slice(i, i + 2) === '||')) {
+        header += source.slice(i, i + 2);
+        i++;
+        continued = true;
+        continue;
+      }
+      if (!quote && source.slice(i, i + 2) === '<<') hasHeredoc = true;
+      if (!/\s/.test(char)) continued = !quote && char === '|';
       if (char === quote) quote = '';
       else if (!quote && (char === "'" || char === '"')) quote = char;
       header += char;

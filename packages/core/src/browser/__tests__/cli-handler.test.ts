@@ -85,6 +85,11 @@ describe('BrowserCliHandler', () => {
     it.each([
       'agent-browser open https://example.com && browser-use < script.py',
       'browser-use < script.py && agent-browser open https://example.com',
+      'browser-use < script.py &&\nagent-browser open https://example.com',
+      'browser-use < script.py &&\n\nagent-browser open https://example.com',
+      'browser-use < script.py && false ||\nagent-browser open https://example.com',
+      'agent-browser open https://example.com &&\nbrowser-use < script.py',
+      "agent-browser open https://example.com &&\nbrowser-use <<'PY'\nPAYLOADPY\n",
       "agent-browser open https://example.com && browser-use <<'PY'\nPAYLOADPY\n",
       "browser-use <<'PY' && agent-browser open https://example.com\nPAYLOADPY\n",
     ])('retains both CLI transports and warmup for %s', template => {

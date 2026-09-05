@@ -674,7 +674,11 @@ describe('executeCommandTool browser CLI logic', () => {
       expect(browser.connectToExternalCdp).not.toHaveBeenCalled();
     });
 
-    it('warms up and scopes agent-browser in a mixed Browser Use stdin chain', async () => {
+    it.each([
+      'agent-browser open https://example.com && browser-use < script.py',
+      'browser-use < script.py &&\nagent-browser open https://example.com',
+      'browser-use < script.py ||\nagent-browser open https://example.com',
+    ])('warms up and scopes agent-browser in a mixed Browser Use stdin chain: %s', async command => {
       const commands: string[] = [];
       const browser = createMockBrowser();
       const { context } = createMockContextWithBrowser({
@@ -686,7 +690,7 @@ describe('executeCommandTool browser CLI logic', () => {
       });
       await execute(
         {
-          command: 'agent-browser open https://example.com && browser-use < script.py',
+          command,
           timeout: null,
           cwd: null,
           tail: null,
