@@ -1,6 +1,6 @@
 import { BlocksIcon } from 'lucide-react';
-import { useState } from 'react';
-import type { ReactNode } from 'react';
+import { useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { parseIntegrationName } from './parse-integration-name';
 import { Badge } from '@/ds/components/Badge';
 import { DialogNew } from '@/ds/components/DialogNew';
@@ -73,11 +73,13 @@ function IntegrationDialog({
   className,
   ...props
 }: IntegrationDialogProps) {
+  const searchRef = useRef<HTMLInputElement>(null);
   return (
     <DialogNew {...props}>
       {children}
-      <DialogNew.Content className={cn('max-w-lg', className)}>
+      <DialogNew.Content className={cn('max-w-lg', className)} initialFocus={searchRef}>
         <IntegrationDialogContent
+          searchRef={searchRef}
           title={title}
           description={description}
           items={items}
@@ -95,7 +97,9 @@ type IntegrationDialogContentProps = Pick<
   IntegrationDialogProps,
   'title' | 'description' | 'items' | 'onSelect' | 'emptyMessage'
 > &
-  Required<Pick<IntegrationDialogProps, 'searchPlaceholder' | 'searchLabel'>>;
+  Required<Pick<IntegrationDialogProps, 'searchPlaceholder' | 'searchLabel'>> & {
+    searchRef: RefObject<HTMLInputElement | null>;
+  };
 
 function IntegrationDialogContent({
   title,
@@ -105,6 +109,7 @@ function IntegrationDialogContent({
   searchPlaceholder,
   searchLabel,
   emptyMessage,
+  searchRef,
 }: IntegrationDialogContentProps) {
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
@@ -118,6 +123,7 @@ function IntegrationDialogContent({
       </DialogNew.Header>
       <div className="shrink-0 px-5 py-2">
         <SearchFieldBlock
+          inputRef={searchRef}
           name="integration-search"
           label={searchLabel}
           labelIsHidden

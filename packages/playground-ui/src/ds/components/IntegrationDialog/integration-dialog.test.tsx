@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationDialog } from './integration-dialog';
 import { parseIntegrationName } from './parse-integration-name';
@@ -30,6 +30,13 @@ describe('IntegrationDialog', () => {
       expect(screen.getByRole('dialog', { name: 'Add connection' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Anthropic' })).toBeDefined();
       expect(screen.getByRole('button', { name: 'Slack' })).toBeDefined();
+    });
+
+    it('focuses the search field', async () => {
+      renderDialog();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Search integrations' })),
+      );
     });
 
     it('disables items marked disabled', () => {
