@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { ClickHouseClient } from '@clickhouse/client';
 import { listScoresArgsSchema } from '@mastra/core/storage';
 import type {
@@ -5,6 +7,7 @@ import type {
   AggregationType,
   BatchCreateScoresArgs,
   CreateScoreArgs,
+  DeleteScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
   ScoreRecord,
@@ -19,7 +22,10 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
+import { isReplicationConfigured } from '../../../db/replication';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import { TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_DELTA } from './ddl';
+import { recordDeletionRequest } from './deletion-requests';
 import { buildPaginationClause, buildScoresFilterConditions, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, rowToScoreRecord, scoreRecordToRow } from './helpers';
@@ -171,6 +177,63 @@ export async function batchCreateScores(client: ClickHouseClient, args: BatchCre
     values: args.scores.map(scoreRecordToRow),
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
+  });
+}
+
+// ============================================================================
+// Delete
+// ============================================================================
+
+/**
+ * Delete score events by scoreId via lightweight DELETE. Optional
+ * `organizationId` and `resourceId` values are ANDed into the predicate to
+ * restrict deletion to records with matching scope fields.
+ *
+ * A durable deletion request is recorded before the lightweight delete. The
+ * delete is immediately visible to subsequent reads; physical purge depends on
+ * the table's configured retention TTL. The delta table is intentionally not
+ * touched and expires through its fixed two-day TTL.
+ */
+export async function deleteScores(
+  client: ClickHouseClient,
+  args: DeleteScoresArgs,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (args.scoreIds.length === 0) return;
+
+  await recordDeletionRequest(client, {
+    requestId: randomUUID(),
+    organizationId: args.organizationId,
+    resourceId: args.resourceId,
+    signal: 'scores',
+    predicateType: 'itemIds',
+    predicateValues: [...args.scoreIds],
+    requestedAt: new Date().toISOString(),
+    replication,
+  });
+
+  const params: Record<string, string> = {};
+  const idPlaceholders: string[] = [];
+  for (let i = 0; i < args.scoreIds.length; i++) {
+    const name = `sid_${i}`;
+    params[name] = args.scoreIds[i]!;
+    idPlaceholders.push(`{${name}:String}`);
+  }
+
+  const conditions = [`scoreId IN (${idPlaceholders.join(', ')})`];
+  if (args.organizationId !== undefined) {
+    conditions.push('organizationId = {delOrganizationId:String}');
+    params.delOrganizationId = args.organizationId;
+  }
+  if (args.resourceId !== undefined) {
+    conditions.push('resourceId = {delResourceId:String}');
+    params.delResourceId = args.resourceId;
+  }
+
+  await client.command({
+    query: `DELETE FROM ${TABLE_SCORE_EVENTS} WHERE ${conditions.join(' AND ')}`,
+    query_params: params,
+    clickhouse_settings: { lightweight_deletes_sync: isReplicationConfigured(replication) ? '2' : '1' },
   });
 }
 

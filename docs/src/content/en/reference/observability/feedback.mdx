@@ -1,12 +1,12 @@
 ---
-title: "Reference: Feedback | Observability"
-description: "Feedback APIs store and query human-in-the-loop observability signals such as ratings, thumbs, comments, and corrections."
+title: 'Reference: Feedback | Observability'
+description: 'Feedback APIs store and query human-in-the-loop observability signals such as ratings, thumbs, comments, and corrections.'
 packages:
-  - "@mastra/core"
-  - "@mastra/observability"
+  - '@mastra/core'
+  - '@mastra/observability'
 ---
 
-import PropertiesTable from "@site/src/components/PropertiesTable";
+import PropertiesTable from '@site/src/components/PropertiesTable';
 
 # Feedback
 
@@ -129,6 +129,38 @@ await observability.batchCreateFeedback({
   ],
 })
 ```
+
+## Delete feedback
+
+### `deleteFeedback(args)`
+
+Deletes feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, they're ANDed into the delete predicate to restrict deletion to records with matching scope fields.
+
+```typescript
+await mastraClient.deleteFeedback({
+  feedbackIds: ['feedback-1', 'feedback-2'],
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'feedbackIds', type: 'string[]', description: 'Ids of the feedback records to delete.' },
+  {
+    name: 'organizationId',
+    type: 'string',
+    description: 'Restricts the delete to records with this organization id.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Restricts the delete to records with this resource id.',
+    isOptional: true,
+  },
+]}
+/>
+
+On ClickHouse, deletion uses lightweight deletes on the main feedback events table to remove rows from reads, including OLAP queries, without guaranteeing immediate physical removal, so open-source deployments must configure an [observability retention period](/reference/storage/retention) to physically purge them. ClickHouse doesn't configure a retention TTL for deletion requests in open-source deployments. Delete APIs intentionally leave cursor-only delta rows untouched. These rows contain identifiers rather than feedback payloads and expire within two days.
 
 ## List feedback
 
@@ -408,7 +440,12 @@ Feedback records can include shared observability context fields for filtering, 
     description: 'Version ID of the root entity.',
     isOptional: true,
   },
-  { name: 'experimentId', type: 'string | null', description: 'Experiment or eval run identifier.', isOptional: true },
+  {
+    name: 'experimentId',
+    type: 'string | null',
+    description: 'Experiment or eval run identifier.',
+    isOptional: true,
+  },
   {
     name: 'executionSource',
     type: 'string | null',
@@ -528,6 +565,7 @@ These routes belong to a Mastra runtime and use its configured observability sto
 | - | - | - | - |
 | `GET` | `/api/observability/feedback` | List feedback records | None derived |
 | `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
+| `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |
 | `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |
