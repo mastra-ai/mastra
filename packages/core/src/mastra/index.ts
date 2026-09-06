@@ -6608,6 +6608,9 @@ export class Mastra<
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
     const drainTimeout = options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
+    if (!Number.isFinite(drainTimeout) || drainTimeout < 0) {
+      throw new RangeError('stopWorkers drainTimeout must be a finite number of milliseconds >= 0');
+    }
     // Block new lazy starts immediately. Runtime signals that arrive during
     // teardown still set their request flags, so a later startWorkers() can
     // honor them, but they must not resurrect workers behind a stopped instance.

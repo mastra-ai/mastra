@@ -195,7 +195,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           "import { testRoute } from '@/api/route/test';",
           "import { testRoute } from '@/api/route/test';\nimport { environmentRoute } from '@/api/route/environment';",
         )
-        .replace('apiRoutes: [testRoute,', 'apiRoutes: [testRoute, environmentRoute,');
+        .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, environmentRoute,');
       await Promise.all([
         writeFile(mastraIndexPath, mastraIndex),
         writeFile(join(inputFile, '.env'), 'BASE_ONLY=base\nSHARED=base\n'),
@@ -589,6 +589,63 @@ export const environmentRoute = registerApiRoute('/environment', {
           // default 5s timeout is tighter than the server's own worst-case bounds.
         } finally {
           // Never leave the drain server running if an assertion failed.
+          server.kill('SIGKILL');
+          await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'lets an in-flight evented workflow run finish before the generated server exits on SIGTERM',
+      async () => {
+        // The route starts the run without awaiting it and responds at once, so
+        // there is no open HTTP connection for the request drain to hold the
+        // process open. Only `mastra.shutdown({ drainTimeout })` — which the
+        // generated server must forward `server.drainTimeout` into — keeps
+        // pubsub alive long enough for the step to finish and print its marker.
+        const drainPort = await getPort();
+        const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+        const drainController = new AbortController();
+        const server = execaNode('index.mjs', {
+          cwd: outputDir,
+          cancelSignal: drainController.signal,
+          env: {
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            MASTRA_PORT: drainPort.toString(),
+          },
+        });
+        activeProcesses.push({ controller: drainController, proc: server });
+
+        let stdout = '';
+        server.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString();
+        });
+
+        try {
+          const maxAttempts = 60;
+          for (let i = 0; i < maxAttempts; i++) {
+            try {
+              const res = await fetch(`http://localhost:${drainPort}/api/tools`);
+              if (res.ok) break;
+            } catch {
+              // Server not ready yet
+            }
+            if (i === maxAttempts - 1) {
+              throw new Error('Workflow drain test server failed to start within timeout');
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const response = await fetch(`http://localhost:${drainPort}/shutdown-drain-workflow`, { method: 'POST' });
+          expect(response.ok).toBe(true);
+          expect(stdout).not.toContain('shutdown-drain-workflow:finished');
+
+          server.kill('SIGTERM');
+
+          await expect(server).resolves.toMatchObject({ exitCode: 0 });
+          expect(stdout).toContain('shutdown-drain-workflow:finished');
+        } finally {
           server.kill('SIGKILL');
           await Promise.race([server.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         }
