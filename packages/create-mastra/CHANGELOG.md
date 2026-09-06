@@ -1,5 +1,7 @@
 # create-mastra
 
+## 1.28.0-alpha.7
+
 ## 1.28.0-alpha.6
 
 ## 1.28.0-alpha.5
