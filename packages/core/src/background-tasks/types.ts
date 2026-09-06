@@ -185,6 +185,12 @@ export interface BackgroundTaskManagerConfig {
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
   /**
+   * Whether to recover running and pending tasks during manager startup.
+   * Disable this when multiple live managers share storage until recovery can
+   * be fenced by persisted worker ownership and leases. Default: true.
+   */
+  recoverStaleTasksOnStart?: boolean;
+  /**
    * Minimum delay between chunk-based progress output events for each task, in ms.
    * Default: undefined (publish every progress chunk).
    */
@@ -200,6 +206,8 @@ export interface BackgroundTaskManagerConfig {
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
   onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
+  /** Optional callback invoked when a task is cancelled */
+  onTaskCancelled?: (task: BackgroundTask) => void | Promise<void>;
 }
 
 // --- Tool-level and agent-level config ---
