@@ -271,6 +271,8 @@ export interface SessionMachinery {
   getAgent(): Agent;
   /** Get the ephemeral state associated with an active or suspended run. */
   getRunScope(runId: string): RunScope | undefined;
+  /** The distinct backing agents whose saved runs this controller may discover. */
+  getAgents?(): Agent[];
   /** Open a fresh subscription to a thread's agent event stream. */
   subscribeToThread(input: {
     agent?: Agent;
@@ -3145,17 +3147,32 @@ export class Session<TState = unknown> {
 
     const localRunId = this.getCurrentRunId();
     const threadId = this.thread.getId();
-    const operationId = this.run.getOperationId();
-    if (!localRunId && threadId && !this.suspensions.hasPending()) {
+    const resourceId = this.identity.getResourceId();
+    const agents = [...new Set(this.machinery.getAgents?.() ?? [this.machinery.getAgent()])];
+
+    // Retract the prompts, retaining their exact run IDs while saved ownership
+    // is resolved. A mode switch may have selected a different backing agent.
+    const parkedRuns = new Set<string>();
+    for (const { toolCallId, toolName, runId } of this.suspensions.clear()) {
+      parkedRuns.add(runId);
+      this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
+    }
+    const discoverParkedOwner = parkedRuns.size > 0 && agents.length > 1;
+    if (threadId && ((!localRunId && parkedRuns.size === 0) || discoverParkedOwner)) {
       const agent = this.machinery.getAgent();
       // A restored Session has no live run identity. Use the same scoped native
-      // discovery as cold resume, bounded to runs that existed when Stop arrived.
-      const scope = { threadId, resourceId: this.identity.getResourceId(), toDate: new Date() };
+      // discovery across this controller's backing agents, bounded to runs that
+      // existed when Stop arrived. Warm Stop selects only its parked run IDs.
+      const scope = { threadId, resourceId, toDate: new Date() };
       const cancelDiscoveredRuns = async () => {
-        const discovery = await Promise.allSettled([
-          agent.listSuspendedRuns(scope),
-          isDurableAgentLike(agent) ? agent.listActiveRuns(scope) : Promise.resolve({ runs: [] }),
-        ]);
+        const discovery = await Promise.allSettled(
+          agents.flatMap(owner => [
+            owner.listSuspendedRuns(scope).then(result => ({ owner, runs: result.runs })),
+            ...(isDurableAgentLike(owner)
+              ? [owner.listActiveRuns(scope).then(result => ({ owner, runs: result.runs }))]
+              : []),
+          ]),
+        );
         const discoveryErrors = discovery.flatMap(result =>
           result.status === 'rejected' &&
           !(result.reason instanceof MastraError && result.reason.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE')
@@ -3164,19 +3181,27 @@ export class Session<TState = unknown> {
         );
         if (discoveryErrors.length) throw new AggregateError(discoveryErrors, 'Failed to discover runs for Stop');
         const results = discovery.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
-        if (
-          this.thread.getId() !== threadId ||
-          this.run.getOperationId() !== operationId ||
-          !this.run.isAbortRequested()
-        )
-          return;
-        const runIds = new Set(results.flatMap(result => result.runs.map(run => run.runId)));
+        // Stop owns the captured saved scope even if turn cleanup or navigation
+        // changes this Session while discovery waits. The native query excludes
+        // runs created after Stop; parked IDs further narrow warm cancellation.
+        const owners = new Map<string, Agent>();
+        for (const { owner, runs } of results) {
+          for (const { runId } of runs) {
+            if (discoverParkedOwner && !parkedRuns.has(runId)) continue;
+            const previous = owners.get(runId);
+            if (previous && previous.id !== owner.id) throw new Error('Multiple agents own a run selected for Stop');
+            owners.set(runId, previous ?? owner);
+          }
+        }
+        if (discoverParkedOwner && owners.size !== parkedRuns.size) {
+          throw new Error('Could not find the owning agent for a parked run selected for Stop');
+        }
         const cancellations = await Promise.allSettled(
-          [...runIds].map(async runId => {
-            if (isDurableAgentLike(agent) && agent.__abortRunStreamAndWait) {
-              await agent.__abortRunStreamAndWait(runId);
+          [...owners].map(async ([runId, owner]) => {
+            if (isDurableAgentLike(owner) && owner.__abortRunStreamAndWait) {
+              await owner.__abortRunStreamAndWait(runId);
             } else {
-              agent.abortRunStream(runId);
+              owner.abortRunStream(runId);
             }
           }),
         );
@@ -3192,15 +3217,9 @@ export class Session<TState = unknown> {
       });
     }
 
-    // Retract the prompts for every parked suspension. Dropping them silently
-    // left the UI rendering `ask_user` / `request_access` prompts whose answers
-    // could never land, since the run they belong to is gone.
-    const parkedRuns = new Set<string>();
-    for (const { toolCallId, toolName, runId } of this.suspensions.clear()) {
-      parkedRuns.add(runId);
-      this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
+    if (!discoverParkedOwner) {
+      for (const runId of parkedRuns) this.machinery.getAgent().abortRunStream(runId);
     }
-    for (const runId of parkedRuns) this.machinery.getAgent().abortRunStream(runId);
 
     // A parked approval gate is special: the agent-side run is still alive and
     // waiting for the decision, so the gated call must be declined through it

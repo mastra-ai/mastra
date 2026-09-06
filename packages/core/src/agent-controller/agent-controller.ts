@@ -407,6 +407,7 @@ export class AgentController<TState = {}> {
     session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
+      getAgents: () => [...this.backingAgents()],
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
       subscribeToThread: ({ agent, resourceId, threadId }) =>
         (agent ?? this.getCurrentAgent(session)).subscribeToThread({ resourceId, threadId }),
