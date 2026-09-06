@@ -8,7 +8,7 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type { KNOWLEDGE_TABLE_NAME, TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import {
@@ -668,7 +668,7 @@ export class LibSQLDB extends MastraBase {
     schema,
     compositePrimaryKey,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
   }): Promise<void> {
@@ -1056,7 +1056,7 @@ export class LibSQLDB extends MastraBase {
     schema,
     ifNotExists,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
