@@ -206,6 +206,8 @@ describe('cardActions', () => {
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
     expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
     expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, session, retry, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, retry }))).toEqual([]);
     expect(cardActions(idle)).toEqual([]);
   });
 
@@ -215,5 +217,6 @@ describe('cardActions', () => {
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
     expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
+    expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
   });
 });
