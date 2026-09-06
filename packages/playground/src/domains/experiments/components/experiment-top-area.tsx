@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, Trash2 } from 'lucide-react';
 import { ExperimentFlowChain } from '@/domains/experiments/components/experiment-flow-chain';
 import { ExperimentMetaBar } from '@/domains/experiments/components/experiment-meta-bar';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
@@ -14,6 +14,8 @@ import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentTopAreaProps {
   experiment: DatasetExperiment;
+  /** When provided, renders a delete action in the header. */
+  onDeleteClick?: () => void;
 }
 
 /**
@@ -21,7 +23,7 @@ export interface ExperimentTopAreaProps {
  * on the left, stats on the right. Wrapped in PageLayout primitives so it slots into
  * any consumer's PageLayout shell.
  */
-export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
+export function ExperimentTopArea({ experiment, onDeleteClick }: ExperimentTopAreaProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
 
   const versionLinkHref =
@@ -54,6 +56,11 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
               View items to review
             </Button>
             <RerunExperimentButton experiment={experiment} />
+            {onDeleteClick && (
+              <Button size="sm" variant="ghost" onClick={onDeleteClick} aria-label="Delete experiment">
+                <Trash2 /> Delete Experiment
+              </Button>
+            )}
           </div>
           {experiment.agentVersion && (
             <DataKeysAndValues numOfCol={1}>

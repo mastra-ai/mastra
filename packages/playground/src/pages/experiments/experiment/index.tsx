@@ -7,9 +7,11 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, Outlet, useParams } from 'react-router';
+import { useState } from 'react';
+import { Link, Outlet, useNavigate, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
@@ -25,6 +27,8 @@ function ExperimentPageShell({ children }: { children?: ReactNode }) {
 
 function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
+  const navigate = useNavigate();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -119,7 +123,7 @@ function ExperimentPage() {
     >
       <div className="relative h-full overflow-hidden">
         <PageLayout height="full">
-          <ExperimentTopArea experiment={experiment!} />
+          <ExperimentTopArea experiment={experiment!} onDeleteClick={() => setDeleteDialogOpen(true)} />
 
           <PageLayout.MainArea className="overflow-visible">
             <ExperimentResultsSection
@@ -137,6 +141,14 @@ function ExperimentPage() {
 
         {/* Item detail sub-route renders here as an absolute overlay panel */}
         <Outlet />
+
+        <DeleteExperimentDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          experimentId={experimentId}
+          experimentName={experiment!.name ?? undefined}
+          onSuccess={() => navigate('/experiments')}
+        />
       </div>
     </ExperimentItemPanelProvider>
   );
