@@ -57,10 +57,15 @@ export class UpstashServerCache extends RedisServerCache {
   constructor(config: UpstashCacheConfig, options: UpstashServerCacheOptions = {}) {
     let client: RedisClient;
 
+    // @upstash/redis speaks a third EVAL shape, (script, keys, args), which the
+    // RedisClient union type rejects. upstashPreset pins the sequential
+    // INCR/RPUSH paths, so EVAL is never routed through this client at runtime.
+    const asRedisClient = (redis: Redis): RedisClient => redis as unknown as RedisClient;
+
     if ('client' in config) {
-      client = config.client;
+      client = asRedisClient(config.client);
     } else {
-      client = new Redis({ url: config.url, token: config.token });
+      client = asRedisClient(new Redis({ url: config.url, token: config.token }));
     }
 
     const redisOptions: RedisServerCacheOptions = {
