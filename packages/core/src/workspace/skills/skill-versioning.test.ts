@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { InMemoryBlobStore } from '../../storage/domains/blobs/inmemory';
 import type { SkillVersionTree, StorageBlobEntry } from '../../storage/types';
 import { CompositeVersionedSkillSource } from './composite-versioned-skill-source';
-import { collectSkillForPublish, publishSkillFromSource } from './publish';
+import { collectSkillForPublish, collectSkillForPublishFromFiles, publishSkillFromSource, publishSkillFromFiles } from './publish';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 import { VersionedSkillSource } from './versioned-skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
@@ -291,6 +291,53 @@ describe('collectSkillForPublish', () => {
     expect(result.snapshot.compatibility).toBe('node>=18');
     expect(result.snapshot.metadata).toBeDefined();
     expect(result.snapshot.metadata!.author).toBe('test-user');
+  });
+});
+
+// =============================================================================
+// 2b. collectSkillForPublishFromFiles / publishSkillFromFiles
+// =============================================================================
+
+describe('collectSkillForPublishFromFiles', () => {
+  it('should publish from a nested storage file tree', async () => {
+    const skillMd = createSkillMd(
+      { name: 'stored-skill', description: 'From storage' },
+      '# Stored Skill\n\nPublished from snapshot.',
+    );
+    const fileNodes = [
+      { name: 'SKILL.md', type: 'file' as const, content: skillMd },
+      {
+        name: 'references',
+        type: 'folder' as const,
+        children: [{ name: 'notes.md', type: 'file' as const, content: '# Notes' }],
+      },
+    ];
+
+    const result = collectSkillForPublishFromFiles(fileNodes);
+
+    expect(result.snapshot.name).toBe('stored-skill');
+    expect(result.snapshot.instructions).toBe('# Stored Skill\n\nPublished from snapshot.');
+    expect(result.tree.entries['SKILL.md']).toBeDefined();
+    expect(result.tree.entries['references/notes.md']).toBeDefined();
+    expect(result.files).toHaveLength(2);
+  });
+
+  it('should throw if SKILL.md is missing from the stored snapshot', () => {
+    expect(() =>
+      collectSkillForPublishFromFiles([{ name: 'README.md', type: 'file', content: '# No skill file' }]),
+    ).toThrow('SKILL.md not found');
+  });
+
+  it('should store blobs via publishSkillFromFiles', async () => {
+    const skillMd = createSkillMd({ name: 'blob-skill', description: 'Blob test' }, '# Blob');
+    const blobStore = new InMemoryBlobStore();
+
+    const result = await publishSkillFromFiles([{ name: 'SKILL.md', type: 'file', content: skillMd }], blobStore);
+
+    for (const blob of result.blobs) {
+      const stored = await blobStore.get(blob.hash);
+      expect(stored).not.toBeNull();
+    }
   });
 });
 
