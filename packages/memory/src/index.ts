@@ -299,6 +299,7 @@ export class Memory extends MastraMemory {
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
   private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
+  private readonly constructorOptions?: MemoryOptions;
 
   /**
    * Every vector cleanup that deleteThread or deleteMessages started in the background.
@@ -333,7 +334,7 @@ export class Memory extends MastraMemory {
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
     await engine?.settled();
-    // Observational-memory cycles can start further vector cleanup; drain once more.
+    // Observational-memory work can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
 
@@ -363,12 +364,20 @@ export class Memory extends MastraMemory {
 
   /** @internal Creates isolated memory for a derived subconscious agent. */
   createSubconsciousMemory(): Memory {
+    const observationalMemory = this.constructorOptions?.observationalMemory;
+    const sidekickObservationalMemory =
+      observationalMemory && typeof observationalMemory === 'object'
+        ? { ...observationalMemory, experimental_subconscious: undefined }
+        : observationalMemory;
     const memory = new Memory({
       storage: this.storage,
       vector: this.vector,
       embedder: this.embedder,
       embedderOptions: this.embedderOptions,
-      options: { observationalMemory: false },
+      options: {
+        ...this.constructorOptions,
+        observationalMemory: sidekickObservationalMemory,
+      },
     });
     if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
     return memory;
@@ -443,6 +452,7 @@ export class Memory extends MastraMemory {
 
   constructor(config: MemoryConstructorConfig = {}) {
     super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
+    this.constructorOptions = config.options;
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {

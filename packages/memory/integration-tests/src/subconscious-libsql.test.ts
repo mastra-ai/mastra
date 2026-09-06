@@ -205,6 +205,7 @@ describe('Subconscious LibSQL integration', () => {
     await storage.init();
 
     let streamCall = 0;
+    let reminderAgentCalls = 0;
     let sentReminder = false;
     const reminder = 'Project Atlas launches January 15. Source KnowledgeRecord: record-atlas-launch.';
     const model = new MockLanguageModelV2({
@@ -212,7 +213,9 @@ describe('Subconscious LibSQL integration', () => {
         streamCall += 1;
         const prompt = JSON.stringify(options.prompt);
         const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
-        if (eventId && !sentReminder) {
+        const isReminderAgent = prompt.includes('For a useful grounded passive reminder');
+        if (isReminderAgent) reminderAgentCalls += 1;
+        if (isReminderAgent && eventId && !sentReminder) {
           sentReminder = true;
           const input = JSON.stringify({ eventId, reminder, sourceIds: ['record-atlas-launch'] });
           return {
@@ -309,7 +312,8 @@ describe('Subconscious LibSQL integration', () => {
 
     expect(result.observed).toBe(true);
     expect(getModel).not.toHaveBeenCalled();
-    expect(streamCall).toBe(3);
+    expect(streamCall).toBeGreaterThan(reminderAgentCalls);
+    expect(reminderAgentCalls).toBe(2);
     expect(parentSendSignal).toHaveBeenCalledTimes(2);
     expect(parentSendSignal).toHaveBeenNthCalledWith(
       1,
@@ -375,7 +379,8 @@ describe('Subconscious LibSQL integration', () => {
       doStream: async options => {
         const prompt = JSON.stringify(options.prompt);
         const eventId = prompt.match(/Passive reminder check (subconscious:remind:[^"\\\\]+:event)/)?.[1];
-        if (eventId && !sentReminder) {
+        const isReminderAgent = prompt.includes('For a useful grounded passive reminder');
+        if (isReminderAgent && eventId && !sentReminder) {
           sentReminder = true;
           const input = JSON.stringify({
             eventId,
@@ -504,7 +509,7 @@ describe('Subconscious LibSQL integration', () => {
     ]);
   });
 
-  it('persists a direct ask_memory turn and correlated terminal reply through LibSQL', async () => {
+  it('continues ask_memory through serialized sidekick history and delivers the correlated reply', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-question-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'memory.db')}`;
@@ -531,7 +536,7 @@ describe('Subconscious LibSQL integration', () => {
           /Memory question (subconscious:remind:[^\\n"]+:reply)/,
         )?.[1];
         const chunks =
-          streamCall === 1 && replyId
+          streamCall === 2 && replyId
             ? [
                 { type: 'stream-start' as const, warnings: [] },
                 {
@@ -600,12 +605,10 @@ describe('Subconscious LibSQL integration', () => {
       agent: { agentId: parentAgent.id, threadId: parentThreadId, resourceId, messages: [] },
       requestContext,
     } as any)) as { accepted: boolean; replyId: string; status: string };
-    for (let attempt = 0; attempt < 50 && parentSendSignal.mock.calls.length < 2; attempt += 1) {
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
+    await vi.waitFor(() => expect(parentSendSignal).toHaveBeenCalledTimes(2), { timeout: 5_000 });
 
     expect(result).toMatchObject({ accepted: true, status: 'pending' });
-    expect(parentSendSignal).toHaveBeenCalledTimes(2);
+    expect(streamCall).toBe(3);
     expect(parentSendSignal.mock.calls[0]![0]).toMatchObject({ id: `${result.replyId}:terminal:signal` });
     const reminderThreadId = getRemindThreadId(parentThreadId);
     const history = await (await storage.getStore('memory'))!.listMessages({
@@ -616,6 +619,11 @@ describe('Subconscious LibSQL integration', () => {
     expect(
       history.messages.some(item => getRemindMessageText(item).startsWith(`Memory question ${result.replyId}\n`)),
     ).toBe(true);
+    expect(
+      history.messages.filter(item =>
+        getRemindMessageText(item).startsWith('Continue these unanswered memory questions (attempt 1):'),
+      ),
+    ).toHaveLength(1);
     expect(
       history.messages.some(item =>
         item.content.parts.some(
@@ -659,6 +667,7 @@ describe('Subconscious LibSQL integration', () => {
       resourceId,
       parentThreadId,
       parentAgent: { sendSignal: vi.fn() } as any,
+      memory,
       maxSteps: 5,
       getReminderAgent: () => ({ id: 'reminder-agent', sendMessage }) as any,
     });
@@ -679,28 +688,54 @@ describe('Subconscious LibSQL integration', () => {
       expect.objectContaining({ threadId: reminderThread.id, resourceId }),
     );
 
-    const terminalMarker: MastraDBMessage = {
-      id: 'subconscious:remind:reply-1:terminal',
-      role: 'assistant',
+    const continuation2 = message(
+      reminderThread.id,
+      resourceId,
+      'Continue these unanswered memory questions (attempt 2): reply-1. Reply to each with reply_to_memory_question.',
+    );
+    continuation2.createdAt = new Date(3_000);
+    await memory.saveMessages({ messages: [continuation2] });
+    const exhaustedHistory = await (await storage.getStore('memory'))!.listMessages({
       threadId: reminderThread.id,
       resourceId,
-      createdAt: new Date(3_000),
-      content: {
-        format: 2,
-        parts: [
-          {
-            type: 'text',
-            text: 'Memory question reply-1 terminal: unable to answer after two continuation attempts',
-          },
-        ],
-      },
-    };
-    await memory.saveMessages({ messages: [terminalMarker] });
+      perPage: false,
+    });
+    const terminalParentSignal = vi.fn((signal: any, options: any) => {
+      const action = options.ifActive?.behavior === 'persist' ? 'persist' : 'discard';
+      return {
+        signal,
+        accepted: Promise.resolve({ action }),
+        persisted: action === 'persist' ? Promise.resolve() : undefined,
+      } as any;
+    });
+    const terminalProcessor = new RemindContinuationProcessor({
+      threadId: reminderThread.id,
+      resourceId,
+      parentThreadId,
+      parentAgent: { sendSignal: terminalParentSignal } as any,
+      memory,
+      maxSteps: 5,
+      getReminderAgent: () => ({ id: 'reminder-agent', sendMessage: vi.fn() }) as any,
+    });
+    await terminalProcessor.processOutputResult({
+      state: {},
+      messages: exhaustedHistory.messages,
+      messageList: { get: { all: { db: () => exhaustedHistory.messages } }, add: vi.fn() },
+      result: { text: '', usage: {}, finishReason: 'stop', steps: [] },
+      requestContext: new RequestContext(),
+    } as any);
+    await vi.waitFor(() => expect(terminalParentSignal).toHaveBeenCalledTimes(2));
+
     const reconstructedHistory = await (await storage.getStore('memory'))!.listMessages({
       threadId: reminderThread.id,
       resourceId,
       perPage: false,
     });
+    expect(
+      reconstructedHistory.messages.some(item =>
+        getRemindMessageText(item).startsWith('Memory question reply-1 terminal: unable to answer'),
+      ),
+    ).toBe(true);
     const reconstructedSendMessage = vi.fn();
     const reconstructedParentSignal = vi.fn();
     const reconstructedProcessor = new RemindContinuationProcessor({
@@ -708,6 +743,7 @@ describe('Subconscious LibSQL integration', () => {
       resourceId,
       parentThreadId,
       parentAgent: { sendSignal: reconstructedParentSignal } as any,
+      memory,
       maxSteps: 5,
       getReminderAgent: () => ({ id: 'reminder-agent', sendMessage: reconstructedSendMessage }) as any,
     });
