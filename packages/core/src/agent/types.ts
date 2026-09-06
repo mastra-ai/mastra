@@ -1204,6 +1204,13 @@ export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'stream
  * to maintain compatibility with the server handlers.
  */
 export interface DurableAgentLike {
+  /**
+   * Complete Stop within an already admitted native Mastra cancellation operation.
+   * Optional for compatibility with other durable wrappers; only implementations
+   * providing this method guarantee stored cancellation completion to Session.
+   * @internal
+   */
+  __abortRunStreamAndWait?(runId: string): Promise<void>;
   /** Agent ID */
   readonly id: string;
   /** Agent name */
