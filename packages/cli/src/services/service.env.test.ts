@@ -73,6 +73,25 @@ describe('FileEnvService', () => {
     await expect(service.getEnvValue('DB_URL')).resolves.toBe('postgres://new');
   });
 
+  it('rejects when the env file cannot be read', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const service = new FileEnvService(envPath);
+
+    await expect(service.setEnvValue('DB_URL', 'postgres://localhost')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('rejects when the env file cannot be written', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const writeError = new Error('write failed');
+    await fs.writeFile(envPath, 'DB_URL=old\n', 'utf8');
+    vi.spyOn(fs, 'writeFile').mockRejectedValueOnce(writeError);
+    const service = new FileEnvService(envPath);
+
+    await expect(service.setEnvValue('DB_URL', 'postgres://new')).rejects.toBe(writeError);
+    expect(errorSpy).toHaveBeenCalledWith(`Error writing ENV value: ${writeError}`);
+  });
+
   it('writes values containing $ literally without replacement expansion', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
@@ -105,7 +124,7 @@ describe('FileEnvService', () => {
     await fs.writeFile(envPath, 'DB.URL=first\nOTHER=1\n', 'utf8');
 
     const service = new FileEnvService(envPath);
-    await service.setEnvValue('DB.URL', 'second');
+    await expect(service.setEnvValue('DB.URL', 'second')).rejects.toThrow('Invalid ENV key: DB.URL');
 
     const content = await fs.readFile(envPath, 'utf8');
     expect(content).toBe('DB.URL=first\nOTHER=1\n');
@@ -118,7 +137,7 @@ describe('FileEnvService', () => {
     await fs.writeFile(envPath, 'SAFE=1\n', 'utf8');
 
     const service = new FileEnvService(envPath);
-    await service.setEnvValue('BAD KEY', 'value');
+    await expect(service.setEnvValue('BAD KEY', 'value')).rejects.toThrow('Invalid ENV key: BAD KEY');
 
     const content = await fs.readFile(envPath, 'utf8');
     expect(content).toBe('SAFE=1\n');
@@ -131,7 +150,9 @@ describe('FileEnvService', () => {
     await fs.writeFile(envPath, 'DB_URL=safe\n', 'utf8');
 
     const service = new FileEnvService(envPath);
-    await service.setEnvValue('DB_URL', 'line1\nINJECTED=1');
+    await expect(service.setEnvValue('DB_URL', 'line1\nINJECTED=1')).rejects.toThrow(
+      'Invalid ENV value for DB_URL: multiline values are not supported.',
+    );
 
     const content = await fs.readFile(envPath, 'utf8');
     expect(content).toBe('DB_URL=safe\n');
@@ -144,7 +165,9 @@ describe('FileEnvService', () => {
     await fs.writeFile(envPath, 'DB_URL=safe\n', 'utf8');
 
     const service = new FileEnvService(envPath);
-    await service.setEnvValue('DB_URL', 'unsafe\rvalue');
+    await expect(service.setEnvValue('DB_URL', 'unsafe\rvalue')).rejects.toThrow(
+      'Invalid ENV value for DB_URL: multiline values are not supported.',
+    );
 
     const content = await fs.readFile(envPath, 'utf8');
     expect(content).toBe('DB_URL=safe\n');
