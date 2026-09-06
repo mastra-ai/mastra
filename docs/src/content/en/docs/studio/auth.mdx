@@ -11,6 +11,10 @@ When you configure [authentication](/docs/auth/overview) on your Mastra server, 
 
 Without authentication, Studio and all API routes are publicly accessible.
 
+:::note
+Studio deployed on Mastra platform works differently. By default, the platform injects its own auth so only your organization members can sign in, and your `server.auth` applies to API routes only. Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` to opt out. See [Authentication on Mastra platform](/docs/mastra-platform/studio#authentication).
+:::
+
 ## When to use Studio Auth
 
 - Multiple team members need to interact with agents, workflows, and tools through a shared Studio deployment.
