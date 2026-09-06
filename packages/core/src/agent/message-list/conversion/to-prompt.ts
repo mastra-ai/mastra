@@ -320,6 +320,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
 function convertToolResultContent(
   prompt: LanguageModelV2Prompt,
   convertMediaPart: (contentPart: Record<string, unknown>, mediaType: string) => unknown,
+  convertImageUrlPart?: (contentPart: Record<string, unknown>, mediaType: string) => unknown,
 ): LanguageModelV2Prompt {
   return prompt.map(message => {
     if (message.role !== `tool`) return message;
@@ -334,10 +335,17 @@ function convertToolResultContent(
       const value = (output.value as unknown[]).map(item => {
         if (item == null || typeof item !== `object`) return item;
         const contentPart = item as Record<string, unknown>;
-        if (contentPart.type !== `media` || typeof contentPart.data !== `string`) return item;
-        outputModified = true;
-        const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
-        return convertMediaPart(contentPart, mediaType);
+        if (contentPart.type === `media` && typeof contentPart.data === `string`) {
+          outputModified = true;
+          const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
+          return convertMediaPart(contentPart, mediaType);
+        }
+        if (convertImageUrlPart && contentPart.type === `image-url` && typeof contentPart.url === `string`) {
+          outputModified = true;
+          const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
+          return convertImageUrlPart(contentPart, mediaType);
+        }
+        return item;
       });
 
       if (!outputModified) return part;
@@ -352,7 +360,8 @@ function convertToolResultContent(
 /**
  * Convert v5-authored media tool results to the `image-data`/`file-data` shape
  * expected only by AI SDK v6 (`v3`) providers. V5 providers accept `media`, and
- * V7 providers expect `file` parts with tagged data instead.
+ * V7 providers expect `file` parts with tagged data instead. `image-url` parts
+ * pass through unchanged: the `v3` spec consumes them natively.
  *
  * See: https://github.com/mastra-ai/mastra/issues/17876
  */
@@ -365,9 +374,19 @@ export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageM
 }
 
 export function aiV5PromptToAIV7Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
-  return convertToolResultContent(prompt, (contentPart, mediaType) => ({
-    type: `file`,
-    data: { type: `data`, data: contentPart.data },
-    mediaType,
-  }));
+  return convertToolResultContent(
+    prompt,
+    (contentPart, mediaType) => ({
+      type: `file`,
+      data: { type: `data`, data: contentPart.data },
+      mediaType,
+    }),
+    // The `v4` spec has no `image-url` tool-result part; its `file` part carries
+    // URLs as tagged data instead.
+    (contentPart, mediaType) => ({
+      type: `file`,
+      data: { type: `url`, url: contentPart.url },
+      mediaType: mediaType || `image/jpeg`,
+    }),
+  );
 }
