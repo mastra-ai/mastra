@@ -201,17 +201,18 @@ export function cardActions({
   run,
 }: {
   running: boolean;
-  /** The run is a parked suggestion or a held card's decision: it needs the user, so it outranks a running session. */
+  /** The run is a parked suggestion or a held card's decision: it needs the user, so it lights up once nothing is running. */
   waiting: boolean;
   session?: CardAction;
   retry?: CardAction;
   run?: CardAction;
 }): CardAction[] {
-  // A running session owns the branch, so no rival run beside it; a waiting suggestion is still the user's to release.
-  const nextRun = running && !waiting ? undefined : run;
-  const main = retry ?? nextRun ?? session;
+  // A running session owns the branch, so no retry, rival run, or parked suggestion can start beside it.
+  const nextRetry = running ? undefined : retry;
+  const nextRun = running ? undefined : run;
+  const main = nextRetry ?? nextRun ?? session;
   if (main === undefined) return [];
   const rest = [session, nextRun].filter(action => action !== undefined).filter(action => action !== main);
-  const urgent = (action: CardAction) => action === retry || (waiting && action === run);
+  const urgent = (action: CardAction) => action === nextRetry || (waiting && action === nextRun);
   return [main, ...rest].map(action => ({ ...action, urgent: urgent(action) }));
 }
