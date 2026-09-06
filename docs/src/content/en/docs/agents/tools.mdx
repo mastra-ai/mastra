@@ -584,9 +584,9 @@ The tool takes a single `url` input and returns `content`, `truncated`, `status`
 - Only `http:` and `https:` URLs are allowed.
 - Requests to `localhost` and to private or reserved IP addresses are blocked, including addresses returned by DNS resolution.
 - Responses are truncated at 100,000 characters, with `truncated: true` in the result.
-- Requests follow at most 5 redirects and time out after 15 seconds.
+- Requests follow at most 5 redirects. One 15-second deadline covers DNS resolution, redirects, and reading the response body.
 
-Failures don't throw. The tool returns `isError: true` with the reason in `content`, so the agent can retry or explain the problem.
+Fetch failures, including the deadline, return `isError: true` with the reason in `content`, so the agent can retry or explain the problem. Explicit cancellation through the tool execution context's `abortSignal` stops the request and rejects with the signal's reason.
 
 ### Ask the user a question
 
