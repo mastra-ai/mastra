@@ -26,6 +26,13 @@ function snapshotStatus(snapshot: string | WorkflowRunState | null | undefined) 
   return (typeof snapshot === 'string' ? (JSON.parse(snapshot) as WorkflowRunState) : snapshot)?.status;
 }
 
+// DurableAgent intentionally narrows the base stream/generate signatures.
+// The controller accepts the native base class; keep the same checked object.
+function requireNativeAgent(agent: unknown) {
+  if (!(agent instanceof Agent)) throw new TypeError('Expected a native Agent');
+  return agent;
+}
+
 it.each([
   'same-mode',
   'switched-mode',
@@ -106,8 +113,8 @@ it.each([
       workspace,
       initialState: { yolo: true },
       modes: [
-        { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: planAgent },
-        { id: 'build', name: 'Build', agent: scenario === 'shared-agent' ? planAgent : buildAgent },
+        { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: requireNativeAgent(planAgent) },
+        { id: 'build', name: 'Build', agent: requireNativeAgent(scenario === 'shared-agent' ? planAgent : buildAgent) },
       ],
     });
     const mastra = new Mastra({
