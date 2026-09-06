@@ -1,9 +1,9 @@
 ---
-title: "Durable agents | Long-running agents"
-description: "Wrap Mastra agents in durable execution so streams and long-running turns survive client disconnects and process restarts across supported runtimes."
+title: 'Durable agents | Long-running agents'
+description: 'Wrap Mastra agents in durable execution so streams and long-running turns survive client disconnects and process restarts across supported runtimes.'
 packages:
-  - "@mastra/core"
-  - "@mastra/inngest"
+  - '@mastra/core'
+  - '@mastra/inngest'
 ---
 
 # Durable agents
@@ -196,6 +196,17 @@ export const durableAgent = createDurableAgent({
 ```
 
 `createInngestAgent()` doesn't enable caching by default. Pass a `cache` option or register the agent with a `Mastra` instance that has a `serverCache` configured to enable resumable streams.
+
+Every published event is recorded in the cache before it's delivered live, so publish latency is bounded by the round-trip to the cache. `@mastra/redis` and `@mastra/valkey` record each event in a single round-trip. If the cache is remote (for example, in another region) and you don't need to resume a topic, use `shouldCache` to publish that topic straight through:
+
+```typescript title="src/mastra/agents/durable-hot-topics.ts" {5}
+export const durableAgent = createDurableAgent({
+  agent,
+  cache,
+  // Skip the replay cache for the per-chunk stream topic; other topics stay resumable.
+  shouldCache: topic => !topic.startsWith('agent.stream.'),
+})
+```
 
 ## Streaming with background tasks
 

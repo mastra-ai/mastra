@@ -534,6 +534,8 @@ export type AgentDurableOption =
       maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). */
       cleanupTimeoutMs?: number;
+      /** See createDurableAgent options: per-topic opt-out of the replay cache. */
+      shouldCache?: (topic: string) => boolean;
       /** Optional id override (defaults to agent.id). */
       id?: string;
       /** Optional name override (defaults to agent.name). */
