@@ -15,7 +15,8 @@ import type {
   SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { isDurableAgentLike } from '../agent/types';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -1150,8 +1151,8 @@ export class SessionSuspensions {
    * Drop all parked suspensions (e.g. on abort or thread switch), returning the
    * dropped entries so callers can retract the corresponding prompts.
    */
-  clear(): Array<{ toolCallId: string; toolName: string }> {
-    const dropped = [...this.#pending].map(([toolCallId, { toolName }]) => ({ toolCallId, toolName }));
+  clear(): Array<{ toolCallId: string; toolName: string; runId: string }> {
+    const dropped = [...this.#pending].map(([toolCallId, { toolName, runId }]) => ({ toolCallId, toolName, runId }));
     this.#pending.clear();
     return dropped;
   }
@@ -1450,6 +1451,11 @@ export class SessionRun {
   /** Bump and return the operation counter at the start of a new operation. */
   nextOperation(): number {
     this.#operationId += 1;
+    return this.#operationId;
+  }
+
+  /** Current operation identity for async work tied to a user command. */
+  getOperationId(): number {
     return this.#operationId;
   }
 
@@ -3137,12 +3143,44 @@ export class Session<TState = unknown> {
     // `tool_approval_required` subscribers each calling abort() is enough.
     if (this.run.isAbortRequested()) return;
 
+    const localRunId = this.getCurrentRunId();
+    const threadId = this.thread.getId();
+    const operationId = this.run.getOperationId();
+    if (!localRunId && threadId && !this.suspensions.hasPending()) {
+      const agent = this.machinery.getAgent();
+      // A restored Session has no live run identity. Use the same scoped native
+      // discovery as cold resume, bounded to runs that existed when Stop arrived.
+      const scope = { threadId, resourceId: this.identity.getResourceId(), toDate: new Date() };
+      void Promise.all([
+        agent.listSuspendedRuns(scope),
+        isDurableAgentLike(agent) ? agent.listActiveRuns(scope) : Promise.resolve({ runs: [] }),
+      ])
+        .then(results => {
+          if (
+            this.thread.getId() !== threadId ||
+            this.run.getOperationId() !== operationId ||
+            !this.run.isAbortRequested()
+          )
+            return;
+          const runIds = new Set(results.flatMap(result => result.runs.map(run => run.runId)));
+          for (const runId of runIds) agent.abortRunStream(runId);
+        })
+        .catch(error => {
+          if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+            this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+          }
+        });
+    }
+
     // Retract the prompts for every parked suspension. Dropping them silently
     // left the UI rendering `ask_user` / `request_access` prompts whose answers
     // could never land, since the run they belong to is gone.
-    for (const { toolCallId, toolName } of this.suspensions.clear()) {
+    const parkedRuns = new Set<string>();
+    for (const { toolCallId, toolName, runId } of this.suspensions.clear()) {
+      parkedRuns.add(runId);
       this.emit({ type: 'tool_suspension_cancelled', toolCallId, toolName, reason: ABORTED_BY_USER_REASON });
     }
+    for (const runId of parkedRuns) this.machinery.getAgent().abortRunStream(runId);
 
     // A parked approval gate is special: the agent-side run is still alive and
     // waiting for the decision, so the gated call must be declined through it
@@ -3157,6 +3195,8 @@ export class Session<TState = unknown> {
       return;
     }
 
+    if (!localRunId && threadId && parkedRuns.size === 0)
+      this.machinery.getAgent().abortThreadStream({ threadId, resourceId: this.identity.getResourceId() });
     this.stream.abort();
     this.run.requestAbort();
   }

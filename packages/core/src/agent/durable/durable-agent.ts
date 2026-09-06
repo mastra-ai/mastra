@@ -16,6 +16,7 @@ import type { ChunkType, MastraOnFinishCallback, MastraStreamTransformOptions } 
 import { ChunkFrom } from '../../stream/types';
 import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import { Workflow } from '../../workflows/workflow';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
@@ -1748,6 +1749,75 @@ export class DurableAgent<
     // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
     // abort synchronously and a failed publish is logged, not thrown.
     void this.requestRemoteAbort(runId);
+    void this.cancelStoredRun(runId).catch(async error => {
+      try {
+        await this.emitError(runId, error);
+      } catch (publishError) {
+        this.#mastra?.getLogger()?.error('Failed to report durable cancellation error', { runId, error, publishError });
+      }
+    });
+  }
+
+  /** Close stored work after execution stops; no model is resumed. */
+  private async cancelStoredRun(runId: string): Promise<void> {
+    const entry = this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId);
+    // Execution reports its own failure. A rejected executor must not prevent
+    // cancellation from closing the exact stored run it was executing.
+    await entry?.workflowExecution?.catch(() => {});
+    const store = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await store?.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+    if (
+      !snapshot ||
+      !['suspended', 'running', 'waiting', 'pending'].includes(snapshot.status) ||
+      snapshot.context?.input?.agentId !== this.id
+    )
+      return;
+    const resourceId = snapshot.context.input.messageListState?.memoryInfo?.resourceId;
+
+    const execution = await store?.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_EXECUTION, runId });
+    const toolStep = execution?.context?.[DurableStepIds.TOOL_CALL];
+    const suspendedTools = toolStep?.suspendPayload?.__workflow_meta?.foreachOutput ?? [toolStep];
+    const requestContext = entry?.requestContext ?? new RequestContext(Object.entries(snapshot.requestContext ?? {}));
+    const workflows = await this.listWorkflows({ requestContext });
+    for (const tool of suspendedTools) {
+      const payload = tool?.suspendPayload;
+      const delegatedRunId = payload?.suspendedToolRunId;
+      const toolName = payload?.toolName;
+      if (
+        tool?.status !== 'suspended' ||
+        typeof delegatedRunId !== 'string' ||
+        delegatedRunId === runId ||
+        typeof toolName !== 'string' ||
+        !toolName.startsWith('workflow-')
+      )
+        continue;
+      const child = workflows[toolName.slice('workflow-'.length)];
+      if (!child) throw new Error('Cannot cancel a delegated workflow that is no longer registered');
+      const childRecord = await store?.getWorkflowRunById({ workflowName: child.id, runId: delegatedRunId });
+      const childSnapshot = await store?.loadWorkflowSnapshot({ workflowName: child.id, runId: delegatedRunId });
+      if (
+        !childRecord ||
+        !childSnapshot ||
+        !['suspended', 'running', 'waiting', 'pending'].includes(childSnapshot.status)
+      )
+        continue;
+      if ((childRecord.resourceId ?? undefined) !== (resourceId ?? undefined)) {
+        throw new Error('Cannot cancel a delegated workflow whose resource does not match its parent');
+      }
+      const childRun = await child.createRun({ runId: delegatedRunId, resourceId });
+      await childRun.cancel();
+    }
+    const workflow = this.getWorkflow();
+    const nested = workflow.steps[DurableStepIds.AGENTIC_EXECUTION];
+    if (nested instanceof Workflow) {
+      // A restored agent has not executed this nested workflow yet, so bind
+      // the same native storage authority without starting its steps.
+      if (this.#mastra) nested.__registerMastra(this.#mastra);
+      const executionRun = await nested.createRun({ runId, resourceId });
+      await executionRun.cancel();
+    }
+    const run = await workflow.createRun({ runId, resourceId });
+    await run.cancel();
   }
 
   /**

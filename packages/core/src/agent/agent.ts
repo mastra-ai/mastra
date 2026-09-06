@@ -5942,7 +5942,11 @@ export class Agent<
           execute: async (inputData, context) => {
             const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
+            const abortSignal = context?.abortSignal;
+            let removeAbortListener: (() => void) | undefined;
+            let cancellation: Promise<void> | undefined;
             try {
+              abortSignal?.throwIfAborted();
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
               // Use a unique runId for each workflow tool call to prevent parallel calls
               // from sharing the same cached Run instance (see #13473).
@@ -5961,6 +5965,17 @@ export class Agent<
               });
 
               const run = await workflow.createRun({ runId: runIdToUse, resourceId });
+              const cancelRun = () => {
+                cancellation ??= run.cancel();
+                // Observe immediately; finally awaits and propagates a failed cancellation.
+                void cancellation.catch(() => {});
+              };
+              abortSignal?.addEventListener('abort', cancelRun, { once: true });
+              removeAbortListener = () => abortSignal?.removeEventListener('abort', cancelRun);
+              if (abortSignal?.aborted) {
+                await run.cancel();
+                abortSignal.throwIfAborted();
+              }
               const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
@@ -6080,6 +6095,8 @@ export class Agent<
                 requestContext.set('MastraMemory', savedMastraMemory);
               }
 
+              abortSignal?.throwIfAborted();
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
@@ -6097,6 +6114,9 @@ export class Agent<
               );
               this.logger.trackException(mastraError);
               throw mastraError;
+            } finally {
+              removeAbortListener?.();
+              await cancellation;
             }
           },
         });

@@ -2834,9 +2834,11 @@ export class Workflow<
     const nestedAbortCb = () => {
       abort();
     };
-    const parentAbortCb = async () => {
+    let parentCancellation: Promise<void> | undefined;
+    const parentAbortCb = () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
-      await run.cancel();
+      parentCancellation ??= run.cancel();
+      void parentCancellation.catch(() => {});
     };
     run.abortController.signal.addEventListener('abort', nestedAbortCb);
     abortSignal.addEventListener('abort', parentAbortCb);
@@ -2903,6 +2905,7 @@ export class Workflow<
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
       abortSignal.removeEventListener('abort', parentAbortCb);
       unwatch();
+      await parentCancellation;
     }
 
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
@@ -3452,29 +3455,27 @@ export class Run<
    * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
-    // Abort any running execution and update in-memory status
-    this.abortController.abort();
-    this.workflowRunStatus = 'canceled';
+    if (['success', 'failed', 'canceled'].includes(this.workflowRunStatus)) return;
 
-    // End the whole span tree now: a step that ignores abortSignal keeps running, so the
-    // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    // Deliver cancellation immediately, even if persisting it later fails.
+    this.abortController.abort();
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
-    try {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      await workflowsStore?.updateWorkflowState({
-        workflowName: this.workflowId,
-        runId: this.runId,
-        opts: {
-          status: 'canceled',
-        },
-      });
-    } catch {
-      // Storage errors should not prevent cancellation from succeeding
-      // The abort signal and in-memory status are already updated
-    }
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const canceled = await workflowsStore?.updateWorkflowState({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      opts: {
+        status: 'canceled',
+        expectedStatus: ['pending', 'running', 'waiting', 'suspended'],
+      },
+    });
+    // A concurrent completion or prior cancellation wins the storage condition.
+    // Do not relabel its in-memory status or completed span as canceled.
+    if (workflowsStore && !canceled) return;
+    this.workflowRunStatus = 'canceled';
+    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
