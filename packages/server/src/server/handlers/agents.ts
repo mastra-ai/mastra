@@ -29,6 +29,7 @@ import { z } from 'zod/v4';
 import {
   MASTRA_IS_STUDIO_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
   WORKSPACE_TOOLS,
   isReservedRequestContextKey,
   resolveToolConfig,
@@ -55,6 +56,8 @@ import {
   sendToolApprovalResponseSchema,
   listSuspendedRunsQuerySchema,
   listSuspendedRunsResponseSchema,
+  listAgentRunsQuerySchema,
+  listAgentRunsResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -86,6 +89,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { hasAdminBypass } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -2600,6 +2604,129 @@ async function validateSubscriptionToolCallThreadAccess({
   return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
 }
 
+async function validateRunListThreadAccess({
+  mastra,
+  agent,
+  requestContext,
+  threadId,
+  effectiveResourceId,
+}: {
+  mastra: Context['mastra'];
+  agent: Agent;
+  requestContext: RequestContext;
+  threadId?: string;
+  effectiveResourceId?: string;
+}): Promise<void> {
+  if (!threadId) return;
+
+  // A thread-scoped listing can expose tool arguments and suspend payloads, so
+  // reject it whenever ownership cannot be verified.
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) {
+    throw new HTTPException(403, {
+      message: 'Access denied: agent has no memory configured to validate thread ownership',
+    });
+  }
+
+  const thread = await memory.getThreadById({ threadId });
+  if (!thread) {
+    throw new HTTPException(403, { message: 'Access denied: thread not found' });
+  }
+
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId,
+    thread,
+    effectiveResourceId,
+  });
+}
+
+function resolveRunListResourceScope(
+  mastra: Context['mastra'],
+  requestContext: RequestContext,
+  clientResourceId?: string,
+): string | undefined {
+  const isAuthenticated = Boolean(requestContext.get(MASTRA_USER_KEY));
+  if (mastra.getServer()?.auth && !isAuthenticated) {
+    throw new HTTPException(403, { message: 'Access denied: listing runs requires an authenticated user' });
+  }
+
+  // Admin permission bypasses resource scoping, not thread-level FGA.
+  if (isAuthenticated && hasAdminBypass(requestContext, 'agents')) return clientResourceId;
+
+  const contextResourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+  if (typeof contextResourceId === 'string' && contextResourceId.length > 0) return contextResourceId;
+  if (!isAuthenticated) return clientResourceId;
+
+  throw new HTTPException(403, {
+    message:
+      'Access denied: listing runs requires a resource scope. Configure mapUserToResourceId in server auth or grant an agents admin permission.',
+  });
+}
+
+async function filterRunListThreadAccess<T extends { threadId?: string }>({
+  mastra,
+  agent,
+  requestContext,
+  result,
+  effectiveResourceId,
+  page,
+  perPage,
+}: {
+  mastra: Context['mastra'];
+  agent: Agent;
+  requestContext: RequestContext;
+  result: { runs: T[]; total: number };
+  effectiveResourceId?: string;
+  page?: number;
+  perPage?: number;
+}): Promise<{ runs: T[]; total: number }> {
+  const fga = mastra.getServer()?.fga;
+  if (!fga) return result;
+  const user = requestContext.get(MASTRA_USER_KEY);
+  if (!user || typeof user !== 'object') {
+    throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user is required' });
+  }
+
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) return { runs: [], total: 0 };
+
+  const allowedThreads = new Set<string>();
+  for (const threadId of new Set(result.runs.map(run => run.threadId))) {
+    if (!threadId) continue;
+    const thread = await memory.getThreadById({ threadId });
+    if (!thread || (effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId)) continue;
+    // Match enforceThreadAccess's permission and context, without converting a
+    // normal denial into an error for the entire list. Provider failures propagate.
+    const resourceId = thread.resourceId ?? effectiveResourceId;
+    if (
+      await fga.check(user, {
+        resource: { type: 'thread', id: threadId },
+        permission: MastraFGAPermissions.MEMORY_READ,
+        context: { resourceId, requestContext, metadata: { threadId, resourceId } },
+      })
+    ) {
+      allowedThreads.add(threadId);
+    }
+  }
+
+  const runs = result.runs.filter(run => run.threadId && allowedThreads.has(run.threadId));
+  return {
+    runs: perPage !== undefined && page !== undefined ? runs.slice(page * perPage, (page + 1) * perPage) : runs,
+    total: runs.length,
+  };
+}
+
+function extractRunListVersionOptions(
+  query: { agentVersionId?: string; agentVersionStatus?: 'draft' | 'published' },
+  requestContext: RequestContext,
+): { versionId: string } | { status: 'draft' | 'published' } | undefined {
+  if (query.agentVersionId) return { versionId: query.agentVersionId };
+  if (query.agentVersionStatus) return { status: query.agentVersionStatus };
+  return extractVersionOptions(requestContext);
+}
+
 export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/send-tool-approval',
@@ -2655,6 +2782,65 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   },
 });
 
+export const LIST_AGENT_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/runs',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: listAgentRunsQuerySchema,
+  responseSchema: listAgentRunsResponseSchema,
+  summary: 'List agent runs',
+  description: 'Lists the current running and suspended runs for an agent. Terminal run history is not included.',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: 'agents:read',
+  handler: async ({ mastra, agentId, requestContext, ...query }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractRunListVersionOptions(query, requestContext),
+        requestContext,
+      });
+
+      const effectiveResourceId = resolveRunListResourceScope(mastra, requestContext, query.resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
+
+      await validateRunListThreadAccess({
+        mastra,
+        agent,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+      });
+
+      const filterThreads = !!mastra.getServer()?.fga && !effectiveThreadId;
+      const result = await agent.listRuns({
+        status: query.status,
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        perPage: filterThreads ? undefined : query.perPage,
+        page: filterThreads ? undefined : query.page,
+      });
+      return filterThreads
+        ? await filterRunListThreadAccess({
+            mastra,
+            agent,
+            requestContext,
+            result,
+            effectiveResourceId,
+            page: query.page,
+            perPage: query.perPage,
+          })
+        : result;
+    } catch (error) {
+      return handleError(error, 'error listing agent runs');
+    }
+  },
+});
+
 export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
   method: 'GET',
   path: '/agents/:agentId/suspended-runs',
@@ -2667,52 +2853,47 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
     'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  requiresPermission: 'agents:read',
   handler: async ({ mastra, agentId, requestContext, ...query }) => {
     try {
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
-        versionOptions: extractVersionOptions(requestContext),
+        versionOptions: extractRunListVersionOptions(query, requestContext),
+        requestContext,
       });
 
-      // Honor server-enforced thread/resource scoping from the request context
-      // so clients cannot list suspended runs outside their own scope.
-      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveResourceId = resolveRunListResourceScope(mastra, requestContext, query.resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
-      // Validate ownership/FGA before honoring a thread filter — without this a
-      // caller could probe another user's suspended approvals (including
-      // tool-call args) by guessing a threadId. Reject when ownership cannot be
-      // verified (no memory configured, or the thread does not exist) so a
-      // thread-scoped query is never honored unchecked.
-      if (effectiveThreadId) {
-        const memory = await agent.getMemory({ requestContext });
-        if (!memory) {
-          throw new HTTPException(403, {
-            message: 'Access denied: agent has no memory configured to validate thread ownership',
-          });
-        }
-        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-        if (!thread) {
-          throw new HTTPException(403, { message: 'Access denied: thread not found' });
-        }
-        await enforceThreadAccess({
-          mastra,
-          requestContext,
-          threadId: effectiveThreadId,
-          thread,
-          effectiveResourceId,
-        });
-      }
+      await validateRunListThreadAccess({
+        mastra,
+        agent,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+      });
 
-      return await agent.listSuspendedRuns({
+      const filterThreads = !!mastra.getServer()?.fga && !effectiveThreadId;
+      const result = await agent.listSuspendedRuns({
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,
         fromDate: query.fromDate,
         toDate: query.toDate,
-        perPage: query.perPage,
-        page: query.page,
+        perPage: filterThreads ? undefined : query.perPage,
+        page: filterThreads ? undefined : query.page,
       });
+      return filterThreads
+        ? await filterRunListThreadAccess({
+            mastra,
+            agent,
+            requestContext,
+            result,
+            effectiveResourceId,
+            page: query.page,
+            perPage: query.perPage,
+          })
+        : result;
     } catch (error) {
       return handleError(error, 'error listing suspended runs');
     }

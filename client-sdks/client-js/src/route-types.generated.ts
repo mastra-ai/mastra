@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_589 =
+type Shared_Auxiliary_594 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,32 +52,32 @@ type Shared_Auxiliary_589 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_589[];
+      args: Shared_Auxiliary_594[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_589;
+      arg: Shared_Auxiliary_594;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_612;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_612;
           };
     };
 
-type Shared_Auxiliary_607 =
+type Shared_Auxiliary_612 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -112,14 +112,14 @@ type Shared_Auxiliary_607 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_607[];
+      args: Shared_Auxiliary_612[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_607;
+      arg: Shared_Auxiliary_612;
     };
 
-type Shared_Auxiliary_1138 =
+type Shared_Auxiliary_1143 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +164,19 @@ type Shared_Auxiliary_1138 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1138[];
+      args: Shared_Auxiliary_1143[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1138;
+      arg: Shared_Auxiliary_1143;
     };
 
-type Shared_Auxiliary_1278 = {
+type Shared_Auxiliary_1283 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1278[] | undefined;
+  children?: Shared_Auxiliary_1283[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2684,7 +2684,7 @@ type Shared_Type_113 = {
       }
     | undefined;
   steps: Shared_Type_108;
-  predicates: Shared_Auxiliary_1138[];
+  predicates: Shared_Auxiliary_1143[];
 };
 
 type Shared_Type_114 = {
@@ -2707,7 +2707,7 @@ type Shared_Type_114 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1138;
+  predicate: Shared_Auxiliary_1143;
 };
 
 type Shared_Type_115 =
@@ -3061,7 +3061,7 @@ type Shared_Type_128 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1278[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4503,11 +4503,77 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agents/:agentId/runs
+// ============================================================================
+export type GetAgentsAgentIdRuns_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdRuns_QueryParams = {
+  status?: ('running' | 'suspended') | undefined;
+  agentVersionId?: string | undefined;
+  agentVersionStatus?: ('draft' | 'published') | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  fromDate?: Date | undefined;
+  toDate?: Date | undefined;
+  perPage?: number | undefined;
+  page?: number | undefined;
+};
+
+export type GetAgentsAgentIdRuns_Response = {
+  runs: (
+    | {
+        runId: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        updatedAt: Date;
+        status: 'running';
+      }
+    | {
+        runId: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        updatedAt: Date;
+        status: 'suspended';
+        suspendedAt: Date;
+        toolCalls: {
+          toolCallId?: string | undefined;
+          toolName?: string | undefined;
+          args?: unknown | undefined;
+          requiresApproval: boolean;
+          suspendPayload?: unknown | undefined;
+        }[];
+      }
+  )[];
+  total: number;
+};
+
+export type GetAgentsAgentIdRuns_Request = Simplify<
+  (GetAgentsAgentIdRuns_PathParams extends never ? {} : { params: GetAgentsAgentIdRuns_PathParams }) &
+    (GetAgentsAgentIdRuns_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdRuns_QueryParams
+        ? { query?: GetAgentsAgentIdRuns_QueryParams }
+        : { query: GetAgentsAgentIdRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdRuns_RouteContract {
+  pathParams: GetAgentsAgentIdRuns_PathParams;
+  queryParams: GetAgentsAgentIdRuns_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdRuns_Request;
+  response: GetAgentsAgentIdRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /agents/:agentId/suspended-runs
 // ============================================================================
 export type GetAgentsAgentIdSuspendedRuns_PathParams = GetAgentsAgentId_PathParams;
 
 export type GetAgentsAgentIdSuspendedRuns_QueryParams = {
+  agentVersionId?: string | undefined;
+  agentVersionStatus?: ('draft' | 'published') | undefined;
   threadId?: string | undefined;
   resourceId?: string | undefined;
   fromDate?: Date | undefined;
@@ -9182,7 +9248,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_589 | undefined;
+  where?: Shared_Auxiliary_594 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16731,7 +16797,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1278[] | undefined;
+  files?: Shared_Auxiliary_1283[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16789,7 +16855,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1278[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1283[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -21990,6 +22056,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/send-tool-approval': PostAgentsAgentIdSendToolApproval_RouteContract;
+  'GET /agents/:agentId/runs': GetAgentsAgentIdRuns_RouteContract;
   'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
@@ -22612,6 +22679,9 @@ export interface Client {
   };
   '/agents/:agentId/resume-stream-until-idle': {
     POST: PostAgentsAgentIdResumeStreamUntilIdle_RouteContract;
+  };
+  '/agents/:agentId/runs': {
+    GET: GetAgentsAgentIdRuns_RouteContract;
   };
   '/agents/:agentId/send-message': {
     POST: PostAgentsAgentIdSendMessage_RouteContract;

@@ -568,6 +568,8 @@ export const sendToolApprovalResponseSchema = z.object({
  */
 export const listSuspendedRunsQuerySchema = z
   .object({
+    agentVersionId: z.string().optional(),
+    agentVersionStatus: z.enum(['draft', 'published']).optional(),
     threadId: z.string().optional(),
     resourceId: z.string().optional(),
     fromDate: z.coerce.date().optional(),
@@ -575,6 +577,10 @@ export const listSuspendedRunsQuerySchema = z
     perPage: z.coerce.number().int().positive().optional(),
     // page is zero-indexed, so 0 is valid
     page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.agentVersionId || !data.agentVersionStatus, {
+    message: 'agentVersionId and agentVersionStatus are mutually exclusive',
+    path: ['agentVersionId'],
   })
   .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
     message: 'fromDate must be less than or equal to toDate',
@@ -602,6 +608,58 @@ export const listSuspendedRunsResponseSchema = z.object({
         }),
       ),
     }),
+  ),
+  total: z.number().int().nonnegative(),
+});
+
+/** Query schema for listing current running and suspended agent runs. */
+export const listAgentRunsQuerySchema = z
+  .object({
+    status: z.enum(['running', 'suspended']).optional(),
+    agentVersionId: z.string().optional(),
+    agentVersionStatus: z.enum(['draft', 'published']).optional(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+    perPage: z.coerce.number().int().positive().optional(),
+    page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.agentVersionId || !data.agentVersionStatus, {
+    message: 'agentVersionId and agentVersionStatus are mutually exclusive',
+    path: ['agentVersionId'],
+  })
+  .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
+    message: 'fromDate must be less than or equal to toDate',
+    path: ['fromDate'],
+  });
+
+const agentRunToolCallSchema = z.object({
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  args: z.unknown().optional(),
+  requiresApproval: z.boolean(),
+  suspendPayload: z.unknown().optional(),
+});
+
+const listedAgentRunCommonSchema = z.object({
+  runId: z.string(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  updatedAt: z.date(),
+});
+
+/** Response schema for listing current running and suspended agent runs. */
+export const listAgentRunsResponseSchema = z.object({
+  runs: z.array(
+    z.discriminatedUnion('status', [
+      listedAgentRunCommonSchema.extend({ status: z.literal('running') }),
+      listedAgentRunCommonSchema.extend({
+        status: z.literal('suspended'),
+        suspendedAt: z.date(),
+        toolCalls: z.array(agentRunToolCallSchema),
+      }),
+    ]),
   ),
   total: z.number().int().nonnegative(),
 });
