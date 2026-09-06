@@ -129,6 +129,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     try {
       await pubsub.subscribe('workflows-finish', finishCb);
     } catch (err) {
+      releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
     }
