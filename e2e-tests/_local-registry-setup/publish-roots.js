@@ -12,6 +12,7 @@ const SHARED_REGISTRY_SUITES = {
   monorepo: {
     tag: 'monorepo-test',
     manifestGlobs: ['e2e-tests/monorepo/template/**/package.json'],
+    extraRoots: ['@mastra/libsql'],
   },
   'no-bundling': {
     tag: 'no-bundling-test',

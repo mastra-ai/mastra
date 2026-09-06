@@ -308,7 +308,9 @@ export async function executeEntry(
       executionContext.stepExecutionPath?.push(stepId);
     }
     const stepPrevOutput = getResumeStepPrevOutput({
-      isResumedStep,
+      // A restart must also use the active step's saved input: earlier outputs
+      // may have been pruned after this payload was persisted.
+      isResumedStep: isResumedStep || !!restart?.activeStepsPath?.[stepId],
       stepId,
       stepResults,
       prevOutput,

@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['monorepo.test.ts'],
+    include: ['monorepo.test.ts', 'native-recovery-lifecycle.test.ts'],
     globalSetup: './setup.ts',
   },
 });

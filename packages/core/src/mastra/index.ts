@@ -724,6 +724,8 @@ export class Mastra<
   #storageExplicit = false;
   #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
+  #durableAgentRecoveries = new Set<Promise<unknown>>();
+  #shutdownStarted = false;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -3822,6 +3824,11 @@ export class Mastra<
     return this.#recoveryConfig;
   }
 
+  /** Whether shutdown has closed admission for new durable-agent recovery. */
+  get isShuttingDown(): boolean {
+    return this.#shutdownStarted;
+  }
+
   /**
    * Re-drive every orphaned RUNNING durable-agent run across every registered
    * `DurableAgent`. Delegates to `DurableAgent.recoverActiveRuns()` on each
@@ -3839,6 +3846,29 @@ export class Mastra<
    * counts.
    */
   public async recoverAllDurableAgents(): Promise<{
+    agents: number;
+    recovered: number;
+    succeeded: number;
+    failed: number;
+  }> {
+    if (this.#shutdownStarted) {
+      throw new MastraError({
+        id: 'MASTRA_DURABLE_RECOVERY_SHUTDOWN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Cannot recover durable agents after Mastra shutdown has started.',
+      });
+    }
+    const recovery = this.#recoverAllDurableAgents();
+    this.#durableAgentRecoveries.add(recovery);
+    try {
+      return await recovery;
+    } finally {
+      this.#durableAgentRecoveries.delete(recovery);
+    }
+  }
+
+  async #recoverAllDurableAgents(): Promise<{
     agents: number;
     recovered: number;
     succeeded: number;
@@ -3869,6 +3899,7 @@ export class Mastra<
     let failed = 0;
 
     for (const agent of durableAgents) {
+      if (this.#shutdownStarted) break;
       try {
         const result = await agent.recoverActiveRuns();
         recovered += result.recovered.length;
@@ -6656,6 +6687,7 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    this.#shutdownStarted = true;
     // The scorer hook lives on a process-global emitter. Release it before any
     // awaited teardown so even a later cleanup failure cannot retain this
     // Mastra instance and its full component graph.
@@ -6671,6 +6703,10 @@ export class Mastra<
 
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    // Discovery can still be reading storage before a run enters the registry.
+    // Admission is closed; keep storage open until these reads settle.
+    await Promise.allSettled(this.#durableAgentRecoveries);
 
     // Durable workflows may still be persisting their next terminal or suspended
     // snapshot. Keep storage and other shared resources alive until they settle.
