@@ -314,9 +314,15 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param uri The resource URI to read (e.g. `ui://weather/dashboard`).
    * @returns A promise resolving to the resource content.
    */
-  public abstract readResource(
-    uri: string,
-  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }>;
+  public abstract readResource(uri: string): Promise<{
+    contents: Array<{
+      uri: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+      text?: string;
+      blob?: string;
+    }>;
+  }>;
 
   /**
    * Lists all resources available on this MCP server.
