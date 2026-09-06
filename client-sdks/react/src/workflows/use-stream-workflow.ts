@@ -1,8 +1,6 @@
-import type { StreamVNextChunkType } from '@mastra/client-js';
+import type { StreamVNextChunkType } from '@mastra/client-js/workflows';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { mapWorkflowStreamChunkToWatchResult } from '../lib/mastra-db';
 import { useMutation } from '../lib/use-mutation';
-import { useMastraClient } from '../mastra-client-context';
 import type {
   UseStreamWorkflowParams,
   WorkflowStreamResult,
@@ -11,6 +9,8 @@ import type {
   ResumeWorkflowStreamParams,
   TimeTravelWorkflowStreamParams,
 } from './types';
+import { useWorkflowClient } from './workflow-client-context';
+import { mapWorkflowStreamChunkToWatchResult } from './workflow-stream-reducer';
 
 /**
  * Hook for streaming workflow execution with support for observing, resuming, and time-travel.
@@ -41,7 +41,7 @@ import type {
  * ```
  */
 export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStreamWorkflowParams) {
-  const client = useMastraClient();
+  const client = useWorkflowClient();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);

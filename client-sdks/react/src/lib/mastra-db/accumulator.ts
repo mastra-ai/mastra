@@ -7,8 +7,9 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import type { WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
+import { mapWorkflowStreamChunkToWatchResult } from '../../workflows/workflow-stream-reducer';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
@@ -35,13 +36,6 @@ import type {
 // in this file is a deliberate storage-boundary cast for one of the above
 // extensions, not an accident. Downstream consumers (`toAISdkV5Messages`,
 // playground `to-assistant-ui-message`) read the V5 fields directly.
-
-type StreamChunk = {
-  type: string;
-  payload: any;
-  runId: string;
-  from: 'AGENT' | 'WORKFLOW';
-};
 
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
@@ -227,99 +221,6 @@ const mergeBgTaskMetadata = (
   };
   if (args.resetRunningCount) merged.runningBackgroundTasksCount = undefined;
   return merged;
-};
-
-/**
- * Workflow chunk accumulation. Mirrors
- * `mapWorkflowStreamChunkToWatchResult` from the previous accumulator.
- */
-export const mapWorkflowStreamChunkToWatchResult = (
-  prev: WorkflowStreamResult<any, any, any, any>,
-  chunk: StreamChunk,
-): WorkflowStreamResult<any, any, any, any> => {
-  if (chunk.type === 'workflow-start') {
-    return {
-      input: prev?.input,
-      status: 'running',
-      steps: prev?.steps || {},
-    };
-  }
-
-  if (chunk.type === 'workflow-canceled') {
-    return { ...prev, status: 'canceled' };
-  }
-
-  if (chunk.type === 'workflow-finish') {
-    const finalStatus = chunk.payload.workflowStatus;
-    const prevSteps = prev?.steps ?? {};
-    const lastStep = Object.values(prevSteps).pop();
-    return {
-      ...prev,
-      status: chunk.payload.workflowStatus,
-      ...(finalStatus === 'success' && lastStep?.status === 'success'
-        ? { result: lastStep?.output }
-        : finalStatus === 'failed' && lastStep?.status === 'failed'
-          ? { error: lastStep?.error }
-          : finalStatus === 'tripwire' && chunk.payload.tripwire
-            ? { tripwire: chunk.payload.tripwire }
-            : {}),
-    };
-  }
-
-  const { stepCallId: _stepCallId, stepName: _stepName, ...newPayload } = chunk.payload ?? {};
-  const newSteps = {
-    ...prev?.steps,
-    [chunk.payload.id]: {
-      ...prev?.steps?.[chunk.payload.id],
-      ...newPayload,
-    },
-  };
-
-  if (chunk.type === 'workflow-step-start') return { ...prev, steps: newSteps };
-
-  if (chunk.type === 'workflow-step-suspended') {
-    const suspendedStepIds = Object.entries(newSteps as Record<string, StepResult<any, any, any, any>>).flatMap(
-      ([stepId, stepResult]) => {
-        if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
-          return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
-        }
-        return [];
-      },
-    );
-    return {
-      ...prev,
-      status: 'suspended',
-      steps: newSteps,
-      suspendPayload: chunk.payload.suspendPayload,
-      suspended: suspendedStepIds as any,
-    };
-  }
-
-  if (chunk.type === 'workflow-step-waiting') return { ...prev, status: 'waiting', steps: newSteps };
-
-  if (chunk.type === 'workflow-step-progress') {
-    return {
-      ...prev,
-      steps: {
-        ...prev?.steps,
-        [chunk.payload.id]: {
-          ...prev?.steps?.[chunk.payload.id],
-          foreachProgress: {
-            completedCount: chunk.payload.completedCount,
-            totalCount: chunk.payload.totalCount,
-            currentIndex: chunk.payload.currentIndex,
-            iterationStatus: chunk.payload.iterationStatus,
-            iterationOutput: chunk.payload.iterationOutput,
-          },
-        },
-      },
-    };
-  }
-
-  if (chunk.type === 'workflow-step-result') return { ...prev, steps: newSteps };
-
-  return prev;
 };
 
 const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessageMetadata): MastraDBMessage[] => {
