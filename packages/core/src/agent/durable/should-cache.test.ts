@@ -6,8 +6,9 @@
  */
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryServerCache } from '../../cache';
+import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Agent } from '../agent';
 import { createDurableAgent } from './create-durable-agent';
@@ -69,6 +70,27 @@ describe('DurableAgent shouldCache', () => {
     await durable.pubsub.publish('workflow.events.v2.run-1', { type: 'watch', data: {} });
 
     expect(await cache.listLength(cacheKeyFor('workflow.events.v2.run-1'))).toBe(0);
+  });
+
+  it('warns and is ignored when the inner pubsub is already a CachingPubSub', async () => {
+    const cache = new InMemoryServerCache();
+    const existing = new CachingPubSub(new EventEmitterPubSub(), cache);
+    const durable = createDurableAgent({
+      agent: makeAgent(),
+      pubsub: existing,
+      cache,
+      shouldCache: () => false,
+    });
+    const warn = vi.fn();
+    durable.__setLogger({ debug: vi.fn(), info: vi.fn(), warn, error: vi.fn(), trace: vi.fn() } as any);
+
+    // No double-wrapping: the existing instance is reused and its policy wins.
+    expect(durable.pubsub).toBe(existing);
+    await durable.pubsub.publish('agent.stream.run-1', { type: 'chunk', data: {} });
+
+    expect(await cache.listLength(cacheKeyFor('agent.stream.run-1'))).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain("'shouldCache' is ignored");
   });
 
   it('is forwarded by createEventedAgent', async () => {

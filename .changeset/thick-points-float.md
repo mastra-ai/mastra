@@ -1,7 +1,5 @@
 ---
 '@mastra/core': patch
-'@mastra/valkey': patch
-'@mastra/redis': patch
 ---
 
 Fixed durable agent streaming being throttled by the event cache when it lives on a remote server (issue #22477). Every streamed chunk used to wait for two sequential cache round-trips before it could be published; it now waits for one, and cache backends can fuse index allocation and append into a single operation.
