@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
@@ -53,7 +54,7 @@ function AgentSession() {
     return <AgentSessionLoadingSkeleton />;
   }
 
-  if (error) {
+  if (error && !is404NotFoundError(error)) {
     return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 

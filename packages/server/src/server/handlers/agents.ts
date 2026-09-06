@@ -714,7 +714,9 @@ async function formatAgentList({
   if (typeof agent.getMetadata === 'function') {
     try {
       metadata = await agent.getMetadata({ requestContext });
-    } catch {}
+    } catch (error) {
+      logger.warn(`Failed to get metadata for agent ${agent.name}`, { error });
+    }
   }
 
   let instructions: SystemMessage | undefined;
@@ -1011,7 +1013,9 @@ async function formatAgent({
   if (typeof agent.getMetadata === 'function') {
     try {
       metadata = await agent.getMetadata({ requestContext });
-    } catch {}
+    } catch (error) {
+      logger.warn(`Failed to get metadata for agent ${agent.name}`, { error });
+    }
   }
 
   let tools: Record<string, SerializedToolInput | object> = {};

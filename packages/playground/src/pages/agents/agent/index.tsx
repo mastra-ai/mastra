@@ -1,7 +1,7 @@
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useParams } from 'react-router';
 import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
@@ -35,7 +35,7 @@ function Agent() {
     return <AgentViewLoadingSkeleton />;
   }
 
-  if (error) {
+  if (error && !is404NotFoundError(error)) {
     return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 

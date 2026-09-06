@@ -11,7 +11,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -116,7 +116,7 @@ function AgentThread() {
     return <AgentThreadLoadingSkeleton />;
   }
 
-  if (error) {
+  if (error && !is404NotFoundError(error)) {
     return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
