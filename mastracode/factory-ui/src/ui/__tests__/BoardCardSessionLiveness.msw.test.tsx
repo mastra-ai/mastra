@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
 import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
@@ -248,10 +248,13 @@ describe('Board card session liveness', () => {
         HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
       ),
     );
-    renderWorkBoard();
+    const { client } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    // The Retry check is only meaningful once the failed decision has loaded; otherwise
+    // it passes vacuously before the card ever had a Retry to hide.
+    await waitForMutationsIdle(client);
     expect(within(card).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'Retry' })).toBeNull();
   });
