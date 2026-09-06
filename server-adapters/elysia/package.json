@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.5-alpha.6",
+  "version": "0.1.5-alpha.7",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",

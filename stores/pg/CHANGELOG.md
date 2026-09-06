@@ -1,5 +1,32 @@
 # @mastra/pg
 
+## 1.23.0-alpha.2
+
+### Minor Changes
+
+- Added read/write pool separation to `PostgresStore`. Pass `writePool` together with an optional `readPool` to route plain reads to a replica while writes, schema setup, transactions, locking reads, and every read-modify-write path stay on the primary. When `readPool` is omitted, reads fall back to the writer, and the existing single `pool` configuration keeps working unchanged. Closes #12035. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+  ```ts
+  import { Pool } from 'pg';
+  import { PostgresStore } from '@mastra/pg';
+
+  const store = new PostgresStore({
+    id: 'pg',
+    writePool: new Pool({ connectionString: process.env.PG_PRIMARY_URL }),
+    readPool: new Pool({ connectionString: process.env.PG_REPLICA_URL }),
+  });
+
+  store.pool; // writer
+  store.readPool; // reader (falls back to the writer when readPool is omitted)
+  ```
+
+  Standalone reads such as `getThreadById`, `listThreads`, `agents.getById`, or `knowledge.search` hit `readPool`. Lookups that feed a mutation (for example the thread check inside `saveMessages`, the metadata merge in `updateThread`, or version resolution inside `skills.update`) always hit `writePool`, so a lagging replica cannot cause false "not found" errors or overwrite recent writes. Caller-provided pools are never closed by the store.
+
+### Patch Changes
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+
 ## 1.23.0-alpha.1
 
 ### Patch Changes
