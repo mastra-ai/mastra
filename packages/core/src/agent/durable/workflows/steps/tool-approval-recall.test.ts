@@ -103,12 +103,12 @@ function seedMessageListState() {
   return messageList.serialize();
 }
 
-async function runMappingStep(toolResults: unknown[]) {
+async function runMappingStep(toolResults: unknown[], messageListState = seedMessageListState()) {
   const step = createDurableLLMMappingStep();
   const output = await (step as any).execute({
     inputData: {
       llmOutput: {
-        messageListState: seedMessageListState(),
+        messageListState,
         stepResult: {
           isContinued: true,
           reason: 'tool-calls',
@@ -142,7 +142,7 @@ async function runMappingStep(toolResults: unknown[]) {
     .flatMap(m => m.parts)
     .find((p: any) => 'toolCallId' in p && p.toolCallId === TOOL_CALL_ID) as Record<string, any> | undefined;
 
-  return { stored, v6 };
+  return { stored, v6, recalled, output };
 }
 
 afterEach(() => {
@@ -204,6 +204,29 @@ describe('issue #17218 (durable engine): tool-call step records the approval dec
 });
 
 describe('issue #17218 (durable engine): mapping step round-trips approvals on recall', () => {
+  it('clears only the canceled call wait metadata and keeps a same-name sibling wait', async () => {
+    const messages = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID }).deserialize(
+      seedMessageListState(),
+    );
+    const sibling = { toolCallId: 'sibling-call', toolName: TOOL_NAME };
+    messages.updateMessageMetadataByToolCallId(TOOL_CALL_ID, {
+      customProductData: 'keep',
+      pendingToolApprovals: { [TOOL_CALL_ID]: { toolCallId: TOOL_CALL_ID }, sibling },
+      suspendedTools: { [TOOL_CALL_ID]: { toolCallId: TOOL_CALL_ID }, sibling },
+    });
+    const { recalled, output, stored } = await runMappingStep(
+      [{ toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, aborted: true }],
+      messages.serialize(),
+    );
+    expect(recalled.get.all.db()[0]?.content.metadata).toEqual({
+      customProductData: 'keep',
+      pendingToolApprovals: { sibling },
+      suspendedTools: { sibling },
+    });
+    expect(stored?.state).toBe('call');
+    expect(output.toolResults).toEqual([]);
+  });
+
   it('a declined tool result persists as output-denied + approval and recalls as a v6 output-denied part', async () => {
     const { stored, v6 } = await runMappingStep([
       {

@@ -1321,7 +1321,10 @@ export class SessionRunEngine {
               chunk.type === 'tool-call-suspended' ||
               (streamResult ?? this.finishStreamState(currentRun)).suspended ||
               undefined;
-            const aborted = chunk.type === 'abort';
+            const abortChunk =
+              chunk.type === 'abort' ||
+              (chunk.type === 'finish' && getString(getRecord(getPayload(chunk).stepResult)?.reason) === 'abort');
+            const aborted = abortChunk || this.#session.run.isAbortRequested();
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the
             // run never silently stops without a visible terminal state.
@@ -1336,20 +1339,18 @@ export class SessionRunEngine {
               isError = true;
               this.#session.emit({ type: 'error', error: new Error(currentRun.terminalError) });
             }
+            if (abortChunk) {
+              // Detach this canceled consumer before finalization drains follow-ups.
+              // A follow-up may open a new subscription that must remain attached.
+              this.#session.stream.detach();
+            }
             await this.finishSubscribedStreamRun({
               suspended,
               error: isError,
               aborted,
             });
             currentRun = undefined;
-            if (aborted) {
-              // The abort chunk terminates this consumer loop, so the live
-              // subscription is no longer being drained. Detach it so the next
-              // signal (e.g. a follow-up message sent right after Ctrl+C)
-              // re-subscribes and starts a fresh consumer — otherwise the new
-              // run's chunks would never be processed and the follow-up would
-              // get no response.
-              this.#session.stream.detach();
+            if (abortChunk) {
               break;
             }
           }

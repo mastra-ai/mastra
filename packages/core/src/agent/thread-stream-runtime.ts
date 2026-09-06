@@ -2578,12 +2578,21 @@ export class AgentThreadStreamRuntime {
                     : typedPart;
                 yield partWithRunId;
                 if (done) break;
-                const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+                const finishReason =
+                  typedPart.payload?.stepResult?.reason ?? typedPart.finishReason ?? typedPart.payload?.finishReason;
                 const terminalBoundary =
                   typedPart.type === 'error' ||
                   typedPart.type === 'abort' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
                 if (terminalBoundary) {
+                  // A durable subscriber can consume the whole run while each
+                  // approval resume registers another stream for that same run.
+                  // Those queued streams are already covered by this terminal
+                  // boundary; replaying them would reopen resolved approvals.
+                  // Keep other runs, including follow-ups queued during finish.
+                  for (let index = pendingRuns.length - 1; index >= 0; index--) {
+                    if (pendingRuns[index]?.runId === run.runId) pendingRuns.splice(index, 1);
+                  }
                   // After a final terminal chunk, drain any non-visible trailing
                   // data in the background to prevent upstream backpressure while
                   // allowing the generator to immediately serve subsequent runs.
