@@ -675,9 +675,10 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // held". The drain window is configurable via `server.drainTimeout` so
   // rolling deploys can let long-running agent turns finish.
   if (serverOptions?.handleShutdownSignals !== false) {
-    // Core teardown keeps its historic 5s bound regardless of the drain
-    // window: it must always run (e.g. DuckDB's file lock release), but a
-    // hanging shutdown can't be allowed to block process exit.
+    // Core teardown gets the drain window (for in-flight evented workflow
+    // runs) plus a fixed 5s for the teardown itself: it must always run (e.g.
+    // DuckDB's file lock release), but a hanging shutdown can't be allowed to
+    // block process exit.
     const CORE_SHUTDOWN_TIMEOUT_MS = 5000;
     const timedOut = Symbol('shutdown-timeout');
     const race = async (work: Promise<unknown>, ms: number): Promise<unknown> => {
@@ -736,14 +737,17 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
         logger.error('Error while draining Mastra server', { error });
       }
 
-      // Phase 2: always tear down core (workers, durable runs, storage), even
-      // if draining failed or timed out. Feature-detect for older @mastra/core
-      // versions without shutdown().
+      // Phase 2: always tear down core (in-flight evented runs, workers,
+      // storage), even if draining failed or timed out. The same drain window
+      // bounds how long core waits for in-flight workflow runs before
+      // unsubscribing from pubsub. Feature-detect for older @mastra/core
+      // versions without shutdown() (older versions ignore the options arg).
       try {
-        const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+        const lifecycle = mastra as unknown as { shutdown?: (options?: { drainTimeout?: number }) => Promise<void> };
         if (typeof lifecycle.shutdown === 'function') {
-          if ((await race(lifecycle.shutdown(), CORE_SHUTDOWN_TIMEOUT_MS)) === timedOut) {
-            logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: CORE_SHUTDOWN_TIMEOUT_MS });
+          const coreTimeoutMs = drainTimeoutMs + CORE_SHUTDOWN_TIMEOUT_MS;
+          if ((await race(lifecycle.shutdown({ drainTimeout: drainTimeoutMs }), coreTimeoutMs)) === timedOut) {
+            logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: coreTimeoutMs });
           }
         }
       } catch (error) {

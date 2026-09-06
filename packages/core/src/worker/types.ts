@@ -1,6 +1,6 @@
 import type { StepResult } from '../workflows/types';
 
-export type { WorkerDeps } from './worker';
+export type { WorkerDeps, WorkerStopOptions } from './worker';
 
 export interface StepExecutionStrategy {
   executeStep(params: StepExecutionParams): Promise<StepResult<unknown, unknown, unknown, unknown>>;
