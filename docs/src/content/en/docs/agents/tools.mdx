@@ -221,6 +221,18 @@ export const researchAgent = new Agent({
 })
 ```
 
+When a workflow ends with `status: 'tripwire'`, its tool returns the workflow run ID and the original tripwire details:
+
+```typescript
+const toolResult = {
+  status: 'tripwire',
+  tripwire: { reason, retry, metadata, processorId },
+  runId,
+}
+```
+
+The result keeps optional fields without defaults and leaves the decision to stop with the parent's guardrail policy. Ordinary workflow failures still return `{ error, runId }`, and successful workflows return `{ result, runId }`.
+
 ## Share tools across agents
 
 Direct imports are the best choice when one tool is used by multiple agents. Each agent imports the tool and adds it to its `tools` record. Dependencies remain explicit and each agent can be used independently.
