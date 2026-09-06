@@ -85,6 +85,8 @@ export const readResourceBodySchema = z.object({
 
 export const resourceContentSchema = z.object({
   uri: z.string(),
+  mimeType: z.string().optional(),
+  _meta: z.record(z.string(), z.unknown()).optional(),
   text: z.string().optional(),
   blob: z.string().optional(),
 });

@@ -573,6 +573,46 @@ describe('MCPServer', () => {
       const content = resourceContentResult.contents[0] as { _meta?: Record<string, unknown> };
       expect(content._meta).toEqual({ ui: { csp: { connectDomains: ['https://api.example.com'] } } });
     });
+
+    it('should preserve `mimeType` and `_meta` on the public readResource() method', async () => {
+      // The `resources/read` protocol handler preserves these, but Studio reads
+      // `ui://` resources through the public method, which dropped both.
+      const result = await resourceTestServerInstance.readResource('weather://ui');
+
+      expect(result.contents.length).toBe(1);
+      expect(result.contents[0]).toEqual({
+        uri: 'weather://ui',
+        mimeType: 'text/html',
+        _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
+        text: '<html><body>widget</body></html>',
+      });
+    });
+
+    it('should omit `_meta` on readResource() when the resource declares none', async () => {
+      const result = await resourceTestServerInstance.readResource('weather://historical');
+
+      expect(result.contents[0]).not.toHaveProperty('_meta');
+      expect(result.contents[0]?.mimeType).toBe('application/json');
+    });
+
+    it('should still return content from readResource() when the resource list provider throws', async () => {
+      const server = new MCPServer({
+        name: 'ThrowingListResourcesServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+        resources: {
+          listResources: async () => {
+            throw new Error('list provider unavailable');
+          },
+          getResourceContent: async () => ({ text: 'content' }),
+        },
+      });
+
+      const result = await server.readResource('weather://ui');
+
+      expect(result.contents[0]).toEqual({ uri: 'weather://ui', text: 'content' });
+      await server.close();
+    });
   });
 
   describe('MCPServer Resource Handling with Notifications and Templates', () => {

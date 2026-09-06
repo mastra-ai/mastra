@@ -3047,7 +3047,15 @@ export class MCPServer extends MCPServerBase {
    * @param uri - The resource URI to read (e.g. `ui://weather/dashboard`)
    * @returns Promise resolving to the resource content
    */
-  public async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  public async readResource(uri: string): Promise<{
+    contents: Array<{
+      uri: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+      text?: string;
+      blob?: string;
+    }>;
+  }> {
     if (!this.resourceOptions?.getResourceContent) {
       throw new MastraError({
         id: 'MCP_SERVER_RESOURCES_NOT_CONFIGURED',
@@ -3058,12 +3066,29 @@ export class MCPServer extends MCPServerBase {
     }
 
     const extra = {} as any;
+
+    // Carry the resource's `mimeType` and `_meta` onto the contents, matching the
+    // `resources/read` handler. MCP Apps hosts read the UI CSP from
+    // `contents[]._meta.ui.csp`, and Studio reads `ui://` resources through here.
+    // Metadata is best-effort: unlike the protocol handler this must not turn a
+    // readable resource into a failed read, so a throwing provider is not fatal.
+    let resource: Resource | undefined;
+    try {
+      const resources = await this.resourceOptions.listResources?.({ extra });
+      resource = resources?.find(r => r.uri === uri);
+    } catch (error) {
+      this.logger.warn(`Could not resolve metadata for resource '${uri}'`, { error });
+    }
+    const resourceMeta = resource?._meta ? { _meta: resource._meta } : {};
+
     const result = await this.resourceOptions.getResourceContent({ uri, extra });
     const contents = Array.isArray(result) ? result : [result];
 
     return {
       contents: contents.map(c => ({
         uri,
+        ...(resource?.mimeType !== undefined ? { mimeType: resource.mimeType } : {}),
+        ...resourceMeta,
         ...('text' in c && c.text !== undefined ? { text: c.text } : {}),
         ...('blob' in c && c.blob !== undefined ? { blob: c.blob } : {}),
       })),
