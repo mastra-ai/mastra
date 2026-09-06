@@ -88,12 +88,14 @@ export async function installNodeVersion({ path }: { path: string }) {
   }
 }
 
-export async function installDeps({ path, pm }: { path: string; pm?: string }) {
+export async function installDeps({ path, pm, frozen = false }: { path: string; pm?: string; frozen?: boolean }) {
   pm = pm ?? detectPm({ path });
   logger.info('Installing dependencies', { pm, path });
   // --force is needed to install peer deps for external packages in the mastra output directory
   // --legacy-peer-deps=false is needed to override other overrides by the repo package manager such as pnpm. Pnpm would set it to true
-  const args = ['install', '--legacy-peer-deps=false', '--force'];
+  const args = frozen
+    ? ['ci', '--legacy-peer-deps=false', '--force']
+    : ['install', '--legacy-peer-deps=false', '--force'];
   const { success, error } = await runWithExeca({ cmd: pm, args, cwd: path });
   if (!success) {
     throw new MastraError(
