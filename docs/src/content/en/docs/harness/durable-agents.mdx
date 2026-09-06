@@ -255,7 +255,7 @@ If the server process crashes while a durable agent run is in progress, that run
 
 ### Automatic recovery
 
-Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, right after restarting active workflow runs:
+Set `recovery.durableAgents` to `'auto'` in the Mastra config. The production server calls `recoverAllDurableAgents()` after installing its shutdown handlers. Startup does not wait for recovered turns to finish. Development keeps using its restart endpoint, and `'off'` disables automatic recovery:
 
 ```typescript title="src/mastra/index.ts" {4}
 export const mastra = new Mastra({
@@ -266,6 +266,8 @@ export const mastra = new Mastra({
 ```
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
+
+`Mastra.shutdown()` closes recovery admission before teardown. Pending discovery can finish reading storage, but cannot start another recovered turn. Runs refused during shutdown keep their saved snapshots for the next process. Already-running turns retain the normal shutdown drain behavior; the generated server's shutdown deadline still applies. Storage stays open while admitted `recoverAllDurableAgents()` calls settle.
 
 :::warning
 

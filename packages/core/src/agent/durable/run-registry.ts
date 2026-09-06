@@ -111,7 +111,7 @@ export function __resetRunRegistryActivityForTests(): void {
 
 export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
   return Array.from(globalRunRegistry.values()).flatMap(entry =>
-    entry.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
+    entry?.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
   );
 }
 

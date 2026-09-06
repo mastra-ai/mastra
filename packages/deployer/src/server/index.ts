@@ -757,5 +757,13 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     process.on('SIGTERM', () => void shutdown('SIGTERM'));
   }
 
+  if (!options.isDev && mastra.recoveryConfig?.durableAgents === 'auto') {
+    // Recovery is admitted and drained by Core shutdown, including storage
+    // discovery. Do not delay normal server startup until turns finish.
+    void mastra.recoverAllDurableAgents().catch(error => {
+      mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+    });
+  }
+
   return server;
 }

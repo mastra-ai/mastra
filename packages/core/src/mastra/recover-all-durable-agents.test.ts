@@ -164,4 +164,61 @@ describe('Mastra.recoverAllDurableAgents', () => {
     await Promise.resolve();
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])('keeps storage open while discovery is pending (rejects=%s)', async rejects => {
+    const durable = makeDurable('pending-discovery');
+    const mastra = new Mastra({ agents: { durable }, storage: store, logger: false });
+    const workflows = (await store.getStore('workflows'))!;
+    await workflows.persistWorkflowSnapshot({
+      workflowName: 'durable-agentic-loop',
+      runId: 'held-discovery-run',
+      snapshot: {
+        runId: 'held-discovery-run',
+        status: 'running',
+        context: { input: { __workflowKind: 'durable-agent', agentId: durable.id } },
+      } as any,
+    });
+    const recoverRun = vi.spyOn(durable, 'recover');
+    const read = workflows.listWorkflowRuns.bind(workflows);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const order: string[] = [];
+    vi.spyOn(workflows, 'listWorkflowRuns').mockImplementation(async input => {
+      const rows = await read(input);
+      expect(rows.runs).toHaveLength(1);
+      entered.resolve();
+      await release.promise;
+      order.push('discovery-finished');
+      if (rejects) throw new Error('discovery failed');
+      return rows;
+    });
+    const stopWorkers = vi.spyOn(mastra, 'stopWorkers');
+    const close = vi.spyOn(store, 'close');
+    const recovery = mastra.recoverAllDurableAgents();
+    await entered.promise;
+    const shutdown = mastra.shutdown().then(() => order.push('shutdown-finished'));
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      expect(stopWorkers).toHaveBeenCalledOnce();
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      release.resolve();
+      await recovery;
+      await shutdown;
+    }
+    expect(order).toEqual(['discovery-finished', 'shutdown-finished']);
+    expect(close).toHaveBeenCalledOnce();
+    expect(recoverRun).not.toHaveBeenCalled();
+  });
+
+  it('refuses a new recovery scan once shutdown has started', async () => {
+    const durable = makeDurable('closing');
+    const mastra = new Mastra({ agents: { durable }, storage: store, logger: false });
+    const spy = vi.spyOn(durable, 'recoverActiveRuns');
+    const shutdown = mastra.shutdown();
+    await expect(mastra.recoverAllDurableAgents()).rejects.toThrow('shutdown');
+    await shutdown;
+    await expect(mastra.recoverAllDurableAgents()).rejects.toThrow('shutdown');
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

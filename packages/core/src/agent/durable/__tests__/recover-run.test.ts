@@ -87,12 +87,12 @@ function createDurableWithStore(agentId: string, store = new InMemoryStore(), pu
     model: makeMockModel(),
   });
   const agent = createDurableAgent({ agent: baseAgent, pubsub, ...(pubsub ? { cache: false } : {}) });
-  void new Mastra({
+  const mastra = new Mastra({
     agents: { [agentId]: agent as any },
     storage: store,
     ...(pubsub ? { pubsub } : {}),
   });
-  return { agent, store };
+  return { agent, store, mastra };
 }
 
 /** Persists matching outer and inner workflow snapshots for a recoverable run. */
@@ -152,6 +152,75 @@ async function readThreadRun(stream: AsyncIterable<any>) {
 }
 
 describe('DurableAgent.recover(runId)', () => {
+  it.each(['snapshot', 'lease', 'registration', 'createRun'] as const)(
+    'preserves snapshots and releases ownership when shutdown starts during %s',
+    async boundary => {
+      const runId = `shutdown-${boundary}`;
+      const pubsub = new EventEmitterPubSub();
+      const { agent, store, mastra } = createDurableWithStore(runId, new InMemoryStore(), pubsub);
+      await seed(store, runId, 'running', runId);
+      const workflow = stubWorkflow(agent, 'success');
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const workflows = (await store.getStore('workflows'))!;
+      const releaseLease = vi.spyOn(pubsub, 'releaseLease');
+      const publish = vi.spyOn(pubsub, 'publish');
+      const gate = async () => {
+        entered.resolve();
+        await release.promise;
+      };
+      const receiver =
+        boundary === 'snapshot'
+          ? workflows
+          : boundary === 'lease'
+            ? pubsub
+            : boundary === 'registration'
+              ? agentThreadStreamRuntime
+              : workflow;
+      const method =
+        boundary === 'snapshot'
+          ? 'getWorkflowRunById'
+          : boundary === 'lease'
+            ? 'acquireLease'
+            : boundary === 'registration'
+              ? 'registerRun'
+              : 'createRun';
+      const actual = (receiver as any)[method].bind(receiver);
+      const intercept = vi.spyOn(receiver as any, method);
+      intercept.mockImplementationOnce(async (...args: any[]) => {
+        const result = await actual(...args);
+        await gate();
+        return result;
+      });
+      const recovery = mastra.recoverAllDurableAgents();
+      void recovery.then(result =>
+        entered.reject(new Error(`Recovery ended before ${boundary}: ${JSON.stringify(result)}`)),
+      );
+      await entered.promise;
+      const shutdown = mastra.shutdown();
+      try {
+        release.resolve();
+        expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0 });
+        await shutdown;
+        expect(workflow.restart).not.toHaveBeenCalled();
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+        expect((await readSnapshot(store, DurableStepIds.AGENTIC_LOOP, runId))?.snapshot.status).toBe('running');
+        expect(
+          publish.mock.calls.filter(
+            ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+          ),
+        ).toHaveLength(0);
+        if (boundary !== 'snapshot')
+          expect(releaseLease.mock.calls.some(([key]) => key.startsWith('mastra:durable-agent-recovery:'))).toBe(true);
+      } finally {
+        release.resolve();
+        await recovery;
+        await shutdown;
+        intercept.mockRestore();
+      }
+    },
+  );
+
   let agent: DurableAgent;
   let store: InMemoryStore;
 
