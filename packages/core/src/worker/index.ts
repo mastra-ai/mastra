@@ -1,5 +1,5 @@
 export { MastraWorker } from './worker';
-export type { WorkerDeps } from './worker';
+export type { WorkerDeps, WorkerStopOptions } from './worker';
 export { OrchestrationWorker } from './workers/orchestration-worker';
 export type { OrchestrationWorkerConfig } from './workers/orchestration-worker';
 export { SchedulerWorker } from './workers/scheduler-worker';
@@ -8,5 +8,5 @@ export type { BackgroundTaskWorkerConfig } from './workers/background-task-worke
 export type { StepExecutionStrategy, StepExecutionParams } from './types';
 export { InProcessStrategy } from './strategies/in-process-strategy';
 export { HttpRemoteStrategy, StepExecutionError } from './strategies/http-remote-strategy';
-export type { WorkerTransport, EventRouter } from './transport/transport';
+export type { WorkerTransport, WorkerTransportStopOptions, EventRouter } from './transport/transport';
 export { PullTransport } from './transport/pull-transport';
