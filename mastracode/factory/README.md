@@ -119,7 +119,7 @@ Every phase declares what it _is_ with a required `kind`; `defineBoard()` reject
 
 - `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
 - `working` — an agent seat carries the card. `role` is required (same identifier rules as decision roles) and names the seat a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a role; `phaseForRole` returns the first in declaration order.
-- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions. `role` is not allowed.
+- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `role` is not allowed.
 
 ```typescript
 const releaseBoard = defineBoard({

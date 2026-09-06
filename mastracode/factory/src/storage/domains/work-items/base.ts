@@ -342,13 +342,6 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
 }
 
-/**
- * Stages in which a bound run can still act on its work item. Mirrors the
- * non-terminal subset of `FACTORY_RULE_STAGES` (rules/types.ts); bindings for
- * items outside these stages are dead weight in the reconcile walk.
- */
-const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set(['intake', 'triage', 'planning', 'execute', 'review']);
-
 export interface RevokeFactoryRunBindingsForWorkItemInput {
   orgId: string;
   factoryProjectId: string;
@@ -1188,8 +1181,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Wired once at boot, before `init()`. Tells the legacy attention sweep which
-   * cards sit in a phase their installed board declares terminal.
+   * Wired once at boot, before `init()`. Tells the legacy attention sweep and
+   * the stale-binding sweep which cards sit in a phase their installed board
+   * declares terminal.
    */
   useTerminalPhasePredicate(isTerminal: (item: WorkItemRow) => boolean): void {
     this.#isTerminal = isTerminal;
@@ -2655,10 +2649,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
           itemCache.set(key, item);
         }
+        // Terminal-ness comes from the installed board via the host-wired
+        // predicate; an unknown board or phase is never treated as finished.
         stale =
           !item ||
           item.stages.length !== 1 ||
-          !ACTIVE_RUN_BINDING_STAGES.has(item.stages[0]!) ||
+          this.#isTerminal(item) ||
           item.factoryProjectId !== binding.factoryProjectId;
       }
       if (!stale) continue;

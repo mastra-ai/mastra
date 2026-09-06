@@ -479,7 +479,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
 
   const transitionService = deps.factoryReady
     ? (deps.factoryTransitionService ??
-      new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems }))
+      new FactoryTransitionService({
+        rules: deps.rules,
+        boards: deps.boardRegistry,
+        storage: deps.domains.workItems,
+      }))
     : undefined;
   const startCoordinator = transitionService
     ? new FactoryStartCoordinator(
