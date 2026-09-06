@@ -56,8 +56,9 @@ export const streamErrorRetryScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit(PROMPT);
-    await runtime.waitForScreenText(/write EPIPE.*retry 1\/10 in 0\.5s/i, terminal);
-    await runtime.waitForScreenText(/Server error.*retry 2\/10 in 1s/i, terminal);
+    await runtime.waitForScreenText(/write EPIPE[\s\S]*retry\s+1\/10 in 0\.5s/i, terminal);
+    await runtime.waitForScreenText(/Model provider unavailable[\s\S]*HTTP 503[\s\S]*retry 2\/10 in 1s/i, terminal);
+    await runtime.waitForScreenText(/Hint: Check the provider's status page/i, terminal);
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.keyCtrlC();
