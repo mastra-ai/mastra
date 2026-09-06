@@ -5928,6 +5928,25 @@ export class Agent<
               },
               required: ['runId', 'error'],
             },
+            {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'Unique identifier for the workflow run' },
+                status: { const: 'tripwire' },
+                tripwire: {
+                  type: 'object',
+                  properties: {
+                    reason: { type: 'string' },
+                    retry: { type: 'boolean' },
+                    metadata: {},
+                    processorId: { type: 'string' },
+                  },
+                  required: ['reason'],
+                  additionalProperties: true,
+                },
+              },
+              required: ['runId', 'status', 'tripwire'],
+            },
           ],
         };
 
@@ -6050,6 +6069,8 @@ export class Agent<
                   error: workflowOutputError?.message || String(workflowOutputError) || 'Workflow execution failed',
                   runId: run.runId,
                 };
+              } else if (result?.status === 'tripwire') {
+                return { status: 'tripwire', tripwire: result.tripwire, runId: run.runId };
               } else if (result?.status === 'suspended') {
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
