@@ -1,1 +1,1 @@
-../../.mastracode/commands/gh-bulk-issues.md
+/Users/damienschneider/.mastracode/web/sandboxes/mastra-ai/mastra/.mastracode/commands/gh-bulk-issues.md

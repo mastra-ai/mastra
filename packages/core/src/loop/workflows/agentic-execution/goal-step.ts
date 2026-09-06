@@ -1,10 +1,10 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import {
   createGoalScorer,
-  GOAL_SCORE_WAITING,
   GOAL_SCORER_ID,
   readObjective,
   resolveEffectiveGoalSettings,
+  resolveGoalEvaluationOutcome,
   resolveGoalStore,
   writeObjective,
 } from '../../../agent/goal';
@@ -393,57 +393,31 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         };
       }
 
-      // The default goal scorer encodes a tri-state decision in the score: 1 =
-      // done, `GOAL_SCORE_WAITING` = the goal explicitly asked to stop and wait
-      // for the user, 0 = keep working. `result.complete` already covers the
-      // done case (score === 1). Detect the waiting score on the goal scorer so
-      // we can stop the auto-loop (isContinued = false) without pausing the
-      // record — the goal stays active so the next turn is still judged.
-      // Custom scorers that never emit this score simply never trigger the
-      // waiting path.
-      // A scorer that *threw* (e.g. the judge model errored) reports score 0,
-      // which is otherwise indistinguishable from a legitimate "keep working"
-      // result — so without this the loop would silently iterate against a
-      // broken judge until the budget is exhausted. Detect the explicit `errored`
-      // flag and treat it as a dedicated failure: pause the objective with the
-      // error reason so the user can fix the judge and `/goal resume`. This takes
-      // precedence over done/waiting/continue: a judge that failed cannot have
-      // validly decided the goal is complete.
-      const erroredScorer = result.scorers.find(s => s.errored);
-      const judgeFailed = !!erroredScorer;
-      // Only the built-in goal scorer uses `GOAL_SCORE_WAITING` as a sentinel;
-      // attribute it by scorer id so a custom `goal.scorer` that legitimately
-      // returns 0.5 is not misread as an explicit "waiting" checkpoint.
-      const waiting =
-        !judgeFailed &&
-        !result.complete &&
-        result.scorers.some(s => s.scorerId === GOAL_SCORER_ID && s.score === GOAL_SCORE_WAITING);
-
-      // Increment runs and update status. Precedence: judge failure → paused;
-      // complete → done; budget exhausted → paused. A "waiting" decision does
-      // NOT change the persisted status — the record stays `active` so the next
-      // agent turn is still judged; only `isContinued` is set to false (below)
-      // to stop the auto-loop and give the user a chance to provide input.
-      const runsUsed = record.runsUsed + 1;
-      const maxRunsReached = runsUsed >= effective.maxRuns;
-      let status: GoalObjectiveRecord['status'] = record.status;
-      let pausedReason: string | undefined;
-      if (judgeFailed) {
-        status = 'paused';
-        pausedReason = erroredScorer?.reason ?? 'The goal judge failed to evaluate the objective.';
-      } else if (result.complete) {
-        status = 'done';
-      } else if (maxRunsReached && !waiting) {
-        // Budget exhausted without reaching the goal: park it (visibly) instead
-        // of leaving it `active` but stuck. Raising maxRuns + setting status
-        // back to `active` (updateObjectiveOptions) resumes evaluation.
-        status = 'paused';
-        pausedReason = `Ran out of evaluation budget (${effective.maxRuns} runs) before reaching the goal — raise maxRuns to resume.`;
-      }
+      // Map the scorer run onto the record update + continuation decision.
+      // The shared helper (agent/goal/evaluation-outcome.ts) is the single
+      // source of truth for this logic — it also covers the durable step. Key
+      // behaviors: a judge failure (thrown scorer OR a timed-out run missing
+      // the goal scorer's result) consumes no run budget and keeps the goal
+      // active + looping so the next iteration retries the judge; only
+      // MAX_CONSECUTIVE_JUDGE_FAILURES in a row pause the objective. A
+      // "waiting" decision does NOT change the persisted status — only
+      // `isContinued` is set to false (below) to stop the auto-loop.
+      const {
+        judgeFailed,
+        failureReason,
+        waiting,
+        runsUsed,
+        judgeFailureCount,
+        maxRunsReached,
+        status,
+        pausedReason,
+        shouldContinue,
+      } = resolveGoalEvaluationOutcome({ record, result, maxRuns: effective.maxRuns });
 
       const updated: GoalObjectiveRecord = {
         ...record,
         runsUsed,
+        judgeFailureCount: judgeFailureCount > 0 ? judgeFailureCount : undefined,
         status,
         // Only persist a pause reason while parked; clear it otherwise so a
         // resumed/continuing objective does not carry a stale reason.
@@ -451,11 +425,6 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         updatedAt: Date.now(),
       };
       await writeObjective(store, threadId, updated, requestContext);
-
-      // The goal gate makes the final continuation decision: complete, parked,
-      // waiting for user input, or budget reached → stop; otherwise force
-      // another iteration toward the goal.
-      const shouldContinue = !result.complete && !waiting && !judgeFailed && !maxRunsReached;
       if (inputData.stepResult) {
         inputData.stepResult.isContinued = shouldContinue;
       }
@@ -472,8 +441,9 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         waitingForUser: waiting,
         results: result.scorers,
         // Parked goals should render the pause cause, not the last continue
-        // reason that happened to exhaust the budget.
-        reason: status === 'paused' ? pausedReason : result.completionReason,
+        // reason that happened to exhaust the budget. A retried (sub-threshold)
+        // judge failure still surfaces its cause.
+        reason: status === 'paused' ? pausedReason : judgeFailed ? failureReason : result.completionReason,
         duration: result.totalDuration,
         timedOut: result.timedOut,
         maxRunsReached,

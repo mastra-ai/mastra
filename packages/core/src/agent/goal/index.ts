@@ -35,6 +35,14 @@ export {
 
 export { beginGoalActivity, stopGoalActivity, getGoalActivityDurationMs } from './activity';
 
+export {
+  MAX_CONSECUTIVE_JUDGE_FAILURES,
+  resolveGoalEvaluationOutcome,
+  type GoalEvaluationOutcome,
+  type GoalEvaluationResult,
+  type GoalEvaluationScorerResult,
+} from './evaluation-outcome';
+
 export { createGoalScorer } from './scorer';
 
 export { GoalStateProcessor } from './state-processor';
