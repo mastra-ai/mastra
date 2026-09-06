@@ -308,6 +308,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               delete propSchema.anyOf;
               delete propSchema.type;
               delete prop.type;
+              // enum/const must live only inside the non-null branch: JSON Schema
+              // applies sibling keywords together, so keeping them on the outer
+              // property would still reject null after the nullable anyOf is built
+              delete prop.const;
+              delete prop.enum;
               prop.anyOf = [
                 {
                   ...propSchema,
