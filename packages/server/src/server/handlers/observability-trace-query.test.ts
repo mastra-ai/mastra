@@ -126,6 +126,27 @@ describe('QUERY_TRACES', () => {
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
   });
 
+  it('passes metadata keys through regardless of their names', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    await QUERY_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'metadata.api-key' }, right: { literal: 'sensitive-value' } },
+      }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          type: 'comparison',
+          field: 'metadata.api-key',
+          operator: 'eq',
+          value: 'sensitive-value',
+        },
+      }),
+    );
+  });
+
   it('distinguishes malformed cursors from changed-query conflicts', async () => {
     const malformedHarness = createHarness();
     const malformed = await captureHttpException(

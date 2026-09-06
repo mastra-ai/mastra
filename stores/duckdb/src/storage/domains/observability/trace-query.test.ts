@@ -36,6 +36,45 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain('FROM current_scores s');
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.sql).not.toContain(value);
+    expect(compiled.sql).toContain(
+      `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
+    );
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      `$.${JSON.stringify(key)}`,
+      `$.${JSON.stringify(key)}`,
+      value,
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      '$."actorRole"',
+      'assistant',
+      'tool',
+      '$."parentMessageId"',
+      '$."parentMessageId"',
+      101,
+    ]);
+  });
+
   it('selects the latest logical root before applying completion and time filters', () => {
     const compiled = compileDuckDBTraceQuery(plan());
 

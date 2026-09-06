@@ -53,6 +53,44 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
   });
 
+  it('parameterizes metadata keys and values with total missing semantics', () => {
+    const key = ` message'id `;
+    const value = `message' OR TRUE --`;
+    const compiled = compilePostgresTraceQuery(
+      'public',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: value } },
+            { op: 'notIn', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+            { op: 'notExists', path: 'metadata.parentMessageId' },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).not.toContain(key);
+    expect(compiled.text).not.toContain(value);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataSearch" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
+    expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
+    expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
+    expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
+    expect(compiled.text).toContain('IS NULL OR');
+    expect(compiled.values).toEqual([
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      key,
+      value,
+      'actorRole',
+      'assistant',
+      'tool',
+      'parentMessageId',
+      101,
+    ]);
+  });
+
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
     const spanClause = {
       spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } },
