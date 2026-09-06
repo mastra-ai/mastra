@@ -68,7 +68,7 @@ beforeEach(async () => {
   const project = await seed.projects.create({
     orgId: 'org1',
     userId: 'u1',
-    input: { name: 'modelspend', autoRunEnabled: true },
+    input: { name: 'modelspend' },
   });
   projectId = project.id;
   const result = await seed.workItems.upsert({
