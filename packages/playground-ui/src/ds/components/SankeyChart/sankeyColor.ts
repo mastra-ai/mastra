@@ -29,6 +29,15 @@ export function nodeColorVivid(hue: number) {
   return supportsOklch() ? `oklch(74% 0.18 ${normalizedHue})` : `hsl(${normalizedHue} 55% 68%)`;
 }
 
+/** Near-neutral fill for muted nodes (e.g. absent buckets), hue-free by design. */
+export function nodeColorMuted() {
+  return supportsOklch() ? 'oklch(52% 0.012 260)' : 'hsl(240 4% 46%)';
+}
+
+export function nodeColorMutedVivid() {
+  return supportsOklch() ? 'oklch(60% 0.014 260)' : 'hsl(240 5% 55%)';
+}
+
 export function buildSankeyHueMap(names: string[]) {
   // Not pre-sorted: the relaxation loop below re-sorts on every iteration.
   const entries = [...new Set(names)].map(name => ({ name, hue: hashHue(name) }));

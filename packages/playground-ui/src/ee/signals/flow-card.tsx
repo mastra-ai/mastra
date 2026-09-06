@@ -30,6 +30,11 @@ export function FlowCard({
   reorderDisabled: boolean;
 }) {
   const linkedColumnIds = new Set(columns.map(column => column.id));
+  // Absent buckets (cohort traces that never produced this stage's signal)
+  // render neutral so they read as "no data", not as another theme.
+  const absentNodeIds = new Set(
+    stages.flatMap(stage => stage.nodes.filter(node => node.kind === 'absent').map(node => node.nodeId)),
+  );
   const stageSignalNames = stages.map(stage => stage.signalName).filter(signalName => linkedColumnIds.has(signalName));
   const optimisticSignalNames = signalOrder.filter(signalName => linkedColumnIds.has(signalName));
   const optimisticSignalSet = new Set(optimisticSignalNames);
@@ -77,6 +82,7 @@ export function FlowCard({
             columns={chartColumns}
             columnOrder={chartColumns.map(column => column.id)}
             getColumnHue={column => getSignalHue(column.id)}
+            getNodeMuted={nodeId => absentNodeIds.has(nodeId)}
             getRecordNodeId={getSignalRecordNodeId}
             getRecordNodeLabel={getSignalRecordNodeLabel}
             getRecordNodeValue={getSignalRecordNodeValue}
