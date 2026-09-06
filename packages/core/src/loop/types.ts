@@ -297,6 +297,11 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;
+    /**
+     * Marks the run as suspending before `serialize()`, for a step that defers
+     * emitting its suspension chunk until the snapshot is durable.
+     */
+    markSuspended: () => void;
   };
   methodType: ModelMethodType;
 };
