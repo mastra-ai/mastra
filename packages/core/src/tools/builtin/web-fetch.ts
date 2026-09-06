@@ -183,6 +183,7 @@ async function readBody(response: http.IncomingMessage): Promise<{ content: stri
 
 async function requestUrl(
   url: URL,
+  signal: AbortSignal,
   redirectsRemaining = MAX_REDIRECTS,
 ): Promise<{
   content: string;
@@ -193,6 +194,7 @@ async function requestUrl(
   url?: string;
   ok?: boolean;
 }> {
+  signal.throwIfAborted();
   assertAllowedUrl(url);
 
   return new Promise((resolve, reject) => {
@@ -205,6 +207,7 @@ async function requestUrl(
           accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.8',
         },
         lookup: createLookup(),
+        signal,
         timeout: TIMEOUT_MS,
       },
       response => {
@@ -212,7 +215,7 @@ async function requestUrl(
           const location = response.headers.location;
 
           if (location && response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
-            response.resume();
+            response.destroy();
 
             if (redirectsRemaining <= 0) {
               throw new WebFetchError(`Too many redirects. Maximum is ${MAX_REDIRECTS}.`);
@@ -223,7 +226,7 @@ async function requestUrl(
               throw new WebFetchError('Redirect target must use HTTP or HTTPS.');
             }
 
-            resolve(await requestUrl(nextUrl, redirectsRemaining - 1));
+            resolve(await requestUrl(nextUrl, signal, redirectsRemaining - 1));
             return;
           }
 
@@ -276,7 +279,8 @@ export const webFetchTool = createTool({
     ok: z.boolean().optional(),
     isError: z.boolean().optional(),
   }),
-  execute: async ({ url }: { url: string }) => {
+  execute: async ({ url }: { url: string }, context) => {
+    context?.abortSignal?.throwIfAborted();
     const parsedUrl = parseHttpUrl(url);
 
     if (!parsedUrl) {
@@ -286,13 +290,23 @@ export const webFetchTool = createTool({
       };
     }
 
+    const deadline = new AbortController();
+    const timeout = setTimeout(() => {
+      deadline.abort(new WebFetchError(`Request timed out after ${TIMEOUT_MS}ms.`));
+    }, TIMEOUT_MS);
+    timeout.unref();
+    const signal = context?.abortSignal ? AbortSignal.any([context.abortSignal, deadline.signal]) : deadline.signal;
+
     try {
-      return await requestUrl(parsedUrl);
+      return await requestUrl(parsedUrl, signal);
     } catch (error) {
+      context?.abortSignal?.throwIfAborted();
       return {
-        content: `Failed to fetch URL: ${getErrorMessage(error)}`,
+        content: `Failed to fetch URL: ${getErrorMessage(signal.aborted ? signal.reason : error)}`,
         isError: true,
       };
+    } finally {
+      clearTimeout(timeout);
     }
   },
 });
