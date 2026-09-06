@@ -527,9 +527,21 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
 
+    // The nested run id must be derivable on every replay pass: core strips
+    // `suspendPayload` from the persisted step result (`omitPriorCompletionFields`)
+    // before this branch runs, so nothing stored on it survives Inngest's
+    // re-execution from the snapshot. The default engine runs nested workflows
+    // under the parent's run id (`Workflow.execute` → `createRun({ runId })`), so
+    // do the same here; foreach iterations get a per-index suffix so concurrent
+    // iterations don't share a snapshot row.
+    const derivedNestedRunId =
+      executionContext.foreachIndex !== undefined
+        ? `${executionContext.runId}-foreach-${executionContext.foreachIndex}`
+        : executionContext.runId;
+
     try {
       if (isResume) {
-        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
+        runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? derivedNestedRunId;
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
@@ -537,19 +549,25 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
 
         const nestedResumeSteps = resume.steps.slice(1);
+        let replayOnly = false;
         if (nestedResumeSteps.length === 0) {
           const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
           if (suspendedStepIds.length === 0) {
-            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
-          }
-          if (suspendedStepIds.length > 1) {
+            // The child is no longer suspended. `step.invoke` parks the parent until
+            // the child finishes, so Inngest re-executes this block to deliver the
+            // memoized result — by which point the resume has already happened.
+            // Replay the invoke (same durable id) instead of treating this as an
+            // error, which would discard a child run that already succeeded.
+            replayOnly = true;
+          } else if (suspendedStepIds.length > 1) {
             const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
             throw new Error(
               `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
                 'Please specify which step to resume using the "step" parameter.',
             );
+          } else {
+            nestedResumeSteps.push(suspendedStepIds[0]!);
           }
-          nestedResumeSteps.push(suspendedStepIds[0]!);
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 
@@ -559,12 +577,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             requestContext: forwardedRequestContext,
             runId: runId,
-            resume: {
-              runId: runId,
-              steps: nestedResumeSteps,
-              resumePayload: resume.resumePayload,
-              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
-            },
+            ...(replayOnly
+              ? { initialState: executionContext.state ?? {} }
+              : {
+                  resume: {
+                    runId: runId,
+                    steps: nestedResumeSteps,
+                    resumePayload: resume.resumePayload,
+                    resumePath: nestedResumeStepId
+                      ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any)
+                      : undefined,
+                  },
+                }),
             outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
@@ -612,7 +636,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         // event against `data.runId` on the trigger, so a nested run invoked
         // without one cannot be cancelled by id — and it would take the
         // unnamed-run branch, warning about advice the caller cannot act on.
-        const nestedRunId = randomUUID();
+        const nestedRunId = derivedNestedRunId;
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
@@ -641,6 +665,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId = 'runId' in errorCause && typeof errorCause.runId === 'string' ? errorCause.runId : randomUUID();
       } else {
+        // Log before flattening: the error object itself doesn't survive
+        // serialization (`JSON.stringify(new Error('x'))` is `{}`), so without
+        // this line the snapshot only ever shows "Workflow failed".
+        this.logger?.error(
+          `Nested workflow step ${step.id} failed: ` + (e instanceof Error ? (e.stack ?? e.message) : String(e)),
+        );
         // Fallback: if we can't get the result from error, construct a basic failed result
         runId = randomUUID();
         result = {
