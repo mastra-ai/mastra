@@ -1,1 +1,1 @@
-export { Mastra, type Config } from './mastra';
+export { Mastra, type Config, type WorkersConfig, type WorkersConfigSection } from './mastra';
