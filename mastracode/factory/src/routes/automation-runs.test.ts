@@ -7,6 +7,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { RouteAuth } from './route.js';
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 const REQUEST_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -24,16 +25,18 @@ const audit: AuditEmitter = {
   },
 };
 
-function app() {
+function app(options: { auth?: RouteAuth; user?: typeof orgUser | null } = {}) {
   const hono = new Hono();
-  hono.use('*', async (c, next) => {
-    c.set('factoryAuthUser' as never, orgUser as never);
-    await next();
-  });
+  if (options.user !== null) {
+    hono.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, (options.user ?? orgUser) as never);
+      await next();
+    });
+  }
   mountApiRoutes(
     hono as never,
     buildAutomationRunRoutes({
-      auth: fakeRouteAuth(),
+      auth: options.auth ?? fakeRouteAuth(),
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
@@ -43,8 +46,8 @@ function app() {
   return hono;
 }
 
-function request(body: Record<string, unknown>) {
-  return app().request(`/web/factory/projects/${projectId}/work-items/${workItemId}/automation-runs`, {
+function request(body: Record<string, unknown>, options: { auth?: RouteAuth; user?: typeof orgUser | null } = {}) {
+  return app(options).request(`/web/factory/projects/${projectId}/work-items/${workItemId}/automation-runs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -115,6 +118,54 @@ describe('POST automation-runs', () => {
       },
     });
     expect(auditEvents.at(-1)).toMatchObject({ action: 'factory.automation_run.queued' });
+  });
+
+  it('rejects tenant callers who are not organization administrators', async () => {
+    const response = await request(body(), {
+      auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'forbidden' });
+    expect(await seed.workItems.listDeferredDecisions('org1', projectId)).toHaveLength(0);
+  });
+
+  it('supports the trusted local no-auth storage scope without inventing a tenant user', async () => {
+    const localProject = await seed.projects.create({
+      orgId: 'local',
+      userId: 'local',
+      input: { name: 'local-modelspend' },
+    });
+    const localItem = await seed.workItems.upsert({
+      orgId: 'local',
+      userId: 'local',
+      factoryProjectId: localProject.id,
+      input: {
+        board: 'work',
+        title: 'Local automation ingress',
+        stages: ['intake'],
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:802',
+          url: 'https://github.com/TheTekTeam/modelspend/issues/802',
+        },
+      },
+    });
+    projectId = localProject.id;
+    workItemId = localItem.item.id;
+    workItemRevision = localItem.item.revision;
+
+    const response = await request(body({ arguments: '{"issue":802}' }), {
+      auth: fakeRouteAuth({ enabled: false }),
+      user: null,
+    });
+    expect(response.status).toBe(202);
+    const decisions = await seed.workItems.listDeferredDecisions('local', localProject.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      workItemId: localItem.item.id,
+      actor: { type: 'system', id: 'factory-external-orchestrator' },
+    });
   });
 
   it('replays the same request id without inserting a second decision', async () => {
