@@ -1059,7 +1059,7 @@ export const mastra = new Mastra({
 
 Maximum time in milliseconds to drain in-flight requests after the server receives `SIGINT` or `SIGTERM`. The value must be finite and between `0` and `2147483647`. During this window the server stops accepting new connections and waits for in-flight requests (including active streams) to finish; if the deadline passes first, remaining HTTP connections are closed. Upgraded connections such as WebSockets end when the process exits. Either way, `mastra.shutdown({ drainTimeout })` then runs before the process exits. It gives in-flight workflow runs (including durable agent runs) the same window to reach a finished or suspended state before workers and pub/sub subscriptions are torn down, followed by up to 5 seconds for the remaining cleanup. Setting `0` skips both drains.
 
-Increase this when rolling deploys should let long-running agent turns or workflow steps finish. Because the HTTP drain and the workflow drain run one after the other, budget up to twice this value plus 5 seconds below your platform's grace period so `mastra.shutdown()` can still complete. For example, account for `terminationGracePeriodSeconds` on Kubernetes:
+Increase this when rolling deploys should let long-running agent turns or workflow steps finish. The HTTP drain and the workflow drain run one after the other, so the worst case is twice this value plus 5 seconds of cleanup. Keep that total below your platform's grace period, such as `terminationGracePeriodSeconds` on Kubernetes:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
