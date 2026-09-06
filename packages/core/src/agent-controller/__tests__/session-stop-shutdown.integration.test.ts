@@ -222,7 +222,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
       removeEvents = fresh.subscribe(event => {
         if (event.type === 'error') errors.push(String(event.error));
       });
-      await fresh.thread.switch({ threadId });
+      expect(fresh.thread.getId()).toBe(threadId);
       restoredRunId = fresh.getCurrentRunId();
       expect(restoredRunId).toBeNull();
       expect(host.controller.getCurrentAgent(fresh).getMastraInstance()).toBe(host.mastra);
