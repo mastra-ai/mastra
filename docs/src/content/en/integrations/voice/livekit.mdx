@@ -185,6 +185,28 @@ export default createLiveKitWorker({
 
 `configuration.stt` works the same way for per-call transcription, for example a different transcription model or language per tenant. The greeting has a matching per-call form: `configuration.greeting.text` accepts a resolver with the same call context, so one worker can open with each tenant's own phrasing.
 
+### Per-call turn detection
+
+LiveKit's `TurnDetector` classes read the job's inference executor when constructed, so they can only be created inside a LiveKit job, not at module scope where the worker options live. To use one, set the `configuration.turnDetection` resolver. It runs once per call with the same call context as `configuration.stt` and returns anything the top-level `turnDetection` option accepts. Return `undefined` to fall back to the top-level option.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { turnDetector } from '@livekit/agents-plugin-livekit'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  turnDetection: 'multilingual',
+  configuration: {
+    // Constructed inside the job, where the inference executor is available.
+    turnDetection: () => new turnDetector.MultilingualModel(0.2),
+  },
+})
+```
+
+The semantic model's inference runners must be registered before the agent server boots, so when this resolver is set the worker imports `@livekit/agents-plugin-livekit` up front. Keep the top-level `turnDetection` set to `'multilingual'` or `'english'` to pre-register only that model; otherwise both stay available.
+
 ### Memory and threads
 
 When the resolved Mastra agent has memory configured, each call becomes one memory thread:
@@ -575,7 +597,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     name: 'turnDetection',
     type: "'multilingual' | 'english' | TurnDetectionMode",
     description:
-      "End-of-turn detection. 'multilingual' and 'english' load LiveKit's semantic turn detector from @livekit/agents-plugin-livekit. Other values such as 'vad', 'stt', or 'manual' pass through.",
+      "End-of-turn detection. 'multilingual' and 'english' load LiveKit's semantic turn detector from @livekit/agents-plugin-livekit. Other values such as 'vad', 'stt', or 'manual' pass through. To construct a TurnDetector instance per call, set the configuration.turnDetection resolver — it takes precedence, with this option as the fallback.",
     isOptional: true,
   },
   {
@@ -616,7 +638,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     name: 'configuration',
     type: 'LiveKitWorkerConfiguration',
     description:
-      'Grouped conversation and compliance configuration: the opening greeting and AI disclosure, consent requirements, agent-initiated hang-up, and per-call STT/TTS selection.',
+      'Grouped conversation and compliance configuration: the opening greeting and AI disclosure, consent requirements, agent-initiated hang-up, and per-call STT/TTS/turn detection selection.',
     isOptional: true,
     properties: [
       {
@@ -655,6 +677,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             type: '(context: VoiceCallContext) => TTS | string | undefined',
             description:
               'Per-call text-to-speech: a resolver invoked once per call (post-connect) with { metadata, requestContext, roomName, ctx }, returning anything the top-level tts option accepts — one voice or language per tenant. Return undefined to fall back to the top-level tts. Cache plugin instances across calls.',
+            isOptional: true,
+          },
+          {
+            name: 'turnDetection',
+            type: '(context: VoiceCallContext) => TurnDetectionMode | undefined',
+            description:
+              "Per-call end-of-turn detection: a resolver invoked once per call (post-connect, inside the LiveKit job) with { metadata, requestContext, roomName, ctx }, returning anything the top-level turnDetection option accepts. Use it to construct LiveKit TurnDetector instances, which need the job's inference executor. Return undefined to fall back to the top-level turnDetection.",
             isOptional: true,
           },
         ],
