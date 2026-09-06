@@ -394,6 +394,8 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
   const inputJson = safeStringify(input);
   const outputJson = safeStringify(output);
   const hasOutput = outputJson.length > 0;
+  const failed = output !== null && typeof output === 'object' && 'success' in output && output.success === false;
+  const status = hasOutput ? (failed ? 'Failed' : 'Completed') : 'Executing';
 
   return (
     <ToolCard testId="agent-builder-chat-generic-tool">
@@ -405,7 +407,7 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
           <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
             <Wrench className="text-neutral4 size-3.5 shrink-0" aria-hidden />
             <Txt variant="ui-sm" className="text-neutral5" as="span">
-              Executing <span className="text-neutral6 font-mono">{toolName}</span>
+              {status} <span className="text-neutral6 font-mono">{toolName}</span>
             </Txt>
           </span>
           <ChevronRight

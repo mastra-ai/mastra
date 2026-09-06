@@ -92,6 +92,7 @@ import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
+import WorkflowBuilderEditorPage from './pages/workflow-builder/editor';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
@@ -509,6 +510,16 @@ export const routes: RouteObject[] = [
         } satisfies RouteHeaderHandle,
       },
 
+      {
+        path: '/workflow-builder/create',
+        element: <WorkflowBuilderEditorPage create />,
+        handle: navHandle('/workflows'),
+      },
+      {
+        path: '/workflow-builder/:workflowId',
+        element: <WorkflowBuilderEditorPage />,
+        handle: navHandle('/workflows'),
+      },
       { path: '/workflows', element: <Workflows />, handle: navHandle('/workflows') },
       {
         path: '/workflows/schedules',

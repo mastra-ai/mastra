@@ -9,6 +9,7 @@ describe('matchesPermission', () => {
       'stored-prompt-blocks',
       'stored-scorers',
       'stored-skills',
+      'stored-workflows',
       'stored-workspaces',
     ];
 

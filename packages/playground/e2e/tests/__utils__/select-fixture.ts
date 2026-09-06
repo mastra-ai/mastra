@@ -12,7 +12,34 @@ export type Fixtures =
   | 'agent-builder-standup'
   | 'agent-builder-pr-reviewer'
   | 'agent-builder-onboarding'
-  | 'agent-builder-complex';
+  | 'agent-builder-complex'
+  | 'workflow-builder-lifecycle'
+  | 'workflow-builder-prompt-addition'
+  | 'workflow-builder-prompt-customer-ticket'
+  | 'workflow-builder-prompt-parallel-customer-lookup'
+  | 'workflow-builder-prompt-parallel-support-fanout'
+  | 'workflow-builder-prompt-support-answer'
+  | 'workflow-builder-prompt-nested-greeting'
+  | 'workflow-builder-prompt-foreach-customer-lookup'
+  | 'workflow-builder-prompt-topic-subtopics-blurbs'
+  | 'workflow-builder-prompt-priority-support-router'
+  | 'workflow-builder-prompt-priority-support-router-normal-route'
+  | 'workflow-builder-prompt-mixed-support-pipeline'
+  | 'workflow-builder-prompt-strict-support-answer'
+  | 'workflow-builder-prompt-strict-support-ticket'
+  | 'workflow-builder-prompt-topic-subtopics-blurbs-single-agent'
+  | 'workflow-builder-portable-echo'
+  | 'workflow-builder-portable-greeting'
+  | 'workflow-builder-portable-order-status'
+  | 'workflow-builder-portable-profile'
+  | 'workflow-builder-portable-tags'
+  | 'workflow-builder-portable-chained-mapping'
+  | 'workflow-builder-portable-receipt'
+  | 'workflow-builder-portable-defaults'
+  | 'workflow-builder-adversarial-customer-ticket'
+  | 'workflow-builder-adversarial-parallel-lookup'
+  | 'workflow-builder-adversarial-priority-router'
+  | 'workflow-builder-adversarial-mixed-pipeline';
 
 export const selectFixture = async (page: Page, fixture: Fixtures) => {
   const setFixture = (browserFixture: Fixtures) => {
@@ -23,7 +50,7 @@ export const selectFixture = async (page: Page, fixture: Fixtures) => {
   };
 
   await page.route(
-    /\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)(?:[/?#]|$)/,
+    /(?:\/agents\/[^/]+\/(?:generate|stream|generate-legacy|stream-legacy|stream-until-idle|network|signals|send-message)|\/editor\/workflow-builder\/stream)(?:[/?#]|$)/,
     route => injectFixtureIntoAgentRequest(route, fixture),
   );
   await page.context().addInitScript(setFixture, fixture);

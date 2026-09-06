@@ -5,15 +5,17 @@ import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/P
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { CalendarClockIcon } from 'lucide-react';
+import { CalendarClockIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useWorkflowBuilderAccess } from '@/domains/workflows/builder';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
+  const { canWrite } = useWorkflowBuilderAccess();
   const [search, setSearch] = useState('');
 
   if (error && is401UnauthorizedError(error)) {
@@ -43,7 +45,7 @@ function Workflows() {
   if (Object.keys(workflows || {}).length === 0 && !isLoading) {
     return (
       <NoDataPageLayout>
-        <NoWorkflowsInfo />
+        <NoWorkflowsInfo canCreate={canWrite} />
       </NoDataPageLayout>
     );
   }
@@ -55,10 +57,16 @@ function Workflows() {
           <div className="max-w-120 flex-1">
             <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
           </div>
-          <Button as={Link} to="/workflows/schedules" variant="primary" className="shrink-0">
+          <Button as={Link} to="/workflows/schedules" variant="default" className="shrink-0">
             <CalendarClockIcon />
             Schedules
           </Button>
+          {canWrite ? (
+            <Button as={Link} to="/workflow-builder/create" variant="primary" className="shrink-0">
+              <PlusIcon />
+              Create workflow
+            </Button>
+          ) : null}
         </PageLayout.Row>
       </PageLayout.TopArea>
 
