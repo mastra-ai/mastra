@@ -1742,6 +1742,27 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
+    this.#signalDurableRun(runId);
+    const cancellation = this.#mastra
+      ? this.#mastra.__runDurableAgentCancellation(() => this.cancelStoredRun(runId))
+      : this.cancelStoredRun(runId);
+    void cancellation.catch(async error => {
+      try {
+        await this.emitError(runId, error);
+      } catch (publishError) {
+        this.#mastra?.getLogger()?.error('Failed to report durable cancellation error', { runId, error, publishError });
+      }
+    });
+  }
+
+  /** Complete cancellation inside an already admitted native lifecycle operation. @internal */
+  async __abortRunStreamAndWait(runId: string): Promise<void> {
+    super.abortRunStream(runId);
+    this.#signalDurableRun(runId);
+    await this.cancelStoredRun(runId);
+  }
+
+  #signalDurableRun(runId: string): void {
     const controller = (this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId))?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
@@ -1749,13 +1770,6 @@ export class DurableAgent<
     // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
     // abort synchronously and a failed publish is logged, not thrown.
     void this.requestRemoteAbort(runId);
-    void this.cancelStoredRun(runId).catch(async error => {
-      try {
-        await this.emitError(runId, error);
-      } catch (publishError) {
-        this.#mastra?.getLogger()?.error('Failed to report durable cancellation error', { runId, error, publishError });
-      }
-    });
   }
 
   /** Close stored work after execution stops; no model is resumed. */

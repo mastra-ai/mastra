@@ -747,7 +747,10 @@ export class Mastra<
   #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #durableAgentRecoveries = new Set<Promise<unknown>>();
+  #durableAgentCancellations = new Set<Promise<void>>();
+  #durableAgentCancellationErrors: unknown[] = [];
   #shutdownStarted = false;
+  #shutdownPromise?: Promise<void>;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -6931,8 +6934,34 @@ export class Mastra<
    * });
    * ```
    */
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.#shutdownPromise) return this.#shutdownPromise;
     this.#shutdownStarted = true;
+    this.#shutdownPromise = Promise.resolve().then(() => this.#shutdown());
+    return this.#shutdownPromise;
+  }
+
+  /**
+   * Admit a native Stop before its first storage read. The operation must await
+   * all discovered cancellation writes; it must not dispatch detached cleanup.
+   * @internal
+   */
+  __runDurableAgentCancellation(operation: () => Promise<void>): Promise<void> {
+    if (this.#shutdownStarted)
+      return Promise.reject(new Error('Mastra is shutting down; cancellation admission is closed'));
+    const cancellation = Promise.resolve().then(operation);
+    this.#durableAgentCancellations.add(cancellation);
+    void cancellation.then(
+      () => this.#durableAgentCancellations.delete(cancellation),
+      error => {
+        this.#durableAgentCancellationErrors.push(error);
+        this.#durableAgentCancellations.delete(cancellation);
+      },
+    );
+    return cancellation;
+  }
+
+  async #shutdown(): Promise<void> {
     // The scorer hook lives on a process-global emitter. Release it before any
     // awaited teardown so even a later cleanup failure cannot retain this
     // Mastra instance and its full component graph.
@@ -6963,6 +6992,11 @@ export class Mastra<
         });
       }
     });
+
+    // Accepted cold Stop discovery is not an executing workflow. Its promise
+    // includes every discovered cancellation, so no child write can outlive it.
+    // New admission closed synchronously in shutdown(), before teardown began.
+    await Promise.allSettled(this.#durableAgentCancellations);
 
     // Stop — don't destroy — registered workspaces. Remote sandboxes
     // suspend/pause and stay resumable across process restarts, and
@@ -7008,6 +7042,12 @@ export class Mastra<
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 
+    if (this.#durableAgentCancellationErrors.length) {
+      throw new AggregateError(
+        this.#durableAgentCancellationErrors,
+        'Durable agent cancellation failed during shutdown',
+      );
+    }
     this.#logger?.info('Mastra shutdown completed');
   }
 

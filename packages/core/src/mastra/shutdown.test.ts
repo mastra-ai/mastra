@@ -15,6 +15,53 @@ function deferred<T = void>() {
 }
 
 describe('Mastra shutdown lifecycle', () => {
+  it('drains accepted cancellation, refuses new work and shares repeated shutdown', async () => {
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({ logger: false, workers: false, storage });
+    const started = deferred();
+    const release = deferred();
+    const operation = mastra.__runDurableAgentCancellation(async () => {
+      started.resolve();
+      await release.promise;
+    });
+    await started.promise;
+    const shutdown = mastra.shutdown();
+    expect(mastra.shutdown()).toBe(shutdown);
+    const late = vi.fn(async () => {});
+    await expect(mastra.__runDurableAgentCancellation(late)).rejects.toThrow('admission is closed');
+    expect(late).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    release.resolve();
+    await operation;
+    await shutdown;
+    expect(close).toHaveBeenCalledTimes(1);
+    await expect(mastra.__runDurableAgentCancellation(late)).rejects.toThrow('admission is closed');
+  });
+
+  it('waits every accepted Stop even when another fails and another instance shuts down', async () => {
+    const storage = new MockStore();
+    const close = vi.spyOn(storage, 'close');
+    const mastra = new Mastra({ logger: false, workers: false, storage });
+    const other = new Mastra({ logger: false, workers: false });
+    const release = deferred();
+    const failure = new Error('Cancellation write failed');
+    const failed = mastra.__runDurableAgentCancellation(async () => {
+      throw failure;
+    });
+    const pending = mastra.__runDurableAgentCancellation(() => release.promise);
+    await expect(failed).rejects.toBe(failure);
+    const shutdown = mastra.shutdown();
+    const rejection = expect(shutdown).rejects.toMatchObject({ errors: [failure] });
+    await other.shutdown();
+    expect(close).not.toHaveBeenCalled();
+    release.resolve();
+    await pending;
+    await rejection;
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(mastra.shutdown()).toBe(shutdown);
+  });
+
   it('ignores a removed cache entry refreshed by its disposal callback', async () => {
     const mastra = new Mastra({ logger: false, workers: false });
     const runId = 'removed-during-cleanup';

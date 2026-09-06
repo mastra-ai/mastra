@@ -230,6 +230,10 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
 
+Register the AgentController on its owning Mastra instance before calling `init()`. For native `DurableAgent` runs, `Mastra.shutdown()` waits for previously accepted Session Stop requests to finish discovering saved runs and writing their cancellation state before closing storage. New Stop requests can't start storage work after shutdown begins. Repeated shutdown calls share the same completion promise.
+
+If an accepted cancellation fails, shutdown finishes resource cleanup and rejects with an `AggregateError`. Session Stop still reports the error through its native error event. Other durable wrappers keep their existing cancellation behavior. This storage completion guarantee applies to the native `DurableAgent`. The generated server's shutdown deadline still applies.
+
 ## Tool approval
 
 Durable agents support tool approval (human-in-the-loop). When a tool call requires approval, the workflow suspends, emits an `onSuspended` callback, and waits for the caller to resume with `resume()`:

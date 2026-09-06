@@ -3151,25 +3151,45 @@ export class Session<TState = unknown> {
       // A restored Session has no live run identity. Use the same scoped native
       // discovery as cold resume, bounded to runs that existed when Stop arrived.
       const scope = { threadId, resourceId: this.identity.getResourceId(), toDate: new Date() };
-      void Promise.all([
-        agent.listSuspendedRuns(scope),
-        isDurableAgentLike(agent) ? agent.listActiveRuns(scope) : Promise.resolve({ runs: [] }),
-      ])
-        .then(results => {
-          if (
-            this.thread.getId() !== threadId ||
-            this.run.getOperationId() !== operationId ||
-            !this.run.isAbortRequested()
-          )
-            return;
-          const runIds = new Set(results.flatMap(result => result.runs.map(run => run.runId)));
-          for (const runId of runIds) agent.abortRunStream(runId);
-        })
-        .catch(error => {
-          if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
-            this.emit({ type: 'error', error: getErrorFromUnknown(error) });
-          }
-        });
+      const cancelDiscoveredRuns = async () => {
+        const discovery = await Promise.allSettled([
+          agent.listSuspendedRuns(scope),
+          isDurableAgentLike(agent) ? agent.listActiveRuns(scope) : Promise.resolve({ runs: [] }),
+        ]);
+        const discoveryErrors = discovery.flatMap(result =>
+          result.status === 'rejected' &&
+          !(result.reason instanceof MastraError && result.reason.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE')
+            ? [result.reason]
+            : [],
+        );
+        if (discoveryErrors.length) throw new AggregateError(discoveryErrors, 'Failed to discover runs for Stop');
+        const results = discovery.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
+        if (
+          this.thread.getId() !== threadId ||
+          this.run.getOperationId() !== operationId ||
+          !this.run.isAbortRequested()
+        )
+          return;
+        const runIds = new Set(results.flatMap(result => result.runs.map(run => run.runId)));
+        const cancellations = await Promise.allSettled(
+          [...runIds].map(async runId => {
+            if (isDurableAgentLike(agent) && agent.__abortRunStreamAndWait) {
+              await agent.__abortRunStreamAndWait(runId);
+            } else {
+              agent.abortRunStream(runId);
+            }
+          }),
+        );
+        const errors = cancellations.flatMap(result => (result.status === 'rejected' ? [result.reason] : []));
+        if (errors.length) throw new AggregateError(errors, 'Failed to cancel discovered runs');
+      };
+      const mastra = agent.getMastraInstance();
+      const cancellation = mastra ? mastra.__runDurableAgentCancellation(cancelDiscoveredRuns) : cancelDiscoveredRuns();
+      void cancellation.catch(error => {
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+        }
+      });
     }
 
     // Retract the prompts for every parked suspension. Dropping them silently
