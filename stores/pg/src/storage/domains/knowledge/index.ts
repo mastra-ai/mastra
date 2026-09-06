@@ -421,6 +421,72 @@ const knowledgeTableDefinitions: Array<{
   { tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA },
 ];
 
+const pgKnowledgeIsolationKeys = new WeakMap<object, Map<string, object>>();
+
+type PgKnowledgeIsolationConfig = {
+  schemaName?: string;
+  client?: DbClient;
+  pool?: object;
+  connectionString?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+};
+
+function canonicalPgTarget(config: PgKnowledgeIsolationConfig): string | undefined {
+  if (config.connectionString) {
+    try {
+      const parsed = new URL(config.connectionString);
+      const host = decodeURIComponent(parsed.hostname).toLocaleLowerCase();
+      const port = parsed.port || '5432';
+      const database = decodeURIComponent(parsed.pathname.slice(1));
+      return `${host}:${port}/${database}`;
+    } catch {
+      return config.connectionString;
+    }
+  }
+
+  if (config.host && config.database) {
+    const host = config.host.startsWith('/') ? config.host : config.host.toLocaleLowerCase();
+    return `${host}:${config.port ?? 5432}/${config.database}`;
+  }
+
+  return undefined;
+}
+
+function pgSourceConfig(source: object | undefined): PgKnowledgeIsolationConfig | undefined {
+  if (!source || !('options' in source)) return undefined;
+  return (source as { options?: PgKnowledgeIsolationConfig }).options;
+}
+
+function pgClientPool(client: DbClient | undefined): object | undefined {
+  if (!client || !('$pool' in client)) return undefined;
+  return (client as DbClient & { $pool?: object }).$pool;
+}
+
+export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): unknown {
+  const schema = config.schemaName ?? 'public';
+  const pool = config.pool ?? pgClientPool(config.client);
+  const target = canonicalPgTarget(config) ?? canonicalPgTarget(pgSourceConfig(pool) ?? {});
+  if (target) return `pg:${target}:schema:${schema}`;
+
+  const source = pool ?? config.client;
+  if (source) {
+    let schemaKeys = pgKnowledgeIsolationKeys.get(source);
+    if (!schemaKeys) {
+      schemaKeys = new Map();
+      pgKnowledgeIsolationKeys.set(source, schemaKeys);
+    }
+    let key = schemaKeys.get(schema);
+    if (!key) {
+      key = {};
+      schemaKeys.set(schema, key);
+    }
+    return key;
+  }
+  return config;
+}
+
 export class KnowledgePG extends KnowledgeStorage {
   static readonly MANAGED_TABLES = KNOWLEDGE_TABLE_NAMES;
 
@@ -443,7 +509,7 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #schemaName?: string;
 
   constructor(config: PgDomainConfig) {
-    super();
+    super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
