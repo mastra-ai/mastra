@@ -40,7 +40,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
-import { createBoardRegistry } from './boards/index.js';
+import { createBoardRegistry, workItemPhaseSemantics } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
@@ -399,6 +399,7 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
+    workItemsStorage.useTerminalPhasePredicate(item => workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal');
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -798,6 +799,7 @@ export class MastraFactory {
                       createFactorySupervisorReadTools({
                         scope: supervisorScope,
                         workItems: workItemsStorage,
+                        boards: this.#boards,
                         comments: workItemCommentsStorage,
                         audit: auditStorage,
                         messageReader: {
@@ -919,6 +921,7 @@ export class MastraFactory {
                 controller,
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                boards: this.#boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
@@ -1099,6 +1102,7 @@ export class MastraFactory {
           integrationStorage,
           sourceControlStorage,
           rules,
+          boardRegistry: this.#boards,
           factoryReady,
           domains,
           feed: commentsDomain,
@@ -1121,7 +1125,13 @@ export class MastraFactory {
     // an unavailable integration must not run.
     const integrationWorkers = [
       ...(factoryReady
-        ? [new FactorySupervisorHealthWorker({ projects: factoryProjectsStorage, workItems: workItemsStorage })]
+        ? [
+            new FactorySupervisorHealthWorker({
+              projects: factoryProjectsStorage,
+              workItems: workItemsStorage,
+              boards: this.#boards,
+            }),
+          ]
         : []),
       ...integrationRegistrations
         .filter(({ integration, ready }) => ready && integration.workers)
@@ -1138,6 +1148,7 @@ export class MastraFactory {
                 integrationStorage,
                 sourceControlStorage,
                 rules,
+                boardRegistry: this.#boards,
                 factoryReady,
                 domains,
                 feed: commentsDomain,

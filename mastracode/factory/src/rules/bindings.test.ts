@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
@@ -202,6 +204,66 @@ describe('Factory run binding authority', () => {
         storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
       ).resolves.toBe(1);
       await expect(storage.listActiveRunBindings()).resolves.toEqual([]);
+    });
+
+    it("keeps fresh bindings in a custom board's working phase and revokes them in its terminal phase", async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const boards = createBoardRegistry({ boards: [createTestBoard()] });
+      storage.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:9' },
+            title: 'Release 9',
+            board: 'release',
+            stages: ['shipping'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'release',
+        session: { sessionId: 'session-9', branch: 'factory/release-9', threadId: 'thread-9' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-9',
+        kickoffMessage: null,
+      });
+      const sweep = () => storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() });
+
+      await expect(sweep()).resolves.toBe(0);
+
+      await storage.update({ orgId: 'org-1', id: prepared.item.id, userId: 'user-1', patch: { stages: ['shipped'] } });
+      await expect(sweep()).resolves.toBe(1);
+    });
+
+    it('never revokes a fresh binding on a guess when the board is not installed', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:10' },
+            title: 'Unknown 10',
+            board: 'not-installed',
+            stages: ['finished'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-10', branch: 'factory/unknown-10', threadId: 'thread-10' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-10',
+        kickoffMessage: null,
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
+      ).resolves.toBe(0);
     });
   });
 });

@@ -8,12 +8,9 @@
  * write tools) would apply.
  */
 
-import {
-  FACTORY_ROLE_STAGES,
-  factoryRuleStage,
-  isTerminalFactoryRuleStage,
-  NEEDS_APPROVAL_LABEL,
-} from '../rules/types.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import type { BoardRegistry, PhaseSemantics } from '../boards/index.js';
+import { factoryRuleStage, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -93,9 +90,6 @@ const FINDING_KINDS: FactoryHealthFindingKind[] = [
 
 const IN_FLIGHT_DECISION_STATUSES = new Set(['pending', 'retry', 'leased', 'proposed']);
 
-/** Working lane → the role whose seat carries a card through it. */
-const ROLE_FOR_LANE = new Map<string, string>(Object.entries(FACTORY_ROLE_STAGES).map(([role, lane]) => [lane, role]));
-
 function itemNumber(item: WorkItemRow | undefined): number | null {
   const number = item?.metadata?.number ?? item?.metadata?.githubIssueNumber ?? item?.metadata?.githubPullRequestNumber;
   return typeof number === 'number' ? number : null;
@@ -136,6 +130,12 @@ interface HealthInputs {
   decisions: FactoryDeferredDecisionRecord[];
   bindings: FactoryRunBindingRecord[];
   pendingStarts: FactoryPendingStartRecord[];
+  /**
+   * What the item's installed board says its current phase means. Undefined when the
+   * board is not installed, the phase is undeclared, or the row spans several stages;
+   * the check then neither revokes nor starts anything on a guess.
+   */
+  phaseSemantics: (item: WorkItemRow) => PhaseSemantics | undefined;
 }
 
 /** Pure: findings from rows. Exported so tests can feed fixtures directly. */
@@ -230,7 +230,7 @@ export function computeFactoryHealth(
     if (binding.status !== 'active') continue;
     const item = itemsById.get(binding.workItemId);
     const stage = item ? factoryRuleStage(item.stages) : undefined;
-    if (!item || !stage || isTerminalFactoryRuleStage([stage])) {
+    if (!item || inputs.phaseSemantics(item)?.kind === 'terminal') {
       findings.push({
         kind: 'seat-orphaned',
         id: `seat-orphaned:${binding.id}`,
@@ -253,12 +253,20 @@ export function computeFactoryHealth(
   );
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
-    if (!stage || stage === 'intake' || isTerminalFactoryRuleStage([stage])) continue;
+    const semantics = stage ? inputs.phaseSemantics(item) : undefined;
+    if (!stage || semantics?.kind !== 'working') continue;
     const base = subject(item.id);
     const enteredAt = stageEnteredAt(item);
     const inStageMs = enteredAt ? now.getTime() - enteredAt.getTime() : null;
 
-    const held = stage === 'triage' && item.triageType !== null && item.triageType !== 'bug' && !item.acceptedAt;
+    // Work's triage seat holds a classified non-bug until a maintainer accepts it. Only
+    // Work has that gate, so this is keyed on the board, not on the phase name.
+    const held =
+      boardForWorkItem(item) === 'work' &&
+      stage === 'triage' &&
+      item.triageType !== null &&
+      item.triageType !== 'bug' &&
+      !item.acceptedAt;
     if (held) {
       if (inStageMs !== null && inStageMs > thresholds.waitingOnPersonMs) {
         findings.push({
@@ -271,7 +279,7 @@ export function computeFactoryHealth(
         });
       }
     } else if (!activeSeatsByItem.has(item.id) && !inFlightByItem.has(item.id)) {
-      const role = ROLE_FOR_LANE.get(stage);
+      const role = semantics.role;
       findings.push({
         kind: 'seat-missing',
         id: `seat-missing:${item.id}`,
@@ -302,6 +310,7 @@ export function computeFactoryHealth(
 
 export async function runFactoryHealthCheck(
   workItems: WorkItemsStorage,
+  boards: BoardRegistry,
   scope: { orgId: string; factoryProjectId: string },
   options: { now?: Date; thresholds?: FactoryHealthThresholds } = {},
 ): Promise<FactoryHealthReport> {
@@ -312,7 +321,7 @@ export async function runFactoryHealthCheck(
     workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
   ]);
   return computeFactoryHealth(
-    { items, decisions, bindings, pendingStarts },
+    { items, decisions, bindings, pendingStarts, phaseSemantics: item => workItemPhaseSemantics(boards, item) },
     options.now ?? new Date(),
     options.thresholds,
   );

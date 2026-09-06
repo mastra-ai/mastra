@@ -11,8 +11,14 @@ describe('Factory rule resolution', () => {
     title: 'Release',
     initialPhase: 'queued',
     phases: {
-      queued: { title: 'Queued', next: 'shipped', onExit: { issue: onExit }, onEnter: { issue: onEnter } },
-      shipped: { title: 'Shipped', onEnter: { issue: onEnter } },
+      queued: {
+        title: 'Queued',
+        kind: 'resting',
+        next: 'shipped',
+        onExit: { issue: onExit },
+        onEnter: { issue: onEnter },
+      },
+      shipped: { title: 'Shipped', kind: 'terminal', onEnter: { issue: onEnter } },
     },
   });
   const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
@@ -77,8 +83,8 @@ describe('Factory rule resolution', () => {
           title: 'Other release',
           initialPhase: 'queued',
           phases: {
-            queued: { title: 'Queued', next: 'shipped' },
-            shipped: { title: 'Shipped' },
+            queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+            shipped: { title: 'Shipped', kind: 'terminal' },
           },
         }),
       ],

@@ -30,7 +30,10 @@ describe('board transition policy contract', () => {
       id: 'release',
       title: 'Release',
       initialPhase: 'approval',
-      phases: { approval: { title: 'Approval', next: 'shipped' }, shipped: { title: 'Shipped' } },
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
       transitionPolicy,
     } as const;
     const board = defineBoard(config);
@@ -46,7 +49,7 @@ describe('board transition policy contract', () => {
         id: 'invalid',
         title: 'Invalid',
         initialPhase: 'queued',
-        phases: { queued: { title: 'Queued' } },
+        phases: { queued: { title: 'Queued', kind: 'resting' } },
         // @ts-expect-error Exercise the JavaScript definition boundary.
         transitionPolicy,
       }),

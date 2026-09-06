@@ -247,7 +247,10 @@ describe('FactoryPhaseStateProcessor', () => {
       id: 'release',
       title: 'Release',
       initialPhase: 'queued',
-      phases: { queued: { title: 'Release Queue', next: 'shipped' }, shipped: { title: 'Shipped' } },
+      phases: {
+        queued: { title: 'Release Queue', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
     });
     const prepared = await prepare(storage, 'work', 'issue', { id: 'release', stage: 'queued' });
     expect(prepared.item).toMatchObject({ board: 'release', stages: ['queued'] });

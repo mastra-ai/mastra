@@ -202,8 +202,8 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       title: 'Release',
       initialPhase: 'queued',
       phases: {
-        queued: { title: 'Queued', next: 'shipped' },
-        shipped: { title: 'Shipped' },
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
     const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
@@ -358,7 +358,10 @@ describe('PATCH /web/factory/work-items/:id', () => {
       id: 'release',
       title: 'Release',
       initialPhase: 'queued',
-      phases: { queued: { next: 'shipped' }, shipped: {} },
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
     });
     const app = buildApp(
       orgUser,
@@ -389,13 +392,13 @@ describe('PATCH /web/factory/work-items/:id', () => {
       id: 'release',
       title: 'Release',
       initialPhase: 'queued',
-      phases: { queued: {} },
+      phases: { queued: { title: 'Queued', kind: 'resting' } },
     });
     const supportBoard = defineBoard({
       id: 'support',
       title: 'Support',
       initialPhase: 'backlog',
-      phases: { backlog: {} },
+      phases: { backlog: { title: 'Backlog', kind: 'resting' } },
     });
     const app = buildApp(
       orgUser,
