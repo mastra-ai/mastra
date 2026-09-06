@@ -56,4 +56,8 @@ describe('toolFromInvocationPart', () => {
   it('leaves the row unstamped when nothing carries a time', () => {
     expect(toolFromInvocationPart(part(), runtime()).createdAt).toBeUndefined();
   });
+
+  it('leaves the row unstamped rather than carrying NaN from an unparseable message date', () => {
+    expect(toolFromInvocationPart(part(), runtime(), 'not a date').createdAt).toBeUndefined();
+  });
 });

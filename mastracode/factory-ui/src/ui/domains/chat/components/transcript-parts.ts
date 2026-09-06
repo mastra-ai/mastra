@@ -180,7 +180,8 @@ export function toolFromInvocationPart(
 ): ToolCall {
   const invocation = part.toolInvocation;
   // Thread history arrives as JSON, so the typed Date is an ISO string at runtime.
-  const fallbackCreatedAt = messageCreatedAt === undefined ? undefined : new Date(messageCreatedAt).getTime();
+  const parsedCreatedAt = messageCreatedAt === undefined ? undefined : new Date(messageCreatedAt).getTime();
+  const fallbackCreatedAt = Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : undefined;
   const persistedResult = 'result' in invocation ? invocation.result : undefined;
   // Persisted terminal state beats the live overlay: `tool_end` can be lost in
   // an SSE gap (no server replay), and a terminal part never regresses — the
