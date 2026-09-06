@@ -34,7 +34,7 @@ import type {
   TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
@@ -62,8 +62,8 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ExperimentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -406,7 +406,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
     try {
-      const existing = await this.getExperimentById({ id: input.id });
+      const existing = await this.#getExperimentById(this.#db.client, { id: input.id });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
@@ -470,7 +470,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       );
 
       // Re-SELECT to get correctly transformed fields (timestamps, jsonb)
-      const updated = await this.getExperimentById({ id: input.id });
+      const updated = await this.#getExperimentById(this.#db.client, { id: input.id });
       return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -485,18 +485,23 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({
-    id,
-    filters,
-  }: {
-    id: string;
-    filters?: ExperimentTenancyFilters;
-  }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    return this.#getExperimentById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -571,7 +576,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -585,7 +590,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -828,7 +833,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       }
 
       if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
+        const existing = await this.#getExperimentResultById(this.#db.client, { id: input.id });
         if (!existing) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
@@ -875,18 +880,26 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({
-    id,
-    filters,
-  }: {
+  async getExperimentResultById(args: {
     id: string;
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null> {
+    return this.#getExperimentResultById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentResultById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -931,7 +944,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -945,7 +958,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -1014,7 +1027,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT
           "experimentId",
           COUNT(*)::int as total,

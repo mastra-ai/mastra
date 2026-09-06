@@ -40,8 +40,10 @@ export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomai
  * Pass an existing database client (DbClient)
  */
 export interface PgDomainClientConfig {
-  /** The database client */
+  /** The writer database client */
   client: DbClient;
+  /** Optional reader database client. Falls back to `client`. */
+  readClient?: DbClient;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
@@ -54,8 +56,10 @@ export interface PgDomainClientConfig {
  * Pass an existing pg.Pool
  */
 export interface PgDomainPoolConfig {
-  /** Pre-configured pg.Pool */
+  /** Pre-configured writer pg.Pool */
   pool: Pool;
+  /** Optional reader pg.Pool. Falls back to `pool`. */
+  readPool?: Pool;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
@@ -95,6 +99,7 @@ export type PgDomainRestConfig = {
  */
 export function resolvePgConfig(config: PgDomainConfig): {
   client: DbClient;
+  readClient: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
@@ -103,6 +108,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   if ('client' in config) {
     return {
       client: config.client,
+      readClient: config.readClient ?? config.client,
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
@@ -111,8 +117,10 @@ export function resolvePgConfig(config: PgDomainConfig): {
 
   // Existing pool
   if ('pool' in config) {
+    const client = new PoolAdapter(config.pool);
     return {
-      client: new PoolAdapter(config.pool),
+      client,
+      readClient: config.readPool && config.readPool !== config.pool ? new PoolAdapter(config.readPool) : client,
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
@@ -147,8 +155,10 @@ export function resolvePgConfig(config: PgDomainConfig): {
     );
   });
 
+  const client = new PoolAdapter(pool);
   return {
-    client: new PoolAdapter(pool),
+    client,
+    readClient: client,
     schemaName: config.schemaName,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
@@ -403,6 +413,7 @@ $mastra_timestamps_trigger$;`;
  */
 export interface PgDBInternalConfig {
   client: DbClient;
+  readClient?: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
 }
@@ -425,6 +436,7 @@ function assertPositiveLimit(limit: number): void {
 
 export class PgDB extends MastraBase {
   public client: DbClient;
+  public readClient: DbClient;
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
 
@@ -441,6 +453,7 @@ export class PgDB extends MastraBase {
     });
 
     this.client = config.client;
+    this.readClient = config.readClient ?? config.client;
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
   }

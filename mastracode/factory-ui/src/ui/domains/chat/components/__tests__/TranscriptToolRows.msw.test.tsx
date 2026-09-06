@@ -439,7 +439,7 @@ describe('TranscriptEntries tool rows', () => {
 
     // The transcript container no longer adds gaps between entries, so prose
     // content must own its breathing room via explicit margins.
-    const userBubbleWrapper = screen.getByText('Please run the tests').closest('.items-end');
+    const userBubbleWrapper = screen.getByText('Please run the tests').closest('.ml-auto');
     expect(userBubbleWrapper).toHaveClass('my-3');
 
     const assistantProse = screen.getByText('All 36 tests passed.').closest('.mastra-markdown');

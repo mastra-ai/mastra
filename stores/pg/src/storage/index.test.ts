@@ -31,6 +31,155 @@ const createTestPool = () => {
   return new Pool({ connectionString });
 };
 
+describe('read/write pools', () => {
+  it('falls back to the writer pool when readPool is omitted', async () => {
+    const writePool = createTestPool();
+    const store = new PostgresStore({ id: 'pg-write-pool-test', writePool });
+
+    try {
+      expect(store.pool).toBe(writePool);
+      expect(store.readPool).toBe(writePool);
+      expect(store.readDb).toBe(store.db);
+    } finally {
+      await store.close();
+      await writePool.end();
+    }
+  });
+
+  it('routes plain reads to readPool and writes to writePool', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    const writeQuery = vi.spyOn(writePool, 'query').mockResolvedValue({ rows: [], rowCount: 1 } as never);
+    const readQuery = vi.spyOn(readPool, 'query').mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    const store = new PostgresStore({ id: 'pg-read-write-pool-test', writePool, readPool });
+    const blobs = await store.getStore('blobs');
+
+    try {
+      await blobs.get('hash');
+      expect(readQuery).toHaveBeenCalledWith(expect.stringContaining('SELECT'), ['hash']);
+      expect(writeQuery).not.toHaveBeenCalled();
+
+      await blobs.delete('hash');
+      expect(writeQuery).toHaveBeenCalledWith(expect.stringContaining('DELETE'), ['hash']);
+    } finally {
+      await store.close();
+      await Promise.all([writePool.end(), readPool.end()]);
+    }
+  });
+
+  it('keeps read-modify-write paths on the writer even when the replica lags', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    // Simulate a replica that never catches up: every read sees an empty table.
+    const readQuery = vi.spyOn(readPool, 'query').mockResolvedValue({ rows: [], rowCount: 0 } as never);
+    const store = new PostgresStore({ id: 'pg-lagging-replica-test', writePool, readPool });
+
+    try {
+      await store.init();
+      const memory = await store.getStore('memory');
+      const agents = await store.getStore('agents');
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const threadId = `lag-thread-${suffix}`;
+      const agentId = `lag-agent-${suffix}`;
+      const now = new Date();
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'lag-resource',
+          title: 'before',
+          metadata: { a: 1 },
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      // Public read goes to the (lagging) reader, so it must not see the thread yet.
+      expect(await memory.getThreadById({ threadId })).toBeNull();
+      expect(readQuery).toHaveBeenCalled();
+
+      // Mutation paths must validate/merge against the writer, not the reader.
+      await memory.saveMessages({
+        messages: [
+          {
+            id: `lag-msg-${suffix}`,
+            threadId,
+            resourceId: 'lag-resource',
+            role: 'user',
+            type: 'text',
+            content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            createdAt: now,
+          },
+        ],
+      });
+      const updated = await memory.updateThread({ id: threadId, title: 'after', metadata: { b: 2 } });
+      expect(updated.title).toBe('after');
+      expect(updated.metadata).toEqual({ a: 1, b: 2 });
+
+      await agents.create({
+        agent: { id: agentId, name: 'lag', instructions: 'x', model: { provider: 'p', name: 'm' } },
+      });
+      expect(await agents.getById(agentId)).toBeNull();
+      const updatedAgent = await agents.update({ id: agentId, metadata: { touched: true } });
+      expect(updatedAgent.metadata).toEqual({ touched: true });
+
+      // Base-class dataset flows (core DatasetsStorage) gate on a dataset lookup
+      // before delegating to the PG writer; that gate must also use the writer.
+      const datasets = await store.getStore('datasets');
+      const filters = { organizationId: `lag-org-${suffix}`, projectId: `lag-proj-${suffix}` };
+      const dataset = await datasets.createDataset({ name: 'lag', ...filters });
+      expect(await datasets.getDatasetById({ id: dataset.id, filters })).toBeNull();
+      const updatedDataset = await datasets.updateDataset({
+        id: dataset.id,
+        filters,
+        description: 'after',
+        inputSchema: { type: 'object' },
+      });
+      expect(updatedDataset.description).toBe('after');
+      const [item] = await datasets.batchInsertItems({
+        datasetId: dataset.id,
+        filters,
+        items: [{ input: { q: 1 } }],
+      });
+      await datasets.updateItem({ id: item!.id, datasetId: dataset.id, filters, input: { q: 2 } });
+      await datasets.batchDeleteItems({ datasetId: dataset.id, filters, itemIds: [item!.id] });
+      await datasets.deleteDataset({ id: dataset.id, filters });
+
+      await memory.deleteThread({ threadId });
+      await agents.delete(agentId);
+    } finally {
+      await store.close();
+      await Promise.all([writePool.end(), readPool.end()]);
+    }
+  });
+
+  it('does not close caller-provided reader or writer pools', async () => {
+    const writePool = createTestPool();
+    const readPool = createTestPool();
+    const writeEnd = vi.spyOn(writePool, 'end');
+    const readEnd = vi.spyOn(readPool, 'end');
+    const store = new PostgresStore({ id: 'pg-read-write-close-test', writePool, readPool });
+
+    await store.close();
+    expect(writeEnd).not.toHaveBeenCalled();
+    expect(readEnd).not.toHaveBeenCalled();
+
+    await Promise.all([writePool.end(), readPool.end()]);
+  });
+
+  it('rejects pool and writePool together', async () => {
+    const pool = createTestPool();
+    const writePool = createTestPool();
+
+    try {
+      expect(() => new PostgresStore({ id: 'pg-invalid-pools-test', pool, writePool } as never)).toThrow(
+        'provide either pool or writePool, not both',
+      );
+    } finally {
+      await Promise.all([pool.end(), writePool.end()]);
+    }
+  });
+});
+
 // Pre-configured pool acceptance tests
 createClientAcceptanceTests({
   storeName: 'PostgresStore',
