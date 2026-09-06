@@ -44,6 +44,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// DurableAgent intentionally narrows the base stream/generate signatures.
+// The controller accepts the native base class; keep the same checked object.
+function requireNativeAgent(agent: unknown) {
+  if (!(agent instanceof Agent)) throw new TypeError('Expected a native Agent');
+  return agent;
+}
+
 it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', 'single-agent-future'] as const)(
   'Cold reopened Session Stop keeps its captured target: %s',
   async scenario => {
@@ -105,11 +112,17 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
         workspace,
         initialState: { yolo: true },
         ...(singleAgent
-          ? { agent: planAgent, modes: [{ id: 'web', name: 'Web', default: true }] }
+          ? { agent: requireNativeAgent(planAgent), modes: [{ id: 'web', name: 'Web', default: true }] }
           : {
               modes: [
-                { id: 'plan', name: 'Plan', default: true, transitionsTo: 'build', agent: planAgent },
-                { id: 'build', name: 'Build', agent: buildAgent },
+                {
+                  id: 'plan',
+                  name: 'Plan',
+                  default: true,
+                  transitionsTo: 'build',
+                  agent: requireNativeAgent(planAgent),
+                },
+                { id: 'build', name: 'Build', agent: requireNativeAgent(buildAgent) },
               ],
             }),
       });
