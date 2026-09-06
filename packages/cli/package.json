@@ -23,6 +23,7 @@
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
+    "generate:mcp-api-operations": "tsx scripts/generate-mcp-api-operations.ts",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
