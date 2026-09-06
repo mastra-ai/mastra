@@ -41,8 +41,12 @@ export class FileService {
 
   public getFirstExistingFile(files: string[]): string {
     for (const f of files) {
-      if (fs.existsSync(f)) {
-        return f;
+      try {
+        if (fs.statSync(f).isFile()) {
+          return f;
+        }
+      } catch {
+        // Missing or inaccessible paths are not valid file candidates.
       }
     }
 
