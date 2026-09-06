@@ -1,5 +1,8 @@
 import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
+import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
+import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
@@ -7,6 +10,7 @@ import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
+import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
@@ -25,6 +29,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
+import { crossAgentSettingsScenario } from './cross-agent-settings.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -190,6 +195,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
+  'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
+  'agent-connections-tool-flow': agentConnectionsToolFlowScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
@@ -198,6 +206,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
+  'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-model-picker': browserModelPickerScenario,
@@ -311,6 +320,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'profile-command': profileCommandScenario,
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
+  'cross-agent-settings': crossAgentSettingsScenario,
   'quiet-settings': quietSettingsScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
   'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,

@@ -29,6 +29,7 @@ export interface SettingsConfig {
   pgConnectionString: string;
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
+  experimentalCrossAgentSignals: boolean;
   webSearchProvider: WebSearchProviderSetting;
   tavilyKeyAvailable: boolean;
   parallelKeyAvailable: boolean;
@@ -43,6 +44,7 @@ export interface SettingsCallbacks {
   onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
   onClose: () => void;
@@ -469,6 +471,36 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalGithubSignalsChange(nextValue);
               config.experimentalGithubSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalGithubSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalCrossAgentSignals',
+        label: 'Experimental cross-agent communication',
+        description:
+          'Enable thread ownership advertisement, peer discovery, and agent connection tools (restart required).',
+        currentValue: config.experimentalCrossAgentSignals ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Enable cross-agent connection tools and thread ownership advertisement',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable cross-agent communication',
+              },
+            ],
+            config.experimentalCrossAgentSignals ? 'on' : 'off',
+            async value => {
+              const nextValue = value === 'on';
+              const accepted = await callbacks.onExperimentalCrossAgentSignalsChange(nextValue);
+              config.experimentalCrossAgentSignals = accepted === false ? !nextValue : nextValue;
+              done(config.experimentalCrossAgentSignals ? 'On' : 'Off');
             },
             () => done(),
           ),
