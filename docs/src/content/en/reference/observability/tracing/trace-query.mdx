@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed logical traces with recursive predicates, related span and score conditions, grouping, ordering, and cursor pagination.'
+description: 'Query completed logical traces with recursive predicates, related span, score, and feedback conditions, grouping, ordering, and cursor pagination.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -8,7 +8,7 @@ packages:
 
 # Advanced trace queries
 
-Use `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span or score records. The endpoint returns a fixed lightweight trace projection, or distinct thread IDs when you group by `threadId`.
+Use `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span, score, or feedback records. The endpoint returns a fixed lightweight trace projection, or distinct thread IDs when you group by `threadId`.
 
 The endpoint uses the same authentication as other observability routes and requires the `observability:read` permission. The configured observability store must support advanced trace queries.
 
@@ -40,7 +40,7 @@ const result = await mastraClient.queryTraces({
 
 A `some` clause matches when one related record satisfies its complete nested predicate. In this example, `scorerId` and `score` must match on the same score record. A `none` clause matches when no related record satisfies its complete nested predicate.
 
-Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans and scores can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans, scores, and feedback can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
 
 ## Send an HTTP request
 
@@ -73,7 +73,7 @@ curl --request POST \
 | Field | Required | Description |
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive, `to` is exclusive, and the range can span at most 31 days. Both values must be ISO timestamps. |
-| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some`, `spans.none`, `scores.some`, and `scores.none`. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `some` or `none` clauses for `spans`, `scores`, and `feedback`. |
 | `group` | No | Set to `{ by: ['threadId'] }` to return distinct non-null thread IDs. |
 | `orderBy` | No | One item ordering ungrouped results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted with `group`. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
@@ -89,7 +89,7 @@ The planner rejects a query before storage execution when it exceeds any of thes
 | Root `timeRange` | 31 days |
 | Predicate nesting depth | 12 levels |
 | Predicate nodes | 100 |
-| Related `spans` and `scores` clauses | 8 total |
+| Related `spans`, `scores`, and `feedback` clauses | 8 total |
 | Values in one `in` or `notIn` set | 100 |
 | Comparison literals and membership values | 1,000 total |
 | String literal | 4,096 UTF-8 bytes |
@@ -111,8 +111,53 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Score | `score` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Feedback | `value` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Feedback | `comment` | `exists`, `notExists` |
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`.
+
+String comparisons are exact and case-sensitive. A missing field satisfies neither positive nor ordered predicates, although the negative operators `ne` and `notIn` do match it. Combine a negative predicate with `exists` when the field must also be present.
+
+### Filter by feedback
+
+Every condition inside one `feedback.some` or `feedback.none` clause applies to the same feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
+
+```typescript
+const negativePatientRating = {
+  feedback: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+        { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+      ],
+    },
+  },
+}
+```
+
+Strict stored-value types are the portable contract for feedback predicates. PostgreSQL and ClickHouse distinguish numeric `3` from textual `'3'`. DuckDB currently persists `value` as `VARCHAR`, so value predicates can coerce numeric-looking strings until typed persistence is added. Ordered operators require a finite numeric literal and match only numeric values. `eq` and `ne` accept one string or number, while `in` and `notIn` require a non-empty set containing only strings or only numbers. `exists` and `notExists` test for either value type.
+
+Use `none` to select traces without a matching record. Traces with no feedback also match:
+
+```typescript
+const missingClinicianReview = {
+  feedback: {
+    none: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+        { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+      ],
+    },
+  },
+}
+```
+
+Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
 ## Responses
 

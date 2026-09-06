@@ -40,9 +40,26 @@ export interface RawTraceQueryScore {
   timestamp?: string;
 }
 
+export interface RawTraceQueryFeedback {
+  cursorId: number;
+  feedbackId: string;
+  traceId: string | null;
+  timestamp: string;
+  feedbackType: string;
+  feedbackSource: string;
+  feedbackUserId: string | null;
+  sourceId: string | null;
+  value: string | number;
+  comment: string | null;
+  entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
+}
+
 export interface TraceQueryFixtureData {
   spans: RawTraceQuerySpan[];
   scores: RawTraceQueryScore[];
+  feedback: RawTraceQueryFeedback[];
 }
 
 const span = (
@@ -65,6 +82,31 @@ const span = (
   entityName: 'agent',
   entityType: 'agent',
   environment: 'production',
+  ...overrides,
+});
+
+const feedbackRecord = (
+  cursorId: number,
+  feedbackId: string,
+  traceId: string | null,
+  feedbackType: string,
+  feedbackSource: string,
+  value: string | number,
+  overrides: Partial<RawTraceQueryFeedback> = {},
+): RawTraceQueryFeedback => ({
+  cursorId,
+  feedbackId,
+  traceId,
+  timestamp: '2026-08-10T00:00:00.000Z',
+  feedbackType,
+  feedbackSource,
+  feedbackUserId: null,
+  sourceId: null,
+  value,
+  comment: null,
+  entityVersionId: null,
+  parentEntityVersionId: null,
+  rootEntityVersionId: null,
   ...overrides,
 });
 
@@ -152,6 +194,41 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     { cursorId: 6, scoreId: 'score-c-factuality', traceId: 'trace-c', scorerId: 'factuality', score: null },
     { cursorId: 7, scoreId: 'score-uncorrelated', traceId: null, scorerId: 'factuality', score: 0.1 },
   ],
+  feedback: [
+    feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'patient', -1, {
+      timestamp: '2026-07-15T10:00:00.000Z',
+      feedbackUserId: 'patient-1',
+      sourceId: 'survey-result-1',
+      comment: 'Needs improvement',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    feedbackRecord(2, 'feedback-a-rating', 'trace-a', 'rating', 'patient', -1, {
+      timestamp: '2026-07-15T10:00:00.000Z',
+      feedbackUserId: 'patient-1',
+      sourceId: 'survey-result-1',
+      comment: 'Needs improvement',
+      entityVersionId: 'entity-v2',
+      parentEntityVersionId: 'parent-v2',
+      rootEntityVersionId: 'root-v1',
+    }),
+    feedbackRecord(3, 'feedback-a-correction', 'trace-a', 'clinician-correction', 'clinician', 'Use 20 mg', {
+      timestamp: '2026-08-12T10:00:00.000Z',
+      feedbackUserId: 'clinician-1',
+    }),
+    feedbackRecord(4, 'feedback-b-review-type', 'trace-b', 'clinical-review', 'patient', 'reviewed'),
+    feedbackRecord(5, 'feedback-b-review-source', 'trace-b', 'rating', 'clinician', 3, {
+      timestamp: '2026-08-20T10:00:00.000Z',
+      sourceId: 'app-result-1',
+    }),
+    feedbackRecord(6, 'feedback-b-text-three', 'trace-b', 'rating', 'patient', '3'),
+    feedbackRecord(7, 'feedback-c-review', 'trace-c', 'clinical-review', 'clinician', 'approved', {
+      comment: 'Reviewed',
+    }),
+    feedbackRecord(8, 'feedback-uncorrelated', null, 'rating', 'patient', -5),
+    feedbackRecord(9, 'feedback-nonmatching-trace', 'trace-without-root', 'rating', 'patient', -5),
+  ],
 };
 
 const tiedStartedAt = '2026-08-20T10:00:00.000Z';
@@ -166,6 +243,7 @@ export const TRACE_QUERY_ORDINAL_FIXTURE_DATA: TraceQueryFixtureData = {
     span(204, 'Ω', 'root-omega', { threadId: 'Ω', startedAt: tiedStartedAt, endedAt: tiedEndedAt }),
   ],
   scores: [],
+  feedback: [],
 };
 
 export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
@@ -216,6 +294,7 @@ export const TRACE_QUERY_TIED_TIMESTAMP_FIXTURE_DATA: TraceQueryFixtureData = {
       timestamp: tiedScoreTimestamp,
     },
   ],
+  feedback: [],
 };
 
 const fullRange = {
@@ -227,6 +306,7 @@ export interface TraceQueryConformanceCase {
   name: string;
   request: TraceQueryRequest;
   expected: Array<{ traceId: string } | { threadId: string }>;
+  requiresStrictFeedbackValueTypes?: boolean;
 }
 
 export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
@@ -442,6 +522,148 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-d' }],
   },
   {
+    name: 'matches negative numeric patient feedback outside the root time range',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'lt', left: { path: 'value' }, right: { literal: 0 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches clinician correction feedback',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinician-correction' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'anti-matches clinician review with same-record binding and includes traces without feedback',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          none: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'clinical-review' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches feedback with comments',
+    request: { timeRange: fullRange, where: { feedback: { some: { op: 'exists', path: 'comment' } } } },
+    expected: [{ traceId: 'trace-c' }, { traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches feedback without comments',
+    request: { timeRange: fullRange, where: { feedback: { some: { op: 'notExists', path: 'comment' } } } },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
+    name: 'matches application-defined feedback sources in an independent feedback time range',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'clinician' } },
+              { op: 'gte', left: { path: 'timestamp' }, right: { literal: '2026-08-15T00:00:00Z' } },
+              { op: 'lt', left: { path: 'timestamp' }, right: { literal: '2026-09-01T00:00:00Z' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'preserves string feedback values without numeric coercion',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'eq', left: { path: 'value' }, right: { literal: '3' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-b' }],
+  },
+  {
+    name: 'does not coerce textual feedback values to numbers',
+    requiresStrictFeedbackValueTypes: true,
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'eq', left: { path: 'value' }, right: { literal: 3 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'matches feedback lineage, user, and source fields',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackUserId' }, right: { literal: 'patient-1' } },
+              { op: 'eq', left: { path: 'sourceId' }, right: { literal: 'survey-result-1' } },
+              { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'entity-v2' } },
+              { op: 'eq', left: { path: 'parentEntityVersionId' }, right: { literal: 'parent-v2' } },
+              { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'root-v1' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
     name: 'returns distinct non-null thread groups',
     request: { timeRange: fullRange, group: { by: ['threadId'] } },
     expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
@@ -451,10 +673,11 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
 export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
   const spans = currentSpans(data.spans);
   const scores = currentScores(data.scores);
+  const feedback = currentFeedback(data.feedback);
   const roots = currentRoots(data.spans)
     .filter(root => !root.isPending && root.endedAt !== null)
     .filter(root => root.startedAt >= plan.timeRange.from && root.startedAt < plan.timeRange.to)
-    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores));
+    .filter(root => !plan.where || evaluateTracePredicate(plan.where, root, spans, scores, feedback));
 
   if (plan.result === 'groups') {
     let groups = [...new Set(roots.map(root => root.threadId).filter((value): value is string => value !== null))].sort(
@@ -551,14 +774,26 @@ function currentScores(scores: RawTraceQueryScore[]): RawTraceQueryScore[] {
   return [...records.values()];
 }
 
+function currentFeedback(feedback: RawTraceQueryFeedback[]): RawTraceQueryFeedback[] {
+  const records = new Map<string, RawTraceQueryFeedback>();
+  for (const candidate of feedback) {
+    const key = `${candidate.feedbackId}\u0000${candidate.timestamp}`;
+    const current = records.get(key);
+    if (!current || candidate.cursorId > current.cursorId) records.set(key, candidate);
+  }
+  return [...records.values()];
+}
+
 function evaluateTracePredicate(
   predicate: TrustedTraceQueryPredicate,
   root: RawTraceQuerySpan,
   spans: RawTraceQuerySpan[],
   scores: RawTraceQueryScore[],
+  feedback: RawTraceQueryFeedback[],
 ): boolean {
   if (predicate.type === 'relation') {
-    const records = (predicate.collection === 'spans' ? spans : scores).filter(
+    const collection = predicate.collection === 'spans' ? spans : predicate.collection === 'scores' ? scores : feedback;
+    const records = collection.filter(
       record => root.traceId !== null && record.traceId !== null && record.traceId === root.traceId,
     );
     const matched = records.some(record => evaluateScalarPredicate(predicate.predicate, record));
@@ -566,16 +801,16 @@ function evaluateTracePredicate(
   }
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
-      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores))
-      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores));
+      ? predicate.args.every(arg => evaluateTracePredicate(arg, root, spans, scores, feedback))
+      : predicate.args.some(arg => evaluateTracePredicate(arg, root, spans, scores, feedback));
   }
-  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores);
+  if (predicate.type === 'not') return !evaluateTracePredicate(predicate.arg, root, spans, scores, feedback);
   return evaluateScalarPredicate(predicate, traceValues(root));
 }
 
 function evaluateScalarPredicate(
   predicate: TrustedTraceQueryScalarPredicate,
-  record: RawTraceQuerySpan | RawTraceQueryScore | Record<string, unknown>,
+  record: RawTraceQuerySpan | RawTraceQueryScore | RawTraceQueryFeedback | Record<string, unknown>,
 ): boolean {
   if (predicate.type === 'boolean') {
     return predicate.operator === 'and'
@@ -592,6 +827,7 @@ function evaluateScalarPredicate(
     return predicate.operator === 'in' ? included : !included;
   }
   if (missing) return predicate.operator === 'ne';
+  if (typeof value !== typeof predicate.value) return predicate.operator === 'ne';
   switch (predicate.operator) {
     case 'eq':
       return value === predicate.value;

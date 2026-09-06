@@ -33,6 +33,8 @@ export interface ObservabilityVNextCapabilities {
    * not accept pending events or logical replacement writes.
    */
   traceQueryWriteModel?: 'current-record' | 'completion-only';
+  /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
+  traceQueryStrictFeedbackValueTypes?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -100,6 +102,7 @@ function completionOnlyTraceQueryFixture() {
     spans: [...roots.values()].filter(root => !root.isPending),
     relatedSpans: [...spans.values()],
     scores: [...scores.values()],
+    feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
   };
 }
 
@@ -151,6 +154,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 spans: TRACE_QUERY_FIXTURE_DATA.spans,
                 relatedSpans: [],
                 scores: TRACE_QUERY_FIXTURE_DATA.scores,
+                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
               };
         const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)
@@ -191,7 +195,31 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           });
         for (const score of scores) await storage.createScore({ score });
 
+        for (const feedback of fixture.feedback) {
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: feedback.feedbackId,
+              traceId: feedback.traceId,
+              spanId: null,
+              timestamp: new Date(feedback.timestamp),
+              feedbackType: feedback.feedbackType,
+              feedbackSource: feedback.feedbackSource,
+              feedbackUserId: feedback.feedbackUserId,
+              sourceId: feedback.sourceId,
+              value: feedback.value,
+              comment: feedback.comment,
+              entityVersionId: feedback.entityVersionId,
+              parentEntityVersionId: feedback.parentEntityVersionId,
+              rootEntityVersionId: feedback.rootEntityVersionId,
+              metadata: null,
+            },
+          });
+        }
+
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
+            continue;
+          }
           const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
