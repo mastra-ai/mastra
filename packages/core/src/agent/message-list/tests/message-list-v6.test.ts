@@ -619,6 +619,74 @@ describe('MessageList AI SDK v6 support', () => {
     });
   });
 
+  // Regression: the AI SDK stores a tool result's providerMetadata as the UI part's
+  // `resultProviderMetadata`, so that is what a browser sends back. Reading only
+  // `callProviderMetadata` dropped the `mastra.modelOutput` projection (issue #22012).
+  it('ingests toModelOutput metadata carried as resultProviderMetadata (issue #22012)', () => {
+    const uiMessage: UIMessageV6 = {
+      id: 'msg-result-metadata',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-screenshotTool',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: { url: 'https://example.com' },
+          output: { ok: true, _b64: 'base64imagedata' },
+          resultProviderMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const dbMessage = new MessageList().add([uiMessage], 'memory').get.all.db()[0]!;
+    const toolPart = dbMessage.content.parts.find(part => part.type === 'tool-invocation') as any;
+
+    expect(toolPart?.toolInvocation?.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    expect(toolPart?.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+    });
+  });
+
+  it('merges call and result provider metadata, letting the result win on conflict (issue #22012)', () => {
+    const uiMessage: UIMessageV6 = {
+      id: 'msg-merged-metadata',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-screenshotTool',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: { url: 'https://example.com' },
+          output: { ok: true },
+          callProviderMetadata: {
+            anthropic: { cacheControl: 'ephemeral' },
+            mastra: { toolPayloadTransform: { display: {} }, modelOutput: 'from-call' },
+          },
+          resultProviderMetadata: {
+            mastra: { modelOutput: 'from-result' },
+          },
+        },
+      ],
+    };
+
+    const dbMessage = new MessageList().add([uiMessage], 'memory').get.all.db()[0]!;
+    const toolPart = dbMessage.content.parts.find(part => part.type === 'tool-invocation') as any;
+
+    // Result wins for the key both halves set.
+    expect(toolPart?.providerMetadata?.mastra?.modelOutput).toBe('from-result');
+    // Call-time keys under the same namespace survive, as do other namespaces.
+    expect(toolPart?.providerMetadata?.mastra?.toolPayloadTransform).toEqual({ display: {} });
+    expect(toolPart?.providerMetadata?.anthropic).toEqual({ cacheControl: 'ephemeral' });
+  });
+
   it('rehydrates persisted pending tool approvals into v6 approval-requested tool parts on reload', () => {
     const messages: MastraDBMessage[] = [
       {
