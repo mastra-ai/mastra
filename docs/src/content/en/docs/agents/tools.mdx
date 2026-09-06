@@ -203,6 +203,8 @@ export const supervisor = new Agent({
 
 ## Workflows as tools
 
+Canceling an agent run also cancels its active workflow tools through the native workflow abort signal. Workflow steps should pass that signal to models and other operations they start. Cancellation prevents later steps from running; a current operation that ignores the signal can continue until it returns.
+
 Add workflows through the `workflows` configuration. Mastra converts each workflow to a `workflow-<key>` tool that uses the workflow's `inputSchema` and `outputSchema`. Include a `description` on the workflow so the agent knows when to trigger it.
 
 ```typescript title="src/mastra/agents/research-agent.ts"

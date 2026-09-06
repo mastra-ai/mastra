@@ -195,6 +195,8 @@ Returns: `string | null`
 
 Abort the active run and clear pending suspension display state.
 
+This synchronous method requests cancellation. Its return does not confirm that storage has saved a terminal state. Native cancellation errors are reported through the session's error events. A restored session uses native run discovery for its exact resource and thread when it has no local run identity.
+
 ```typescript
 session.abort()
 ```

@@ -1249,226 +1249,234 @@ export async function createNetworkLoop({
       const run = await wf.createRun({ runId });
 
       // listen for the network-level abort signal
-      const networkAbortCb = async () => {
-        await run.cancel();
-        await onAbort?.({
-          primitiveType: 'workflow',
-          primitiveId: inputData.primitiveId,
-          iteration: inputData.iteration,
+      let cancellation: Promise<void> | undefined;
+      const networkAbortCb = () => {
+        cancellation ??= run.cancel().then(async () => {
+          await onAbort?.({
+            primitiveType: 'workflow',
+            primitiveId: inputData.primitiveId,
+            iteration: inputData.iteration,
+          });
         });
+        void cancellation.catch(() => {});
       };
       if (abortSignal) {
         abortSignal.addEventListener('abort', networkAbortCb);
       }
 
-      const toolData = {
-        workflowId: wf.id,
-        args: inputData,
-        runId: stepId,
-      };
-
-      await writer?.write({
-        type: 'workflow-execution-start',
-        payload: toolData,
-        from: ChunkFrom.NETWORK,
-        runId,
-      });
-
-      const stream = resumeData
-        ? run.resumeStream({
-            resumeData,
-            requestContext: requestContext,
-          })
-        : run.stream({
-            inputData: input,
-            requestContext: requestContext,
-          });
-
-      // const wflowAbortCb = () => {
-      //   abort();
-      // };
-      // run.abortController.signal.addEventListener('abort', wflowAbortCb);
-      // wflowAbortSignal.addEventListener('abort', async () => {
-      //   run.abortController.signal.removeEventListener('abort', wflowAbortCb);
-      //   await run.cancel();
-      // });
-
-      // let result: any;
-      // let stepResults: Record<string, any> = {};
-      let workflowCancelled = false;
-      let chunks: ChunkType[] = [];
-      for await (const chunk of stream.fullStream) {
-        chunks.push(chunk);
-        await writer?.write({
-          type: `workflow-execution-event-${chunk.type}`,
-          payload: {
-            ...chunk,
-            runId: stepId,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-        if (chunk.type === 'workflow-canceled') {
-          workflowCancelled = true;
-        }
-      }
-
-      let runSuccess = true;
-
-      const workflowState = await stream.result;
-
-      if (!workflowState?.status || workflowState?.status === 'failed') {
-        runSuccess = false;
-      }
-
-      let resumeSchema;
-      let suspendPayload;
-      if (workflowState?.status === 'suspended') {
-        const suspendedStep = workflowState?.suspended?.[0]?.[0]!;
-        suspendPayload = workflowState?.steps?.[suspendedStep]?.suspendPayload;
-        if (suspendPayload?.__workflow_meta) {
-          delete suspendPayload.__workflow_meta;
-        }
-        const firstSuspendedStepPath = [...(workflowState?.suspended?.[0] ?? [])];
-        let wflowStep = wf;
-        while (firstSuspendedStepPath.length > 0) {
-          const key = firstSuspendedStepPath.shift();
-          if (key) {
-            if (!wflowStep.steps[key]) {
-              mastra?.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
-              break;
-            }
-            wflowStep = wflowStep.steps[key] as any;
-          }
-        }
-        const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
-        if (wflowStepSchema) {
-          resumeSchema = JSON.stringify(schemaToJsonSchema(wflowStepSchema));
-        } else {
-          resumeSchema = '';
-        }
-      }
-
-      const finalResult = JSON.stringify({
-        isNetwork: true,
-        primitiveType: inputData.primitiveType,
-        primitiveId: inputData.primitiveId,
-        selectionReason: inputData.selectionReason,
-        input,
-        finalResult: {
-          runId: run.runId,
-          runResult: workflowState,
-          chunks,
-          runSuccess,
-        },
-      });
-
-      const memory = await agent.getMemory({ requestContext: requestContext });
-      const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-
-      // When the workflow was cancelled due to abort, skip saving results to memory
-      if (workflowCancelled && abortSignal?.aborted) {
-        return handleAbort({
-          writer,
-          eventType: 'workflow-execution-abort',
-          primitiveType: 'workflow',
-          primitiveId: inputData.primitiveId,
-          iteration: inputData.iteration,
-          task: inputData.task,
-        });
-      }
-
-      await saveMessagesWithProcessors(
-        memory,
-        [
-          {
-            id: generateId({
-              idType: 'message',
-              source: 'workflow',
-              entityId: wf.id,
-              threadId: initData?.threadId || runId,
-              resourceId: initData?.threadResourceId || networkName,
-              role: 'assistant',
-            }),
-            type: 'text',
-            role: 'assistant',
-            content: {
-              parts: [{ type: 'text', text: finalResult }],
-              format: 2,
-              metadata: {
-                mode: 'network',
-                ...(suspendPayload
-                  ? {
-                      suspendedTools: {
-                        [inputData.primitiveId]: {
-                          args: input,
-                          suspendPayload,
-                          runId,
-                          type: 'suspension',
-                          resumeSchema,
-                          workflowId,
-                          primitiveType: 'workflow',
-                          primitiveId: inputData.primitiveId,
-                          toolName: inputData.primitiveId,
-                          toolCallId: inputData.primitiveId,
-                        },
-                      },
-                    }
-                  : {}),
-              },
-            },
-            createdAt: new Date(),
-            threadId: initData?.threadId || runId,
-            resourceId: initData?.threadResourceId || networkName,
-          },
-        ] as MastraDBMessage[],
-        processorRunner,
-        { requestContext },
-      );
-
-      if (suspendPayload) {
-        await writer?.write({
-          type: 'workflow-execution-suspended',
-          payload: {
-            args: input,
-            workflowId,
-            suspendPayload,
-            resumeSchema,
-            name: wf.name,
-            runId: stepId,
-            usage: await stream.usage,
-            selectionReason: inputData.selectionReason,
-            toolName: inputData.primitiveId,
-            toolCallId: inputData.primitiveId,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-        return suspend({ ...toolData, workflowSuspended: suspendPayload });
-      } else {
-        const endPayload = {
-          task: inputData.task,
-          primitiveId: inputData.primitiveId,
-          primitiveType: inputData.primitiveType,
-          result: finalResult,
-          isComplete: false,
-          iteration: inputData.iteration,
+      try {
+        const toolData = {
+          workflowId: wf.id,
+          args: inputData,
+          runId: stepId,
         };
 
         await writer?.write({
-          type: 'workflow-execution-end',
-          payload: {
-            ...endPayload,
-            result: workflowState,
-            name: wf.name,
-            runId: stepId,
-            usage: await stream.usage,
-          },
+          type: 'workflow-execution-start',
+          payload: toolData,
           from: ChunkFrom.NETWORK,
           runId,
         });
 
-        return endPayload;
+        const stream = resumeData
+          ? run.resumeStream({
+              resumeData,
+              requestContext: requestContext,
+            })
+          : run.stream({
+              inputData: input,
+              requestContext: requestContext,
+            });
+
+        // const wflowAbortCb = () => {
+        //   abort();
+        // };
+        // run.abortController.signal.addEventListener('abort', wflowAbortCb);
+        // wflowAbortSignal.addEventListener('abort', async () => {
+        //   run.abortController.signal.removeEventListener('abort', wflowAbortCb);
+        //   await run.cancel();
+        // });
+
+        // let result: any;
+        // let stepResults: Record<string, any> = {};
+        let workflowCancelled = false;
+        let chunks: ChunkType[] = [];
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+          await writer?.write({
+            type: `workflow-execution-event-${chunk.type}`,
+            payload: {
+              ...chunk,
+              runId: stepId,
+            },
+            from: ChunkFrom.NETWORK,
+            runId,
+          });
+          if (chunk.type === 'workflow-canceled') {
+            workflowCancelled = true;
+          }
+        }
+
+        let runSuccess = true;
+
+        const workflowState = await stream.result;
+
+        if (!workflowState?.status || workflowState?.status === 'failed') {
+          runSuccess = false;
+        }
+
+        let resumeSchema;
+        let suspendPayload;
+        if (workflowState?.status === 'suspended') {
+          const suspendedStep = workflowState?.suspended?.[0]?.[0]!;
+          suspendPayload = workflowState?.steps?.[suspendedStep]?.suspendPayload;
+          if (suspendPayload?.__workflow_meta) {
+            delete suspendPayload.__workflow_meta;
+          }
+          const firstSuspendedStepPath = [...(workflowState?.suspended?.[0] ?? [])];
+          let wflowStep = wf;
+          while (firstSuspendedStepPath.length > 0) {
+            const key = firstSuspendedStepPath.shift();
+            if (key) {
+              if (!wflowStep.steps[key]) {
+                mastra?.getLogger()?.warn(`Suspended step '${key}' not found in workflow '${workflowId}'`);
+                break;
+              }
+              wflowStep = wflowStep.steps[key] as any;
+            }
+          }
+          const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
+          if (wflowStepSchema) {
+            resumeSchema = JSON.stringify(schemaToJsonSchema(wflowStepSchema));
+          } else {
+            resumeSchema = '';
+          }
+        }
+
+        const finalResult = JSON.stringify({
+          isNetwork: true,
+          primitiveType: inputData.primitiveType,
+          primitiveId: inputData.primitiveId,
+          selectionReason: inputData.selectionReason,
+          input,
+          finalResult: {
+            runId: run.runId,
+            runResult: workflowState,
+            chunks,
+            runSuccess,
+          },
+        });
+
+        const memory = await agent.getMemory({ requestContext: requestContext });
+        const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
+
+        // When the workflow was cancelled due to abort, skip saving results to memory
+        if (workflowCancelled && abortSignal?.aborted) {
+          return handleAbort({
+            writer,
+            eventType: 'workflow-execution-abort',
+            primitiveType: 'workflow',
+            primitiveId: inputData.primitiveId,
+            iteration: inputData.iteration,
+            task: inputData.task,
+          });
+        }
+
+        await saveMessagesWithProcessors(
+          memory,
+          [
+            {
+              id: generateId({
+                idType: 'message',
+                source: 'workflow',
+                entityId: wf.id,
+                threadId: initData?.threadId || runId,
+                resourceId: initData?.threadResourceId || networkName,
+                role: 'assistant',
+              }),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [{ type: 'text', text: finalResult }],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                  ...(suspendPayload
+                    ? {
+                        suspendedTools: {
+                          [inputData.primitiveId]: {
+                            args: input,
+                            suspendPayload,
+                            runId,
+                            type: 'suspension',
+                            resumeSchema,
+                            workflowId,
+                            primitiveType: 'workflow',
+                            primitiveId: inputData.primitiveId,
+                            toolName: inputData.primitiveId,
+                            toolCallId: inputData.primitiveId,
+                          },
+                        },
+                      }
+                    : {}),
+                },
+              },
+              createdAt: new Date(),
+              threadId: initData?.threadId || runId,
+              resourceId: initData?.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+
+        if (suspendPayload) {
+          await writer?.write({
+            type: 'workflow-execution-suspended',
+            payload: {
+              args: input,
+              workflowId,
+              suspendPayload,
+              resumeSchema,
+              name: wf.name,
+              runId: stepId,
+              usage: await stream.usage,
+              selectionReason: inputData.selectionReason,
+              toolName: inputData.primitiveId,
+              toolCallId: inputData.primitiveId,
+            },
+            from: ChunkFrom.NETWORK,
+            runId,
+          });
+          return suspend({ ...toolData, workflowSuspended: suspendPayload });
+        } else {
+          const endPayload = {
+            task: inputData.task,
+            primitiveId: inputData.primitiveId,
+            primitiveType: inputData.primitiveType,
+            result: finalResult,
+            isComplete: false,
+            iteration: inputData.iteration,
+          };
+
+          await writer?.write({
+            type: 'workflow-execution-end',
+            payload: {
+              ...endPayload,
+              result: workflowState,
+              name: wf.name,
+              runId: stepId,
+              usage: await stream.usage,
+            },
+            from: ChunkFrom.NETWORK,
+            runId,
+          });
+
+          return endPayload;
+        }
+      } finally {
+        abortSignal?.removeEventListener('abort', networkAbortCb);
+        await cancellation;
       }
     },
   });

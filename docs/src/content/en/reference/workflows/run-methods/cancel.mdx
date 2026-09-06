@@ -9,7 +9,7 @@ packages:
 
 The `.cancel()` method cancels a workflow run, stopping execution and cleaning up resources.
 
-This method aborts any running steps and updates the workflow status to 'canceled'. It works for both actively running workflows and suspended/waiting workflows.
+This method aborts any running steps and updates a nonterminal workflow status to 'canceled'. It works for both actively running workflows and suspended/waiting workflows. A stored terminal result is preserved if completion wins a race with cancellation.
 
 ## Usage example
 
@@ -17,7 +17,6 @@ This method aborts any running steps and updates the workflow status to 'cancele
 const run = await workflow.createRun()
 
 await run.cancel()
-// Returns: { message: 'Workflow run canceled' }
 ```
 
 ## Parameters
@@ -39,8 +38,9 @@ await run.cancel()
   content={[
   {
     name: 'result',
-    type: 'Promise<{ message: string }>',
-    description: "A promise that resolves with { message: 'Workflow run canceled' } when cancellation succeeds",
+    type: 'Promise<void>',
+    description:
+      'Resolves after the cancellation write, or without changing an already terminal result. Rejects if configured storage cannot save the canceled status. For a nonterminal run, the abort signal is delivered before that write.',
   },
 ]}
 />
