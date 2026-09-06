@@ -1,15 +1,13 @@
-import type { Context } from 'hono';
-
 const clients = new Set<ReadableStreamDefaultController>();
 let hotReloadDisabled = false;
 
-export function handleClientsRefresh(c: Context): Response {
+export function handleClientsRefreshRequest(abortSignal: AbortSignal): Response {
   const stream = new ReadableStream({
     start(controller) {
       clients.add(controller);
       controller.enqueue('data: connected\n\n');
 
-      c.req.raw.signal.addEventListener('abort', () => {
+      abortSignal.addEventListener('abort', () => {
         clients.delete(controller);
       });
     },
@@ -20,7 +18,6 @@ export function handleClientsRefresh(c: Context): Response {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
     },
   });
 }
@@ -42,7 +39,7 @@ export function closeRefreshStreams() {
   clients.clear();
 }
 
-export function handleTriggerClientsRefresh(c: Context) {
+export function getTriggerClientsRefreshPayload() {
   clients.forEach(controller => {
     try {
       controller.enqueue('data: refresh\n\n');
@@ -50,7 +47,7 @@ export function handleTriggerClientsRefresh(c: Context) {
       clients.delete(controller);
     }
   });
-  return c.json({ success: true, clients: clients.size });
+  return { success: true, clients: clients.size };
 }
 
 // Functions to control hot reload during template installation
