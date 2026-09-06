@@ -2010,7 +2010,7 @@
       "apiKeyEnvVar": "SENSENOVA_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "SenseNova (China)",
-      "models": ["deepseek-v4-flash", "glm-5.2", "sensenova-6.8-flash-lite"],
+      "models": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "kimi-k3", "sensenova-6.8-flash-lite"],
       "docUrl": "https://platform.sensenova.cn/docs",
       "gateway": "models.dev"
     },
@@ -5166,6 +5166,7 @@
         "deepseek-v3.2",
         "deepseek-v4-flash",
         "deepseek-v4-flash-0731",
+        "deepseek-v4-flash-vision-exp",
         "deepseek-v4-pro",
         "deepseek-v4-pro-0813",
         "gemma-4-31b-it",
@@ -5190,6 +5191,9 @@
       "docUrl": "https://crof.ai/docs",
       "gateway": "models.dev",
       "modelOverrides": {
+        "deepseek-v4-flash-vision-exp": {
+          "npm": "@ai-sdk/openai-compatible"
+        },
         "deepseek-v4-pro-0813": {
           "npm": "@ai-sdk/openai-compatible"
         },
@@ -6714,18 +6718,7 @@
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI (China)",
-      "models": [
-        "kimi-k2-0711-preview",
-        "kimi-k2-0905-preview",
-        "kimi-k2-thinking",
-        "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview",
-        "kimi-k2.5",
-        "kimi-k2.6",
-        "kimi-k2.7-code",
-        "kimi-k2.7-code-highspeed",
-        "kimi-k3"
-      ],
+      "models": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -7135,7 +7128,6 @@
         "z-ai/glm-5-turbo",
         "z-ai/glm-5.1",
         "z-ai/glm-5.2",
-        "z-ai/glm-5.2:free",
         "z-ai/glm-5.3",
         "z-ai/glm-5.3-flash",
         "z-ai/glm-5v-turbo",
@@ -7308,6 +7300,7 @@
         "openai/gpt-5.6-luna",
         "openai/gpt-5.6-sol",
         "openai/gpt-5.6-terra",
+        "openai/gpt-6-astra",
         "volcengine/doubao-seed-1-6",
         "volcengine/doubao-seed-1-6-flash",
         "volcengine/doubao-seed-1-6-vision",
@@ -7416,6 +7409,10 @@
           "npm": "@ai-sdk/openai"
         },
         "openai/gpt-5.2-codex": {
+          "api": "https://api.ofox.ai/v1",
+          "npm": "@ai-sdk/openai"
+        },
+        "openai/gpt-6-astra": {
           "api": "https://api.ofox.ai/v1",
           "npm": "@ai-sdk/openai"
         },
@@ -7567,6 +7564,7 @@
       "name": "Neon",
       "models": [
         "claude-fable-5",
+        "claude-fable-5-1",
         "claude-haiku-4-5",
         "claude-opus-4-1",
         "claude-opus-4-5",
@@ -7585,6 +7583,7 @@
         "gemini-3-flash",
         "gemma-3-12b",
         "glm-5-2",
+        "glm-5-3-flash",
         "gpt-5",
         "gpt-5-1",
         "gpt-5-2",
@@ -7599,8 +7598,10 @@
         "gpt-5-6-terra",
         "gpt-5-mini",
         "gpt-5-nano",
+        "gpt-6-astra",
         "gpt-oss-120b",
         "gpt-oss-20b",
+        "grok-4-6",
         "inkling",
         "kimi-k3",
         "llama-4-maverick",
@@ -7642,6 +7643,11 @@
           "shape": "responses",
           "npm": "@ai-sdk/openai"
         },
+        "gpt-6-astra": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
         "gpt-5-2": {
           "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
@@ -7663,6 +7669,11 @@
           "npm": "@ai-sdk/openai"
         },
         "gpt-5-5-pro": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "grok-4-6": {
           "api": "${NEON_AI_GATEWAY_BASE_URL}/openai/v1",
           "shape": "responses",
           "npm": "@ai-sdk/openai"
@@ -7990,18 +8001,7 @@
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI",
-      "models": [
-        "kimi-k2-0711-preview",
-        "kimi-k2-0905-preview",
-        "kimi-k2-thinking",
-        "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview",
-        "kimi-k2.5",
-        "kimi-k2.6",
-        "kimi-k2.7-code",
-        "kimi-k2.7-code-highspeed",
-        "kimi-k3"
-      ],
+      "models": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -8370,7 +8370,7 @@
     "cerebras": {
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
       "name": "Cerebras",
-      "models": ["gemma-4-31b", "gpt-oss-120b"],
+      "models": ["gpt-oss-120b", "qwen-3.8-27b"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
       "gateway": "models.dev",
       "npm": "@ai-sdk/cerebras"
@@ -9731,7 +9731,6 @@
         "openrouter/z-ai/glm-5",
         "openrouter/z-ai/glm-5.1",
         "openrouter/z-ai/glm-5.2",
-        "openrouter/z-ai/glm-5.2:free",
         "openrouter/z-ai/glm-5.3",
         "openrouter/z-ai/glm-5.3-flash",
         "openrouter/~deepseek/deepseek-v4-flash-latest",
@@ -11389,7 +11388,7 @@
       "doubao-seed-evolving",
       "glm-5-2-260617"
     ],
-    "sensenova": ["deepseek-v4-flash", "glm-5.2", "sensenova-6.8-flash-lite"],
+    "sensenova": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "kimi-k3", "sensenova-6.8-flash-lite"],
     "orcarouter": [
       "anthropic/claude-fable-5",
       "anthropic/claude-haiku-4.5",
@@ -13956,6 +13955,7 @@
       "deepseek-v3.2",
       "deepseek-v4-flash",
       "deepseek-v4-flash-0731",
+      "deepseek-v4-flash-vision-exp",
       "deepseek-v4-pro",
       "deepseek-v4-pro-0813",
       "gemma-4-31b-it",
@@ -15016,18 +15016,7 @@
       "trinity-large-preview-free",
       "x-preview-f-free"
     ],
-    "moonshotai-cn": [
-      "kimi-k2-0711-preview",
-      "kimi-k2-0905-preview",
-      "kimi-k2-thinking",
-      "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview",
-      "kimi-k2.5",
-      "kimi-k2.6",
-      "kimi-k2.7-code",
-      "kimi-k2.7-code-highspeed",
-      "kimi-k3"
-    ],
+    "moonshotai-cn": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"],
     "stepfun-step-plan": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-router-v1"],
     "nearai": [
       "Qwen/Qwen3-30B-A3B-Instruct-2507",
@@ -15413,7 +15402,6 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1",
       "z-ai/glm-5.2",
-      "z-ai/glm-5.2:free",
       "z-ai/glm-5.3",
       "z-ai/glm-5.3-flash",
       "z-ai/glm-5v-turbo",
@@ -15553,6 +15541,7 @@
       "openai/gpt-5.6-luna",
       "openai/gpt-5.6-sol",
       "openai/gpt-5.6-terra",
+      "openai/gpt-6-astra",
       "volcengine/doubao-seed-1-6",
       "volcengine/doubao-seed-1-6-flash",
       "volcengine/doubao-seed-1-6-vision",
@@ -15605,6 +15594,7 @@
     ],
     "neon": [
       "claude-fable-5",
+      "claude-fable-5-1",
       "claude-haiku-4-5",
       "claude-opus-4-1",
       "claude-opus-4-5",
@@ -15623,6 +15613,7 @@
       "gemini-3-flash",
       "gemma-3-12b",
       "glm-5-2",
+      "glm-5-3-flash",
       "gpt-5",
       "gpt-5-1",
       "gpt-5-2",
@@ -15637,8 +15628,10 @@
       "gpt-5-6-terra",
       "gpt-5-mini",
       "gpt-5-nano",
+      "gpt-6-astra",
       "gpt-oss-120b",
       "gpt-oss-20b",
+      "grok-4-6",
       "inkling",
       "kimi-k3",
       "llama-4-maverick",
@@ -15855,18 +15848,7 @@
       "zai-org/GLM-4.7",
       "zai-org/GLM-5"
     ],
-    "moonshotai": [
-      "kimi-k2-0711-preview",
-      "kimi-k2-0905-preview",
-      "kimi-k2-thinking",
-      "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview",
-      "kimi-k2.5",
-      "kimi-k2.6",
-      "kimi-k2.7-code",
-      "kimi-k2.7-code-highspeed",
-      "kimi-k3"
-    ],
+    "moonshotai": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"],
     "volcengine-coding-plan": [
       "deepseek-v4-flash",
       "deepseek-v4-pro",
@@ -16086,7 +16068,7 @@
       "qwen/qwen3.5-9b"
     ],
     "longcat": ["LongCat-2.0"],
-    "cerebras": ["gemma-4-31b", "gpt-oss-120b"],
+    "cerebras": ["gpt-oss-120b", "qwen-3.8-27b"],
     "togetherai": [
       "LiquidAI/LFM2-24B-A2B",
       "MiniMaxAI/MiniMax-M2.5",
@@ -17040,7 +17022,6 @@
       "openrouter/z-ai/glm-5",
       "openrouter/z-ai/glm-5.1",
       "openrouter/z-ai/glm-5.2",
-      "openrouter/z-ai/glm-5.2:free",
       "openrouter/z-ai/glm-5.3",
       "openrouter/z-ai/glm-5.3-flash",
       "openrouter/~deepseek/deepseek-v4-flash-latest",

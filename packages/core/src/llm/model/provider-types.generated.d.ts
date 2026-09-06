@@ -1653,7 +1653,13 @@ export type ProviderModelsMap = {
     'doubao-seed-evolving',
     'glm-5-2-260617',
   ];
-  readonly sensenova: readonly ['deepseek-v4-flash', 'glm-5.2', 'sensenova-6.8-flash-lite'];
+  readonly sensenova: readonly [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'glm-5.2',
+    'kimi-k3',
+    'sensenova-6.8-flash-lite',
+  ];
   readonly orcarouter: readonly [
     'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
@@ -4227,6 +4233,7 @@ export type ProviderModelsMap = {
     'deepseek-v3.2',
     'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
+    'deepseek-v4-flash-vision-exp',
     'deepseek-v4-pro',
     'deepseek-v4-pro-0813',
     'gemma-4-31b-it',
@@ -5291,18 +5298,7 @@ export type ProviderModelsMap = {
     'trinity-large-preview-free',
     'x-preview-f-free',
   ];
-  readonly 'moonshotai-cn': readonly [
-    'kimi-k2-0711-preview',
-    'kimi-k2-0905-preview',
-    'kimi-k2-thinking',
-    'kimi-k2-thinking-turbo',
-    'kimi-k2-turbo-preview',
-    'kimi-k2.5',
-    'kimi-k2.6',
-    'kimi-k2.7-code',
-    'kimi-k2.7-code-highspeed',
-    'kimi-k3',
-  ];
+  readonly 'moonshotai-cn': readonly ['kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k3'];
   readonly 'stepfun-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash', 'step-router-v1'];
   readonly nearai: readonly [
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
@@ -5688,7 +5684,6 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
-    'z-ai/glm-5.2:free',
     'z-ai/glm-5.3',
     'z-ai/glm-5.3-flash',
     'z-ai/glm-5v-turbo',
@@ -5828,6 +5823,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.6-luna',
     'openai/gpt-5.6-sol',
     'openai/gpt-5.6-terra',
+    'openai/gpt-6-astra',
     'volcengine/doubao-seed-1-6',
     'volcengine/doubao-seed-1-6-flash',
     'volcengine/doubao-seed-1-6-vision',
@@ -5880,6 +5876,7 @@ export type ProviderModelsMap = {
   ];
   readonly neon: readonly [
     'claude-fable-5',
+    'claude-fable-5-1',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -5898,6 +5895,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemma-3-12b',
     'glm-5-2',
+    'glm-5-3-flash',
     'gpt-5',
     'gpt-5-1',
     'gpt-5-2',
@@ -5912,8 +5910,10 @@ export type ProviderModelsMap = {
     'gpt-5-6-terra',
     'gpt-5-mini',
     'gpt-5-nano',
+    'gpt-6-astra',
     'gpt-oss-120b',
     'gpt-oss-20b',
+    'grok-4-6',
     'inkling',
     'kimi-k3',
     'llama-4-maverick',
@@ -6130,18 +6130,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
-  readonly moonshotai: readonly [
-    'kimi-k2-0711-preview',
-    'kimi-k2-0905-preview',
-    'kimi-k2-thinking',
-    'kimi-k2-thinking-turbo',
-    'kimi-k2-turbo-preview',
-    'kimi-k2.5',
-    'kimi-k2.6',
-    'kimi-k2.7-code',
-    'kimi-k2.7-code-highspeed',
-    'kimi-k3',
-  ];
+  readonly moonshotai: readonly ['kimi-k2.6', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed', 'kimi-k3'];
   readonly 'volcengine-coding-plan': readonly [
     'deepseek-v4-flash',
     'deepseek-v4-pro',
@@ -6361,7 +6350,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-9b',
   ];
   readonly longcat: readonly ['LongCat-2.0'];
-  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3.8-27b'];
   readonly togetherai: readonly [
     'LiquidAI/LFM2-24B-A2B',
     'MiniMaxAI/MiniMax-M2.5',
@@ -7323,7 +7312,6 @@ export type ProviderModelsMap = {
     'openrouter/z-ai/glm-5',
     'openrouter/z-ai/glm-5.1',
     'openrouter/z-ai/glm-5.2',
-    'openrouter/z-ai/glm-5.2:free',
     'openrouter/z-ai/glm-5.3',
     'openrouter/z-ai/glm-5.3-flash',
     'openrouter/~deepseek/deepseek-v4-flash-latest',
