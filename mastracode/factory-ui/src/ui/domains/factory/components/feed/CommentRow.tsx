@@ -1,16 +1,25 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import {
+  CommentEditor,
+  CommentItem,
+  CommentItemActions,
+  CommentItemAuthor,
+  CommentItemAvatar,
+  CommentItemBody,
+  CommentItemContent,
+  CommentItemHeader,
+  CommentItemTimestamp,
+  CommentQuote,
+} from '@mastra/playground-ui/components/Comment';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { KeyboardEvent, Ref } from 'react';
+import type { Ref } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
-import { REVEAL_ON_CARD_HOVER } from '../BoardCardParts';
-import { CommentQuote } from './CommentQuote';
-import type { CommentQuoteDraft } from './CommentQuote';
+import type { CommentQuoteDraft } from './quoteDraft';
 
 // A hand-picked passage is quoted as picked; quoting a whole comment gets more
 // room, since the reader has no highlight to tell them what mattered.
@@ -60,87 +69,6 @@ function RowAction({
   );
 }
 
-/**
- * Owns the draft so a failed save keeps what was typed; closing is the parent's
- * call, and only ever happens on a save that landed or on cancel.
- */
-function CommentEditor({
-  initialBody,
-  onSave,
-  onClose,
-}: {
-  initialBody: string;
-  onSave?: (body: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState(initialBody);
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    const body = draft.trim();
-    if (body.length === 0) {
-      setError('Comment body must not be empty.');
-      return;
-    }
-    if (body === initialBody) {
-      onClose();
-      return;
-    }
-    // One save in flight per row: a second one would carry the same expected
-    // revision and race its own predecessor.
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      await onSave?.(body);
-      onClose();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save comment');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // An IME commit fires Enter mid-composition; acting on it would save half a word.
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void save();
-    }
-  };
-
-  return (
-    <div className="mt-1 flex flex-col gap-1.5">
-      <div className="relative">
-        <textarea
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          aria-label="Edit comment"
-          rows={2}
-          className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border px-2 pt-1.5 pb-9 outline-none"
-        />
-        {/* Opaque, so a scrolled line passes behind the actions instead of under them. */}
-        <div className="bg-surface2 absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg px-1.5 pt-1 pb-1.5">
-          <Button type="button" variant="ghost" size="xs" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" variant="outline" size="xs" disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-      </div>
-      {error ? (
-        <p role="alert" className="text-ui-xs text-error m-0">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 export function CommentRow({
   ref,
   comment,
@@ -153,7 +81,7 @@ export function CommentRow({
   onSaveEdit,
   onDelete,
 }: {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLElement>;
   comment: WorkItemComment;
   currentUserId?: string;
   showHeader: boolean;
@@ -164,7 +92,7 @@ export function CommentRow({
   onSaveEdit?: (body: string) => Promise<void>;
   onDelete?: () => void;
 }) {
-  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const deleted = comment.deletedAt !== undefined;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
@@ -179,26 +107,18 @@ export function CommentRow({
   };
 
   return (
-    <div
-      ref={ref}
-      aria-busy={pending || undefined}
-      className={cn(
-        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2',
-        showHeader ? 'py-1.5' : 'py-0.5',
-        highlighted && 'bg-accent1/10',
-      )}
-    >
-      <div className="w-6 shrink-0 pt-0.5">
+    <CommentItem ref={ref} aria-busy={pending || undefined} continued={!showHeader} highlighted={highlighted}>
+      <CommentItemAvatar>
         {showHeader ? <Avatar src={comment.author.avatarUrl} name={authorName} size="sm" /> : null}
-      </div>
-      <div className="min-w-0 flex-1">
+      </CommentItemAvatar>
+      <CommentItemContent>
         {showHeader ? (
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-ui-sm text-icon6 truncate font-medium">{authorName}</span>
-            <time dateTime={comment.occurredAt} className="text-ui-xs text-icon2 shrink-0">
+          <CommentItemHeader>
+            <CommentItemAuthor>{authorName}</CommentItemAuthor>
+            <CommentItemTimestamp dateTime={comment.occurredAt}>
               {relativeTime(comment.occurredAt)}
-            </time>
-          </div>
+            </CommentItemTimestamp>
+          </CommentItemHeader>
         ) : null}
         {comment.replyTo?.quote ? (
           <CommentQuote authorName={comment.replyTo.authorName} quote={comment.replyTo.quote} className="mt-1" />
@@ -214,19 +134,14 @@ export function CommentRow({
             }}
           />
         ) : (
-          <div ref={bodyRef} className="text-ui-sm">
+          <CommentItemBody ref={bodyRef}>
             <MarkdownRenderer>{comment.body}</MarkdownRenderer>
             {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
-          </div>
+          </CommentItemBody>
         )}
-      </div>
+      </CommentItemContent>
       {!deleted && !editing && !pending ? (
-        <div
-          className={cn(
-            'bg-surface2 border-border1 absolute -top-2 right-2 flex items-center gap-0.5 rounded-lg border px-0.5',
-            REVEAL_ON_CARD_HOVER,
-          )}
-        >
+        <CommentItemActions>
           {onQuote ? (
             <RowAction label="Quote reply" onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
               <Quote aria-hidden />
@@ -252,8 +167,8 @@ export function CommentRow({
               <Trash2 aria-hidden />
             </RowAction>
           ) : null}
-        </div>
+        </CommentItemActions>
       ) : null}
-    </div>
+    </CommentItem>
   );
 }

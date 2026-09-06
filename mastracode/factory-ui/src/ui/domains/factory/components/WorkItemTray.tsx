@@ -8,7 +8,7 @@ import { CardSourceDescription, useSourceDescription } from './BoardCardDetails'
 import { CommentComposer } from './feed/CommentComposer';
 import { CommentList } from './feed/CommentList';
 import type { FeedUser } from './feed/CommentList';
-import type { CommentQuoteDraft } from './feed/CommentQuote';
+import type { CommentQuoteDraft } from './feed/quoteDraft';
 
 // One stream in time order, runs and moves and comments alike, the composer under it.
 export function WorkItemTray({

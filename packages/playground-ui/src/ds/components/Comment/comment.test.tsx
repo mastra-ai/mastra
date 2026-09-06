@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +16,8 @@ import {
 } from './comment';
 import { CommentComposer, CommentComposerInput, CommentComposerSend } from './comment-composer';
 import type { CommentVariant } from './comment-context';
+import { CommentEditor } from './comment-editor';
+import { CommentQuote } from './comment-quote';
 
 afterEach(() => {
   cleanup();
@@ -117,5 +119,133 @@ describe('CommentComposer', () => {
     const form = screen.getByRole('form', { name: 'Add a comment' });
     expect(form.getAttribute('data-slot')).toBe('comment-composer');
     expect(screen.getByRole('button', { name: 'Send comment' }).getAttribute('type')).toBe('submit');
+  });
+});
+
+describe('Comment thread variant', () => {
+  const ThreadRow = () => (
+    <Comment variant="thread">
+      <CommentItem>
+        <CommentItemHeader>
+          <CommentItemAuthor>Marvin Frachet</CommentItemAuthor>
+          <CommentItemTimestamp dateTime="2026-09-04T09:00:00Z">2h</CommentItemTimestamp>
+        </CommentItemHeader>
+        <CommentItemBody>Hello world</CommentItemBody>
+        <CommentItemActions>
+          <button type="button">Quote reply</button>
+        </CommentItemActions>
+      </CommentItem>
+    </Comment>
+  );
+
+  it('renders the row as a stream entry rather than a list item', () => {
+    render(<ThreadRow />);
+
+    expect(screen.queryByRole('listitem')).toBeNull();
+    expect(document.querySelector('[data-slot="comment-item"]')?.tagName).toBe('DIV');
+  });
+
+  it('keeps per-row actions, unlike the embed variant', () => {
+    render(<ThreadRow />);
+
+    expect(screen.getByRole('button', { name: 'Quote reply' })).toBeTruthy();
+  });
+
+  it('renders a body that can hold rendered markdown blocks', () => {
+    render(<ThreadRow />);
+
+    expect(screen.getByText('Hello world').tagName).toBe('DIV');
+  });
+});
+
+describe('CommentQuote', () => {
+  it('attributes the passage to its author', () => {
+    render(<CommentQuote authorName="Marvin Frachet" quote="should it move to Review?" />);
+
+    expect(screen.getByText('Marvin Frachet')).toBeTruthy();
+    expect(screen.getByText('should it move to Review?')).toBeTruthy();
+  });
+
+  it('offers to drop the quote only while it is a draft', () => {
+    const onDismiss = vi.fn();
+    const { rerender } = render(<CommentQuote quote="a passage" />);
+    expect(screen.queryByRole('button', { name: 'Remove quote' })).toBeNull();
+
+    rerender(<CommentQuote quote="a passage" onDismiss={onDismiss} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove quote' }));
+
+    expect(onDismiss).toHaveBeenCalled();
+  });
+});
+
+describe('CommentEditor', () => {
+  const type = (value: string) =>
+    fireEvent.change(screen.getByRole('textbox', { name: 'Edit comment' }), {
+      target: { value },
+    });
+
+  it('saves the trimmed draft and closes', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(<CommentEditor initialBody="before" onSave={onSave} onClose={onClose} />);
+
+    type('  after  ');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith('after'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('keeps the draft on screen and surfaces why a save failed', async () => {
+    const onClose = vi.fn();
+    render(
+      <CommentEditor
+        initialBody="before"
+        onSave={() => Promise.reject(new Error('Comment was edited elsewhere'))}
+        onClose={onClose}
+      />,
+    );
+
+    type('after');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Comment was edited elsewhere');
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Edit comment' }).value).toBe('after');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty body without calling the caller', () => {
+    const onSave = vi.fn();
+    render(<CommentEditor initialBody="before" onSave={onSave} onClose={vi.fn()} />);
+
+    type('   ');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(screen.getByRole('alert').textContent).toBe('Comment body must not be empty.');
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('closes without a save when nothing changed', () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(<CommentEditor initialBody="before" onSave={onSave} onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('sends on Enter but keeps Shift+Enter for a new line', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<CommentEditor initialBody="before" onSave={onSave} onClose={vi.fn()} />);
+
+    const textarea = screen.getByRole('textbox', { name: 'Edit comment' });
+    type('after');
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith('after'));
   });
 });
