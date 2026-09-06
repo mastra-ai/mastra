@@ -61,28 +61,51 @@ async function resolveProject(
   c: Context,
   deps: Pick<AutomationRunRoutesDeps, 'auth' | 'projects'>,
 ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }> {
-  await deps.auth.ensureUser(c);
-  const tenant = deps.auth.tenant(c);
-  if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (!tenant.orgId) {
-    return {
-      response: c.json(
-        { error: 'organization_required', message: 'The Factory board requires an organization.' },
-        403,
-      ),
-    };
+  let orgId: string;
+  let userId: string;
+
+  if (deps.auth.enabled()) {
+    await deps.auth.ensureUser(c);
+    const tenant = deps.auth.tenant(c);
+    if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
+    if (!tenant.orgId) {
+      return {
+        response: c.json(
+          { error: 'organization_required', message: 'The Factory board requires an organization.' },
+          403,
+        ),
+      };
+    }
+    if (!(await deps.auth.isOrganizationAdmin(c, tenant.orgId))) {
+      return {
+        response: c.json(
+          { error: 'forbidden', message: 'Organization administrator access is required for automation ingress.' },
+          403,
+        ),
+      };
+    }
+    orgId = tenant.orgId;
+    userId = tenant.userId;
+  } else {
+    // Match Factory's existing no-auth storage scope. This keeps the trusted
+    // loopback/self-hosted controller path usable without inventing a fake user.
+    orgId = 'local';
+    userId = 'local';
   }
+
   const projectId = c.req.param('id');
   if (!projectId || !UUID_RE.test(projectId)) return { response: c.json({ error: 'Project not found' }, 404) };
   await deps.projects.ensureReady();
-  const project = await deps.projects.get({ orgId: tenant.orgId, id: projectId });
+  const project = await deps.projects.get({ orgId, id: projectId });
   if (!project) return { response: c.json({ error: 'Project not found' }, 404) };
-  return { orgId: tenant.orgId, userId: tenant.userId, factoryProjectId: projectId };
+  return { orgId, userId, factoryProjectId: projectId };
 }
 
 /**
  * Constrained durable ingress for a trusted external orchestrator.
  *
+ * Local/no-auth deployments may call this through their trusted loopback
+ * boundary. In tenant mode the caller must be an organization administrator.
  * The caller may enqueue exactly one validated invokeSkill decision for an
  * existing work item. It cannot move the board, send arbitrary messages, stamp
  * human consent, or create a source-control session. Those responsibilities stay
