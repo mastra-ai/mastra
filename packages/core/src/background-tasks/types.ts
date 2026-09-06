@@ -212,9 +212,18 @@ export interface BackgroundTaskManagerConfig {
 
 // --- Tool-level and agent-level config ---
 
+export type BackgroundExecutionDisposition = 'foreground' | 'deferred' | 'awaited';
+
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;
+  /**
+   * How an eligible tool runs when the call carries no `_background` override.
+   * - `'deferred'` (default): eligible calls run in the background.
+   * - `'foreground'`: eligible calls run inline unless the model explicitly
+   *   opts in via `_background` — eligibility only grants the *option*.
+   */
+  defaultDisposition?: 'foreground' | 'deferred';
   /** Override the manager's default timeout for this tool */
   timeoutMs?: number;
   /** Override retry config for this tool */
@@ -227,7 +236,9 @@ export interface ToolBackgroundConfig {
   onFailed?: (task: BackgroundTask) => void | Promise<void>;
 }
 
-export type AgentBackgroundToolConfig = boolean | { enabled: boolean; timeoutMs?: number };
+export type AgentBackgroundToolConfig =
+  | boolean
+  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
 
 export interface AgentBackgroundConfig {
   /**
@@ -239,11 +250,13 @@ export interface AgentBackgroundConfig {
    */
   disabled?: boolean;
   /**
-   * Which tools should run in the background.
-   * - `true`: use the tool's own background config
-   * - `false`: always foreground, even if tool says background
-   * - `{ enabled, timeoutMs }`: override specific settings
-   * - `'all'`: run all background-eligible tools in background
+   * Which tools are eligible for background execution. Eligible tools run
+   * deferred by default; set `defaultDisposition: 'foreground'` to make a
+   * tool run inline unless the call opts in via `_background`.
+   * - `true`: allow the tool's own background config
+   * - `false`: always foreground, even if the tool is eligible
+   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `'all'`: make all tools eligible for background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
@@ -261,8 +274,10 @@ export interface AgentBackgroundConfig {
  * to override background behavior per-call.
  */
 export interface LLMBackgroundOverride {
-  /** Force background (true) or foreground (false). Undefined = use default config. */
+  /** Force deferred (true) or foreground (false). Undefined uses the configured default disposition. */
   enabled?: boolean;
+  /** Choose foreground, deferred, or awaited execution for this call. */
+  disposition?: BackgroundExecutionDisposition;
   /** Override timeout for this specific call */
   timeoutMs?: number;
   /** Override max retries for this specific call */

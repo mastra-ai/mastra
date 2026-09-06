@@ -1,14 +1,15 @@
 {
   "meta": {
     "name": "test-c78816dd",
-    "testFile": "packages/core/src/background-tasks/background-tasks.e2e.test.ts",
+    "testFile": "src/background-tasks/background-tasks.e2e.test.ts",
     "testName": "Background Tasks E2E > runs a foreground tool normally",
     "model": "gpt-4o-mini",
-    "createdAt": "2026-07-14T16:54:58.958Z"
+    "createdAt": "2026-07-14T16:54:58.958Z",
+    "updatedAt": "2026-09-02T19:35:12.027Z"
   },
   "recordings": [
     {
-      "hash": "d9db75b67fbf8bd2",
+      "hash": "ee8606477d9e8b5c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -17,7 +18,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -43,14 +44,36 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "properties": {
                       "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "description": "Force deferred (true) or foreground (false) execution for this call.",
                         "anyOf": [
                           {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "disposition": {
+                        "description": "Choose foreground, deferred, or awaited execution for this call.",
+                        "enum": [
+                          "foreground",
+                          "deferred",
+                          "awaited"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -85,24 +108,48 @@
                     "additionalProperties": false,
                     "required": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "x-optional": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "anyOf": [
                       {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -137,11 +184,13 @@
                         "additionalProperties": false,
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
@@ -185,7 +234,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784048095704
+        "timestamp": 1788377708340
       },
       "response": {
         "status": 200,
@@ -194,35 +243,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d564c319efc-CDG",
+          "cf-ray": "a34ef4c57874b81a-DFW",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 16:54:57 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1215",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 02 Sep 2026 19:35:09 GMT",
+          "openai-organization": "personal-1smmvi",
+          "openai-processing-ms": "815",
+          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999095",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_761834dfc9cf405d94e859a476691bad"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999112",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "5ms",
+          "x-request-id": "req_1fd84960f5a746b1b125fa208a87413e"
         },
         "body": {
-          "id": "resp_05181ff4f2bd6f43006a5669dfcfa881a092cc431409a23bd0",
+          "id": "resp_0e78f8520405a4a0006a987a6c75ac87d1a2b008c445bceae2",
           "object": "response",
-          "created_at": 1784048095,
+          "created_at": 1788377708,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784048096,
+          "completed_at": 1788377709,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -233,11 +282,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_05181ff4f2bd6f43006a5669e0c1c481a08433f7ece42d2ffb",
+              "id": "fc_0e78f8520405a4a0006a987a6cf44c87d1a0d834e3646d947c",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"name\":\"Alice\",\"_background\":null}",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "arguments": "{\"name\":\"Alice\"}",
+              "call_id": "call_mBVQaNmrXmxrsrWMhai0w0PC",
               "name": "greet"
             }
           ],
@@ -295,14 +344,36 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "properties": {
                       "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "description": "Force deferred (true) or foreground (false) execution for this call.",
                         "anyOf": [
                           {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "disposition": {
+                        "description": "Choose foreground, deferred, or awaited execution for this call.",
+                        "enum": [
+                          "foreground",
+                          "deferred",
+                          "awaited"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -337,24 +408,48 @@
                     "additionalProperties": false,
                     "required": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "x-optional": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "anyOf": [
                       {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -389,11 +484,13 @@
                         "additionalProperties": false,
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
@@ -428,126 +525,12 @@
                   "name": {
                     "type": "string",
                     "description": "The name to greet"
-                  },
-                  "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                    "properties": {
-                      "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "timeoutMs": {
-                        "description": "Override timeout in milliseconds for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "maxRetries": {
-                        "description": "Override maximum retry attempts for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Override maximum retry attempts for this call.",
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
-                  "name",
-                  "_background"
+                  "name"
                 ],
-                "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "additionalProperties": false
               },
               "strict": true
             }
@@ -556,16 +539,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 687,
+            "input_tokens": 671,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 20,
+            "output_tokens": 15,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 707
+            "total_tokens": 686
           },
           "user": null,
           "metadata": {}
@@ -574,7 +557,7 @@
       }
     },
     {
-      "hash": "b9bce7ae65749048",
+      "hash": "50603f2470527149",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -583,7 +566,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -596,13 +579,13 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "call_id": "call_mBVQaNmrXmxrsrWMhai0w0PC",
               "name": "greet",
-              "arguments": "{\"name\":\"Alice\",\"_background\":null}"
+              "arguments": "{\"name\":\"Alice\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_psoYGVdL3y2EFiKEKHs6zerW",
+              "call_id": "call_mBVQaNmrXmxrsrWMhai0w0PC",
               "output": "{\"greeting\":\"Hello, Alice!\"}"
             }
           ],
@@ -620,14 +603,36 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "properties": {
                       "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "description": "Force deferred (true) or foreground (false) execution for this call.",
                         "anyOf": [
                           {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "disposition": {
+                        "description": "Choose foreground, deferred, or awaited execution for this call.",
+                        "enum": [
+                          "foreground",
+                          "deferred",
+                          "awaited"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -662,24 +667,48 @@
                     "additionalProperties": false,
                     "required": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "x-optional": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "anyOf": [
                       {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -714,11 +743,13 @@
                         "additionalProperties": false,
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
@@ -762,7 +793,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784048097097
+        "timestamp": 1788377709284
       },
       "response": {
         "status": 200,
@@ -771,35 +802,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b20d5eea349efc-CDG",
+          "cf-ray": "a34ef4cb5a20b81a-DFW",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 16:54:58 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "1706",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Wed, 02 Sep 2026 19:35:12 GMT",
+          "openai-organization": "personal-1smmvi",
+          "openai-processing-ms": "2521",
+          "openai-project": "proj_i5xepL7AVq5Id7m6q2HKx0cV",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999062",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_5c9c3a9f13864e448aac8b3863f6a96f"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999083",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "5ms",
+          "x-request-id": "req_65b4132bfcc842c6a31562a1e5571368"
         },
         "body": {
-          "id": "resp_0fdaaeb77cd50005006a5669e14708819fa739865f0b18970e",
+          "id": "resp_057c7c7000022c8b006a987a6d830887d1a470f39532aa7e56",
           "object": "response",
-          "created_at": 1784048097,
+          "created_at": 1788377709,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784048098,
+          "completed_at": 1788377711,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -810,7 +841,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0fdaaeb77cd50005006a5669e2129c819fb0e5b9de77281c51",
+              "id": "msg_057c7c7000022c8b006a987a6fcf0887d1833152fc92e55355",
               "type": "message",
               "status": "completed",
               "content": [
@@ -818,7 +849,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I greeted Alice: \"Hello, Alice!\" If there's anything else you need, just let me know!"
+                  "text": "Hello, Alice!"
                 }
               ],
               "role": "assistant"
@@ -878,14 +909,36 @@
                     "description": "The topic to research"
                   },
                   "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                     "properties": {
                       "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "description": "Force deferred (true) or foreground (false) execution for this call.",
                         "anyOf": [
                           {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "disposition": {
+                        "description": "Choose foreground, deferred, or awaited execution for this call.",
+                        "enum": [
+                          "foreground",
+                          "deferred",
+                          "awaited"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -920,24 +973,48 @@
                     "additionalProperties": false,
                     "required": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "x-optional": [
                       "enabled",
+                      "disposition",
                       "timeoutMs",
                       "maxRetries"
                     ],
                     "anyOf": [
                       {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
                         "properties": {
                           "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
                             "anyOf": [
                               {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "description": "Force deferred (true) or foreground (false) execution for this call.",
                                 "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "enum": [
+                              "foreground",
+                              "deferred",
+                              "awaited"
+                            ],
+                            "anyOf": [
+                              {
+                                "description": "Choose foreground, deferred, or awaited execution for this call.",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "type": "string"
                               },
                               {
                                 "type": "null"
@@ -972,11 +1049,13 @@
                         "additionalProperties": false,
                         "required": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
                         "x-optional": [
                           "enabled",
+                          "disposition",
                           "timeoutMs",
                           "maxRetries"
                         ],
@@ -1011,126 +1090,12 @@
                   "name": {
                     "type": "string",
                     "description": "The name to greet"
-                  },
-                  "_background": {
-                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                    "properties": {
-                      "enabled": {
-                        "description": "Force background (true) or foreground (false) execution for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "type": "boolean"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "timeoutMs": {
-                        "description": "Override timeout in milliseconds for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "maxRetries": {
-                        "description": "Override maximum retry attempts for this call.",
-                        "anyOf": [
-                          {
-                            "description": "Override maximum retry attempts for this call.",
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "x-optional": [
-                      "enabled",
-                      "timeoutMs",
-                      "maxRetries"
-                    ],
-                    "anyOf": [
-                      {
-                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
-                        "properties": {
-                          "enabled": {
-                            "description": "Force background (true) or foreground (false) execution for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Force background (true) or foreground (false) execution for this call.",
-                                "type": "boolean"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "timeoutMs": {
-                            "description": "Override timeout in milliseconds for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override timeout in milliseconds for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "maxRetries": {
-                            "description": "Override maximum retry attempts for this call.",
-                            "anyOf": [
-                              {
-                                "description": "Override maximum retry attempts for this call.",
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          }
-                        },
-                        "additionalProperties": false,
-                        "required": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "x-optional": [
-                          "enabled",
-                          "timeoutMs",
-                          "maxRetries"
-                        ],
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
-                  "name",
-                  "_background"
+                  "name"
                 ],
-                "additionalProperties": false,
-                "x-optional": [
-                  "_background"
-                ]
+                "additionalProperties": false
               },
               "strict": true
             }
@@ -1139,16 +1104,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 721,
+            "input_tokens": 700,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 23,
+            "output_tokens": 6,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 744
+            "total_tokens": 706
           },
           "user": null,
           "metadata": {}
