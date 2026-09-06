@@ -169,6 +169,27 @@ function createMockLogger(): IMastraLogger {
 }
 
 describe('MastraSandbox Base Class', () => {
+  it('preserves original argv through the process manager env wrapper', async () => {
+    const pm = new ExecuteCommandProcessManager('first second');
+    const sandbox = new ProcessBackedSandbox(pm, { BASE: 'base' });
+    const args = ['-c', 'printf "first" && printf " second"', '', 'a\\b'];
+    const release = vi.spyOn(pm, 'release');
+    const result = await sandbox.executeCommand!('sh', args, { env: { CALL: 'call' } });
+
+    expect(pm.lastOptions?.originalInvocation).toEqual({ command: 'sh', args });
+    expect(pm.lastOptions?.originalInvocation?.args).not.toBe(args);
+    expect(pm.lastOptions?.env).toMatchObject({ BASE: 'base', CALL: 'call' });
+    expect(result.stdout).toBe('first second');
+    expect(result.command).toContain('sh -c');
+    expect(release).toHaveBeenCalledWith('execute-command-process');
+  });
+
+  it.each([undefined, []])('does not add invocation metadata for absent argv: %s', async args => {
+    const pm = new ExecuteCommandProcessManager('');
+    const sandbox = new ProcessBackedSandbox(pm);
+    await sandbox.executeCommand!('echo hello', args);
+    expect(pm.lastOptions).not.toHaveProperty('originalInvocation');
+  });
   describe('MountManager Creation', () => {
     it('constructor creates MountManager if mount() implemented', () => {
       const sandbox = new MountableSandbox();
