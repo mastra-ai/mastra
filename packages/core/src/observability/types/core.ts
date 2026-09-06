@@ -61,6 +61,7 @@ export interface CorrelationContext {
   rootEntityVersionId?: string;
   userId?: string;
   organizationId?: string;
+  projectId?: string;
   resourceId?: string;
   runId?: string;
   sessionId?: string;

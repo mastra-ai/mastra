@@ -42,6 +42,7 @@ Entity and context:
 - `entityName`
 - `userId`
 - `organizationId`
+- `projectId`
 - `resourceId`
 - `runId`
 - `sessionId`

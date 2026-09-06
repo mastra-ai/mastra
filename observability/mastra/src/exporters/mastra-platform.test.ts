@@ -109,7 +109,7 @@ function getMockLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
       data: { requestId: 'req-123' },
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { source: 'test-suite' },
@@ -131,7 +131,7 @@ function getMockMetricEvent(overrides: Partial<MetricEvent['metric']> = {}): Met
       labels: { provider: 'openai' },
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { unit: 'tokens' },
@@ -154,7 +154,7 @@ function getMockScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreE
       reason: 'high confidence',
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { rubric: 'v1' },
@@ -177,7 +177,7 @@ function getMockFeedbackEvent(overrides: Partial<FeedbackEvent['feedback']> = {}
       comment: 'looks good',
       correlationContext: {
         organizationId: 'team-123',
-        resourceId: 'project-456',
+        resourceId: 'memory-resource-456',
         serviceName: 'cloud-exporter-test',
       },
       metadata: { locale: 'en-US' },
@@ -863,6 +863,7 @@ describe('MastraPlatformExporter', () => {
       expectOptionalProperty(requestBody.spans[0], 'entityName', mockSpan.entityName);
       expectOptionalProperty(requestBody.spans[0], 'tags', mockSpan.tags);
       expectOptionalProperty(requestBody.spans[0], 'errorInfo', mockSpan.errorInfo);
+      expect(requestBody.spans[0]).not.toHaveProperty('projectId');
       expect(requestBody.spans[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
       expect(requestBody.spans[0].updatedAt).toBeNull();
     });
@@ -1077,19 +1078,37 @@ describe('MastraPlatformExporter', () => {
       await derivedExporter.shutdown();
     });
 
-    it('should upload logs, metrics, scores, and feedback to their derived endpoints', async () => {
+    it('should attach the configured projectId to all signals without changing resourceId', async () => {
       const multiSignalExporter = new MastraPlatformExporter({
         accessToken: testJWT,
         endpoint: 'http://localhost:3000',
+        projectId: 'platform-project',
       });
+      const exportedSpan = {
+        ...mockSpan,
+        projectId: 'caller-project',
+        resourceId: 'span-memory-resource',
+      };
 
+      await multiSignalExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan,
+      });
       await multiSignalExporter.onLogEvent(getMockLogEvent());
       await multiSignalExporter.onMetricEvent(getMockMetricEvent());
       await multiSignalExporter.onScoreEvent(getMockScoreEvent());
-      await multiSignalExporter.onFeedbackEvent(getMockFeedbackEvent());
+      await multiSignalExporter.onFeedbackEvent(
+        getMockFeedbackEvent({
+          correlationContext: {
+            projectId: 'caller-project',
+            resourceId: 'memory-resource-456',
+          },
+        }),
+      );
 
       const buffer = (multiSignalExporter as any).buffer;
-      expect(buffer.totalSize).toBe(4);
+      expect(buffer.totalSize).toBe(5);
+      expect(buffer.spans).toHaveLength(1);
       expect(buffer.logs).toHaveLength(1);
       expect(buffer.metrics).toHaveLength(1);
       expect(buffer.scores).toHaveLength(1);
@@ -1097,7 +1116,7 @@ describe('MastraPlatformExporter', () => {
 
       await multiSignalExporter.flush();
 
-      expect(mockFetchWithRetry).toHaveBeenCalledTimes(4);
+      expect(mockFetchWithRetry).toHaveBeenCalledTimes(5);
 
       const getCallByUrl = (url: string) => {
         const call = mockFetchWithRetry.mock.calls.find(([callUrl]) => callUrl === url);
@@ -1105,29 +1124,50 @@ describe('MastraPlatformExporter', () => {
         return call!;
       };
 
-      const logCall = getCallByUrl('http://localhost:3000/ai/logs/publish');
-      const metricCall = getCallByUrl('http://localhost:3000/ai/metrics/publish');
-      const scoreCall = getCallByUrl('http://localhost:3000/ai/scores/publish');
-      const feedbackCall = getCallByUrl('http://localhost:3000/ai/feedback/publish');
+      const spanCall = getCallByUrl('http://localhost:3000/projects/platform-project/ai/spans/publish');
+      const logCall = getCallByUrl('http://localhost:3000/projects/platform-project/ai/logs/publish');
+      const metricCall = getCallByUrl('http://localhost:3000/projects/platform-project/ai/metrics/publish');
+      const scoreCall = getCallByUrl('http://localhost:3000/projects/platform-project/ai/scores/publish');
+      const feedbackCall = getCallByUrl('http://localhost:3000/projects/platform-project/ai/feedback/publish');
 
-      expect(logCall[0]).toBe('http://localhost:3000/ai/logs/publish');
+      expect(JSON.parse((spanCall[1] as RequestInit).body as string)).toMatchObject({
+        spans: [{ projectId: 'platform-project', resourceId: 'span-memory-resource' }],
+      });
       expect(JSON.parse((logCall[1] as RequestInit).body as string)).toMatchObject({
-        logs: [{ message: 'test log', level: 'info' }],
+        logs: [
+          {
+            message: 'test log',
+            level: 'info',
+            correlationContext: { projectId: 'platform-project', resourceId: 'memory-resource-456' },
+          },
+        ],
       });
-
-      expect(metricCall[0]).toBe('http://localhost:3000/ai/metrics/publish');
       expect(JSON.parse((metricCall[1] as RequestInit).body as string)).toMatchObject({
-        metrics: [{ name: 'mastra.tokens', value: 42 }],
+        metrics: [
+          {
+            name: 'mastra.tokens',
+            value: 42,
+            correlationContext: { projectId: 'platform-project', resourceId: 'memory-resource-456' },
+          },
+        ],
       });
-
-      expect(scoreCall[0]).toBe('http://localhost:3000/ai/scores/publish');
       expect(JSON.parse((scoreCall[1] as RequestInit).body as string)).toMatchObject({
-        scores: [{ scorerId: 'relevance', score: 0.9 }],
+        scores: [
+          {
+            scorerId: 'relevance',
+            score: 0.9,
+            correlationContext: { projectId: 'platform-project', resourceId: 'memory-resource-456' },
+          },
+        ],
       });
-
-      expect(feedbackCall[0]).toBe('http://localhost:3000/ai/feedback/publish');
       expect(JSON.parse((feedbackCall[1] as RequestInit).body as string)).toMatchObject({
-        feedback: [{ feedbackType: 'thumbs', value: 'up' }],
+        feedback: [
+          {
+            feedbackType: 'thumbs',
+            value: 'up',
+            correlationContext: { projectId: 'platform-project', resourceId: 'memory-resource-456' },
+          },
+        ],
       });
 
       await multiSignalExporter.shutdown();
@@ -1549,6 +1589,8 @@ describe('MastraPlatformExporter', () => {
           3,
           expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
+        const body = JSON.parse((mockFetchWithRetry.mock.calls[0][1] as RequestInit).body as string);
+        expect(body.scores[0].correlationContext.projectId).toBe('project-from-env');
       } finally {
         await derivedExporter.shutdown();
         vi.unstubAllEnvs();
@@ -1577,6 +1619,8 @@ describe('MastraPlatformExporter', () => {
           3,
           expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
+        const body = JSON.parse((mockFetchWithRetry.mock.calls[0][1] as RequestInit).body as string);
+        expect(body.feedback[0].correlationContext.projectId).toBe('project-from-config');
       } finally {
         await derivedExporter.shutdown();
         vi.unstubAllEnvs();
@@ -1604,6 +1648,8 @@ describe('MastraPlatformExporter', () => {
           3,
           expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
+        const body = JSON.parse((mockFetchWithRetry.mock.calls[0][1] as RequestInit).body as string);
+        expect(body.metrics[0].correlationContext).not.toHaveProperty('projectId');
       } finally {
         await derivedExporter.shutdown();
         vi.unstubAllEnvs();

@@ -251,6 +251,7 @@ type ResolvedPlatformConfig = {
   maxBatchWaitMs: number;
   maxRetries: number;
   accessToken: string;
+  projectId?: string;
   tracesEndpoint: string;
   logsEndpoint: string;
   metricsEndpoint: string;
@@ -330,6 +331,7 @@ export class MastraPlatformExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
+      projectId,
       tracesEndpoint,
       logsEndpoint: resolveConfiguredSignalEndpoint('logs', config.logsEndpoint),
       metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
@@ -464,6 +466,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private formatSpan(span: AnyExportedSpan): MastraPlatformSpanRecord {
     const spanRecord: MastraPlatformSpanRecord = {
       ...span,
+      ...(this.platformConfig.projectId !== undefined && { projectId: this.platformConfig.projectId }),
       spanId: span.id,
       spanType: span.type,
       startedAt: span.startTime,
@@ -479,24 +482,36 @@ export class MastraPlatformExporter extends BaseExporter {
   private formatLog(log: LogEvent['log']): MastraPlatformLogRecord {
     return {
       ...log,
+      ...(this.platformConfig.projectId !== undefined && {
+        correlationContext: { ...log.correlationContext, projectId: this.platformConfig.projectId },
+      }),
     };
   }
 
   private formatMetric(metric: MetricEvent['metric']): MastraPlatformMetricRecord {
     return {
       ...metric,
+      ...(this.platformConfig.projectId !== undefined && {
+        correlationContext: { ...metric.correlationContext, projectId: this.platformConfig.projectId },
+      }),
     };
   }
 
   private formatScore(score: ScoreEvent['score']): MastraPlatformScoreRecord {
     return {
       ...score,
+      ...(this.platformConfig.projectId !== undefined && {
+        correlationContext: { ...score.correlationContext, projectId: this.platformConfig.projectId },
+      }),
     };
   }
 
   private formatFeedback(feedback: FeedbackEvent['feedback']): MastraPlatformFeedbackRecord {
     return {
       ...feedback,
+      ...(this.platformConfig.projectId !== undefined && {
+        correlationContext: { ...feedback.correlationContext, projectId: this.platformConfig.projectId },
+      }),
     };
   }
 

@@ -825,6 +825,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.organizationId !== undefined && rootSpan.organizationId !== filters.organizationId) {
       return false;
     }
+    if (filters.projectId !== undefined && rootSpan.projectId !== filters.projectId) {
+      return false;
+    }
     if (filters.resourceId !== undefined && rootSpan.resourceId !== filters.resourceId) {
       return false;
     }
@@ -1032,6 +1035,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.experimentId !== undefined && span.experimentId !== filters.experimentId) return false;
     if (filters.userId !== undefined && span.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && span.organizationId !== filters.organizationId) return false;
+    if (filters.projectId !== undefined && span.projectId !== filters.projectId) return false;
     if (filters.resourceId !== undefined && span.resourceId !== filters.resourceId) return false;
     if (filters.runId !== undefined && span.runId !== filters.runId) return false;
     if (filters.sessionId !== undefined && span.sessionId !== filters.sessionId) return false;
@@ -1248,6 +1252,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     if (filters.userId !== undefined && m.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
+    if (filters.projectId !== undefined && m.projectId !== filters.projectId) return false;
     if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
     if (filters.runId !== undefined && m.runId !== filters.runId) return false;
     if (filters.sessionId !== undefined && m.sessionId !== filters.sessionId) return false;
@@ -1816,6 +1821,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     if (filters.userId !== undefined && log.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && log.organizationId !== filters.organizationId) return false;
+    if (filters.projectId !== undefined && log.projectId !== filters.projectId) return false;
     if (filters.resourceId !== undefined && log.resourceId !== filters.resourceId) return false;
     if (filters.runId !== undefined && log.runId !== filters.runId) return false;
     if (filters.sessionId !== undefined && log.sessionId !== filters.sessionId) return false;
@@ -1936,6 +1942,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     if (filters.userId !== undefined && score.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
+    if (filters.projectId !== undefined && score.projectId !== filters.projectId) return false;
     if (filters.resourceId !== undefined && score.resourceId !== filters.resourceId) return false;
     if (filters.runId !== undefined && score.runId !== filters.runId) return false;
     if (filters.sessionId !== undefined && score.sessionId !== filters.sessionId) return false;
@@ -2521,6 +2528,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && fb.organizationId !== filters.organizationId) return false;
+    if (filters.projectId !== undefined && fb.projectId !== filters.projectId) return false;
     if (filters.resourceId !== undefined && fb.resourceId !== filters.resourceId) return false;
     if (filters.runId !== undefined && fb.runId !== filters.runId) return false;
     if (filters.sessionId !== undefined && fb.sessionId !== filters.sessionId) return false;

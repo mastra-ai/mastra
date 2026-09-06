@@ -191,6 +191,8 @@ Filter semantics:
 
 - `tags` filters use contains-all semantics
 - `labels` filters use contains-all semantics over exact key/value pairs
+- `organizationId`, `projectId`, and `resourceId` filters use exact equality against their independent typed columns
+- `projectId` identifies the Mastra project tenancy scope; `resourceId` remains the application or memory resource identifier
 - unless a specific endpoint says otherwise, v0 does not imply wildcard, regex, prefix, substring, or fuzzy-match semantics for `tags` or `labels`
 
 Normalization rules:
@@ -205,6 +207,7 @@ Normalization rules:
   - `entityName`
   - `userId`
   - `organizationId`
+  - `projectId`
   - `resourceId`
   - `runId`
   - `sessionId`
