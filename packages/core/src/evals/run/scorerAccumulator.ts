@@ -24,33 +24,21 @@ export class ScoreAccumulator {
 
   private addFlatScores(scorerResults: Record<string, any>) {
     for (const [scorerName, result] of Object.entries(scorerResults)) {
-      if (!this.flatScores[scorerName]) {
-        this.flatScores[scorerName] = [];
-      }
-      this.flatScores[scorerName].push((result as { score: number }).score);
+      this.pushScore(this.flatScores, scorerName, result);
     }
   }
 
   private addWorkflowScores(scorerResults: Record<string, any>) {
     if ('workflow' in scorerResults && scorerResults.workflow) {
       for (const [scorerName, result] of Object.entries(scorerResults.workflow)) {
-        if (!this.workflowScores[scorerName]) {
-          this.workflowScores[scorerName] = [];
-        }
-        this.workflowScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.workflowScores, scorerName, result);
       }
     }
 
     if ('steps' in scorerResults && scorerResults.steps) {
       for (const [stepId, stepResults] of Object.entries(scorerResults.steps)) {
-        if (!this.stepScores[stepId]) {
-          this.stepScores[stepId] = {};
-        }
         for (const [scorerName, result] of Object.entries(stepResults as Record<string, any>)) {
-          if (!this.stepScores[stepId][scorerName]) {
-            this.stepScores[stepId][scorerName] = [];
-          }
-          this.stepScores[stepId][scorerName].push((result as { score: number }).score);
+          this.pushStepScore(stepId, scorerName, result);
         }
       }
     }
@@ -58,10 +46,7 @@ export class ScoreAccumulator {
     // Trajectory scores can come from workflow scorer configs too
     if ('trajectory' in scorerResults && scorerResults.trajectory) {
       for (const [scorerName, result] of Object.entries(scorerResults.trajectory)) {
-        if (!this.trajectoryScores[scorerName]) {
-          this.trajectoryScores[scorerName] = [];
-        }
-        this.trajectoryScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.trajectoryScores, scorerName, result);
       }
     }
   }
@@ -69,35 +54,36 @@ export class ScoreAccumulator {
   private addAgentScores(scorerResults: Record<string, any>) {
     if ('agent' in scorerResults && scorerResults.agent) {
       for (const [scorerName, result] of Object.entries(scorerResults.agent)) {
-        if (!this.agentScores[scorerName]) {
-          this.agentScores[scorerName] = [];
-        }
-        this.agentScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.agentScores, scorerName, result);
       }
     }
 
     if ('trajectory' in scorerResults && scorerResults.trajectory) {
       for (const [scorerName, result] of Object.entries(scorerResults.trajectory)) {
-        if (!this.trajectoryScores[scorerName]) {
-          this.trajectoryScores[scorerName] = [];
-        }
-        this.trajectoryScores[scorerName].push((result as { score: number }).score);
+        this.pushScore(this.trajectoryScores, scorerName, result);
       }
     }
   }
 
   addStepScores(stepScorerResults: Record<string, Record<string, any>>) {
     for (const [stepId, stepResults] of Object.entries(stepScorerResults)) {
-      if (!this.stepScores[stepId]) {
-        this.stepScores[stepId] = {};
-      }
       for (const [scorerName, result] of Object.entries(stepResults)) {
-        if (!this.stepScores[stepId][scorerName]) {
-          this.stepScores[stepId][scorerName] = [];
-        }
-        this.stepScores[stepId][scorerName].push((result as { score: number }).score);
+        this.pushStepScore(stepId, scorerName, result);
       }
     }
+  }
+
+  // Buckets are created on the first numeric score, so all-excluded scorers are omitted rather than averaged to 0
+  private pushScore(buckets: Record<string, number[]>, scorerName: string, result: unknown) {
+    const score = (result as { score?: unknown } | null | undefined)?.score;
+    if (typeof score !== 'number') return;
+    (buckets[scorerName] ??= []).push(score);
+  }
+
+  private pushStepScore(stepId: string, scorerName: string, result: unknown) {
+    const score = (result as { score?: unknown } | null | undefined)?.score;
+    if (typeof score !== 'number') return;
+    ((this.stepScores[stepId] ??= {})[scorerName] ??= []).push(score);
   }
 
   getAverageScores(): Record<string, any> {

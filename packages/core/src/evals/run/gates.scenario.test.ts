@@ -13,6 +13,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { createTool } from '../../tools';
 import { createScorer } from '../base';
+import { notScorable } from '../not-scorable';
 import { runEvals } from '.';
 
 // ─── AIMock lifecycle ───────────────────────────────────────────────────────────
@@ -102,6 +103,13 @@ const failingGate = createScorer({
   name: 'Always Fail',
 }).generateScore(() => 0);
 
+/** A gate scorer that declares every run not scorable. */
+const notScorableGate = createScorer({
+  id: 'not-scorable-gate',
+  description: 'Never applies',
+  name: 'Not Scorable',
+}).generateScore(() => notScorable('nothing to check'));
+
 /** A scorer that returns a fixed score (for threshold testing). */
 function fixedScorer(id: string, score: number) {
   return createScorer({
@@ -171,6 +179,20 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
       expect(result.gateResults).toHaveLength(2);
       expect(result.gateResults![0]!.passed).toBe(true);
       expect(result.gateResults![1]!.passed).toBe(false);
+    });
+
+    it('leaves a gate out of the verdict when every run was not scorable', async () => {
+      const agent = textAgent('Sunny and 72°F in Brooklyn.');
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        scorers: [fixedScorer('quality', 0.9)],
+        gates: [passingGate, notScorableGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toEqual([{ id: 'always-pass-gate', passed: true, score: 1 }]);
     });
 
     it('allows gate-only runs when scorers is omitted', async () => {

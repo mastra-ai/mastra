@@ -41,6 +41,8 @@ import type { MastraOnStepFinishCallback } from '../stream/types';
 import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
+import { isNotScorable } from './not-scorable';
+import type { NotScorableOutcome, NotScorableResult } from './not-scorable';
 import type { ScoringFilter } from './predicate';
 import type {
   ScoringSamplingConfig,
@@ -352,13 +354,12 @@ export interface ScorerJudgeStepResult {
 
 export type ScorerJudgeResults = Partial<Record<ScorerJudgeStepName, ScorerJudgeStepResult>>;
 
-export type ScorerRunResult<
+type ScorerRunResultBase<
   TAccumulatedResults extends Record<string, any> = Record<string, any>,
   TInput = any,
   TRunOutput = any,
 > = ScorerRun<TInput, TRunOutput> & {
   scoreTraceId?: string;
-  score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
   reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
 
   // Prompts
@@ -375,6 +376,23 @@ export type ScorerRunResult<
 
   judge?: ScorerJudgeResults;
 } & { runId: string };
+
+export type ScorerRunResult<
+  TAccumulatedResults extends Record<string, any> = Record<string, any>,
+  TInput = any,
+  TRunOutput = any,
+> = ScorerRunResultBase<TAccumulatedResults, TInput, TRunOutput> &
+  (
+    | {
+        score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
+        notScorable?: undefined;
+      }
+    | {
+        /** Set when a step returned `notScorable()`: no score, remaining steps skipped. */
+        notScorable: NotScorableOutcome;
+        score?: undefined;
+      }
+  );
 
 export type ScorerRunResultSnapshot<TResult extends ScorerRunResult = ScorerRunResult> = Omit<TResult, 'score'> &
   Partial<Pick<TResult, 'score'>>;
@@ -656,8 +674,8 @@ type GenerateReasonFunctionStep<TAccumulated extends Record<string, any>, TInput
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => Promise<any>);
 
 type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number)
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number>);
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | NotScorableResult)
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | NotScorableResult>);
 
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
@@ -1113,6 +1131,7 @@ class MastraScorer<
         success: true,
         score: typeof scorerResult.score === 'number' ? scorerResult.score : null,
         reason: typeof scorerResult.reason === 'string' ? scorerResult.reason : null,
+        ...(scorerResult.notScorable ? { notScorable: true, ...scorerResult.notScorable } : {}),
       },
     });
 
@@ -1197,7 +1216,7 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, ...rest }) => {
+        execute: async ({ inputData, getInitData, bail, ...rest }) => {
           const observabilityContext = resolveObservabilityContext(rest);
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
@@ -1263,8 +1282,6 @@ class MastraScorer<
             });
           }
 
-          stepSpan?.end({ output: stepResult });
-
           const newGeneratedPrompts =
             prompt !== undefined
               ? {
@@ -1273,10 +1290,6 @@ class MastraScorer<
                 }
               : generatedPrompts;
 
-          const newAccumulatedResults = {
-            ...accumulatedResults,
-            [`${scorerStep.name}StepResult`]: stepResult,
-          };
           const judgeStepName = scorerStep.name as ScorerJudgeStepName;
           const newJudge = judgeExecution
             ? {
@@ -1286,6 +1299,26 @@ class MastraScorer<
                 },
               }
             : judge;
+
+          // Not scorable: stop before any remaining steps or judge calls run.
+          if (isNotScorable(stepResult)) {
+            const notScorable: NotScorableOutcome =
+              stepResult.reason !== undefined ? { reason: stepResult.reason } : {};
+            stepSpan?.end({ output: { notScorable: true, ...notScorable } });
+            return bail({
+              notScorable,
+              accumulatedResults,
+              generatedPrompts: newGeneratedPrompts,
+              ...(newJudge ? { judge: newJudge } : {}),
+            });
+          }
+
+          stepSpan?.end({ output: stepResult });
+
+          const newAccumulatedResults = {
+            ...accumulatedResults,
+            [`${scorerStep.name}StepResult`]: stepResult,
+          };
 
           return {
             stepResult,
@@ -1826,6 +1859,7 @@ class MastraScorer<
     const accumulatedResults = finalStepResult?.accumulatedResults ?? {};
     const generatedPrompts = finalStepResult?.generatedPrompts ?? {};
     const judge = finalStepResult?.judge as ScorerJudgeResults | undefined;
+    const notScorable = finalStepResult?.notScorable as NotScorableOutcome | undefined;
     const score = accumulatedResults.generateScoreStepResult;
     const reason = accumulatedResults.generateReasonStepResult;
     const preprocessStepResult = accumulatedResults.preprocessStepResult;
@@ -1838,7 +1872,8 @@ class MastraScorer<
     if (includeUndefinedFields) {
       return {
         ...originalInput,
-        score,
+        ...(notScorable ? { notScorable } : {}),
+        ...(notScorable ? {} : { score }),
         generateScorePrompt,
         reason,
         generateReasonPrompt,
@@ -1852,6 +1887,7 @@ class MastraScorer<
 
     return {
       ...originalInput,
+      ...(notScorable ? { notScorable } : {}),
       ...(score !== undefined ? { score } : {}),
       ...(generateScorePrompt !== undefined ? { generateScorePrompt } : {}),
       ...(reason !== undefined ? { reason } : {}),
