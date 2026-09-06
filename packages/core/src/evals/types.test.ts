@@ -843,6 +843,42 @@ describe('extractTrajectory', () => {
     });
   });
 
+  it('marks structured tool validation errors as unsuccessful', () => {
+    const validationError = {
+      error: true,
+      message: 'Tool input validation failed for weatherTool',
+      validationErrors: { fields: { city: { errors: ['Required'] } } },
+    };
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'c1',
+                toolName: 'weatherTool',
+                args: {},
+                result: validationError,
+              },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps[0]).toMatchObject({
+      name: 'weatherTool',
+      toolResult: validationError,
+      success: false,
+    });
+  });
+
   it('extracts multiple tool calls from V2 parts in a single message', () => {
     const output = [
       {

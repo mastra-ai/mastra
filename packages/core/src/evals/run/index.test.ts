@@ -53,6 +53,49 @@ const createMockAgent = (response: string = 'Dummy response'): Agent => {
   return agent;
 };
 
+function createMockSpan(type: string, spans: any[], parent?: any): any {
+  const span: Record<string, any> = {
+    id: `span-${spans.length}`,
+    traceId: 'eval-trace-id',
+    name: type,
+    type,
+    startTime: new Date(),
+    isInternal: false,
+    isEvent: false,
+    isValid: true,
+    isRootSpan: !parent,
+    parent,
+    end: vi.fn(),
+    endTree: vi.fn(),
+    error: vi.fn(),
+    update: vi.fn(),
+    exportSpan: vi.fn(),
+    getParentSpanId: vi.fn(() => parent?.id),
+    getExportedSpanId: vi.fn(() => span.id),
+    findParent: vi.fn(),
+    executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),
+    executeInContextSync: vi.fn((fn: () => any) => fn()),
+    get externalTraceId() {
+      return span.traceId;
+    },
+    createTracker: vi.fn(() => ({
+      getTracingContext: vi.fn(() => ({ currentSpan: span })),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      updateStep: vi.fn(),
+    })),
+    createChildSpan: vi.fn((options: any) => createMockSpan(options?.type ?? 'child', spans, span)),
+    createEventSpan: vi.fn((options: any) => createMockSpan(options?.type ?? 'event', spans, span)),
+    getCorrelationContext: vi.fn(),
+    observabilityInstance: {} as any,
+  };
+  spans.push(span);
+  return span;
+}
+
 const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
   const dummyModel = new MockLanguageModelV2({
     doGenerate: async () => ({
@@ -277,39 +320,171 @@ describe('runEvals', () => {
 
       expect(onItemComplete).toHaveBeenCalledTimes(2);
 
-      expect(onItemComplete).toHaveBeenNthCalledWith(1, {
-        item: testData[0],
-        targetResult: expect.any(Object),
-        scorerResults: expect.objectContaining({
-          toxicity: expect.any(Object),
-          relevance: expect.any(Object),
+      expect(onItemComplete).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          status: 'success',
+          item: testData[0],
+          targetResult: expect.any(Object),
+          scorerResults: expect.objectContaining({
+            toxicity: expect.any(Object),
+            relevance: expect.any(Object),
+          }),
         }),
-      });
+      );
     });
   });
   describe('Error handling', () => {
-    it('should handle agent generate errors', async () => {
-      mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
+    it('should preserve successful items when another target fails', async () => {
+      mockAgent.generateLegacy = vi.fn().mockImplementation(async input => {
+        if (input === 'fail') throw new Error('Agent error');
+        if (input === 'slow success') await new Promise(resolve => setTimeout(resolve, 20));
+        return {
+          scoringData: {
+            input,
+            output: `${input} response`,
+          },
+        };
+      });
+      const onItemComplete = vi.fn();
+      const data = [{ input: 'slow success' }, { input: 'fail' }, { input: 'fast success' }];
 
-      await expect(
-        runEvals({
-          data: testData,
-          scorers: mockScorers,
-          target: mockAgent,
-        }),
-      ).rejects.toThrow();
+      const result = await runEvals({
+        data,
+        scorers: [createMockScorer('quality', 0.8)],
+        target: mockAgent,
+        concurrency: 3,
+        onItemComplete,
+      });
+
+      expect(result.items.map(item => item.status)).toEqual(['success', 'failed', 'success']);
+      expect(result.items[1]).toMatchObject({
+        status: 'failed',
+        item: data[1],
+        phase: 'target',
+        error: { message: 'Agent error' },
+      });
+      expect(result.scores).toEqual({ quality: 0.8 });
+      expect(result.summary).toEqual({ totalItems: 3, succeededItems: 2, failedItems: 1 });
+      expect(result.verdict).toBe('failed');
+      expect(onItemComplete).toHaveBeenCalledTimes(3);
+      expect(onItemComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'failed', item: data[1], phase: 'target' }),
+      );
     });
 
-    it('should handle scorer errors', async () => {
+    it('should return the trace containing a failed agent execution', async () => {
+      const providerError = Object.assign(new Error('Provider unavailable'), {
+        statusCode: 503,
+        isRetryable: true,
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw providerError;
+        },
+      });
+      const agent = new Agent({
+        id: 'failing-agent',
+        name: 'Failing agent',
+        instructions: 'Fail during generation.',
+        model,
+      });
+      const spans: any[] = [];
+      const parentSpan = createMockSpan('parent', spans);
+
+      const result = await runEvals({
+        data: [{ input: 'trigger failure', tracingContext: { currentSpan: parentSpan } }],
+        scorers: [createMockScorer('quality')],
+        target: agent,
+      });
+
+      expect(result.items[0]).toMatchObject({
+        status: 'failed',
+        phase: 'target',
+        traceId: 'eval-trace-id',
+      });
+      const failedItem = result.items[0]!;
+      expect(failedItem.status).toBe('failed');
+      if (failedItem.status !== 'failed') throw new Error('Expected failed item');
+      expect(JSON.stringify(failedItem.error)).toContain('Provider unavailable');
+      expect(JSON.stringify(failedItem.error)).toContain('503');
+
+      const itemSpan = spans.find(span => span.type === 'generic');
+      const agentSpan = spans.find(span => span.type === 'agent_run');
+      expect(itemSpan).toMatchObject({ id: failedItem.spanId, traceId: failedItem.traceId, parent: parentSpan });
+      expect(agentSpan).toMatchObject({ traceId: failedItem.traceId, parent: itemSpan });
+      expect(agentSpan.error).toHaveBeenCalled();
+      expect(itemSpan.error).toHaveBeenCalledWith(expect.objectContaining({ endSpan: true }));
+    });
+
+    it('should expose invalid model-generated tool arguments as an unsuccessful trajectory step', async () => {
+      const execute = vi.fn();
+      const trajectoryScorer = createScorer({
+        id: 'valid-tool-calls',
+        description: 'Fails when a tool call does not produce a result',
+      }).generateScore(({ run }: any) => (run.output.steps.every((step: any) => step.success) ? 1 : 0));
+      const weatherTool = createTool({
+        id: 'weather',
+        description: 'Get the weather for a city',
+        inputSchema: z.object({ city: z.string() }),
+        execute,
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'weather',
+              input: JSON.stringify({}),
+            },
+          ],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+      const agent = new Agent({
+        id: 'invalid-tool-args-agent',
+        name: 'Invalid tool args agent',
+        instructions: 'Call the weather tool.',
+        model,
+        tools: { weather: weatherTool },
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        scorers: { trajectory: [trajectoryScorer] },
+        target: agent,
+      });
+
+      expect(execute).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        scores: { trajectory: { 'valid-tool-calls': 0 } },
+        summary: { totalItems: 1 },
+      });
+    });
+
+    it('should return scorer errors as failed item results', async () => {
       mockScorers[0].run = vi.fn().mockRejectedValue(new Error('Scorer error'));
 
-      await expect(
-        runEvals({
-          data: testData,
-          scorers: mockScorers,
-          target: mockAgent,
-        }),
-      ).rejects.toThrow();
+      const result = await runEvals({
+        data: testData,
+        scorers: mockScorers,
+        target: mockAgent,
+      });
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0]).toMatchObject({
+        status: 'failed',
+        phase: 'scoring',
+        error: { cause: { message: 'Scorer error' } },
+      });
+      expect(result.items[1]).toMatchObject({ status: 'failed', phase: 'scoring' });
+      expect(result.scores).toEqual({});
+      expect(result.summary).toEqual({ totalItems: 2, succeededItems: 0, failedItems: 2 });
+      expect(result.verdict).toBe('failed');
     });
 
     it('should handle empty data array', async () => {
@@ -1313,7 +1488,7 @@ describe('runEvals', () => {
       expect(result.scores['threshold-scorer']).toBeDefined();
     });
 
-    it('should convert a throwing gate into score 0 and verdict failed', async () => {
+    it('should return a throwing gate as a failed scoring item', async () => {
       const agent = createMockAgentV2('response');
       const throwingGate = createScorer({
         id: 'throwing-gate',
@@ -1321,18 +1496,21 @@ describe('runEvals', () => {
       }).generateScore(() => {
         throw new Error('Boom');
       });
+      const scorer = createMockScorer('basic', 0.8);
 
       const result = await runEvals({
         data: [{ input: 'Test' }],
-        scorers: [createMockScorer('basic', 0.8)],
+        scorers: [scorer],
         gates: [throwingGate],
         target: agent,
       });
 
+      expect(result.items[0]).toMatchObject({ status: 'failed', phase: 'scoring' });
+      expect(JSON.stringify(result.items[0])).toContain('Boom');
+      expect(scorer.run).not.toHaveBeenCalled();
+      expect(result.scores).toEqual({});
+      expect(result.summary).toEqual({ totalItems: 1, succeededItems: 0, failedItems: 1 });
       expect(result.verdict).toBe('failed');
-      expect(result.gateResults).toHaveLength(1);
-      expect(result.gateResults![0]!.passed).toBe(false);
-      expect(result.gateResults![0]!.score).toBe(0);
     });
 
     it('should reject invalid threshold values', async () => {
@@ -1931,35 +2109,25 @@ describe('runEvals', () => {
       expect(result.turnResults![0]!.gateResults![0]!.passed).toBe(true);
     });
 
-    it('logs the cause when a gate throws, while still scoring it 0 (#22632)', async () => {
-      const agent = createTurnAgent('gateThrowLoggingAgent');
-      const warn = vi.fn();
-      const mastra = new Mastra({
-        agents: { gateThrowLoggingAgent: agent },
-        logger: { warn, error: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any,
-      });
-
+    it('returns a throwing per-turn gate as a failed scoring item (#22632)', async () => {
+      const agent = createTurnAgent('perTurnGateThrowAgent');
       const throwingGate = createScorer({
-        id: 'throwing-gate-logged',
+        id: 'throwing-per-turn-gate',
         description: 'Always throws',
       }).generateScore(() => {
         throw new Error('gate boom');
       });
 
       const result = await runEvals({
-        data: [{ input: 'Test' }],
-        gates: [throwingGate],
-        target: mastra.getAgent('gateThrowLoggingAgent'),
-      });
+        data: [{ turns: [{ input: 'Turn one', gates: [throwingGate] }] }],
+        target: agent,
+      } as any);
 
-      // The score-0 contract is deliberate and stays.
-      expect(result.gateResults![0]!.score).toBe(0);
+      expect(result.items[0]).toMatchObject({ status: 'failed', phase: 'scoring' });
+      expect(JSON.stringify(result.items[0])).toContain('gate boom');
+      expect(result.summary).toEqual({ totalItems: 1, succeededItems: 0, failedItems: 1 });
+      expect(result.turnResults).toBeUndefined();
       expect(result.verdict).toBe('failed');
-      // ... but the cause is no longer discarded by a bare catch.
-      expect(warn).toHaveBeenCalled();
-      const logged = warn.mock.calls.map((c: unknown[]) => c.map(String).join(' ')).join(' | ');
-      expect(logged).toContain('throwing-gate-logged');
-      expect(logged).toContain('gate boom');
     });
 
     it('fails the verdict when a per-turn gate fails on one turn (wrong turn cannot satisfy)', async () => {
