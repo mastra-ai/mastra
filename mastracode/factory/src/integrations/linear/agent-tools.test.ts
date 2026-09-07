@@ -22,12 +22,19 @@ const refreshLinearAccessToken = vi.fn();
 let PROJECT_ID = '';
 const ORG_ID = 'org-1';
 
-function requestContextFor(resourceId: string | undefined): RequestContext {
+function requestContextFor(resourceId: string | undefined, factoryProjectId?: string): RequestContext {
   const ctx = new RequestContext();
   if (resourceId !== undefined) {
-    ctx.set('controller', { resourceId });
+    ctx.set('controller', {
+      resourceId,
+      getState: () => ({ factoryProjectId }),
+    });
   }
   return ctx;
+}
+
+function boardRunRequestContext(factoryProjectId: string): RequestContext {
+  return requestContextFor('work-item-session-id', factoryProjectId);
 }
 
 async function seedProject(): Promise<void> {
@@ -102,6 +109,28 @@ beforeEach(async () => {
 
 describe('buildLinearAgentTools — exposure gating', () => {
   it('exposes the Linear tools when the project org has a Linear connection', async () => {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).toHaveProperty('linear_create_comment');
+  });
+
+  it('resolves a board run from its factory project instead of its work-item session id', async () => {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({ linear, requestContext: boardRunRequestContext(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).toHaveProperty('linear_create_comment');
+  });
+
+  it('exposes nothing for a board run whose project org has not connected Linear', async () => {
+    await seedProject();
+    const tools = await buildLinearAgentTools({ linear, requestContext: boardRunRequestContext(PROJECT_ID) });
+    expect(tools).toEqual({});
+  });
+
+  it('falls back to a project-scoped resourceId when factoryProjectId is absent', async () => {
     await seedProject();
     await seedConnection();
     const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });

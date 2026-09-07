@@ -5743,6 +5743,21 @@ if (ENABLE_TESTS) {
           );
         });
 
+        it('batchDeleteTraces deletes trace-linked metrics and preserves unrelated or trace-less metrics', async () => {
+          await observability.batchCreateMetrics({
+            metrics: [
+              makeMetric({ metricId: 'metric-delete', traceId: 'trace-delete' }),
+              makeMetric({ metricId: 'metric-keep', traceId: 'trace-keep' }),
+              makeMetric({ metricId: 'metric-trace-less', traceId: null }),
+            ],
+          });
+
+          await observability.batchDeleteTraces({ traceIds: ['trace-delete'] });
+
+          const result = await observability.listMetrics({ pagination: { page: 0, perPage: 50 } });
+          expect(result.metrics.map(metric => metric.metricId).sort()).toEqual(['metric-keep', 'metric-trace-less']);
+        });
+
         it('round-trips JSON columns (labels, tags, costMetadata, metadata, scope)', async () => {
           const id = randomUUID();
           await observability.batchCreateMetrics({

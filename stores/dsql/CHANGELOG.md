@@ -1,5 +1,14 @@
 # @mastra/dsql
 
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Fixed scoped trace deletion to reject unsupported tenant filters instead of deleting data without scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
 ## 1.3.4
 
 ### Patch Changes

@@ -39,7 +39,7 @@ export function TimelineNameCol({
       ref={isSelected ? revealRow : undefined}
       aria-label={`View details for span ${span.name}`}
       className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
-        'opacity-30 [&:hover]:opacity-60': isFaded,
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
         'bg-surface4': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}

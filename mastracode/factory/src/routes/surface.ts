@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -29,7 +30,6 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
-import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -48,7 +48,7 @@ import {
   type FactoryDispatchFailureCode,
   type WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
+import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -114,6 +114,8 @@ export interface FactoryApiRoutesDeps {
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
+  /** Boards installed for this Factory instance. */
+  boardRegistry: BoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -218,11 +220,8 @@ export async function prepareFactoryRuleBinding(
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
-    const branch = workItemBranch({
-      id: input.item.id,
-      source: workItemBranchSource(input.item.externalSource),
-      metadata: input.item.metadata,
-    });
+    const source = workItemBranchSource(input.item.externalSource);
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
     // Only the Intake exit derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     const currentStage = factoryRuleStage(input.item.stages);
@@ -259,7 +258,7 @@ export async function prepareFactoryRuleBinding(
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
-      threadTitle: `${input.role === 'review' ? 'PR' : 'Issue'}: ${input.item.title}`,
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
@@ -476,7 +475,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
-        new FactoryFeedReader(deps.domains.comments),
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -555,6 +553,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          boardRegistry: deps.boardRegistry,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

@@ -15,6 +15,7 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
 import { ActivityAttentionProvider } from './attention-activity.js';
+import { proposedDecisionAttentionSpec } from './attention-proposed.js';
 import type {
   AttentionLatest,
   AttentionPageResult,
@@ -23,11 +24,17 @@ import type {
   AttentionStreamPosition,
   FactoryAttentionView,
 } from './attention-providers.js';
-import { AutomationFailedAttentionProvider, MentionAttentionProvider } from './attention-providers.js';
+import {
+  DecisionAttentionProvider,
+  failedDecisionAttentionSpec,
+  MentionAttentionProvider,
+  SupervisorFindingAttentionProvider,
+} from './attention-providers.js';
 
 export { factoryDecisionType } from './attention-providers.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SUPERVISOR_FINDING_KEY_RE = /^[a-z0-9:_-]{1,256}$/i;
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 50;
 
@@ -52,11 +59,22 @@ function parseAttentionLimit(raw: string | undefined): number {
 }
 
 function isAttentionKind(value: string): value is FactoryAttentionKind {
-  return value === 'automation-failed' || value === 'mention' || value === 'activity';
+  return (
+    value === 'automation-failed' ||
+    value === 'automation-proposed' ||
+    value === 'mention' ||
+    value === 'activity' ||
+    value === 'supervisor-finding'
+  );
 }
 
 /** Kinds the sidebar badge and the notification sound answer to. */
-const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set(['automation-failed', 'mention']);
+const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set([
+  'automation-failed',
+  'automation-proposed',
+  'mention',
+  'supervisor-finding',
+]);
 
 type AttentionTier = 'all' | 'badge' | 'activity';
 
@@ -205,7 +223,9 @@ function receiptRoute(
       const kind = context.req.param('kind');
       const sourceId = context.req.param('sourceId');
       const occurrence = parseOccurrence(context.req.param('occurrence'));
-      if (!kind || !isAttentionKind(kind) || !sourceId || !UUID_RE.test(sourceId) || occurrence === undefined) {
+      const validSourceId =
+        kind === 'supervisor-finding' ? SUPERVISOR_FINDING_KEY_RE.test(sourceId) : UUID_RE.test(sourceId);
+      if (!kind || !isAttentionKind(kind) || !sourceId || !validSourceId || occurrence === undefined) {
         return context.json({ error: 'invalid_attention_item' }, 422);
       }
       await dependencies.workItems.ensureReady();
@@ -233,7 +253,9 @@ function receiptRoute(
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
   const { workItems, comments } = dependencies;
   const providers: AttentionProvider[] = [
-    new AutomationFailedAttentionProvider({ workItems }),
+    new DecisionAttentionProvider({ workItems }, failedDecisionAttentionSpec),
+    new DecisionAttentionProvider({ workItems }, proposedDecisionAttentionSpec),
+    new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
   ];
@@ -264,12 +286,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           provider => kindInTier(tier, provider.kind) && (!before || before.has(provider.kind)),
         );
 
-        const [approvalCount, summaries, pages] = await Promise.all([
-          workItems.countDeferredDecisionsByStatuses({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            statuses: ['proposed'],
-          }),
+        const [summaries, pages] = await Promise.all([
           Promise.all(
             providers.map(async provider => ({
               kind: provider.kind,
@@ -298,7 +315,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         const activity = summaries.filter(summary => !BADGE_KINDS.has(summary.kind));
         const sum = (rows: typeof summaries, field: 'open' | 'unread') =>
           rows.reduce((total, row) => total + row.counts[field], 0);
-        const openCount = sum(badge, 'open') + approvalCount;
+        const openCount = sum(badge, 'open');
         const unreadCount = sum(badge, 'unread');
         // An unread item must never be masked by a newer already-read one of
         // another kind — the streams are independent.
@@ -310,8 +327,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         return context.json({
           items: merged.items,
           openCount,
-          approvalCount,
-          badgeCount: unreadCount + approvalCount,
+          badgeCount: unreadCount,
           unreadCount,
           activityUnreadCount: sum(activity, 'unread'),
           latestOccurrenceKey: latest?.key ?? null,

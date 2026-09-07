@@ -1,5 +1,29 @@
 # @mastra/duckdb
 
+## 1.7.0-alpha.1
+
+### Patch Changes
+
+- Fixed DuckDB score retries to preserve delta cursors when updating an existing score. ([#23076](https://github.com/mastra-ai/mastra/pull/23076))
+
+- Fixed trace deletion to cascade to metrics, logs, scores, and feedback while respecting tenant scope. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Added advanced trace query support to DuckDB observability storage, including filtering, grouping, ordering, cursor pagination, shared cross-adapter semantics, and query-shape-aware relation reads. ([#22801](https://github.com/mastra-ai/mastra/pull/22801))
+
+  Repeated writes for a score ID now retain the latest record so trace queries evaluate the current score consistently with other observability adapters.
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.6.4
 
 ### Patch Changes

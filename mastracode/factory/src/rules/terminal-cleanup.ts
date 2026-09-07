@@ -3,7 +3,7 @@ import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domai
 export interface TerminalStageCleanupOptions {
   workItems: Pick<
     WorkItemsStorage,
-    'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'supersedeTerminalDecisionsForWorkItem'
+    'get' | 'listRunBindings' | 'revokeRunBindingsForWorkItem' | 'supersedeTerminalDecisionsForWorkItem'
   >;
   /** Final ingest of trailing tool results before the binding is revoked. */
   reconcileBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
@@ -15,6 +15,8 @@ export interface TerminalStageCleanupArgs {
   orgId: string;
   factoryProjectId: string;
   workItemId: string;
+  /** Revision produced by the terminal transition that scheduled this cleanup. */
+  revision?: number;
 }
 
 /**
@@ -38,6 +40,12 @@ export function createTerminalStageCleanup(options: TerminalStageCleanupOptions)
     } catch {
       // Best-effort; revocation below does not depend on the listing.
     }
+    // Cleanup can outlive the terminal transition's response window. Do not
+    // revoke a new binding or retire its workspace if the card has since been
+    // re-entered for another pass.
+    const item = await options.workItems.get({ orgId: args.orgId, id: args.workItemId }).catch(() => null);
+    if (args.revision !== undefined && item?.revision !== args.revision) return;
+
     try {
       await options.workItems.revokeRunBindingsForWorkItem({
         orgId: args.orgId,

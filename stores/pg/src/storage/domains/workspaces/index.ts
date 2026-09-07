@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/workspaces';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -50,8 +50,8 @@ export class WorkspacesPG extends WorkspacesStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (WorkspacesPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -145,9 +145,17 @@ export class WorkspacesPG extends WorkspacesStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageWorkspaceType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageWorkspaceType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -248,7 +256,7 @@ export class WorkspacesPG extends WorkspacesStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_WORKSPACES, schemaName: getSchemaName(this.#schema) });
 
-      const existingWorkspace = await this.getById(id);
+      const existingWorkspace = await this.#getById(this.#db.client, id);
       if (!existingWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
@@ -272,7 +280,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
 
       if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
+        const latestVersion = await this.#getLatestVersion(this.#db.client, id);
         if (!latestVersion) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NO_VERSIONS'),
@@ -363,7 +371,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         );
       }
 
-      const updatedWorkspace = await this.getById(id);
+      const updatedWorkspace = await this.#getById(this.#db.client, id);
       if (!updatedWorkspace) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
@@ -447,7 +455,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -464,7 +472,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -564,7 +572,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -591,7 +599,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 AND "versionNumber" = $2`,
         [workspaceId, versionNumber],
       );
@@ -616,12 +624,20 @@ export class WorkspacesPG extends WorkspacesStorage {
   }
 
   async getLatestVersion(workspaceId: string): Promise<WorkspaceVersion | null> {
+    return this.#getLatestVersion(this.#db.readClient, workspaceId);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getLatestVersion(client: DbClient, workspaceId: string): Promise<WorkspaceVersion | null> {
     try {
       const tableName = getTableName({
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await client.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [workspaceId],
       );
@@ -670,7 +686,7 @@ export class WorkspacesPG extends WorkspacesStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`,
         [workspaceId],
       );
@@ -687,7 +703,7 @@ export class WorkspacesPG extends WorkspacesStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "workspaceId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [workspaceId, limitValue, offset],
       );
@@ -770,9 +786,10 @@ export class WorkspacesPG extends WorkspacesStorage {
         indexName: TABLE_WORKSPACE_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`, [
-        workspaceId,
-      ]);
+      const result = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "workspaceId" = $1`,
+        [workspaceId],
+      );
       return parseInt(result.count, 10);
     } catch (error) {
       if (error instanceof MastraError) throw error;

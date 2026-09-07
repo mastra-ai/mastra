@@ -1,5 +1,17 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.9-alpha.1
+
+### Patch Changes
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+## 0.14.9-alpha.0
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
 ## 0.14.8
 
 ### Patch Changes

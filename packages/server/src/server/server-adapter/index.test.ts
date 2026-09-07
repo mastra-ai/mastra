@@ -5,7 +5,8 @@ import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MastraServer } from './index';
+import { HTTPException } from '../http-exception';
+import { MastraServer, getCustomHTTPExceptionResponse } from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -1126,5 +1127,52 @@ describe('registerUserMiddleware default implementation', () => {
     adapter.registerUserMiddleware();
 
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCustomHTTPExceptionResponse', () => {
+  it('returns an attached JSON response with normalized status and headers', async () => {
+    const error = new HTTPException(409, {
+      res: Response.json(
+        { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
+        { status: 400, headers: { 'X-Trace-Error': 'cursor' } },
+      ),
+    });
+
+    const response = getCustomHTTPExceptionResponse(error);
+
+    expect(response?.status).toBe(409);
+    expect(response?.headers.get('content-type')).toContain('application/json');
+    expect(response?.headers.get('x-trace-error')).toBe('cursor');
+    await expect(response?.json()).resolves.toEqual({
+      code: 'TRACE_QUERY_CURSOR_CONFLICT',
+      message: 'The cursor does not match the query',
+    });
+  });
+
+  it('returns an attached text response without consuming it', async () => {
+    const error = new HTTPException(418, {
+      res: new Response('custom text', {
+        headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
+      }),
+    });
+
+    const response = getCustomHTTPExceptionResponse(error);
+
+    expect(response?.status).toBe(418);
+    expect(response?.headers.get('content-type')).toBe('text/custom');
+    expect(response?.headers.get('x-custom-error')).toBe('true');
+    await expect(response?.text()).resolves.toBe('custom text');
+  });
+
+  it('ignores message-only HTTP exceptions', () => {
+    expect(getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found' }))).toBeUndefined();
+  });
+
+  it.each([
+    { status: 409, res: Response.json({ code: 'NOT_TRUSTED' }) },
+    { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
+  ])('ignores non-HTTPException values', error => {
+    expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
   });
 });
