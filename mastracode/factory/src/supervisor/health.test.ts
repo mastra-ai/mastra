@@ -258,7 +258,7 @@ describe('computeFactoryHealth', () => {
       expect.objectContaining({
         kind: 'seat-missing',
         workItemId: 'stranded',
-        ageMs: 2 * HOUR,
+        since: ago(2 * HOUR).toISOString(),
         suggestedRepair: { action: 'start-run', workItemId: 'stranded', role: 'plan' },
       }),
     ]);
@@ -348,6 +348,18 @@ describe('computeFactoryHealth', () => {
     expect(report.findings.map(f => f.id)).toEqual(['decision-failed:d-older', 'decision-failed:d-recent']);
     expect(report.counts['decision-failed']).toBe(2);
     expect(report.counts['seat-missing']).toBe(0);
+  });
+
+  it('reports the same findings whatever the clock says, so a later tick rewrites nothing', () => {
+    const inputs = {
+      ...empty,
+      items: [item({ id: 'item-1' })],
+      bindings: [binding({ id: 'b-1' })],
+      decisions: [decision({ id: 'd-1', status: 'failed', updatedAt: ago(HOUR) })],
+    };
+    const first = computeFactoryHealth(inputs, NOW);
+    const later = computeFactoryHealth(inputs, new Date(NOW.getTime() + HOUR));
+    expect(later.findings).toEqual(first.findings);
   });
 });
 

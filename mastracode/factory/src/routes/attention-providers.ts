@@ -374,7 +374,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
     const batches = scanBatches<FactorySupervisorFindingRecord>(
       before =>
         this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-      row => ({ occurredAt: row.updatedAt, id: row.id }),
+      row => ({ occurredAt: row.openedAt, id: row.id }),
     );
     for await (const page of batches) {
       const identities = page.rows.map(row =>
@@ -402,7 +402,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
     const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities: [identity] });
     return {
       key: factoryAttentionKey(scope.factoryProjectId, identity),
-      at: newest.updatedAt,
+      at: newest.openedAt,
       unread: receipts.length === 0,
     };
   }
@@ -412,7 +412,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
       scanBatches<FactorySupervisorFindingRecord>(
         before =>
           this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        row => ({ occurredAt: row.openedAt, id: row.id }),
         args.before,
       ),
       args.limit,
@@ -432,8 +432,8 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
           return [
             {
               key: factoryAttentionKey(scope.factoryProjectId, identity),
-              occurredAt: row.updatedAt,
-              resumeCursor: { occurredAt: row.updatedAt, id: row.id },
+              occurredAt: row.openedAt,
+              resumeCursor: { occurredAt: row.openedAt, id: row.id },
               receipt,
               item: {
                 key: factoryAttentionKey(scope.factoryProjectId, identity),
@@ -444,10 +444,10 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
                 evidence: finding.evidence,
                 title: finding.title,
                 detail: finding.evidence,
-                ageMs: finding.ageMs,
+                since: finding.since,
                 suggestedRepair: finding.suggestedRepair,
                 workItemId: finding.workItemId,
-                occurredAt: row.updatedAt.toISOString(),
+                occurredAt: row.openedAt.toISOString(),
                 read: Boolean(receipt),
                 archived: receipt?.state === 'archived',
                 target: finding.workItemId
@@ -469,7 +469,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
       scanBatches<FactorySupervisorFindingRecord>(
         before =>
           this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        row => ({ occurredAt: row.openedAt, id: row.id }),
         args.before,
       ),
       rows =>

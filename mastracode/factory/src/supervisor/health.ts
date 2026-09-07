@@ -51,8 +51,8 @@ export interface FactoryHealthFinding {
   title: string;
   /** One sentence of grounded evidence: ids, timestamps, error text. */
   evidence: string;
-  /** How long the condition has held, in ms, when it is age-based. */
-  ageMs: number | null;
+  /** ISO instant the condition began, when it is age-based. */
+  since: string | null;
   suggestedRepair: FactoryHealthRepair | null;
 }
 
@@ -131,6 +131,10 @@ function stageEnteredAt(item: WorkItemRow): Date | null {
   return Number.isFinite(at) ? new Date(at) : null;
 }
 
+function beganAtMs(finding: FactoryHealthFinding): number {
+  return finding.since === null ? Number.MAX_SAFE_INTEGER : Date.parse(finding.since);
+}
+
 interface HealthInputs {
   items: WorkItemRow[];
   decisions: FactoryDeferredDecisionRecord[];
@@ -159,7 +163,7 @@ export function computeFactoryHealth(
         id: `decision-failed:${decision.id}`,
         ...base,
         evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
-        ageMs: now.getTime() - decision.updatedAt.getTime(),
+        since: decision.updatedAt.toISOString(),
         suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
       });
       continue;
@@ -172,7 +176,7 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) has been ${decision.status} since ${decision.availableAt.toISOString()} with ${decision.attempts} attempt(s) and was never leased; is the dispatcher running?`,
-          ageMs: overdue,
+          since: decision.availableAt.toISOString(),
           suggestedRepair: null,
         });
       }
@@ -186,7 +190,7 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) is still leased by ${decision.leaseOwner ?? 'unknown'} though the lease expired at ${decision.leaseExpiresAt.toISOString()}; the worker likely died mid-dispatch.`,
-          ageMs: expired,
+          since: decision.leaseExpiresAt.toISOString(),
           suggestedRepair: null,
         });
       }
@@ -200,7 +204,7 @@ export function computeFactoryHealth(
           id: `proposal-waiting:${decision.id}`,
           ...base,
           evidence: `Proposed run ${decision.id} (${describeDecision(decision)}) has waited for a person since ${decision.createdAt.toISOString()}.`,
-          ageMs: waiting,
+          since: decision.createdAt.toISOString(),
           suggestedRepair: { action: 'resolve-proposal', decisionId: decision.id },
         });
       }
@@ -219,7 +223,7 @@ export function computeFactoryHealth(
         id: `start-stalled:${start.id}`,
         ...base,
         evidence: `Pending start ${start.id}${binding ? ` for the ${binding.role} seat` : ''} is ${start.status} since ${start.createdAt.toISOString()} after ${start.attempts} attempt(s)${start.lastError ? `: ${truncate(start.lastError)}` : '.'}`,
-        ageMs: age,
+        since: start.createdAt.toISOString(),
         suggestedRepair: binding ? { action: 'revoke-binding', bindingId: binding.id } : null,
       });
     }
@@ -238,7 +242,7 @@ export function computeFactoryHealth(
         evidence: item
           ? `Binding ${binding.id} (${binding.role}) is still active though the card is in ${stage ?? item.stages.join('+')}.`
           : `Binding ${binding.id} (${binding.role}) is active for work item ${binding.workItemId}, which no longer exists.`,
-        ageMs: now.getTime() - binding.createdAt.getTime(),
+        since: binding.createdAt.toISOString(),
         suggestedRepair: { action: 'revoke-binding', bindingId: binding.id },
       });
       continue;
@@ -266,7 +270,7 @@ export function computeFactoryHealth(
           id: `held-waiting:${item.id}`,
           ...base,
           evidence: `Triaged as "${item.triageType}" and waiting for a maintainer's decision since ${enteredAt!.toISOString()}.`,
-          ageMs: inStageMs,
+          since: enteredAt!.toISOString(),
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
@@ -277,7 +281,7 @@ export function computeFactoryHealth(
         id: `seat-missing:${item.id}`,
         ...base,
         evidence: `In ${stage} since ${enteredAt?.toISOString() ?? 'unknown'} with no active seat and no decision in flight; nothing will move it.`,
-        ageMs: inStageMs,
+        since: enteredAt?.toISOString() ?? null,
         suggestedRepair: role ? { action: 'start-run', workItemId: item.id, role } : null,
       });
     }
@@ -288,13 +292,13 @@ export function computeFactoryHealth(
         id: `label-drift:${item.id}`,
         ...base,
         evidence: `Accepted at ${item.acceptedAt.toISOString()} but the last observed labels still include "${NEEDS_APPROVAL_LABEL}".`,
-        ageMs: now.getTime() - item.acceptedAt.getTime(),
+        since: item.acceptedAt.toISOString(),
         suggestedRepair: { action: 'reconcile-labels', workItemId: item.id },
       });
     }
   }
 
-  findings.sort((a, b) => (b.ageMs ?? 0) - (a.ageMs ?? 0));
+  findings.sort((a, b) => beganAtMs(a) - beganAtMs(b));
   const counts = Object.fromEntries(FINDING_KINDS.map(kind => [kind, 0])) as Record<FactoryHealthFindingKind, number>;
   for (const finding of findings) counts[finding.kind] += 1;
   return { checkedAt: now.toISOString(), findings, counts };

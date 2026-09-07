@@ -7,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, ChevronRight, PanelRightIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { FactoryHealthFinding } from '../services/supervisor';
 import { findingPrompt } from '../services/supervisor';
 
@@ -31,14 +32,6 @@ const FINDING_LABELS: Record<FactoryHealthFinding['kind'], string> = {
   'held-waiting': 'Held cards waiting',
   'label-drift': 'Label drift',
 };
-
-function formatAge(ageMs: number) {
-  const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
 
 function groupFindings(findings: FactoryHealthFinding[]) {
   const groups = new Map<FactoryHealthFinding['kind'], FactoryHealthFinding[]>();
@@ -110,9 +103,9 @@ function FindingsContent({
                               {finding.evidence}
                             </Txt>
                           </div>
-                          {finding.ageMs !== null && (
+                          {finding.since !== null && (
                             <Txt variant="ui-xs" className="text-neutral3 shrink-0">
-                              {formatAge(finding.ageMs)}
+                              {relativeTime(finding.since)}
                             </Txt>
                           )}
                         </div>
