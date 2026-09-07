@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
+import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import type { Mastra } from '../../../../mastra';
 import { EntityType, SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
@@ -15,7 +16,6 @@ import type {
   DurableAgenticExecutionOutput,
   SerializableDurableState,
 } from '../../types';
-import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable LLM mapping step.

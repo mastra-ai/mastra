@@ -3,6 +3,7 @@ import { createBackgroundTask } from '../../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
+import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -37,7 +38,6 @@ import {
   toolRequiresApproval,
 } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
-import { normalizeModelOutput } from './normalize-model-output';
 
 /**
  * Input schema for the durable tool call step.
