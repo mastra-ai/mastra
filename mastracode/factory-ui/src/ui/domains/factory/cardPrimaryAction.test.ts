@@ -58,6 +58,11 @@ describe('cardMoves', () => {
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
   });
 
+  it('offers a Work card in Review no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
+    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review')).toEqual([]);
+  });
+
   it('offers a finished card no lane, so its session is the action', () => {
     expect(cardMoves({ source: 'github-pr', metadata: { merged: true }, stages: ['done'] }, 'done')).toEqual([]);
     expect(cardMoves({ source: 'github-pr', metadata: { state: 'open' } }, 'canceled')).toEqual([]);
@@ -200,10 +205,9 @@ describe('cardActions', () => {
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
     expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([
-      'Investigate',
-      'Open session',
-    ]);
+    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, session, retry, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, retry }))).toEqual([]);
     expect(cardActions(idle)).toEqual([]);
   });
 
@@ -212,6 +216,7 @@ describe('cardActions', () => {
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
-    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
+    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
+    expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
   });
 });

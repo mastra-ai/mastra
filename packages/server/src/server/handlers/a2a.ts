@@ -24,7 +24,7 @@ import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
-import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
+import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -1053,7 +1053,6 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
 async function executeMessageSend({
   requestId,
   message,
-  metadata,
   currentData,
   taskStore,
   pushNotificationSender,
@@ -1065,7 +1064,6 @@ async function executeMessageSend({
 }: {
   requestId: number | string;
   message: MessageSendParams['message'];
-  metadata: MessageSendParams['metadata'];
   currentData: Task;
   taskStore: InMemoryTaskStore;
   pushNotificationSender: DefaultPushNotificationSender;
@@ -1075,12 +1073,11 @@ async function executeMessageSend({
   requestContext: RequestContext;
   resume?: ResumeClaim;
 }) {
-  const { contextId } = message;
-
   try {
-    // Pass contextId as threadId for memory persistence across A2A conversations
-    // Allow user to pass resourceId via metadata, fall back to agentId
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeGenerate(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1090,7 +1087,7 @@ async function executeMessageSend({
       : await agent.generate([convertToCoreMessage(message)], {
           runId: currentData.id,
           requestContext,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
 
     const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
@@ -1236,6 +1233,7 @@ export async function handleMessageSend({
   if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
   if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
     return createSuccessResponse(requestId, existingTask);
   }
@@ -1270,6 +1268,7 @@ export async function handleMessageSend({
     message,
     contextId,
     metadata,
+    requestContext,
   });
 
   if (params.configuration?.pushNotificationConfig) {
@@ -1299,7 +1298,6 @@ export async function handleMessageSend({
   const execution = executeMessageSend({
     requestId,
     message,
-    metadata,
     currentData,
     taskStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -1563,9 +1561,11 @@ export async function* handleMessageStream({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
-  if (message.taskId && !taskStore.loadWithVersion({ agentId, taskId })) {
+  const existingTask = taskStore.loadWithVersion({ agentId, taskId })?.task;
+  if (message.taskId && !existingTask) {
     throw MastraA2AError.taskNotFound(message.taskId);
   }
+  resolveTaskMemory({ task: existingTask, agentId, requestContext, metadata, message });
 
   // A follow-up message for an interrupted task resumes the suspended agent
   // run instead of starting a fresh generation (A2A HITL continuation).
@@ -1588,6 +1588,7 @@ export async function* handleMessageStream({
     message,
     contextId,
     metadata,
+    requestContext,
   });
 
   if (params.configuration?.pushNotificationConfig) {
@@ -1626,7 +1627,10 @@ export async function* handleMessageStream({
   try {
     yield createSuccessResponse(requestId, currentData);
 
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const memory = {
+      ...resolveTaskMemory({ task: currentData, agentId, requestContext }),
+      thread: currentData.contextId,
+    };
     const result = resume
       ? await agent.resumeStream(normalizeResumeData(extractResumeData(message), resume.requiresApproval), {
           runId: resume.runId,
@@ -1638,7 +1642,7 @@ export async function* handleMessageStream({
           runId: taskId,
           requestContext,
           abortSignal: taskAbortController.signal,
-          ...(contextId ? { threadId: contextId, resourceId } : {}),
+          memory,
         });
     let sawTextArtifact = false;
     let pendingTextChunk: string | undefined;

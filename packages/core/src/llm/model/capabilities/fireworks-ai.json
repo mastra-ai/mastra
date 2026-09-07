@@ -27,6 +27,7 @@
     "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
     "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
     "accounts/fireworks/models/qwen3p7-plus",
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b",
     "accounts/fireworks/models/qwen3p8-max",
     "accounts/fireworks/routers/glm-5p2-fast"
   ],
@@ -39,6 +40,7 @@
     "accounts/fireworks/models/kimi-k3",
     "accounts/fireworks/models/muse-glimmer-30b",
     "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b",
     "accounts/fireworks/routers/kimi-k3-fast"
   ]
 }

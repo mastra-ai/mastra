@@ -1,4 +1,3 @@
-import { resolveFactoryGithubRule } from '../../rules/resolve.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -18,6 +17,7 @@ import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-i
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
+import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -184,7 +184,8 @@ function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository)
   if (tracked === undefined) return undefined;
   // A canonical key with no URL names no repository, and the pull request matcher takes it anyway.
   // Asking GitHub about the wrong repository of a multi-repository project would record a wrong answer.
-  const unattributed = !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
+  const unattributed =
+    !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
   if (unattributed && metadata.githubRepositoryId !== repository.id) return undefined;
   return metadata.author;
 }
@@ -237,6 +238,7 @@ function pullRequestProvenance(
 }
 
 export interface GithubRulesIntegration {
+  readonly rules: GithubEventRules;
   readonly slug?: string;
   /**
    * Factory's own GitHub login, used to ignore its own writes. Optional because
@@ -259,7 +261,7 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  rules: Pick<FactoryRules, 'version'>;
 }
 
 export class GithubRules {
@@ -519,7 +521,7 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = resolveFactoryGithubRule(this.options.rules, event);
+      const rule = this.options.github.rules[event];
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -1073,7 +1075,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -1105,7 +1109,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);

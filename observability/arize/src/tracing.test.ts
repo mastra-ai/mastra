@@ -728,7 +728,11 @@ describe('ArizeExporter', () => {
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
     });
 
-    it('maps mcp_tool_call spans to TOOL span kind', async () => {
+    it.each([
+      { mcpServer: 'filesystem-server', serverVersion: '1.2.0' },
+      { mcpServer: 'roster-server', serverVersion: '9.9.9' },
+      { mcpServer: 'unversioned-server', serverVersion: undefined },
+    ])('preserves MCP tool and server metadata for $mcpServer', async ({ mcpServer, serverVersion }) => {
       exporter = new ArizeExporter({
         endpoint: 'http://localhost:4318/v1/traces',
       });
@@ -739,15 +743,21 @@ describe('ArizeExporter', () => {
         parentSpanId: 'parent-agent',
         type: SpanType.MCP_TOOL_CALL,
         name: 'execute_tool filesystem.readFile',
+        entityName: 'filesystem.readFile',
+        isEvent: false,
         startTime: new Date(),
         endTime: new Date(),
         isRootSpan: false,
         input: { path: '/tmp/file.txt' },
         output: { content: 'file contents' },
         attributes: {
-          mcpServer: 'filesystem-server',
+          mcpServer,
+          serverVersion,
+          toolDescription: 'Read a file',
+          toolType: 'tool',
+          toolCallId: 'mcp-call-1',
         },
-      } as unknown as AnyExportedSpan;
+      };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -757,8 +767,16 @@ describe('ArizeExporter', () => {
       expect(exportedSpans.length).toBe(1);
       const attrs = exportedSpans[0].attributes;
 
-      // MCP tool call spans should be mapped to TOOL span kind
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
+      expect(attrs['tool.name']).toBe('filesystem.readFile');
+      expect(attrs['tool.description']).toBe('Read a file');
+      expect(attrs['tool_call.id']).toBe('mcp-call-1');
+      expect(attrs['mastra.mcp_tool_call.server_name']).toBe(mcpServer);
+      if (serverVersion) {
+        expect(attrs['mastra.mcp_tool_call.server_version']).toBe(serverVersion);
+      } else {
+        expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_version');
+      }
     });
 
     it('defaults unknown span types to CHAIN span kind', async () => {

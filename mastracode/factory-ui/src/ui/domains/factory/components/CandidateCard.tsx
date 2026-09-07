@@ -36,7 +36,8 @@ export function CandidateCard({
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const [defaultMove] = cardMoves(candidate, candidate.column);
+  const moves = cardMoves(candidate, candidate.column);
+  const [defaultMove] = moves;
   const status = boardCardStatus({});
 
   const fileFromDetails = () => {
@@ -45,7 +46,7 @@ export function CandidateCard({
   };
 
   const menuItems: ReactElement[] = [
-    ...cardMoves(candidate, candidate.column).map(move => (
+    ...moves.map(move => (
       <DropdownMenu.Item
         key={move.label}
         onClick={() => {
@@ -100,7 +101,11 @@ export function CandidateCard({
         <CandidateCardRows
           candidate={candidate}
           status={status}
-          actions={<CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />}
+          actions={
+            defaultMove === undefined ? undefined : (
+              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+            )
+          }
           controls={
             <>
               <CardDetailsHint />

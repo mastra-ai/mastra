@@ -266,7 +266,7 @@ Visit [createTool()](/reference/tools/create-tool) for a full list of configurat
 
 ## Reserved keys
 
-Mastra reserves special context keys for security purposes. When set, these keys take precedence over client-provided values. The server automatically validates ownership and returns 403 errors when users attempt to access resources they don't own.
+Mastra reserves special context keys for the server to read. The resource and thread keys take precedence over client-provided values: the server validates ownership and returns 403 errors when users attempt to access resources they don't own.
 
 The easiest way to set `MASTRA_RESOURCE_ID_KEY` is via the `mapUserToResourceId` callback in auth config:
 
@@ -295,6 +295,7 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 | - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
 | `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
+| `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions copy it onto every message the request sends as `providerMetadata.mastra.author`, so a thread shared by several people can show who wrote what. |
 
 These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
 

@@ -26,7 +26,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt, busy } = useChatTranscript();
+  const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -62,6 +62,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         onApprove={onApprove}
         onRespond={onRespond}
         running={busy}
+        viewerId={viewerId}
         tail={tail}
       />
     </ArrivalScope>
@@ -75,6 +76,7 @@ export function TranscriptEntries({
   onApprove,
   onRespond,
   running = false,
+  viewerId,
   tail,
 }: {
   entries: TimelineEntry[];
@@ -84,6 +86,8 @@ export function TranscriptEntries({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   /** Holds the room open under the live turn, and releases it when the agent stops. */
   running?: boolean;
+  /** The signed-in user; anyone else's message gets their avatar beside it. */
+  viewerId?: string;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -157,6 +161,7 @@ export function TranscriptEntries({
                     canonicalToolCallIds.has(entry.toolCallId)
                   }
                   isSubmitting={isSubmitting}
+                  viewerId={viewerId}
                   onApprove={onApprove}
                   onRespond={onRespond}
                 />
@@ -186,6 +191,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   reply,
   redundantSuspension,
   isSubmitting,
+  viewerId,
   onApprove,
   onRespond,
 }: {
@@ -194,6 +200,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   reply?: string;
   redundantSuspension: boolean;
   isSubmitting: boolean;
+  viewerId?: string;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -205,6 +212,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           suspensions={suspensions}
           reply={reply}
           isSubmitting={isSubmitting}
+          viewerId={viewerId}
           onRespond={onRespond}
         />
       );
