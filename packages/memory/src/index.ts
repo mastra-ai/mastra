@@ -7,7 +7,12 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
-import { MastraMemory, normalizeLastMessages } from '@mastra/core/memory';
+import {
+  MastraMemory,
+  normalizeLastMessages,
+  getMemoryTokenBoundary,
+  isAfterMemoryTokenBoundary,
+} from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -20,6 +25,7 @@ import type {
 } from '@mastra/core/memory';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
+import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -1849,13 +1855,47 @@ ${workingMemory}`;
       if (!lastMessages.enabled) {
         messages = [];
       } else {
+        const storedBoundary =
+          lastMessages.maxTokens !== undefined
+            ? getMemoryTokenBoundary(await memoryStore.getThreadById({ threadId, resourceId }))
+            : undefined;
+        const boundary =
+          storedBoundary?.maxTokens === lastMessages.maxTokens &&
+          storedBoundary?.atMaxRemoveTokens === lastMessages.atMaxRemoveTokens
+            ? storedBoundary
+            : undefined;
         const result = await memoryStore.listMessages({
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           perPage: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+          filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
         });
-        messages = result.messages.reverse(); // DESC → chronological order
+        messages = result.messages
+          .filter(message => !boundary || isAfterMemoryTokenBoundary(message, boundary))
+          .reverse();
+        if (lastMessages.maxTokens !== undefined) {
+          const messageList = new MessageList();
+          messageList.add(messages, 'memory');
+          if (systemParts.length) messageList.addSystem(systemParts.join('\n\n'));
+          const limiter = new TokenLimiterProcessor({
+            limit: lastMessages.maxTokens,
+            atMaxRemoveTokens: lastMessages.atMaxRemoveTokens,
+            trimMode: 'memory-only',
+            tokenCounter: this.createMemoryTokenCounter(),
+          });
+          await limiter.processInput({
+            messageList,
+            messages: messageList.get.all.db(),
+            systemMessages: messageList.getAllSystemMessages(),
+            state: {},
+            retryCount: 0,
+            abort: reason => {
+              throw new Error(reason);
+            },
+          });
+          messages = messageList.get.all.db();
+        }
       }
     }
 

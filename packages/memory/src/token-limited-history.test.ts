@@ -60,6 +60,43 @@ describe('nested lastMessages', () => {
     ).toHaveLength(15);
   });
 
+  it('bounds direct context retrieval and respects matching persisted boundaries', async () => {
+    const storage = new InMemoryStore();
+    const memory = new Memory({ storage, options: { lastMessages: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
+    await memory.saveThread({
+      thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const store = (await storage.getStore('memory'))!;
+    await store.saveMessages({ messages });
+    const context = await memory.getContext({ threadId: 'thread', resourceId: 'resource' });
+    const counter = new TokenCounter();
+    expect(context.messages.length).toBeGreaterThan(0);
+    expect(context.messages.length).toBeLessThan(messages.length);
+    expect(context.messages.at(-1)?.id).toBe('message-14');
+    expect(context.messages.reduce((total, message) => total + counter.countMessage(message), 24)).toBeLessThanOrEqual(
+      400,
+    );
+
+    await store.patchThread({
+      id: 'thread',
+      metadata: {
+        memoryTokenLimiter: {
+          createdAt: messages[14]!.createdAt.toISOString(),
+          messageIds: ['message-14'],
+          maxTokens: 500,
+          atMaxRemoveTokens: 100,
+        },
+      },
+    });
+    expect((await memory.getContext({ threadId: 'thread' })).messages).toEqual([]);
+    expect((await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: 3 } })).messages).toHaveLength(
+      3,
+    );
+    expect(
+      (await memory.getContext({ threadId: 'thread', memoryConfig: { lastMessages: { maxTokens: 10000 } } })).messages,
+    ).toHaveLength(15);
+  });
+
   it('uses the observational-memory counter in the automatically injected limiter', async () => {
     const storage = new InMemoryStore();
     const memory = new Memory({ storage, options: { lastMessages: { maxTokens: 500, atMaxRemoveTokens: 100 } } });
