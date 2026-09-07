@@ -2,4 +2,17 @@
 '@mastra/factory': patch
 ---
 
-Audit stage moves, run starts and run ends where every path converges instead of at the browser routes. The transition service records `factory.work_item.stage_moved` / `transition_rejected` for every commit, whoever asked (a person, an agent, a rule, a GitHub event); the start coordinator records `factory.run.started` for every prepared kickoff, browser or dispatcher; a session observer records the new `factory.run.ended` with its reason. Rule-driven rows carry the new `system` actor type. Filing a session onto a role over PATCH is audited as an update, not a run start.
+The audit trail now records every stage move, run start and run end, whoever caused it. Before, only moves and starts made from the browser left a row: a rule, an agent tool, a GitHub event or the supervisor moving a card was invisible, and no run ever recorded that it ended.
+
+What lands in the trail now:
+
+- `factory.work_item.stage_moved` and `factory.work_item.transition_rejected` for every commit, under the real actor: the person, `agent:<binding>`, `github:<login>`, or actor type `system` for a rule
+- `factory.run.started` for every kickoff, including the ones the rule dispatcher starts on its own
+- `factory.run.ended`, a new action, with the run's `reason`
+
+Filing a session onto a role is audited as `factory.work_item.updated` with `fields: ['sessions']`, no longer as a run start.
+
+```ts
+const { events } = await audit.list({ orgId, factoryProjectId, actions: ['factory.run.ended'] });
+// events[0].metadata → { reason: 'complete', sessionId, threadId }
+```
