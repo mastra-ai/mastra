@@ -94,12 +94,6 @@ await observability!.createFeedback({
 })
 ```
 
-### Attribute feedback to a user
-
-When you create feedback through HTTP or `client.createFeedback()`, Mastra uses the authenticated user's non-empty string ID as `feedbackUserId`, overriding any ID submitted by the client. Without a usable authenticated identity, Mastra keeps an explicitly supplied `feedbackUserId` or leaves it absent. An ID supplied without authentication isn't a verified identity. Studio continues to work without authentication.
-
-The trace's `userId` and `resourceId` don't identify the feedback author. Direct storage writes don't perform authenticated attribution. Only `feedbackUserId` is stored as the author link, not the user's profile.
-
 ## List feedback
 
 Use `listFeedback()` to page through raw records or poll with delta mode.
@@ -129,28 +123,6 @@ await observability!.listFeedback({
   },
 })
 ```
-
-### Read author profiles through the client SDK
-
-Unlike direct storage reads, `GET /observability/feedback` and `client.listFeedback()` include an optional `author` profile when the configured authentication provider can resolve `feedbackUserId`. No additional configuration or client-side user requests are needed.
-
-Using your configured `MastraClient` instance, read the profile from the feedback response:
-
-```typescript
-const result = await client.listFeedback({
-  filters: { traceId: 'trace-123' },
-})
-
-for (const feedback of result.feedback) {
-  console.log(feedback.author?.name ?? feedback.feedbackUserId ?? 'Anonymous')
-}
-```
-
-`author` contains `id` and optional `name`, `email`, and `avatarUrl`. Provider-specific fields such as tokens and roles aren't exposed. Feedback remains in the response without `author` if it has no author ID or the user has been deleted. The same applies when the provider doesn't support user lookup or a lookup fails. Record order and pagination or delta metadata don't change.
-
-The server deduplicates author IDs for each response and calls `getUsers(ids)` once when supported. Otherwise, it calls `getUser(id)` for each unique ID. A failed batch doesn't trigger individual retries. Provider lookups can add latency to the response.
-
-Studio requests use `studio.auth` when configured and otherwise use `server.auth`. Mastra doesn't search another provider if a user is missing from the active one. Profiles are resolved when feedback is returned. A profile change alone doesn't produce a feedback delta event.
 
 ## Query feedback analytics
 
