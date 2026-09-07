@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -17,7 +17,7 @@ import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
 
 export interface InboxTracePanelProps {
-  feedback: FeedbackRecord;
+  feedback: FeedbackItem;
   traceId: string;
   /** Span the feedback was attached to, if any — opened by default so the reviewer lands on it. */
   initialSpanId?: string;

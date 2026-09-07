@@ -1,4 +1,4 @@
-import type { FeedbackRecord } from '@mastra/core/storage';
+import type { FeedbackItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
@@ -12,7 +12,7 @@ const COLUMNS = 'minmax(0, 2fr) auto minmax(0, 1fr) auto auto';
 import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-value';
 
 export interface InboxFeedbackListProps {
-  items: FeedbackRecord[];
+  items: FeedbackItem[];
   isLoading: boolean;
   error?: Error;
   hasNextPage: boolean;
@@ -21,7 +21,7 @@ export interface InboxFeedbackListProps {
   onMarkReviewed: (feedbackId: string) => void;
   pendingFeedbackId?: string;
   /** Opens the trace side panel for the row's feedback. */
-  onSelect: (feedback: FeedbackRecord) => void;
+  onSelect: (feedback: FeedbackItem) => void;
   selectedFeedbackId?: string;
 }
 

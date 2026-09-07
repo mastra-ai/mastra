@@ -106,6 +106,7 @@ type GeneratedRequest<T> = OptionalizeUndefined<T>;
 type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
 export type ListFeedbackResponse = GeneratedResponse<'GET /observability/feedback'>;
+export type FeedbackItem = ListFeedbackResponse['feedback'][number];
 
 export interface ClientOptions {
   /** Base URL for API requests */

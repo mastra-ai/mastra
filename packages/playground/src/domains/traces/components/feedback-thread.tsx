@@ -1,4 +1,4 @@
-import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
+import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
@@ -27,7 +27,7 @@ type FeedbackThreadProps = {
   variant?: CommentVariant;
 };
 
-function formatBody(fb: FeedbackRecord): string {
+function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
   if (text) return text;
   if (fb.feedbackType === 'thumbs') return fb.value === 1 ? '\u{1F44D}' : '\u{1F44E}';
