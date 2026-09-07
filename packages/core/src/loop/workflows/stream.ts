@@ -445,7 +445,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...executionResult.result,
             stepResult: {
               ...executionResult.result.stepResult,
-              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
+              // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
           },

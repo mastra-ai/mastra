@@ -5,8 +5,10 @@ import { InternalSpans } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { createWorkflow } from '../workflows/create';
+import { createEventedWorkflow, createWorkflow } from '../workflows/create';
+import type { Step } from '../workflows/step';
 import type { OutputWriter } from '../workflows/types';
+import type { Workflow } from '../workflows/workflow';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from './run-scope-keys';
@@ -52,6 +54,18 @@ export interface AgenticLoopBuilderParams<Tools extends ToolSet = ToolSet, OUTPU
 export type LoopContinuationPredicate = (params: any) => Promise<boolean>;
 
 /**
+ * Engine-agnostic handle for a loop step. The two engines build steps with
+ * different ids and schemas (state flows through workflow context on the main
+ * loop vs. serialized iteration state on the durable loop), so the overridable
+ * factory surface is typed loosely; each engine's composition works with its
+ * own concrete step types internally.
+ */
+export type LoopStep = Step<string, any, any, any, any, any, any, any>;
+
+/** Engine-agnostic handle for a composed loop workflow (see {@link LoopStep}). */
+export type LoopWorkflow = Workflow<any, any, any, any, any, any, any, any>;
+
+/**
  * Builds the agentic loop: an outer `dowhile` workflow wrapping a
  * single-iteration workflow of ten steps (LLM execution → tool calls →
  * mapping → background check → signal drain → isTaskComplete → goal).
@@ -93,7 +107,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * Which workflow engine the loop is composed on. The durable subclass
    * returns `createEventedWorkflow` when the evented engine is selected.
    */
-  protected workflowFactory(): typeof createWorkflow {
+  protected workflowFactory(): typeof createWorkflow | typeof createEventedWorkflow {
     return createWorkflow;
   }
 
@@ -101,31 +115,31 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
   // Each delegates to today's step files unchanged. These are the hoisting
   // targets for the shared-core migration (PHASE3 steps 3–5).
 
-  protected llmExecutionStep(toolCallForeachOptions: ToolCallForeachOptions) {
+  protected llmExecutionStep(toolCallForeachOptions: ToolCallForeachOptions): LoopStep {
     return createLLMExecutionStep<Tools, OUTPUT>({ ...this.params, toolCallForeachOptions });
   }
 
-  protected toolCallStep() {
+  protected toolCallStep(): LoopStep {
     return createToolCallStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected llmMappingStep(llmExecutionStep: any) {
-    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep);
+  protected llmMappingStep(llmExecutionStep: LoopStep): LoopStep {
+    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep as any);
   }
 
-  protected backgroundTaskCheckStep() {
+  protected backgroundTaskCheckStep(): LoopStep {
     return createBackgroundTaskCheckStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected signalDrainStep() {
+  protected signalDrainStep(): LoopStep {
     return createSignalDrainStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected isTaskCompleteStep() {
+  protected isTaskCompleteStep(): LoopStep {
     return createIsTaskCompleteStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected goalStep() {
+  protected goalStep(): LoopStep {
     return createGoalStep<Tools, OUTPUT>({ ...this.params });
   }
 
@@ -135,7 +149,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * The single-iteration workflow: LLM execution → tool-call foreach →
    * mapping → background check → signal drain → isTaskComplete → goal.
    */
-  buildIterationWorkflow() {
+  buildIterationWorkflow(): LoopWorkflow {
     const { _internal, ...rest } = this.params;
 
     const { limit: configuredToolCallConcurrency, strategy: toolCallConcurrencyStrategy } =
@@ -487,7 +501,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * The outer loop workflow: dowhile(iteration workflow, continuation
    * predicate).
    */
-  build() {
+  build(): LoopWorkflow {
     return this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,

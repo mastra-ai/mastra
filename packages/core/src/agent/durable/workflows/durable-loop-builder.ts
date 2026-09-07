@@ -1,0 +1,782 @@
+import { z } from 'zod';
+import type { PubSub } from '../../../events/pubsub';
+import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
+import { AgenticLoopBuilder } from '../../../loop/loop-builder';
+import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
+import type { Mastra } from '../../../mastra';
+import { InternalSpans } from '../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import { PUBSUB_SYMBOL } from '../../../workflows/constants';
+import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import { DurableStepIds, DurableAgentDefaults } from '../constants';
+import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
+import type {
+  DurableToolCallInput,
+  DurableAgenticWorkflowInput,
+  DurableAgenticExecutionOutput,
+  DurableLLMStepOutput,
+  DurableToolCallOutput,
+} from '../types';
+import { createRunMessageList } from '../utils/run-message-list';
+import { runDurableFinishSideEffects } from './finalize-run';
+import {
+  modelConfigSchema,
+  modelListEntrySchema,
+  durableAgenticOutputSchema,
+  baseIterationStateSchema,
+  createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
+  executeDurableAgentScorers,
+} from './shared';
+import {
+  createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
+  createDurableIsTaskCompleteStep,
+  createDurableLLMExecutionStep,
+  createDurableToolCallStep,
+  createDurableLLMMappingStep,
+  createDurableSignalDrainStep,
+} from './steps';
+
+/**
+ * Options for creating a durable agentic workflow
+ */
+export interface DurableAgenticWorkflowOptions {
+  /** Maximum number of agentic loop iterations */
+  maxSteps?: number;
+  /**
+   * Which workflow execution engine runs the loop. `'evented'` builds both
+   * the outer loop and the inner single-iteration workflow on the evented
+   * execution engine (pubsub + WorkflowEventProcessor); `'default'` (the
+   * default) uses the in-process default engine.
+   */
+  engine?: 'default' | 'evented';
+}
+
+/**
+ * Input schema for the durable agentic workflow.
+ * Extends base schema with model list for fallback support.
+ */
+const durableAgenticInputSchema = z.object({
+  __workflowKind: z.literal('durable-agent'),
+  runId: z.string(),
+  agentId: z.string(),
+  agentName: z.string().optional(),
+  messageListState: z.any(),
+  toolsMetadata: z.array(z.any()),
+  modelConfig: modelConfigSchema,
+  // Model list for fallback support (when agent configured with array of models)
+  modelList: z.array(modelListEntrySchema).optional(),
+  options: z.any(),
+  state: z.any(),
+  messageId: z.string(),
+  // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
+  agentSpanData: z.any().optional(),
+  modelSpanData: z.any().optional(),
+  // JSON-safe snapshot of requestContext.entries() so durable steps can read
+  // it (e.g. is-task-complete scorers pass it as customContext).
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
+});
+
+/**
+ * Schema for the iteration state that flows through the dowhile loop.
+ * Extends base schema with model list for fallback support.
+ */
+const iterationStateSchema = baseIterationStateSchema.extend({
+  // Model list for fallback support
+  modelList: z.array(z.any()).optional(),
+});
+
+type IterationState = z.infer<typeof iterationStateSchema>;
+
+/**
+ * Builds the durable agent loop on the shared `AgenticLoopBuilder` topology.
+ *
+ * The durable loop implements the same agentic loop pattern as the main loop
+ * (LLM execution → tool-call foreach → mapping → background check → signal
+ * drain → isTaskComplete → goal, wrapped in a dowhile) but flows all state
+ * through workflow input/output so it is durable across process restarts and
+ * execution engine replays.
+ *
+ * Migration status (PHASE3 Step 1): every method is still a whole-method
+ * override delegating to the durable step files. As the shared cores land,
+ * these overrides shrink until only the runtime hooks remain (state
+ * resolution via registry + serialized `messageListState`, pubsub chunk
+ * transport, the evented `workflowFactory`, and snapshot policies).
+ */
+export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
+  readonly #options?: DurableAgenticWorkflowOptions;
+  readonly #maxSteps: number;
+
+  constructor(options?: DurableAgenticWorkflowOptions) {
+    // No main-loop params: the durable loop resolves its runtime from the run
+    // registry and serialized iteration state. Any base method that reads
+    // `this.params` on this path throws (see AgenticLoopBuilder).
+    super();
+    this.#options = options;
+    this.#maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
+  }
+
+  /**
+   * Engine selection: EventedAgent opts into the evented execution engine;
+   * DurableAgent stays on the default in-process engine.
+   */
+  protected override workflowFactory(): typeof createWorkflow {
+    return this.#options?.engine === 'evented' ? createEventedWorkflow : createWorkflow;
+  }
+
+  // ── Step factories ─────────────────────────────────────────────────────
+  // Tools and model are resolved from Mastra at runtime; the workflow is
+  // created once at startup and reused for all runs.
+
+  protected override llmExecutionStep() {
+    return createDurableLLMExecutionStep();
+  }
+
+  /** Each tool call runs as its own step with suspend support. */
+  protected override toolCallStep() {
+    return createDurableToolCallStep();
+  }
+
+  protected override llmMappingStep() {
+    return createDurableLLMMappingStep();
+  }
+
+  protected override backgroundTaskCheckStep() {
+    return createDurableBackgroundTaskCheckStep();
+  }
+
+  /**
+   * Mirrors the non-durable `signalDrainStep` which drains signals queued
+   * during tool execution.
+   */
+  protected override signalDrainStep() {
+    return createDurableSignalDrainStep();
+  }
+
+  /**
+   * The isTaskComplete evaluation step (mirrors the non-durable
+   * createIsTaskCompleteStep). Lives as a real step (not predicate logic)
+   * so it shows up in workflow traces and produces a proper state transition.
+   */
+  protected override isTaskCompleteStep() {
+    return createDurableIsTaskCompleteStep(this.#maxSteps);
+  }
+
+  /**
+   * The goal evaluation step — mirrors the non-durable `createGoalStep`.
+   * Runs after isTaskComplete so the goal judge sees whether isTaskComplete
+   * already stopped the loop.
+   */
+  protected override goalStep() {
+    return createDurableGoalStep();
+  }
+
+  // ── Composition ────────────────────────────────────────────────────────
+
+  /**
+   * The single iteration workflow (LLM -> Tool Calls -> Mapping).
+   * Note: tool-call foreach concurrency is resolved per run at execution time
+   * (see resolveDurableToolCallConcurrency) — approval/suspend flows force
+   * sequential execution; otherwise the run's `toolCallConcurrency` applies.
+   */
+  override buildIterationWorkflow() {
+    const llmExecutionStep = this.llmExecutionStep();
+    const toolCallStep = this.toolCallStep();
+    const llmMappingStep = this.llmMappingStep();
+    const backgroundTaskCheckStep = this.backgroundTaskCheckStep();
+    const signalDrainStep = this.signalDrainStep();
+    const isTaskCompleteStep = this.isTaskCompleteStep();
+    const goalStep = this.goalStep();
+
+    return (
+      this.workflowFactory()({
+        id: DurableStepIds.AGENTIC_EXECUTION,
+        inputSchema: iterationStateSchema,
+        outputSchema: iterationStateSchema,
+        options: {
+          shouldPersistSnapshot: params => {
+            // We need a persisted snapshot record to support both:
+            //  - `resumeStream()` after a suspend (records with status
+            //    `pending` / `paused` / `suspended`)
+            //  - boot-time recovery of orphaned RUNNING runs after a process
+            //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+            //    the row to actually be stamped `running` while the loop is
+            //    in-flight (issue #19056).
+            //
+            // The engine's persist path guards against overwriting a `suspended`
+            // / `paused` snapshot with a later `running` update from the same
+            // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+            // it is safe to return true for `running` here.
+            return (
+              params.workflowStatus === 'pending' ||
+              params.workflowStatus === 'paused' ||
+              params.workflowStatus === 'suspended' ||
+              params.workflowStatus === 'running'
+            );
+          },
+          // Agent-loop snapshots are pure resume artifacts — strip everything a
+          // resume never reads before persisting.
+          pruneSnapshot: pruneAgentLoopSnapshot,
+          validateInputs: false,
+          emitStepEvents: false,
+          sharePubsub: true,
+          // Internal durable-agent execution plumbing — hide workflow spans;
+          // the agent/tool/model spans within still surface for users.
+          tracingPolicy: {
+            internal: InternalSpans.WORKFLOW,
+          },
+        },
+      })
+        // Step 0: Convert iteration state to LLM input format
+        .map(
+          async ({ inputData }) => {
+            const state = inputData as IterationState;
+            return {
+              runId: state.runId,
+              agentId: state.agentId,
+              agentName: state.agentName,
+              messageListState: state.messageListState,
+              toolsMetadata: state.toolsMetadata,
+              modelConfig: state.modelConfig,
+              modelList: state.modelList,
+              options: state.options,
+              state: state.state,
+              messageId: state.messageId,
+              requestContextEntries: state.requestContextEntries,
+              stepIndex: state.iterationCount,
+              agentSpanData: state.agentSpanData,
+              modelSpanData: state.modelSpanData,
+            };
+          },
+          { id: 'map-to-llm-input' },
+        )
+        // Step 1: Execute LLM
+        .then(llmExecutionStep)
+        // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
+        .map(
+          async ({ inputData }) => {
+            const llmOutput = inputData as DurableLLMStepOutput;
+            return (llmOutput.toolCalls ?? []).map(toolCall => ({
+              ...toolCall,
+              stepSpanData: llmOutput.stepSpanData,
+            })) as DurableToolCallInput[];
+          },
+          { id: 'extract-tool-calls' },
+        )
+        // Step 3: Execute each tool call individually (with suspend support).
+        // Concurrency is resolved per run from the serialized iteration state:
+        // approval/suspend-capable tool sets run sequentially, everything else
+        // honors the run's `toolCallConcurrency` (default 10). The workflow graph
+        // is shared across runs, so this must be a resolver — never a mutated
+        // shared options object.
+        .foreach(toolCallStep, {
+          concurrency: ({ inputData, getInitData }) => {
+            const state = getInitData() as IterationState | undefined;
+            return resolveDurableToolCallConcurrency({
+              options: state?.options,
+              toolsMetadata: state?.toolsMetadata,
+              toolCalls: inputData as DurableToolCallInput[],
+            });
+          },
+        })
+        // Step 4: Collect tool results and bundle with LLM output for mapping step
+        .map(
+          async ({ inputData, getStepResult, getInitData }) => {
+            const toolResults = inputData as DurableToolCallOutput[];
+            const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
+            const initData = getInitData() as IterationState;
+
+            return {
+              llmOutput,
+              toolResults,
+              runId: initData.runId,
+              agentId: initData.agentId,
+              messageId: initData.messageId,
+              state: llmOutput?.state ?? initData.state,
+            };
+          },
+          { id: 'collect-tool-results' },
+        )
+        // Step 5: Map tool results back to state
+        .then(llmMappingStep)
+        // Step 6: Check for pending background tasks
+        .then(backgroundTaskCheckStep)
+        // Step 6.5: Drain signals that were queued while tool execution was running
+        // within this iteration. Mirrors the non-durable `signalDrainStep` which
+        // sits between backgroundTaskCheckStep and isTaskCompleteStep.
+        .then(signalDrainStep)
+        // Step 7: Map back to iteration state format using shared function
+        .map(
+          async ({ inputData, getInitData }) => {
+            const executionOutput = inputData as DurableAgenticExecutionOutput;
+            const initData = getInitData() as IterationState;
+
+            // Use shared function for base state update
+            const baseUpdate = createBaseIterationStateUpdate({
+              currentState: initData,
+              executionOutput,
+            });
+
+            // Extend with core-specific fields
+            const newIterationState: IterationState = {
+              ...baseUpdate,
+              modelList: initData.modelList,
+            };
+
+            return newIterationState;
+          },
+          { id: 'update-iteration-state' },
+        )
+        // Step 8: Evaluate user-supplied isTaskComplete scorers (if any). Runs as
+        // a real step so it shows up in traces and may mutate lastStepResult /
+        // messageListState before the dowhile predicate decides whether to loop
+        // again. No-op when the run has no policy configured.
+        .then(isTaskCompleteStep)
+        // Step 9: Goal evaluation. Mirrors the non-durable createGoalStep — judges
+        // whether the thread's active objective is satisfied or should continue.
+        // No-op when no goal is configured or no active objective exists.
+        .then(goalStep)
+        .commit()
+    );
+  }
+
+  /**
+   * The dowhile predicate: abort check, feedback two-phase stop, stopWhen
+   * evaluation, delegation bail, inter-iteration signal drain, the
+   * onIterationComplete hook, response-message boundary rotation, and the
+   * iteration-complete observability event.
+   */
+  protected override buildContinuationPredicate(): LoopContinuationPredicate {
+    const maxSteps = this.#maxSteps;
+
+    return async (params: any) => {
+      const { inputData, mastra } = params;
+      const state = inputData as IterationState;
+      const initData = params.getInitData() as DurableAgenticWorkflowInput;
+      const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+      const registryEntry = globalRunRegistry.get(state.runId);
+
+      // ── Abort check ────────────────────────────────────────────────
+      // If the abort signal has fired, stop the loop immediately.
+      // The llm-execution step may have already emitted the ABORT event
+      // and returned a clean output, but the signal may also have fired
+      // between steps (e.g. inside a tool). Override the stepResult
+      // reason so the FINISH event carries 'abort' and the client sees
+      // the correct finishReason.
+      if (registryEntry?.abortSignal?.aborted) {
+        if (state.lastStepResult) {
+          state.lastStepResult.reason = 'abort';
+          state.lastStepResult.isContinued = false;
+        }
+        return false;
+      }
+
+      // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
+      // on the previous iteration, we allowed one more LLM turn with that feedback.
+      // Now that the turn has completed, stop the loop unconditionally.
+      let hasFinishedSteps = false;
+      // Hard-stop tracks reasons that onIterationComplete must NOT override.
+      // pendingFeedbackStop and delegationBailed are unconditional stops.
+      let hardStop = false;
+      if (state.pendingFeedbackStop) {
+        hasFinishedSteps = true;
+        hardStop = true;
+        state.pendingFeedbackStop = false;
+      }
+
+      // Continuation check. isTaskComplete (when configured) runs as a
+      // proper step inside singleIterationWorkflow and may have already
+      // flipped lastStepResult.isContinued by the time we get here.
+      // Declared as `let` because signal drain may force isContinued later.
+      let shouldContinue = state.lastStepResult?.isContinued === true;
+      const runMaxSteps = state.options?.maxSteps ?? maxSteps;
+      const underMaxSteps = state.iterationCount < runMaxSteps;
+
+      // Evaluate user-supplied stopWhen predicate(s) parked on the registry
+      // up-front so we can include them in the finality decision emitted on
+      // the iteration-complete event. The predicate is a closure and can't
+      // survive the wire, so we read it from in-process state. Cross-process
+      // engines (Inngest after worker restart) won't have the registry entry
+      // and fall back to maxSteps only.
+      let stopWhenMatched = false;
+      if (shouldContinue && underMaxSteps && !hasFinishedSteps) {
+        const stopWhen = registryEntry?.stopWhen;
+        if (stopWhen && state.accumulatedSteps.length > 0) {
+          const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+          // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
+          // compatibility — the StepRecord we accumulate is sufficient at runtime.
+          const steps = state.accumulatedSteps as any;
+          const results = await Promise.all(conditions.map(condition => condition({ steps })));
+          stopWhenMatched = results.some(Boolean);
+        }
+      }
+
+      if (stopWhenMatched) {
+        hasFinishedSteps = true;
+      }
+
+      // Check if a delegation hook called ctx.bail() during this iteration.
+      // The flag was set by the mapping step and propagated via iteration state.
+      const delegationBailed = !!(state as any).delegationBailed;
+      if (delegationBailed) {
+        hasFinishedSteps = true;
+        hardStop = true;
+        // Reset the flag so it doesn't carry forward
+        (state as any).delegationBailed = false;
+      }
+
+      // ── Inter-iteration signal drain ──────────────────────────────
+      // Mirror the non-durable agentic-loop predicate: drain pending
+      // signals that were queued while the previous iteration was
+      // running. If signals are present, mark a response boundary,
+      // rotate the messageId, add them to the transcript, emit them
+      // to the stream, and force continuation so the LLM sees them.
+      if (pubsub && registryEntry?.drainPendingSignals) {
+        try {
+          const pendingSignals = registryEntry.drainPendingSignals('pending');
+          if (pendingSignals.length > 0) {
+            const drainList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              state.messageListState,
+            );
+            const nextMessageId = drainList.rotateResponseMessageId();
+            state.messageId = nextMessageId;
+
+            for (const pendingSignal of pendingSignals) {
+              const signalForTranscript = drainList.addSignal(pendingSignal);
+              await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+            }
+
+            state.messageListState = drainList.serialize();
+
+            // Force continuation — the LLM must see the injected signals
+            if (state.lastStepResult) {
+              state.lastStepResult.isContinued = true;
+            }
+            shouldContinue = true;
+          }
+        } catch {
+          // Signal drain is best-effort; if deserialization fails
+          // the next iteration still runs with the un-drained state.
+          // drainPendingSignals() is inside the try so signals remain
+          // queued if the drain function itself throws.
+        }
+      }
+
+      let isFinal = !shouldContinue || !underMaxSteps || hasFinishedSteps;
+
+      // Call onIterationComplete hook if provided (for every iteration, not
+      // just continued ones). Mirrors the regular agentic-loop predicate:
+      // the handler can return { continue: false } to stop, { continue: true }
+      // to force-continue (if under maxSteps), and/or { feedback } to inject
+      // a message before the next turn.
+      const onIterationComplete = registryEntry?.onIterationComplete;
+      if (onIterationComplete && !state.backgroundTaskPending) {
+        const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+
+        try {
+          // Deserialize messageList for the callback's messages snapshot
+          const callbackMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined });
+          try {
+            callbackMessageList.deserialize(state.messageListState);
+          } catch {
+            // If deserialization fails, callback sees empty messages
+          }
+
+          const iterationContext = {
+            iteration: state.accumulatedSteps.length,
+            maxIterations: runMaxSteps,
+            text: lastStep?.text ?? '',
+            toolCalls: (lastStep?.toolCalls ?? []).map((tc: any) => ({
+              id: tc.toolCallId || tc.id || '',
+              name: tc.toolName || tc.name || '',
+              args: (tc.args || {}) as Record<string, unknown>,
+            })),
+            toolResults: (lastStep?.toolResults ?? []).map((tr: any) => ({
+              id: tr.toolCallId || tr.id || '',
+              name: tr.toolName || tr.name || '',
+              result: tr.result,
+              error: tr.error,
+            })),
+            isFinal,
+            finishReason: lastStep?.finishReason ?? 'unknown',
+            runId: state.runId,
+            threadId: initData.state?.threadId,
+            resourceId: initData.state?.resourceId,
+            agentId: state.agentId,
+            agentName: state.agentName ?? state.agentId,
+            messages: callbackMessageList.get.all.db(),
+          };
+
+          const iterationResult = await onIterationComplete(iterationContext);
+
+          if (iterationResult) {
+            // Determine whether we can run another turn. Hard stops
+            // (pendingFeedbackStop, delegationBailed) are unconditional —
+            // onIterationComplete cannot override them.
+            const canRunAnotherTurn =
+              !hardStop && underMaxSteps && (shouldContinue || iterationResult.continue === true);
+
+            if (iterationResult.feedback && canRunAnotherTurn) {
+              // Inject feedback as a synthetic assistant message so the LLM
+              // sees it on the next turn. Mirror the regular agent: mark it
+              // with completionResult.suppressFeedback so isTaskComplete
+              // scorers skip it.
+              const feedbackId =
+                (mastra as Mastra | undefined)?.generateId?.() ??
+                globalThis.crypto?.randomUUID?.() ??
+                `msg_${Date.now()}`;
+              callbackMessageList.add(
+                {
+                  id: feedbackId,
+                  createdAt: new Date(),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [{ type: 'text', text: iterationResult.feedback }],
+                    metadata: {
+                      mode: 'stream',
+                      completionResult: { suppressFeedback: true },
+                    },
+                    format: 2,
+                  },
+                } as any,
+                'response',
+              );
+              // Re-serialize the updated messageList
+              state.messageListState = callbackMessageList.serialize();
+
+              if (iterationResult.continue === false) {
+                // Two-phase stop: let one more LLM turn run with the feedback,
+                // then stop on the next predicate evaluation.
+                state.pendingFeedbackStop = true;
+                isFinal = false;
+              } else if (!hasFinishedSteps && underMaxSteps) {
+                isFinal = false;
+                if (state.lastStepResult) {
+                  state.lastStepResult.isContinued = true;
+                }
+              }
+            } else if (iterationResult.continue === false && !hasFinishedSteps) {
+              hasFinishedSteps = true;
+              isFinal = true;
+            } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
+              if (underMaxSteps || !runMaxSteps) {
+                hasFinishedSteps = false;
+                isFinal = false;
+                if (state.lastStepResult) {
+                  state.lastStepResult.isContinued = true;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Log error but don't fail the iteration
+          const logger = (mastra as Mastra | undefined)?.getLogger?.();
+          logger?.error('Error in onIterationComplete hook:', error);
+        }
+      }
+
+      // Each iteration's assistant response is a distinct message, mirroring
+      // the non-durable agentic loop. The mutated state.messageId flows into
+      // the next singleIterationWorkflow input via map-to-llm-input.
+      if (!isFinal) {
+        const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+          state.messageListState,
+        );
+        state.messageId = boundaryList.rotateResponseMessageId();
+        state.messageListState = boundaryList.serialize();
+      }
+
+      // Emit an iteration-complete event for observability. This fires after
+      // every iteration (including the last one) so client-side callbacks
+      // (via stream-adapter) can track progress. The in-process callback
+      // above has already been evaluated and its result applied to the
+      // continuation decision.
+      if (pubsub) {
+        const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+        await emitIterationCompleteEvent(pubsub, state.runId, {
+          iteration: state.iterationCount,
+          maxIterations: runMaxSteps,
+          text: lastStep?.text,
+          toolCalls: lastStep?.toolCalls,
+          toolResults: lastStep?.toolResults,
+          isFinal,
+          finishReason: lastStep?.finishReason,
+          runId: state.runId,
+          threadId: initData.state?.threadId,
+          resourceId: initData.state?.resourceId,
+          agentId: initData.agentId,
+          agentName: initData.agentName,
+        });
+      }
+
+      return !isFinal;
+    };
+  }
+
+  /**
+   * The outer loop workflow: init iteration state → dowhile(single iteration,
+   * continuation predicate) → finalize (output mapping, memory persistence,
+   * finish event, span closure) → fire-and-forget scorers.
+   */
+  override build() {
+    return (
+      this.workflowFactory()({
+        id: DurableStepIds.AGENTIC_LOOP,
+        inputSchema: durableAgenticInputSchema,
+        outputSchema: durableAgenticOutputSchema,
+        options: {
+          shouldPersistSnapshot: params => {
+            // See the singleIterationWorkflow comment above — same policy for
+            // the outer loop. The persist path guards against overwriting a
+            // suspended snapshot with running.
+            return (
+              params.workflowStatus === 'pending' ||
+              params.workflowStatus === 'paused' ||
+              params.workflowStatus === 'suspended' ||
+              params.workflowStatus === 'running'
+            );
+          },
+          // Agent-loop snapshots are pure resume artifacts — strip everything a
+          // resume never reads before persisting.
+          pruneSnapshot: pruneAgentLoopSnapshot,
+          validateInputs: false,
+          emitStepEvents: false,
+          // Internal durable-agent execution plumbing — see singleIterationWorkflow.
+          tracingPolicy: {
+            internal: InternalSpans.WORKFLOW,
+          },
+        },
+      })
+        // Initialize iteration state from input
+        .map(
+          async ({ inputData }) => {
+            const input = inputData as DurableAgenticWorkflowInput;
+            const iterationState: IterationState = {
+              ...input,
+              iterationCount: 0,
+              accumulatedSteps: [],
+              accumulatedUsage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+              },
+              lastStepResult: undefined,
+            };
+            return iterationState;
+          },
+          { id: 'init-iteration-state' },
+        )
+        // Run the agentic loop with dowhile
+        .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+        // Map final state to output format, run output processors, persist memory, emit finish
+        .map(
+          async params => {
+            const { inputData, mastra, requestContext, tracingContext } = params;
+            const state = inputData as IterationState;
+            const initData = params.getInitData() as DurableAgenticWorkflowInput;
+
+            const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+            const logger = mastra?.getLogger?.();
+
+            // Extract final text from last step
+            const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+            let finalText = lastStep?.text;
+
+            const finishResult = await runDurableFinishSideEffects({
+              runId: state.runId,
+              initData,
+              messageListState: state.messageListState,
+              mastra: mastra as Mastra | undefined,
+              requestContext,
+              tracingContext,
+              logger,
+              outputResult: {
+                text: finalText ?? '',
+                usage: state.accumulatedUsage,
+                finishReason: state.lastStepResult?.reason ?? 'unknown',
+                steps: state.accumulatedSteps,
+              },
+            });
+            if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
+              lastStep.text = finishResult.outputText;
+              finalText = finishResult.outputText;
+            }
+
+            const finalOutput = {
+              messageListState: finishResult.messageListState,
+              messageId: state.messageId,
+              stepResult: state.lastStepResult || {
+                reason: 'stop',
+                warnings: [],
+                isContinued: false,
+              },
+              output: {
+                text: finalText,
+                usage: state.accumulatedUsage,
+                steps: state.accumulatedSteps,
+              },
+              state: state.state,
+            };
+
+            if (pubsub) {
+              await emitFinishEvent(pubsub, state.runId, {
+                output: finalOutput.output,
+                stepResult: finalOutput.stepResult,
+              });
+            }
+
+            // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
+            // originals were ended as `suspended`, so end the *resume* spans (registry override).
+            try {
+              const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
+                requestContext,
+              });
+              const reg = globalRunRegistry.get(initData.runId);
+              const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+              const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              if (observability) {
+                if (modelSpanData) {
+                  const modelSpan = observability.rebuildSpan(
+                    modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+                  ) as AIModelGenerationSpan | undefined;
+                  modelSpan?.createTracker()?.endGeneration({
+                    output: { text: finalText },
+                    attributes: { finishReason: finalOutput.stepResult?.reason },
+                    usage: state.accumulatedUsage,
+                  });
+                }
+                if (agentSpanData) {
+                  const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                  agentSpan?.end({ output: { text: finalText } });
+                }
+              }
+            } catch (error) {
+              logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
+            }
+
+            return finalOutput;
+          },
+          { id: 'map-final-output' },
+        )
+        // Execute scorers (fire-and-forget, doesn't affect main result)
+        .map(
+          async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
+            executeDurableAgentScorers({
+              initData: getInitData() as DurableAgenticWorkflowInput,
+              finalOutput: inputData,
+              mastra: mastra as Mastra | undefined,
+              requestContext,
+              tracingContext,
+            });
+
+            return inputData;
+          },
+          { id: 'execute-scorers' },
+        )
+        .commit()
+    );
+  }
+}
