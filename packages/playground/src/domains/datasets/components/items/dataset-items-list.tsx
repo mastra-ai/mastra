@@ -4,7 +4,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
-import { Plus, Upload, FileJson } from 'lucide-react';
+import { CircleSlashIcon, Plus, Upload, FileJson } from 'lucide-react';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -219,7 +219,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
-        iconSlot={<Plus className="text-neutral3 h-8 w-8" />}
+        iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
