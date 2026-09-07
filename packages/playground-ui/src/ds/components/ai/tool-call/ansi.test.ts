@@ -29,6 +29,10 @@ describe('stripSerializedAnsi', () => {
     expect(stripSerializedAnsi(JSON.stringify('\u001b]0;title\u0007text'))).toBe('"text"');
   });
 
+  it('removes JSON-escaped private-mode sequences such as the cursor toggle', () => {
+    expect(stripSerializedAnsi(JSON.stringify('\u001b[?25lspin\u001b[?25h'))).toBe('"spin"');
+  });
+
   it('keeps a source file that spells an escape sequence as text', () => {
     const sourceLine = "const clearLine = '\\u001b[2K';";
     expect(stripSerializedAnsi(JSON.stringify(sourceLine))).toBe(JSON.stringify(sourceLine));
