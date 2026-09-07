@@ -16,6 +16,7 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
+const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -403,6 +404,27 @@ function mapMastraToLangfuseAttributes(
       }
       if (span.entityName) {
         attributes['langfuse.trace.metadata.workflowName'] = span.entityName;
+      }
+    }
+
+    // Root-span metadata: forward the remaining mastra.metadata.* keys (runId,
+    // resourceId, and any user-supplied keys) to langfuse.trace.metadata.* so
+    // they stay first-level, filterable trace metadata, as they were before the
+    // OTLP migration. Langfuse only nests unmapped attributes under
+    // metadata.attributes, which cannot be used in trace filters or evaluator
+    // scopes. Keys that map to dedicated Langfuse fields (userId, sessionId,
+    // threadId, traceName, version, langfuse.*) were already removed above.
+    // Explicit metadata.langfuse.* values and the identity keys above take
+    // precedence. Child spans are skipped because Langfuse applies
+    // langfuse.trace.* from any span, so a child could overwrite the trace.
+    // The mastra.metadata.* attribute is kept on the observation.
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(MASTRA_METADATA_PREFIX) || value === null || value === undefined) {
+        continue;
+      }
+      const traceKey = `langfuse.trace.metadata.${key.slice(MASTRA_METADATA_PREFIX.length)}`;
+      if (attributes[traceKey] === undefined) {
+        attributes[traceKey] = typeof value === 'string' ? value : JSON.stringify(value);
       }
     }
   }
