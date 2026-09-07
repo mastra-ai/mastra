@@ -40,10 +40,10 @@ interface BaseSpan<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input passed at the start of the span */
-  input?: any
+  input?: SpanInputMap[TType]
 
   /** Output generated at the end of the span */
-  output?: any
+  output?: SpanOutputMap[TType]
 
   /** Error information if span failed */
   errorInfo?: {
@@ -108,7 +108,7 @@ Ends the span and triggers export to configured exporters. Sets the `endTime` an
   props={[
   {
     name: 'output',
-    type: 'any',
+    type: 'SpanOutputMap[TType]',
     description: 'Final output data from the operation',
     required: false,
   },
@@ -176,13 +176,13 @@ Updates span data while it's still active. Can modify `input`, `output`, `metada
   props={[
   {
     name: 'input',
-    type: 'any',
+    type: 'SpanInputMap[TType]',
     description: 'Update or set input data',
     required: false,
   },
   {
     name: 'output',
-    type: 'any',
+    type: 'SpanOutputMap[TType]',
     description: 'Update or set output data',
     required: false,
   },
@@ -239,7 +239,7 @@ Creates a child span under this span. Child spans track sub-operations and inher
   },
   {
     name: 'input',
-    type: 'any',
+    type: 'SpanInputMap[TChildType]',
     description: 'Initial input data',
     required: false,
   },
@@ -284,13 +284,13 @@ Creates an event span under this span. Event spans represent point-in-time occur
   },
   {
     name: 'input',
-    type: 'any',
+    type: 'SpanInputMap[TChildType]',
     description: 'Event input data',
     required: false,
   },
   {
     name: 'output',
-    type: 'any',
+    type: 'SpanOutputMap[TChildType]',
     description: 'Event output data',
     required: false,
   },

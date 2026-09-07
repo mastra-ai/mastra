@@ -69,6 +69,7 @@ import {
 } from '../notifications/signals';
 import type { NotificationDeliveryDecision, SendNotificationSignalInput } from '../notifications/types';
 import type {
+  AgentRunResumeInput,
   DefinitionSource,
   TracingProperties,
   ObservabilityContext,
@@ -7023,9 +7024,13 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
-  #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
+  #getResumeSpanInput(
+    resumeData: unknown,
+    suspendedToolInfo?: { toolCallId?: string; toolName?: string },
+  ): AgentRunResumeInput {
     if (!suspendedToolInfo?.toolName && !suspendedToolInfo?.toolCallId) {
-      return resumeData;
+      // Resume data is the object the suspended tool's resume schema accepts.
+      return resumeData as AgentRunResumeInput;
     }
 
     const resumeInput: Record<string, unknown> =
@@ -7041,7 +7046,7 @@ export class Agent<
       suspendedToolInfo.toolCallId &&
       resumeInput.toolCallId !== undefined &&
       resumeInput.toolCallId !== suspendedToolInfo.toolCallId;
-    const spanInput: Record<string, unknown> =
+    const spanInput: AgentRunResumeInput =
       hasConflictingToolName || hasConflictingToolCallId ? { resumeData: resumeInput } : { ...resumeInput };
 
     if (suspendedToolInfo.toolName) {
