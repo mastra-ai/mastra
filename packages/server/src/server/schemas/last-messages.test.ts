@@ -12,6 +12,10 @@ describe('lastMessages schema', () => {
     expect(lastMessagesSchema.parse(value)).toEqual(value);
   });
   it.each([
+    -1,
+    1.5,
+    NaN,
+    Infinity,
     { maxTokens: -1 },
     { maxTokens: Infinity },
     { maxMessages: 1.5 },

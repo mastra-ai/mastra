@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
 export const lastMessagesSchema = z.union([
-  z.number(),
+  z.number().int().nonnegative(),
   z.literal(false),
   z
     .object({
