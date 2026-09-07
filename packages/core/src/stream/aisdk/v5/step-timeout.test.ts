@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { isMastraTimeoutError } from '../../../loop/timeout';
@@ -169,16 +170,27 @@ describe('modelSettings.timeout.firstChunkMs', () => {
     expect(chunks.some(chunk => contentChunks.some(content => content.type === chunk.type))).toBe(true);
   });
 
-  it('gives each retry attempt a fresh first-content budget', async () => {
+  it.each([
+    { firstChunkMs: 800, contentDelayMs: 0 },
+    { firstChunkMs: 1_500, contentDelayMs: 750 },
+  ])('gives each retry attempt a fresh $firstChunkMs ms first-content budget', async ({ firstChunkMs, contentDelayMs }) => {
     let attempt = 0;
     const doStream = vi.fn(async () => {
       attempt++;
-      if (attempt === 1) throw new Error('retry me');
+      if (attempt === 1) {
+        throw new APICallError({
+          message: 'rate limited',
+          url: 'https://example.test',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+        });
+      }
 
       return {
         stream: new ReadableStream({
           async start(controller) {
-            await new Promise(resolve => setTimeout(resolve, 750));
+            await new Promise(resolve => setTimeout(resolve, contentDelayMs));
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
             controller.enqueue({
               type: 'finish',
@@ -192,7 +204,7 @@ describe('modelSettings.timeout.firstChunkMs', () => {
     });
     const model = new MockLanguageModelV2({ doStream: doStream as any });
 
-    const chunks = await runExecute({ model, firstChunkMs: 1_500, maxRetries: 1 });
+    const chunks = await runExecute({ model, firstChunkMs, maxRetries: 1 });
 
     expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
     expect(doStream).toHaveBeenCalledTimes(2);
