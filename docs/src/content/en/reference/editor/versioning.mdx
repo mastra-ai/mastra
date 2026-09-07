@@ -28,7 +28,21 @@ Saving changed snapshot fields creates a new latest version. Saving identical sn
 
 If an active version exists, creating a draft doesn't change the version handling published requests. Publishing updates `activeVersionId`. Restoring a historical version copies its configuration into a new inactive draft.
 
-The direct namespace methods and REST APIs differ in one important way. `editor.prompt.update()` creates an inactive draft. `editor.agent.update()` creates a version and immediately assigns it to `activeVersionId`. The stored-agent REST `PATCH` route creates an inactive draft unless `autoPublish` is enabled.
+Both `editor.prompt.update()` and `editor.agent.update()` create an inactive draft when snapshot fields change. Neither method changes `activeVersionId` unless you pass it explicitly.
+
+To publish an existing agent version through the SDK, pass its ID as `activeVersionId` with `status: 'published'`:
+
+```typescript
+await editor.agent.update({
+  id: 'support-agent',
+  status: 'published',
+  activeVersionId: version.id,
+})
+```
+
+Here, `version` is the stored version you want to publish, not the runtime `Agent` returned by `editor.agent.update()`.
+
+The stored-agent REST `PATCH` route also creates an inactive draft by default (`autoPublish: false`). Set `autoPublish: true` to publish the update, or publish an existing version with `POST /api/stored/agents/:agentId/versions/:versionId/activate` (using the default `/api` prefix).
 
 When a generic stored resource has no active version, published resolution can fall back to the latest snapshot. For a code-defined agent override, requesting `status: 'published'` without an active override returns the original code agent.
 
