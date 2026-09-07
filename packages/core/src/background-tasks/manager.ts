@@ -334,7 +334,20 @@ export class BackgroundTaskManager {
       try {
         await this.dispatch(task);
       } catch (error) {
-        if (isProcessAffine) this.releaseLocalSlot(task.id);
+        const failed = await storage.updateTask(
+          task.id,
+          {
+            status: 'failed',
+            error: { message: error instanceof Error ? error.message : String(error) },
+            completedAt: new Date(),
+          },
+          { expectedStatus: 'pending' },
+        );
+        if (failed) {
+          this.releaseLocalSlot(task.id);
+          this.deregisterTaskContext(task.id);
+          void this.drainPending();
+        }
         throw error;
       }
       return { task };
