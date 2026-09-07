@@ -171,10 +171,12 @@ function writeResponseTurnRecordMetadata(
  * reloading the full set of stored turn messages referenced by the metadata.
  */
 export async function findResponseTurnRecord({
+  mastra,
   agent,
   responseId,
   requestContext,
 }: {
+  mastra: Mastra | undefined;
   agent: Agent<any, any, any, any>;
   responseId: string;
   requestContext: RequestContext;
@@ -201,7 +203,7 @@ export async function findResponseTurnRecord({
     return null;
   }
 
-  await validateThreadOwnership(thread, effectiveResourceId);
+  await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext });
   const messageIds = metadata.messageIds.length > 0 ? metadata.messageIds : [message.id];
   const { messages: responseMessages } = await memoryStore.listMessagesById({ messageIds });
   const messagesById = new Map(responseMessages.map(storedMessage => [storedMessage.id, storedMessage] as const));
@@ -227,7 +229,7 @@ export async function findResponseTurnRecordAcrossAgents({
 
   const agents = Object.values(mastra.listAgents()) as Agent<any, any, any, any>[];
   for (const agent of agents) {
-    const match = await findResponseTurnRecord({ agent, responseId, requestContext });
+    const match = await findResponseTurnRecord({ mastra, agent, responseId, requestContext });
     if (match) {
       return match;
     }
@@ -268,7 +270,7 @@ export async function findConversationThreadAcrossAgents({
       continue;
     }
 
-    await validateThreadOwnership(thread, effectiveResourceId);
+    await validateThreadOwnership(thread, effectiveResourceId, { mastra, requestContext });
     return { thread, memoryStore };
   }
 
