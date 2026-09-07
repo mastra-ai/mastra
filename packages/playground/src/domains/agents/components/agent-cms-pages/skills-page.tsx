@@ -5,7 +5,7 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { Plus, Drill, SearchIcon } from 'lucide-react';
+import { Plus, CircleSlashIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -112,7 +112,7 @@ export function SkillsPage() {
         {!isLoading && storedSkills.length === 0 && (
           <div className="py-12">
             <EmptyState
-              iconSlot={<Drill height={40} width={40} />}
+              iconSlot={<CircleSlashIcon height={40} width={40} />}
               titleSlot="No skills available"
               descriptionSlot="Create a skill to give your agent specialized knowledge."
               actionSlot={

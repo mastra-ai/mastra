@@ -22,7 +22,7 @@ import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
   ChevronDown,
-  ClipboardCheck,
+  CircleSlashIcon,
   FilterIcon,
   GaugeIcon,
   Sparkles,
@@ -599,7 +599,12 @@ export function DatasetReview({
           featuredItem && detailPanelVariant === 'inline' && 'grid-cols-[1fr_1fr]',
         )}
       >
-        <div className="grid min-h-0 w-full grid-rows-[auto_1fr] gap-3 overflow-hidden pt-3">
+        <div
+          className={cn(
+            'grid min-h-0 w-full gap-3 overflow-hidden pt-3',
+            items.length > 0 || activeFilterCount > 0 ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-1',
+          )}
+        >
           {(items.length > 0 || activeFilterCount > 0) && (
             <div className="flex w-full flex-wrap items-center justify-start gap-3">
               {/* Filters (left) */}
@@ -772,9 +777,9 @@ export function DatasetReview({
               <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex h-full items-center justify-center py-12">
+            <div className="flex h-full items-center-safe justify-center-safe overflow-auto py-12">
               <EmptyState
-                iconSlot={<ClipboardCheck className="text-neutral3 h-8 w-8" />}
+                iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
                 titleSlot={showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 descriptionSlot={
                   showCompleted
