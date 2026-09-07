@@ -11,6 +11,8 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryProject, GithubRepo } from '../ui/domains/workspaces/services/github';
+import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
+import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -57,13 +59,19 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
+/** Also feeds the caller's issue intake; the server link is idempotent, so a failed intake write is safe to retry. */
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const saveIntakeConfig = useSaveIntakeConfigMutation();
   return useMutation({
     mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: GithubRepo }) => {
       const connectionId = await connectInstallation(baseUrl, factoryProjectId, repo.installationStorageId);
-      return linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+      const config = await fetchIntakeConfig(baseUrl);
+      const githubSelection = selectIntakeSource(config.github, repo.fullName);
+      if (githubSelection !== config.github) await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+      return linked;
     },
     onSuccess: () => invalidateFactories(queryClient),
   });
