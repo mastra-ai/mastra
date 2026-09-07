@@ -43,7 +43,7 @@ const MAX_PAGE_SIZE = 50;
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   comments: WorkItemCommentsStorage;
-  liveSessions: Pick<LiveSessions, 'parked'>;
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 

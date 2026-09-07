@@ -82,6 +82,17 @@ export class LiveSessions {
     return oldest;
   }
 
+  /** Every parked session of a project, so the inbox reads no card when nothing waits. */
+  parkedIn(factoryProjectId: string): Array<{ sessionId: string; run: ParkedRun }> {
+    const parked: Array<{ sessionId: string; run: ParkedRun }> = [];
+    for (const [sessionId, tracked] of this.#byId) {
+      if (tracked.session.state.get().factoryProjectId !== factoryProjectId) continue;
+      const run = this.parked(sessionId);
+      if (run) parked.push({ sessionId, run });
+    }
+    return parked;
+  }
+
   /** Fires when a session parks, is answered, or finishes a turn: whoever shows parked runs re-reads. */
   onParkedChanged(listener: (session: LiveSession) => void): () => void {
     this.#parkedListeners.add(listener);

@@ -42,7 +42,7 @@ function parkedRunLabel(toolName: string): string {
 function olderThan(entry: ParkedSession, before: AttentionStreamPosition | undefined): boolean {
   if (!before) return true;
   const gap = entry.occurredAt.getTime() - before.occurredAt.getTime();
-  return gap < 0 || (gap === 0 && entry.sessionId < before.id);
+  return gap < 0 || (gap === 0 && entry.sessionId.localeCompare(before.id) > 0);
 }
 
 function toItem(scope: AttentionScope, { entry, receipt }: ReceiptedParkedSession): Record<string, unknown> {
@@ -67,14 +67,14 @@ function toItem(scope: AttentionScope, { entry, receipt }: ReceiptedParkedSessio
 export class ParkedRunAttentionProvider implements AttentionProvider {
   readonly kind = 'agent-waiting' as const;
   readonly #workItems: WorkItemsStorage;
-  readonly #liveSessions: Pick<LiveSessions, 'parked'>;
+  readonly #liveSessions: Pick<LiveSessions, 'parkedIn'>;
 
   constructor({
     workItems,
     liveSessions,
   }: {
     workItems: WorkItemsStorage;
-    liveSessions: Pick<LiveSessions, 'parked'>;
+    liveSessions: Pick<LiveSessions, 'parkedIn'>;
   }) {
     this.#workItems = workItems;
     this.#liveSessions = liveSessions;
@@ -82,11 +82,15 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
 
   /** Newest park first. A session bound to several cards is listed once, under the first card. */
   async #parked(scope: AttentionScope): Promise<ParkedSession[]> {
+    const runBySession = new Map(
+      this.#liveSessions.parkedIn(scope.factoryProjectId).map(({ sessionId, run }) => [sessionId, run]),
+    );
+    if (runBySession.size === 0) return [];
     const items = await this.#workItems.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
     const bySession = new Map<string, ParkedSession>();
     for (const item of items) {
       for (const [role, ref] of Object.entries(item.sessions)) {
-        const run = this.#liveSessions.parked(ref.sessionId);
+        const run = runBySession.get(ref.sessionId);
         if (!run || bySession.has(ref.sessionId)) continue;
         bySession.set(ref.sessionId, {
           item,
@@ -153,8 +157,11 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
     return { entries, hasMore: false };
   }
 
-  async markAllRead(scope: AttentionScope, { now }: { now: Date }): Promise<{ hasMore: boolean }> {
-    const parked = await this.#parked(scope);
+  async markAllRead(
+    scope: AttentionScope,
+    { before, now }: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean }> {
+    const parked = (await this.#parked(scope)).filter(entry => olderThan(entry, before));
     if (parked.length > 0) {
       await this.#workItems.markAttentionReceiptsRead({
         ...receiptScope(scope),

@@ -71,7 +71,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
-  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked'>;
+  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */

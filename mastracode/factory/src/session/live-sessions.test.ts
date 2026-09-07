@@ -21,13 +21,13 @@ function fakeController() {
   };
 }
 
-function fakeSession(id: string, running: { value: boolean } = { value: false }) {
+function fakeSession(id: string, running: { value: boolean } = { value: false }, factoryProjectId = 'project-1') {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
   const pendingSuspensions = new Map<string, { toolName: string }>();
   const session: LiveSession = {
     identity: { getId: () => id },
     run: { isRunning: () => running.value },
-    state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
+    state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId }) },
     displayState: { get: () => ({ pendingSuspensions }) },
     subscribe: listener => {
       listeners.add(listener);
@@ -104,6 +104,24 @@ describe('LiveSessions', () => {
     });
     fake.end('complete');
     expect(registry.parked('session-1')).toBeUndefined();
+  });
+
+  it('lists the parked sessions of one project only', () => {
+    const controller = fakeController();
+    const registry = new LiveSessions(controller);
+    const parked = fakeSession('session-1');
+    const idle = fakeSession('session-2');
+    const elsewhere = fakeSession('session-3', { value: false }, 'project-2');
+    for (const fake of [parked, idle, elsewhere]) controller.create(fake.session);
+    parked.park('call-1', 'ask_user');
+    elsewhere.park('call-2', 'submit_plan');
+
+    expect(registry.parkedIn('project-1')).toEqual([
+      {
+        sessionId: 'session-1',
+        run: { toolName: 'ask_user', suspendedAt: new Date('2030-01-01T00:00:00Z').getTime() },
+      },
+    ]);
   });
 
   it('announces every park, answer and finished turn, and stops once the session is gone', () => {

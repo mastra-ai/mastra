@@ -49,6 +49,8 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
 // ── Test harness ─────────────────────────────────────────────────────────
+const PARKED_RUN = { toolName: 'ask_user', suspendedAt: 0 };
+
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
@@ -81,7 +83,8 @@ function buildApp(
       startCoordinator,
       liveSessions: {
         isRunning: sessionId => running.has(sessionId),
-        parked: sessionId => (parked.has(sessionId) ? { toolName: 'ask_user', suspendedAt: 0 } : undefined),
+        parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
+        parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
       },
     }).routes(),
   );

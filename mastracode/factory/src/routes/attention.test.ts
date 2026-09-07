@@ -39,7 +39,11 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
-      liveSessions: { isRunning: () => false, parked: sessionId => parkedBySession.get(sessionId) },
+      liveSessions: {
+        isRunning: () => false,
+        parked: sessionId => parkedBySession.get(sessionId),
+        parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
+      },
     }).routes(),
   );
   return app;
@@ -234,6 +238,59 @@ describe('agent waiting attention items', () => {
       { items: [], openCount: 0, badgeCount: 0 },
     );
     expect((await request('POST', `${receiptPath}/archive`)).status).toBe(409);
+  });
+
+  it('pages two sessions parked in the same millisecond without repeating or losing one', async () => {
+    const otherSessionId = '7a1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+    for (const [title, id] of [
+      ['First card', sessionId],
+      ['Second card', otherSessionId],
+    ] as const) {
+      const item = await seedWorkItem(title);
+      await seed.workItems.update({
+        orgId: 'org1',
+        userId: 'u1',
+        id: item.id,
+        patch: { sessions: { work: { sessionId: id, branch: `factory/${id}`, threadId: 'thread-1' } } },
+      });
+      parkedBySession.set(id, { toolName: 'ask_user', suspendedAt });
+    }
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(first.items.map((entry: any) => entry.sessionId)).toEqual([sessionId]);
+    expect(first.hasMore).toBe(true);
+    const second = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1&before=${first.nextCursor}`)
+    ).json();
+    expect(second.items.map((entry: any) => entry.sessionId)).toEqual([otherSessionId]);
+    expect(second.hasMore).toBe(false);
+  });
+
+  it('read-all with a cursor leaves the parks newer than the cursor unread', async () => {
+    const newerSessionId = '7a1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+    for (const [title, id, at] of [
+      ['Older park', sessionId, suspendedAt],
+      ['Newer park', newerSessionId, suspendedAt + 1_000],
+    ] as const) {
+      const item = await seedWorkItem(title);
+      await seed.workItems.update({
+        orgId: 'org1',
+        userId: 'u1',
+        id: item.id,
+        patch: { sessions: { work: { sessionId: id, branch: `factory/${id}`, threadId: 'thread-1' } } },
+      });
+      parkedBySession.set(id, { toolName: 'ask_user', suspendedAt: at });
+    }
+
+    const first = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json();
+    expect(first.items.map((entry: any) => entry.sessionId)).toEqual([newerSessionId]);
+    const readAll = await request(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/attention/read-all?before=${first.nextCursor}`,
+    );
+    expect(readAll.status).toBe(200);
+    const unread = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json();
+    expect(unread.items.map((entry: any) => entry.sessionId)).toEqual([newerSessionId]);
   });
 
   it('409s a receipt for a park that has since been answered and re-parked', async () => {
