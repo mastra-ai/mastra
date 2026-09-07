@@ -1087,6 +1087,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         modes.find(mode => mode.id === defaultModeId)?.defaultModelId,
     }),
     allowedControllerTools: definition.allowedControllerTools?.filter(name => !disabledTools.has(name)),
+    allowedWorkspaceTools: definition.allowedWorkspaceTools?.filter(name => !disabledTools.has(name)),
     ...(definition.tools && {
       tools: Object.fromEntries(Object.entries(definition.tools).filter(([name]) => !disabledTools.has(name))),
     }),
