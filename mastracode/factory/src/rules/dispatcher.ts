@@ -21,7 +21,12 @@ import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES, isWorkingFactoryRuleStage } from './types.js';
+import {
+  externallyAuthoredWorkItem,
+  FACTORY_RULE_STAGES,
+  isTerminalFactoryRuleStage,
+  isWorkingFactoryRuleStage,
+} from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
 
 const LEASE_MS = 30_000;
@@ -572,15 +577,39 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory decision lease was lost before completion.');
     } catch (error) {
       const failureCode = factoryDispatchFailureCode(error);
-      await this.#storage.failDeferredDecision({
+      const terminal = isTerminalFailure(record.attempts, failureCode);
+      const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
         availableAt: retryAt(now, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
-        terminal: isTerminalFailure(record.attempts, failureCode),
+        terminal,
         advanceDeliveryGeneration: !executionCompleted,
       });
+      if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
+    }
+  }
+
+  /**
+   * Startup repair and terminal cleanup already settle a failed effect on a done or canceled
+   * card as superseded; a failure landing after the card settled would otherwise page a person
+   * until the next restart.
+   */
+  async #supersedeFailureOnSettledCard(record: FactoryDeferredDecisionRecord): Promise<void> {
+    if (!record.workItemId) return;
+    try {
+      const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
+      if (!item || !isTerminalFactoryRuleStage(item.stages)) return;
+      await this.#storage.supersedeDecisionsForWorkItem({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: record.workItemId,
+        supersededAt: new Date(),
+      });
+    } catch (error) {
+      // Best-effort: the row is already failed, and the next restart repairs it.
+      console.error('Factory settled-card supersede failed', sanitizeDispatchError(error));
     }
   }
 
