@@ -17,6 +17,7 @@ import {
   rootBranchList,
   rootBranchSpans,
   subtraceBranchSpans,
+  threadedTraceSpans,
   traceSpans,
   traceList,
   traceListWithTwoTraces,
@@ -81,6 +82,8 @@ const renderPage = (initialEntry = '/traces') =>
   );
 
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the timeline reveals the selected span row on mount.
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
     value: createMemoryStorage(),
@@ -157,6 +160,51 @@ describe('Traces page usage columns', () => {
       expect(onBreakdownRequest).not.toHaveBeenCalled();
       expect(screen.queryByText('Input tokens')).toBeNull();
       expect(screen.queryByText('Est. cost')).toBeNull();
+    });
+  });
+
+  describe('Messages column', () => {
+    const setThreadedTraceHandlers = () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
+          HttpResponse.json({ span: threadedTraceSpans.spans[0] }),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a`, () => HttpResponse.json(threadedTraceSpans)),
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)),
+      );
+    };
+
+    it('given an agent trace with a thread id, when opened, then Messages renders as a column and the panel is wide', async () => {
+      setThreadedTraceHandlers();
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Messages' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('given a span is also selected, then the panel covers the full frame', async () => {
+      setThreadedTraceHandlers();
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
+
+      expect(await screen.findByRole('heading', { name: 'Messages' })).not.toBeNull();
+      await waitFor(() => expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-full'));
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('given a trace without a thread id, then no Messages column renders and the panel is half width', async () => {
+      setTracePageHandlers(metricsCapableSystemPackages);
+      server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByRole('heading', { name: 'Messages' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-1/2');
     });
   });
 

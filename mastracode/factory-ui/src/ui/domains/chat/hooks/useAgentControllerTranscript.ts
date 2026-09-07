@@ -9,17 +9,20 @@ export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'omProgress
 
 /**
  * The transcript and the handles that change it. Every handle is a bare dispatch, so
- * they are pinned once: a delta then leaves the whole API identical, which is what lets
- * anything downstream skip a render.
+ * they are pinned once (`onEvent` re-pins only when the viewer changes): a delta then
+ * leaves the whole API identical, which is what lets anything downstream skip a render.
  */
 export function useAgentControllerTranscript({
   initialThreadId,
   initialMessages,
   initialState,
+  viewerId,
 }: {
   initialThreadId?: string;
   initialMessages?: MastraDBMessage[];
   initialState?: SessionStateSnapshot;
+  /** The signed-in user; a live message from anyone else is drawn as it lands. */
+  viewerId?: string;
 } = {}) {
   const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
     createInitialTranscript({
@@ -43,9 +46,12 @@ export function useAgentControllerTranscript({
     });
   }, []);
 
-  const onEvent = useCallback((event: AgentControllerEvent) => {
-    dispatch({ type: 'event', event });
-  }, []);
+  const onEvent = useCallback(
+    (event: AgentControllerEvent) => {
+      dispatch({ type: 'event', event, viewerId });
+    },
+    [viewerId],
+  );
 
   const localUser = useCallback((text: string, steer?: boolean, files?: OutgoingFile[]) => {
     const id = createLocalMessageId();

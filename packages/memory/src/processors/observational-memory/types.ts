@@ -273,7 +273,10 @@ export interface ObservationConfig {
    * endpoints) while the main agent uses a multimodal model. The same
    * filter applies to tool results that contain image or file parts.
    *
-   * @default true
+   * When omitted, images and PDFs are forwarded. Use `true` to explicitly
+   * forward every attachment type.
+   *
+   * @default ['image/*', 'application/pdf']
    */
   observeAttachments?: 'auto' | boolean | string[];
 }

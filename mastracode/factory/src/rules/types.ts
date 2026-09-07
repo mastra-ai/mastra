@@ -2,6 +2,26 @@ import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.
 
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
+/** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
+
+// The label only holds a card at rest: once a person accepted it, or it sits in a working
+// lane only a person could have moved it into, the label is stale until the source catches up.
+export function needsApproval(item: {
+  metadata: Record<string, unknown> | null;
+  stages?: readonly string[];
+  acceptedAt?: Date | string | null;
+}): boolean {
+  const labels = item.metadata?.labels;
+  if (!Array.isArray(labels)) return false;
+  return (
+    labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
+    !item.acceptedAt &&
+    (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
+
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
@@ -32,7 +52,7 @@ export function externallyAuthoredWorkItem(item: {
 }
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the
 // seat pipeline order — Resume depth derives from it.
@@ -73,7 +93,7 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
 
 export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
   const stage = stages.length === 1 ? stages[0] : undefined;
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return typeof stage === 'string' && stage.length > 0 ? stage : undefined;
 }
 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
@@ -93,7 +113,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
-export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
+export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
 export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -134,6 +154,7 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  acceptedAt: Date | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
 }
@@ -276,33 +297,13 @@ export interface FactoryToolRuleLeaf {
   onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
 }
 
-export interface FactoryGithubRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
-}
-
-export interface FactoryLinearRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
-}
-
-export type FactoryBoardRules = Partial<
-  Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
->;
-
 export interface FactoryRules {
   version: string;
-  work: FactoryBoardRules;
-  review: FactoryBoardRules;
   tools: Record<string, FactoryToolRuleLeaf>;
-  github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export interface FactoryRulesOverrides {
-  work?: FactoryBoardRules;
-  review?: FactoryBoardRules;
   tools?: Record<string, FactoryToolRuleLeaf>;
-  github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =

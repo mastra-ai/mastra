@@ -8,8 +8,12 @@
  * write tools) would apply.
  */
 
-import { NEEDS_APPROVAL_LABEL } from '../integrations/github/acceptance-labels.js';
-import { FACTORY_ROLE_STAGES, factoryRuleStage, isTerminalFactoryRuleStage } from '../rules/types.js';
+import {
+  FACTORY_ROLE_STAGES,
+  factoryRuleStage,
+  isTerminalFactoryRuleStage,
+  NEEDS_APPROVAL_LABEL,
+} from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,

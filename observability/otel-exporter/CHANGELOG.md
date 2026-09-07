@@ -1,5 +1,22 @@
 # @mastra/otel-exporter
 
+## 1.3.14-alpha.2
+
+### Patch Changes
+
+- Preserve MCP tool descriptions and types in OpenTelemetry spans. Export MCP server names and optional versions as `mastra.mcp_tool_call.server_name` and `mastra.mcp_tool_call.server_version`, retaining `server.address` and preserving server metadata through Arize's OpenInference conversion. ([#23218](https://github.com/mastra-ai/mastra/pull/23218))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
+## 1.3.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`abb0263`](https://github.com/mastra-ai/mastra/commit/abb0263bc5740868dd9b3b615312a0b9e040747f), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`e5a8e80`](https://github.com/mastra-ai/mastra/commit/e5a8e80caef6aaa00495de9e00d11f06c4a78bdb)]:
+  - @mastra/observability@1.17.6-alpha.1
+  - @mastra/core@1.65.0-alpha.3
+
 ## 1.3.14-alpha.0
 
 ### Patch Changes

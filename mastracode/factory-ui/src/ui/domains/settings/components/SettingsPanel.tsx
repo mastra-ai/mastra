@@ -1,5 +1,4 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { Brain } from 'lucide-react';
@@ -33,6 +32,8 @@ import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsCard } from './SettingsCard';
+import { ScopeSwap, useScopeControl } from './SettingsScope';
+import type { SettingsScope } from './SettingsScope';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
@@ -49,7 +50,6 @@ export function SettingsPanel() {
   const section = useSettingsSection();
   const { hash } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
-  const { theme, setTheme } = useTheme();
 
   // Deep links like `/settings/models#model-packs` scroll to the subsection.
   useEffect(() => {
@@ -77,11 +77,12 @@ export function SettingsPanel() {
   const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
-    if (!settings || updateSettingsMutation.isPending) return;
-    updateSettingsMutation.mutate(updates, {
-      onSuccess: () => toast.success('Settings updated'),
-      onError: error => toast.error(getSettingsUpdateErrorMessage(error)),
-    });
+    if (!settings) return Promise.resolve();
+    // Returned so a control can hold its pending value until the write settles.
+    // No success toast: the control already shows the new value.
+    return updateSettingsMutation
+      .mutateAsync(updates)
+      .catch(error => toast.error(getSettingsUpdateErrorMessage(error)));
   };
 
   return (
@@ -89,22 +90,21 @@ export function SettingsPanel() {
       <div className="mx-auto grid w-full max-w-4xl grid-cols-[minmax(0,1fr)] py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'account' && <AccountSettingsSection />}
-        {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
+        {section === 'preferences' && <GeneralSettings />}
         {section === 'factory' && <FactoryManagementSection />}
         {section === 'connections' && (
-          <SettingsSubsection title="Connected accounts" description="Connect your account to use Factory from Slack.">
+          <SettingsSubsection
+            scope="personal"
+            title="Connected accounts"
+            description="Connect your account to use Factory from Slack."
+          >
             <ConnectedAccountsSection />
           </SettingsSubsection>
         )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (
-          <ModelsSettingsSection
-            models={models}
-            settings={settings}
-            updating={updateSettingsMutation.isPending}
-            onBehaviorChange={onBehaviorChange}
-          />
+          <ModelsSettingsSection models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
         )}
         {section === 'memory' && (
           <MemorySettingsSection
@@ -118,7 +118,6 @@ export function SettingsPanel() {
         {section === 'behavior' && (
           <BehaviorSettings
             settings={settings}
-            updating={updateSettingsMutation.isPending}
             onBehaviorChange={onBehaviorChange}
             permissions={permissions ?? null}
             pendingPermissionCategory={pendingPermissionCategory}
@@ -133,8 +132,7 @@ export function SettingsPanel() {
 interface ModelsSettingsSectionProps {
   models: AvailableModelOption[];
   settings: AgentControllerSessionSettings | null;
-  updating: boolean;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
 }
 
 interface MemorySettingsSectionProps {
@@ -145,13 +143,14 @@ interface MemorySettingsSectionProps {
 }
 
 /**
- * Observational-memory settings, split by scope. OM models are useless
+ * Observational-memory settings for one scope at a time. OM models are useless
  * without a provider credential, so until one is connected the page is a
  * zero state pointing at the Models page.
  */
 function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionScope }: MemorySettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
+  const scopeControl = useScopeControl(factoryId ? ['personal', 'factory'] : ['personal']);
   const anyConnected =
     (providersQuery.data ?? []).some(p => p.source !== 'none') || (customProvidersQuery.data ?? []).length > 0;
   const providersKnown = providersQuery.isSuccess && customProvidersQuery.isSuccess;
@@ -174,29 +173,28 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
     );
   }
 
+  const factoryView = scopeControl.shown === 'factory' && factoryId;
+
   return (
-    <div className="flex flex-col gap-8">
-      {/* Without a factory id an unscoped OM request would resolve — and let
-          this section edit — the caller's personal row as if it were shared. */}
-      {factoryId && (
-        <SettingsSubsection
-          title="Factory observational memory"
-          description="Models and token thresholds used to summarize and retain context in Factory runs."
-        >
-          <SettingsCard>
-            <OMSection factoryId={factoryId} models={models} />
-          </SettingsCard>
-        </SettingsSubsection>
-      )}
-      <SettingsSubsection
-        title="Your observational memory"
-        description="Models and token thresholds used to summarize and retain context in your interactive chats."
-      >
+    <SettingsSubsection
+      title="Observational memory"
+      description={
+        factoryView
+          ? 'Models and token thresholds used to summarize and retain context in Factory runs.'
+          : 'Models and token thresholds used to summarize and retain context in your interactive chats.'
+      }
+      scope={scopeControl}
+    >
+      <ScopeSwap control={scopeControl}>
         <SettingsCard>
-          <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+          {factoryView ? (
+            <OMSection key="factory" factoryId={factoryId} models={models} />
+          ) : (
+            <OMSection key="personal" resourceId={sessionResourceId} scope={sessionScope} models={models} />
+          )}
         </SettingsCard>
-      </SettingsSubsection>
-    </div>
+      </ScopeSwap>
+    </SettingsSubsection>
   );
 }
 
@@ -206,7 +204,7 @@ function MemorySettingsSection({ factoryId, models, sessionResourceId, sessionSc
  * Once connected, model selection moves to the top and provider management
  * drops to the bottom.
  */
-function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }: ModelsSettingsSectionProps) {
+function ModelsSettingsSection({ models, settings, onBehaviorChange }: ModelsSettingsSectionProps) {
   const providersQuery = useProvidersQuery();
   const customProvidersQuery = useCustomProvidersQuery();
   const anyConnected =
@@ -215,15 +213,12 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
 
   const providerSubsections = (
     <>
-      <SettingsSubsection
-        title="Provider access"
+      <ProviderAccessSection
         description={
           anyConnected ? undefined : 'Connect a provider to unlock model selection and observational-memory settings.'
         }
-      >
-        <ProviderAccessSection />
-      </SettingsSubsection>
-      <SettingsSubsection title="Custom providers">
+      />
+      <SettingsSubsection scope="org" title="Custom providers">
         <SettingsCard className="p-4">
           <CustomProvidersSection />
         </SettingsCard>
@@ -239,21 +234,43 @@ function ModelsSettingsSection({ models, settings, updating, onBehaviorChange }:
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection
+        scope="factory"
         title="Factory defaults"
         description="Applied to Factory runs (triage, board work items) and channel sessions."
       >
         <SettingsCard>
           <FactoryDefaultModelSection models={models} />
-          <BaseThinkingSection />
         </SettingsCard>
       </SettingsSubsection>
-      <SettingsSubsection id="model-packs" title="Your defaults" description="Applied to your interactive chats.">
+      <SettingsSubsection
+        scope="deployment"
+        title="Thinking defaults"
+        description="Fallback for every run without its own level. One settings file, shared by every Factory on this server."
+      >
+        <SettingsCard>
+          <BaseThinkingSection />
+          <ModeThinkingDefaultsSection />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="factory"
+        title="Chat defaults"
+        description="Applied to chats opened from this Factory, and shared with everyone working in it."
+      >
+        <SettingsCard>
+          <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
+        </SettingsCard>
+      </SettingsSubsection>
+      <SettingsSubsection
+        scope="personal"
+        id="model-packs"
+        title="Your defaults"
+        description="The pack you run with. Creating or removing a pack changes the list for your whole org."
+      >
         <SettingsCard>
           <div className="p-4">
             <ModelPacksSection models={models} />
           </div>
-          <ModelSettings settings={settings} updating={updating} onBehaviorChange={onBehaviorChange} />
-          <ModeThinkingDefaultsSection />
         </SettingsCard>
       </SettingsSubsection>
       {providerSubsections}

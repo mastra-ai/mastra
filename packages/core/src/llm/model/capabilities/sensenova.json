@@ -1,5 +1,5 @@
 {
-  "attachment": ["sensenova-6.8-flash-lite"],
-  "temperature": ["deepseek-v4-flash", "glm-5.2", "sensenova-6.8-flash-lite"],
-  "structuredOutput": ["deepseek-v4-flash", "glm-5.2", "sensenova-6.8-flash-lite"]
+  "attachment": ["kimi-k3", "sensenova-6.8-flash-lite"],
+  "temperature": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "sensenova-6.8-flash-lite"],
+  "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-pro", "glm-5.2", "kimi-k3", "sensenova-6.8-flash-lite"]
 }

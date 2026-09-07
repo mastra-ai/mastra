@@ -32,6 +32,49 @@ type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
 };
 
+// Preserve cursorId on retries so replacing the current score does not emit a new delta event.
+const SCORE_UPSERT_COLUMNS = [
+  'timestamp',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'scoreTraceId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'scorerId',
+  'scorerVersion',
+  'scoreSource',
+  'score',
+  'reason',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
+
+const SCORE_UPSERT_CLAUSE = `ON CONFLICT (scoreId) DO UPDATE SET ${SCORE_UPSERT_COLUMNS.map(
+  column => `${column} = excluded.${column}`,
+).join(', ')}`;
+
 const SCORE_GROUP_BY_COLUMNS = new Set([
   'timestamp',
   'traceId',
@@ -285,7 +328,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
      ].join(', ')})
-     ON CONFLICT DO NOTHING`,
+     ${SCORE_UPSERT_CLAUSE}`,
   );
 }
 
@@ -345,7 +388,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES ${tuples.join(',\n       ')}
-     ON CONFLICT DO NOTHING`,
+     ${SCORE_UPSERT_CLAUSE}`,
   );
 }
 

@@ -134,6 +134,25 @@ export const agentTraceWithTools: GetTraceResponse = {
       attributes: { toolCallId: 'call-provider' },
       startedAt: new Date('2026-08-30T12:00:00.500Z'),
     },
+    {
+      ...baseSpan,
+      spanId: 'reasoning-chunk',
+      parentSpanId: 'model-generation',
+      name: "chunk: 'reasoning'",
+      spanType: SpanType.MODEL_CHUNK,
+      attributes: { chunkType: 'reasoning' },
+      startedAt: new Date('2026-08-30T12:00:00.600Z'),
+    },
+    {
+      ...baseSpan,
+      spanId: 'text-chunk',
+      parentSpanId: 'model-generation',
+      name: "chunk: 'text'",
+      spanType: SpanType.MODEL_CHUNK,
+      attributes: { chunkType: 'text' },
+      output: { text: 'Your Paris itinerary is ready.' },
+      startedAt: new Date('2026-08-30T12:00:00.700Z'),
+    },
   ],
 };
 

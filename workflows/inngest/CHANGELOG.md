@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.8.10-alpha.0
+
+### Patch Changes
+
+- Fixed Inngest workflow steps receiving `retryCount: 0` on every retry; steps now receive the current attempt number. ([#22492](https://github.com/mastra-ai/mastra/pull/22492))
+
+- Updated dependencies [[`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd)]:
+  - @mastra/core@1.65.0-alpha.3
+
 ## 1.8.9
 
 ### Patch Changes

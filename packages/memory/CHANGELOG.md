@@ -1,5 +1,46 @@
 # @mastra/memory
 
+## 1.28.3-alpha.3
+
+### Patch Changes
+
+- Fixed observation indexing retries so temporary connection errors recover without duplicating stored observations. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Fixed Observational Memory to forward only images and PDFs to the observer by default. ([#22153](https://github.com/mastra-ai/mastra/pull/22153))
+
+  **Before:** Omitting `observeAttachments` forwarded every attachment type.
+
+  **After:** Omitting `observeAttachments` forwards images and PDFs. To retain the previous behavior and forward every attachment type, explicitly set `observeAttachments: true`:
+
+  ```ts
+  new ObservationalMemory({
+    observation: {
+      observeAttachments: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
+## 1.28.3-alpha.2
+
+### Patch Changes
+
+- Fixed a memory tool reliability issue. ([#23042](https://github.com/mastra-ai/mastra/pull/23042))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
+## 1.28.3-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory buffering so transient database connection timeouts are retried instead of failing the buffer operation. ([#23019](https://github.com/mastra-ai/mastra/pull/23019))
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.28.3-alpha.0
 
 ### Patch Changes

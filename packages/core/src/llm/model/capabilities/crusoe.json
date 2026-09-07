@@ -6,10 +6,13 @@
     "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B"
   ],
   "temperature": [
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "deepseek-ai/DeepSeek-V3-0324",
     "google/gemma-4-31b-it",
     "meta-llama/Llama-3.3-70B-Instruct",
     "moonshotai/Kimi-K2.6",
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
     "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B",
     "openai/gpt-oss-120b",
     "zai/GLM-5.1",

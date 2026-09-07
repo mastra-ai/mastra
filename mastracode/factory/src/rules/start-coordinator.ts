@@ -1,11 +1,8 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { formatSkillActivation } from '@mastra/core/workspace';
 
 import { hydrateFactorySession } from '../session/factory-session.js';
-import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
-import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -18,10 +15,9 @@ export interface FactoryStartRequest {
   factoryProjectId: string;
   sessionId: string;
   threadTitle: string;
-  threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  destinationStage: FactoryRuleStage;
+  /** Where the arrival path lands the card; a session opened on an existing card names none. */
+  destinationStage?: FactoryRuleStage;
   defaultModelId?: string;
   workItem: {
     id?: string;
@@ -29,10 +25,6 @@ export interface FactoryStartRequest {
     input: CreateWorkItemInput;
   };
   requestContext?: RequestContext;
-  /** Arm the item's autonomy in the same transaction that prepares the run. */
-  armAutonomy?: boolean;
-  /** The person chose a hands-off run: the item's parked plans get approved for them. */
-  preapprovePlans?: boolean;
 }
 
 export class FactoryStartTransitionError extends Error {
@@ -60,28 +52,6 @@ export interface FactoryStartPreparedResult {
 type FactoryController = AgentController<MastraCodeState>;
 type FactorySession = Awaited<ReturnType<FactoryController['createSession']>>;
 
-function escapeSkillBoundary(value: string): string {
-  return value.replaceAll('</skill>', '&lt;/skill&gt;');
-}
-
-async function resolveKickoffMessage(
-  session: FactorySession,
-  invocation: FactoryStartRequest['invocation'],
-): Promise<string | null> {
-  if (!invocation) return null;
-  if (invocation.type === 'prompt') return invocation.prompt;
-
-  const skills = session.getWorkspace()?.skills;
-  await skills?.maybeRefresh();
-  const skill = await skills?.get(invocation.skillName);
-  if (!skill || skill['user-invocable'] === false) {
-    throw new Error(`Skill not found: ${invocation.skillName}.`);
-  }
-  const args = invocation.arguments.trim();
-  const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-  return `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
-}
-
 async function resolveSourceSession(
   storage: SourceControlStorageHandle,
   request: FactoryStartRequest,
@@ -105,8 +75,7 @@ async function resolveSourceSession(
 async function configureThread(session: FactorySession, request: FactoryStartRequest): Promise<string> {
   const threadId = session.thread.requireId();
   await session.thread.rename({ title: request.threadTitle });
-  const settings = { ...(request.threadTags ?? {}), factorySessionId: request.sessionId };
-  await Promise.all(Object.entries(settings).map(([key, value]) => session.thread.setSetting({ key, value })));
+  await session.thread.setSetting({ key: 'factorySessionId', value: request.sessionId });
   return threadId;
 }
 
@@ -116,7 +85,6 @@ export class FactoryStartCoordinator {
   readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
   readonly #sourceControl?: SourceControlStorageHandle;
   readonly #memorySettings?: MemorySettingsStorage;
-  readonly #feedReader?: FactoryFeedReader;
 
   constructor(
     controller: FactoryController,
@@ -124,14 +92,12 @@ export class FactoryStartCoordinator {
     transitionService?: Pick<FactoryTransitionService, 'transition'>,
     sourceControl?: SourceControlStorageHandle,
     memorySettings?: MemorySettingsStorage,
-    feedReader?: FactoryFeedReader,
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#memorySettings = memorySettings;
-    this.#feedReader = feedReader;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -157,10 +123,7 @@ export class FactoryStartCoordinator {
     // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
     // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
     // or reminders — those files are attacker-writable in a PR branch.
-    const untrustedCheckout =
-      request.workItem.input.externalSource?.type === 'pull-request' ||
-      (request.invocation?.type === 'skill' &&
-        (request.invocation.skillName === 'factory-review' || request.invocation.skillName === 'factory-rereview'));
+    const untrustedCheckout = request.workItem.input.externalSource?.type === 'pull-request';
     // The trusted ref the SDK may serve project instruction files from on an
     // untrusted checkout (the PR's base branch). Prefer the session record's
     // base branch; fall back to the intake metadata captured from the PR.
@@ -209,15 +172,6 @@ export class FactoryStartCoordinator {
     // Starting the run was already the say-so; the rules engine still governs.
     await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
     const threadId = await configureThread(session, request);
-    let kickoffMessage = await resolveKickoffMessage(session, request.invocation);
-    // A null kickoff is a deliberate no-send branch and must stay null.
-    if (kickoffMessage !== null) {
-      kickoffMessage = await withWorkItemFeed(
-        this.#feedReader,
-        { orgId: request.orgId, factoryProjectId: request.factoryProjectId, workItemId: request.workItem.id },
-        kickoffMessage,
-      );
-    }
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
       userId: request.userId,
@@ -227,21 +181,20 @@ export class FactoryStartCoordinator {
       session: { sessionId: sourceSession.sessionId, branch: sourceSession.branch, threadId },
       resourceId: sourceSession.sessionId,
       kickoffKey: request.kickoffKey,
-      kickoffMessage,
-      armAutonomy: request.armAutonomy === true,
-      preapprovePlans: request.preapprovePlans === true,
+      kickoffMessage: null,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 
     let revision = prepared.item.revision;
-    if (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== request.destinationStage) {
+    const destinationStage = request.destinationStage;
+    if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
       if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
       const transition = await this.#transitionService.transition({
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,
         board: prepared.item.externalSource?.type === 'pull-request' ? 'review' : 'work',
-        stage: request.destinationStage,
+        stage: destinationStage,
         expectedRevision: prepared.item.revision,
         actor: { type: 'human', id: request.userId },
         ingress: { type: 'human', identity: `start:${request.kickoffKey}:transition` },
@@ -254,10 +207,8 @@ export class FactoryStartCoordinator {
       revision = transition.revision;
     }
 
-    if (kickoffMessage === null) {
-      await storage.markPendingStart(prepared.binding.id, 'sent');
-      prepared.pendingStart.status = 'sent';
-    }
+    await storage.markPendingStart(prepared.binding.id, 'sent');
+    prepared.pendingStart.status = 'sent';
 
     return {
       workItemId: prepared.item.id,
