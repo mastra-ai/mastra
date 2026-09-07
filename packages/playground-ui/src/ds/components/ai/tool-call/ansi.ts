@@ -3,8 +3,8 @@
 const ANSI_RE =
   /[\u001b\u009b][[\]()#;?]*(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?\u0007|(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])/g;
 
-// The same sequences once JSON.stringify has escaped the ESC byte (`\u001b[1;38m`).
-const ESCAPED_ANSI_RE = /\\u001[bB]\[[0-9;]*[a-zA-Z]/g;
+// The same CSI and OSC sequences once JSON.stringify has escaped the bytes (`\u001b[1;38m`, `\u001b]0;title\u0007`).
+const ESCAPED_ANSI_RE = /\\u001[bB](?:\[[0-9;]*[a-zA-Z]|\][\s\S]*?(?:\\u0007|\\u001[bB]\\\\))/g;
 
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, '');

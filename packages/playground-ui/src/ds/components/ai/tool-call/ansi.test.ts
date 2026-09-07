@@ -24,4 +24,8 @@ describe('stripSerializedAnsi', () => {
   it('removes JSON-escaped escape sequences from serialized results', () => {
     expect(stripSerializedAnsi('"\\u001b[32mok\\u001b[m all good"')).toBe('"ok all good"');
   });
+
+  it('removes JSON-escaped title sequences too', () => {
+    expect(stripSerializedAnsi(JSON.stringify('\u001b]0;title\u0007text'))).toBe('"text"');
+  });
 });
