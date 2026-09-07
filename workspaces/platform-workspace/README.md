@@ -12,14 +12,14 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                        | Required         |
-| --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
-| `actingUserId`  | —                              | No (sandbox)     |
-| `sandboxProvider` | `SANDBOX_PROVIDER`           | No (sandbox, defaults to `e2b`) |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
+| Option            | Env var                        | Required                        |
+| ----------------- | ------------------------------ | ------------------------------- |
+| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes                             |
+| `projectId`       | `MASTRA_PROJECT_ID`            | Yes                             |
+| `environmentId`   | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)                   |
+| `actingUserId`    | —                              | No (sandbox)                    |
+| `sandboxProvider` | `SANDBOX_PROVIDER`             | No (sandbox, defaults to `e2b`) |
+| `bucketName`      | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem)                |
 
 The proxy URL defaults to `https://workspaces.mastra.ai`. Set `MASTRA_PLATFORM_REGION` to `us` or `eu` (case-insensitive) to route to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` (useful for staging) overrides both.
 
