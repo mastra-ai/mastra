@@ -55,6 +55,38 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it('executes a producer-only manager’s portable task on a remote static worker', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'mastra-background-task-portable-'));
+    const socketPath = join(tempDir, 'events.sock');
+    const storage = new MockStore();
+    const producerMastra = new Mastra({ logger: false, storage });
+    const workerMastra = new Mastra({ logger: false, storage });
+    const producerPubsub = new UnixSocketPubSub(socketPath);
+    const workerPubsub = new UnixSocketPubSub(socketPath);
+    const producer = new BackgroundTaskManager({ enabled: true, mode: 'producer', recoverStaleTasksOnStart: false });
+    const worker = new BackgroundTaskManager({ enabled: true, mode: 'worker', recoverStaleTasksOnStart: false });
+    managers.push(producer, worker);
+    mastras.push(producerMastra, workerMastra);
+    pubsubs.push(producerPubsub, workerPubsub);
+    producer.__registerMastra(producerMastra);
+    worker.__registerMastra(workerMastra);
+    await Promise.all([producerMastra.startWorkers(), workerMastra.startWorkers()]);
+    await Promise.all([producer.init(producerPubsub), worker.init(workerPubsub)]);
+    const execute = vi.fn().mockResolvedValue('remote-result');
+    worker.registerStaticExecutor('portable-tool', { execute });
+    const { task } = await producer.enqueue({
+      toolName: 'portable-tool',
+      toolCallId: 'portable',
+      args: {},
+      agentId: 'agent',
+      runId: 'portable',
+    });
+    await vi.waitFor(async () => {
+      expect(await producer.getTask(task.id)).toMatchObject({ status: 'completed', result: 'remote-result' });
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps invocation-bound executors on their originating manager', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-background-task-affinity-'));
     const socketPath = join(tempDir, 'events.sock');
