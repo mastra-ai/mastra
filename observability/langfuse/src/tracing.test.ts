@@ -394,6 +394,134 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.metadata.customerId']).toBe('abc');
     });
 
+    it('promotes root span metadata keys to langfuse.trace.metadata.*', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          metadata: { runId: 'run-1', threadId: 'thread-1', sampleKey: 'sample-value' },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+      // threadId still maps to session.id AND lands on the trace metadata,
+      // matching the legacy exporter that only pulled sessionId out
+      expect(attrs['langfuse.trace.metadata.threadId']).toBe('thread-1');
+      expect(attrs['session.id']).toBe('thread-1');
+      expect(attrs['langfuse.trace.metadata.sampleKey']).toBe('sample-value');
+    });
+
+    it('promotes the span type to langfuse.trace.metadata.spanType on the root span', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.WORKFLOW_RUN,
+          isRootSpan: true,
+          entityId: 'my-workflow',
+          entityName: 'My Workflow',
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.spanType']).toBe('workflow_run');
+      expect(attrs['langfuse.trace.metadata.workflowId']).toBe('my-workflow');
+      // observation level mapping is unchanged
+      expect(attrs['langfuse.observation.metadata.spanType']).toBe('workflow_run');
+    });
+
+    it('lets a user metadata key named spanType win over the span type', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          metadata: { spanType: 'user-supplied' },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.spanType']).toBe('user-supplied');
+    });
+
+    it('does not promote metadata keys on non-root spans', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { runId: 'run-1' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.runId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.spanType']).toBeUndefined();
+    });
+
+    it('skips metadata keys with dedicated trace targets when promoting', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          metadata: { userId: 'user-1', sessionId: 'session-1', traceName: 'my-trace', version: 'v2', runId: 'run-1' },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['user.id']).toBe('user-1');
+      expect(attrs['session.id']).toBe('session-1');
+      expect(attrs['langfuse.trace.name']).toBe('my-trace');
+      expect(attrs['langfuse.trace.version']).toBe('v2');
+      // dedicated targets are not duplicated as trace metadata
+      expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.traceName']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.version']).toBeUndefined();
+      // everything else is still promoted
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+    });
+
+    it('serializes promoted non-string metadata values as JSON', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          metadata: { seats: 42, isVip: true, nested: { plan: 'pro' }, nothing: undefined, blank: null },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.seats']).toBe('42');
+      expect(attrs['langfuse.trace.metadata.isVip']).toBe('true');
+      expect(attrs['langfuse.trace.metadata.nested']).toBe(JSON.stringify({ plan: 'pro' }));
+      expect(attrs['langfuse.trace.metadata.nothing']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.blank']).toBeUndefined();
+    });
+
+    it('lets root span metadata win over a colliding custom langfuse metadata key but not over identity', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            langfuse: { customerId: 'abc' },
+            customerId: 'from-metadata',
+            agentId: 'from-metadata',
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      // the langfuse object is mapped first, root metadata never overwrites it
+      expect(attrs['langfuse.trace.metadata.customerId']).toBe('abc');
+      // root-span identity wins over promoted metadata
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+    });
+
     it('maps completionStartTime to langfuse.observation.completion_start_time', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       const ttftTime = new Date('2025-01-01T00:00:00.500Z');

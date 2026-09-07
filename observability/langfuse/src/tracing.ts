@@ -405,6 +405,38 @@ function mapMastraToLangfuseAttributes(
         attributes['langfuse.trace.metadata.workflowName'] = span.entityName;
       }
     }
+
+    // Trace metadata: the legacy exporter built the trace payload with the
+    // span type and the root span's metadata (minus the keys that map to
+    // their own trace fields), so keys like runId, threadId, or custom
+    // fields landed on the
+    // trace record as filterable langfuse.trace.metadata.* entries. The
+    // rewrite only forwards the langfuse-specific metadata object and the
+    // entity identity above, silently dropping every other root metadata key.
+    // Promote them again: the metadata keys first, without overwriting the
+    // reserved mappings above, then the span type as the lowest precedence
+    // fallback so a user metadata key named spanType still wins over it.
+    for (const [key, value] of Object.entries(span.metadata ?? {})) {
+      // userId, sessionId, traceName, and version already have their own
+      // trace targets (user.id, session.id, langfuse.trace.name/version),
+      // and langfuse has its own object handling above.
+      if (key === 'userId' || key === 'sessionId' || key === 'traceName' || key === 'version' || key === 'langfuse') {
+        continue;
+      }
+      if (value === null || value === undefined) {
+        continue;
+      }
+      const traceKey = `langfuse.trace.metadata.${key}`;
+      if (attributes[traceKey] === undefined) {
+        // Langfuse maps langfuse.trace.metadata.* as string attributes, so
+        // serialize non-strings with JSON, same convention as the
+        // mastra.metadata.langfuse keys above.
+        attributes[traceKey] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+    }
+    if (attributes['langfuse.trace.metadata.spanType'] === undefined) {
+      attributes['langfuse.trace.metadata.spanType'] = span.type;
+    }
   }
 
   // Observation metadata: map semantic attributes to langfuse.observation.metadata.*
