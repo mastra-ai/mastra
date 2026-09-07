@@ -7,6 +7,7 @@ import type { Tool } from '../../tools';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
+import { getProcessorToolOwner, markProcessorTools } from '../tool-provenance';
 import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
 import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
 
@@ -378,21 +379,27 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     requestContext?: RequestContext;
     stepArgs?: ProcessInputStepArgs;
     tools?: Record<string, unknown>;
+    /** Include native discovery tools when rebuilding an agent's executors. */
+    includeMetaTools?: boolean;
   }): Promise<Record<string, Tool<any, any>>> {
-    if (args?.stepArgs) {
-      const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
-      // Fall back to the step's own request context so active-phase filtering still
-      // runs when the caller only supplies stepArgs.
-      return this.getLoadedTools(
-        this.catalogForStep(args.stepArgs.tools),
-        loadedNames,
-        args.requestContext ?? args.stepArgs.requestContext,
-      );
-    }
-
-    const threadId = this.resolveThreadId(args?.requestContext);
-    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
-    return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
+    const requestContext = args?.requestContext ?? args?.stepArgs?.requestContext;
+    const resolvedTools = args?.stepArgs ? args.stepArgs.tools : args?.tools;
+    const catalog = this.catalogForStep(resolvedTools);
+    const storeContext = args?.stepArgs
+      ? this.makeStoreContext(args.stepArgs)
+      : { threadId: this.resolveThreadId(requestContext), args: undefined };
+    const loadedNames = await this.store.getLoadedNames(storeContext);
+    const loadedTools = await this.getLoadedTools(catalog, loadedNames, requestContext);
+    if (!args?.includeMetaTools) return loadedTools;
+    const metaTools = this.createMetaTools(catalog, storeContext, loadedNames, requestContext);
+    return {
+      ...Object.fromEntries(
+        Object.entries(metaTools).filter(
+          ([name]) => !resolvedTools?.[name] || getProcessorToolOwner(resolvedTools[name]) === this.id,
+        ),
+      ),
+      ...loadedTools,
+    };
   }
 
   /**
@@ -508,27 +515,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     });
   }
 
-  async processInputStep(args: ProcessInputStepArgs) {
-    const { tools, messageList } = args;
-    const catalog = this.catalogForStep(tools);
-    const storeContext = this.makeStoreContext(args);
-    // Snapshot of names already loaded as of this step. Newly activated tools are
-    // recorded via the store and become available on the model's next turn.
-    const loadedToolNames = await this.store.getLoadedNames(storeContext);
-
+  private createMetaTools(
+    catalog: ToolCatalog,
+    storeContext: LoadedToolStoreContext,
+    loadedToolNames: Set<string>,
+    requestContext?: RequestContext,
+  ) {
     const autoLoad = this.searchConfig.autoLoad;
-
-    // Add system instruction about the meta-tools
-    messageList.addSystem(
-      autoLoad
-        ? 'To discover available tools, call search_tools with a keyword query. ' +
-            'Matching tools are loaded automatically and become available on your next turn — ' +
-            'there is no separate load step. After searching, use the tool directly.'
-        : 'To discover available tools, call search_tools with a keyword query. ' +
-            'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
-            'Tools must be loaded before they can be used.',
-    );
-
     // Create the search tool with BM25 ranking
     const searchTool = createTool({
       id: 'search_tools',
@@ -556,7 +549,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results = await this.searchTools(catalog, query, args.requestContext);
+        const results = await this.searchTools(catalog, query, requestContext);
 
         if (results.length === 0) {
           return {
@@ -656,7 +649,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             continue;
           }
 
-          const isAllowed = await this.isToolAllowed(matchingTool, args.requestContext, 'load');
+          const isAllowed = await this.isToolAllowed(matchingTool, requestContext, 'load');
           if (!isAllowed) {
             notFound.push(name);
             continue;
@@ -682,7 +675,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           // Single-tool response (backward compatible shape)
           if (notFound.length > 0) {
             const name = toLoad[0]!;
-            const suggestions = await this.getSuggestedToolNames(catalog, name, args.requestContext);
+            const suggestions = await this.getSuggestedToolNames(catalog, name, requestContext);
             let message = `Tool "${name}" not found.`;
             if (suggestions.length > 0) {
               message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
@@ -722,8 +715,41 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       },
     });
 
+    return markProcessorTools({ search_tools: searchTool, ...(autoLoad ? {} : { load_tool: loadTool }) }, this.id);
+  }
+
+  async processInputStep(args: ProcessInputStepArgs) {
+    const { tools, messageList } = args;
+    const catalog = this.catalogForStep(tools);
+    const storeContext = this.makeStoreContext(args);
+    // Snapshot of names already loaded as of this step. Newly activated tools are
+    // recorded via the store and become available on the model's next turn.
+    const loadedToolNames = await this.store.getLoadedNames(storeContext);
+
+    const autoLoad = this.searchConfig.autoLoad;
+
+    // Add system instruction about the meta-tools
+    messageList.addSystem(
+      autoLoad
+        ? 'To discover available tools, call search_tools with a keyword query. ' +
+            'Matching tools are loaded automatically and become available on your next turn — ' +
+            'there is no separate load step. After searching, use the tool directly.'
+        : 'To discover available tools, call search_tools with a keyword query. ' +
+            'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
+            'Tools must be loaded before they can be used.',
+    );
+
+    const metaTools = this.createMetaTools(catalog, storeContext, loadedToolNames, args.requestContext);
+
     // Get loaded tools as of this step's snapshot.
     const loadedTools = await this.getLoadedTools(catalog, loadedToolNames, args.requestContext);
+    // Replace only our own earlier meta-tool closures. Explicit user overrides
+    // retain their existing precedence over the processor's generated tools.
+    const existingTools = Object.fromEntries(
+      Object.entries(tools ?? {}).filter(
+        ([name, tool]) => !META_TOOL_NAMES.has(name) || getProcessorToolOwner(tool) !== this.id,
+      ),
+    );
 
     // Return merged tools, ordered to keep the cacheable prefix stable:
     // meta-tool(s) first (always present, fixed position), then existing tools,
@@ -732,13 +758,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // not invalidated when a tool is loaded mid-conversation.
     return {
       tools: {
-        search_tools: searchTool,
-        // load_tool is omitted in auto-load mode — search_tools activates matches directly.
-        ...(autoLoad ? {} : { load_tool: loadTool }),
+        ...metaTools,
         // When request-resolved tools are searchable they are withheld here:
         // leaving them in would defeat the point, since they would still occupy
         // prompt space. They come back through `loadedTools` once loaded.
-        ...(this.includeResolvedTools ? unsearchableResolvedTools(tools) : (tools ?? {})),
+        ...(this.includeResolvedTools ? unsearchableResolvedTools(existingTools) : existingTools),
         ...loadedTools,
       },
     };

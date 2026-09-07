@@ -26,10 +26,13 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory/types';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
+import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import type { Tool } from '../../tools';
 import type { WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
+import { getProcessorToolOwner, markProcessorTools } from '../tool-provenance';
 
 /**
  * Thread state with timestamp for TTL management
@@ -168,7 +171,7 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
    * resolving the thread (covers HTTP calls that pass the thread via
    * `memory.thread`).
    */
-  private getThreadId(args: ProcessInputStepArgs): string {
+  private getThreadId(args: Pick<ProcessInputStepArgs, 'requestContext'>): string {
     return (
       (args.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
       parseMemoryRequestContext(args.requestContext)?.thread?.id ||
@@ -269,42 +272,32 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
     return this.cleanupStaleState();
   }
 
-  async processInputStep(args: ProcessInputStepArgs) {
-    const { tools, messageList } = args;
-    const threadId = this.getThreadId(args);
-    const threadState = this.getThreadState(threadId);
+  /** Rebuild native discovery tools before a saved approval enters tool execution. */
+  public async getLoadedToolsForRequestContext(args?: {
+    requestContext?: RequestContext;
+    tools?: Record<string, unknown>;
+    includeMetaTools?: boolean;
+  }): Promise<Record<string, Tool<any, any>>> {
+    if (!args?.includeMetaTools) return {};
     const configuredSkills = this.skills;
-
-    if (!configuredSkills) {
-      return { tools };
-    }
-
+    if (!configuredSkills) return {};
     const skills = configuredSkills.getScoped
-      ? await configuredSkills.getScoped({ requestContext: args.requestContext })
+      ? await configuredSkills.getScoped({ requestContext: args?.requestContext })
       : configuredSkills;
+    const metaTools = this.createMetaTools(skills, this.getThreadState(this.getThreadId(args)));
+    this.warnMetaToolConflicts(args.tools, metaTools);
+    return metaTools;
+  }
 
-    // Revalidate skills on first step only. Fire-and-forget by default: the
-    // staleness walk can cost seconds of filesystem I/O over remote sandboxes,
-    // so the turn proceeds on the cached catalog while the walk runs in the
-    // background. Rejections are contained (an unhandled rejection in a
-    // processor can kill the process) but logged so sandbox outages stay
-    // visible. With blockingRefresh the walk is awaited so search results
-    // reflect disk.
-    if (args.stepNumber === 0) {
-      if (this.blockingRefresh) {
-        await skills.maybeRefresh({ requestContext: args.requestContext })?.catch(this.warnRefreshFailed);
-      } else {
-        void skills.maybeRefresh({ requestContext: args.requestContext })?.catch(this.warnRefreshFailed);
+  private warnMetaToolConflicts(tools: Record<string, unknown> | undefined, metaTools: Record<string, unknown>) {
+    for (const key of Object.keys(tools ?? {})) {
+      if (key in metaTools && getProcessorToolOwner(tools?.[key]) !== this.id) {
+        console.warn(`[SkillSearchProcessor] User tool "${key}" conflicts with meta-tool and will be shadowed.`);
       }
     }
+  }
 
-    // Add system instruction about the meta-tools
-    messageList.addSystem(
-      'To discover available skills, call search_skills with a keyword query. ' +
-        "To load a skill's instructions, call load_skill with the skill name. " +
-        'Loaded skills provide context and instructions for the conversation.',
-    );
-
+  private createMetaTools(skills: WorkspaceSkills, threadState: ThreadState) {
     // Create the search_skills meta-tool
     const searchSkillTool = createTool({
       id: 'search_skills',
@@ -430,19 +423,53 @@ export class SkillSearchProcessor implements Processor<'skill-search'> {
       },
     });
 
+    return markProcessorTools({ search_skills: searchSkillTool, load_skill: loadSkillTool }, this.id);
+  }
+
+  async processInputStep(args: ProcessInputStepArgs) {
+    const { tools, messageList } = args;
+    const threadId = this.getThreadId(args);
+    const threadState = this.getThreadState(threadId);
+    const configuredSkills = this.skills;
+
+    if (!configuredSkills) {
+      return { tools };
+    }
+
+    const skills = configuredSkills.getScoped
+      ? await configuredSkills.getScoped({ requestContext: args.requestContext })
+      : configuredSkills;
+
+    // Revalidate skills on first step only. Fire-and-forget by default: the
+    // staleness walk can cost seconds of filesystem I/O over remote sandboxes,
+    // so the turn proceeds on the cached catalog while the walk runs in the
+    // background. Rejections are contained (an unhandled rejection in a
+    // processor can kill the process) but logged so sandbox outages stay
+    // visible. With blockingRefresh the walk is awaited so search results
+    // reflect disk.
+    if (args.stepNumber === 0) {
+      if (this.blockingRefresh) {
+        await skills.maybeRefresh({ requestContext: args.requestContext })?.catch(this.warnRefreshFailed);
+      } else {
+        void skills.maybeRefresh({ requestContext: args.requestContext })?.catch(this.warnRefreshFailed);
+      }
+    }
+
+    // Add system instruction about the meta-tools
+    messageList.addSystem(
+      'To discover available skills, call search_skills with a keyword query. ' +
+        "To load a skill's instructions, call load_skill with the skill name. " +
+        'Loaded skills provide context and instructions for the conversation.',
+    );
+
+    const metaTools = this.createMetaTools(skills, threadState);
+
     // Build system messages for loaded skills
     for (const [skillName, instructions] of threadState.skills) {
       messageList.addSystem(`[Skill: ${skillName}]\n\n${instructions}`);
     }
 
-    const metaTools = { search_skills: searchSkillTool, load_skill: loadSkillTool };
-    if (tools) {
-      for (const key of Object.keys(tools)) {
-        if (key in metaTools) {
-          console.warn(`[SkillSearchProcessor] User tool "${key}" conflicts with meta-tool and will be shadowed.`);
-        }
-      }
-    }
+    this.warnMetaToolConflicts(tools, metaTools);
 
     return {
       tools: {
