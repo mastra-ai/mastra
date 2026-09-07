@@ -3478,6 +3478,8 @@ describe('PgVector', () => {
       const originalConnect = vectorDB.pool.connect.bind(vectorDB.pool);
       const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
         const client: any = await originalConnect();
+        // Metadata and data queries can reuse the same pooled client on separate checkouts.
+        if (patched.some(entry => entry.client === client)) return client;
         const originalQuery = client.query.bind(client);
         patched.push({ client, originalQuery });
         client.query = (...args: any[]) => {

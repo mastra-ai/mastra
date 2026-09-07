@@ -20,10 +20,8 @@ import type {
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
-import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleStage, WorkItemSource } from '../rules/types.js';
-import { isFactoryRuleStage } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
@@ -375,13 +373,12 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
 }
 
 /** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
-function summaryRole(decision: Record<string, unknown>): string | null {
+function summaryRole(boards: BoardRegistry, decision: Record<string, unknown>): string | null {
   if (typeof decision.role === 'string') return decision.role.slice(0, 32);
   if (decision.type !== 'transition') return null;
-  const board = decision.board;
-  const stage = decision.stage;
-  if ((board !== 'work' && board !== 'review') || !isFactoryRuleStage(stage)) return null;
-  return roleForStage(board, stage);
+  const { board, stage } = decision;
+  if (typeof board !== 'string' || typeof stage !== 'string') return null;
+  return boards.get(board)?.roleForPhase(stage) ?? null;
 }
 
 /** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
@@ -393,13 +390,13 @@ function summarySource(decision: Record<string, unknown>): WorkItemSource | null
     : null;
 }
 
-function decisionSummary(decision: FactoryDeferredDecisionRecord) {
+function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
     type: factoryDecisionType(decision),
-    role: summaryRole(decision.decision),
+    role: summaryRole(boards, decision.decision),
     source: summarySource(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
@@ -414,6 +411,12 @@ function decisionSummary(decision: FactoryDeferredDecisionRecord) {
 }
 
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
+  #defaultBoards: BoardRegistry | undefined;
+
+  get #boards(): BoardRegistry {
+    return this.deps.boardRegistry ?? (this.#defaultBoards ??= createBoardRegistry());
+  }
+
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
     await this.deps.auth.ensureUser(c);
@@ -561,7 +564,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             metadata: { decisionId: decision.id, effect: factoryDecisionType(decision) },
           },
         });
-        return c.json({ decision: decisionSummary(decision) });
+        return c.json({ decision: decisionSummary(this.#boards, decision) });
       },
     });
   }
@@ -649,7 +652,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           const last = page.decisions.at(-1);
           return c.json({
-            decisions: page.decisions.map(decisionSummary),
+            decisions: page.decisions.map(decision => decisionSummary(this.#boards, decision)),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
         },
@@ -663,6 +666,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       ...buildSupervisorRoutes({
         workItems,
+        boards: this.#boards,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
@@ -694,7 +698,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             new Date(),
           );
           if (!decision) return c.json({ error: 'decision_not_retryable' }, 409);
-          return c.json({ decision: decisionSummary(decision) });
+          return c.json({ decision: decisionSummary(this.#boards, decision) });
         },
       }),
 
@@ -711,7 +715,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const input = parseCreateWorkItem(body);
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
           const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
-          const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(boardId);
+          const board = this.#boards.get(boardId);
           if (!board) return c.json({ error: 'invalid_board', message: `Board '${boardId}' is not installed.` }, 422);
           const initialStages = input.stages ?? [board.initialPhase];
           if (initialStages.length !== 1 || initialStages[0] !== board.initialPhase) {
@@ -899,7 +903,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const existing = await workItems.get({ orgId: tenant.orgId, id });
           if (!existing) return c.json({ error: 'Work item not found' }, 404);
           if (patch.board !== undefined) {
-            const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(patch.board);
+            const board = this.#boards.get(patch.board);
             const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
             if (existing.board !== null) {
               return c.json({ error: 'board_already_assigned' }, 409);

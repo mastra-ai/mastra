@@ -1,3 +1,4 @@
+import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { IntegrationContext } from '../base.js';
 import {
   githubRulesOptions,
@@ -74,8 +75,7 @@ export function createGithubIssueReconciler(
           for (const item of items) {
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
-            const stage = item.stages[0];
-            if (stage === 'done' || stage === 'canceled') continue; // terminal, skip
+            if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];

@@ -78,12 +78,6 @@ function DatasetCompareVersionsPage() {
     );
   }
 
-  const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    void navigate(
-      `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
-    );
-  };
-
   const handleVersionChange = (newA: string, newB: string) => {
     void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
@@ -129,7 +123,6 @@ function DatasetCompareVersionsPage() {
                 allItems={allItems}
                 itemsAMap={itemsAMap}
                 itemsBMap={itemsBMap}
-                onItemClick={handleItemClick}
               />
             </Column>
           </Columns>

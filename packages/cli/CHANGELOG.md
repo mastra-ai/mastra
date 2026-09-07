@@ -1,5 +1,41 @@
 # mastra
 
+## 1.28.0-alpha.8
+
+### Patch Changes
+
+- Reject failed CLI environment updates with the original read, validation, or write error after logging it, so callers can detect when configuration was not persisted. ([#23215](https://github.com/mastra-ai/mastra/pull/23215))
+
+- Improved the trace view of a thread in Studio. The thread page now exposes a single **Show traces** toggle (the slide-in traces panel is gone), long traces are clamped to the height of their message with a **Show more** / **Show less** control, the row currently in view is emphasised as you scroll, opening a tool call highlights the spans behind it (the **Highlight spans** button remains for text-only messages), and **View full thread** from a trace lands you on that trace's row. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- Include optional Mastra dependencies in build, dev, and lint package inventories, giving optional declarations precedence when dependency sections overlap. ([#23211](https://github.com/mastra-ai/mastra/pull/23211))
+
+- Use the nearest ancestor lockfile when suggesting peer dependency repair commands so nested workspace applications receive guidance for the correct package manager. ([#23208](https://github.com/mastra-ai/mastra/pull/23208))
+
+- Skip directories and invalid paths during CLI entry discovery so a later valid source file can be selected, while preserving file symlink support and existing missing-entry behavior. ([#23212](https://github.com/mastra-ai/mastra/pull/23212))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/deployer@1.65.0-alpha.8
+
+## 1.28.0-alpha.7
+
+### Patch Changes
+
+- Factory session tool rows now show the local time each step began, with the full date on hover, so long or collapsed sessions can be scanned as a timeline. ([#23165](https://github.com/mastra-ai/mastra/pull/23165))
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+  - @mastra/deployer@1.65.0-alpha.7
+
+## 1.28.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/deployer@1.65.0-alpha.6
+
 ## 1.28.0-alpha.5
 
 ### Patch Changes

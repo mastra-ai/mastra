@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.65.0-alpha.8
+
+### Patch Changes
+
+- Preserve MCP tool descriptions and types in OpenTelemetry spans. Export MCP server names and optional versions as `mastra.mcp_tool_call.server_name` and `mastra.mcp_tool_call.server_version`, retaining `server.address` and preserving server metadata through Arize's OpenInference conversion. ([#23218](https://github.com/mastra-ai/mastra/pull/23218))
+
+## 1.65.0-alpha.7
+
+### Patch Changes
+
+- Added `MASTRA_MESSAGE_AUTHOR_KEY` to `@mastra/core/request-context`. Set it from your auth middleware to `{ id, name?, avatarUrl? }` and every message an agent-controller session sends on that request (`sendMessage`, `steer`, `followUp`) is stored with that sender under `providerMetadata.mastra.author`, so a thread several people share can show who wrote what. ([#23085](https://github.com/mastra-ai/mastra/pull/23085))
+
+  ```typescript
+  import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
+
+  requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+  ```
+
+- Added protected `getDatasetForMutation` and `listItemsForMutation` hooks to `DatasetsStorage`. The base `updateDataset`, `updateItem`, `deleteItem`, `batchInsertItems`, and `batchDeleteItems` flows now use these hooks for their pre-write dataset checks, so storage adapters that read from a replica can point those checks at the primary. Defaults are unchanged. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+## 1.65.0-alpha.6
+
+### Patch Changes
+
+- Fixed BrowserViewer connections for Browser Use stdin commands while preserving thread isolation. ([#23142](https://github.com/mastra-ai/mastra/pull/23142))
+
+- Fixed dataset experiments to pass request context when resolving dynamic agent models. ([#23152](https://github.com/mastra-ai/mastra/pull/23152))
+
+- Fixed AgentController reply IDs after a suspended tool resumes so streamed replies match their saved messages in Memory. ([#23151](https://github.com/mastra-ai/mastra/pull/23151))
+
+- Added inference start timestamps to step-start stream events for accurate time-to-first-token measurement. ([#23094](https://github.com/mastra-ai/mastra/pull/23094))
+
+- Fixed unnecessary streaming overhead for final-only output processors. ([#23147](https://github.com/mastra-ai/mastra/pull/23147))
+
 ## 1.65.0-alpha.5
 
 ### Patch Changes
