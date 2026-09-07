@@ -144,7 +144,7 @@ describe('supervisor finding attention items', () => {
           title: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
           ageMs: 600_000,
-          suggestedRepair: { action: 'retry-decision', decisionId: 'decision-1' },
+          suggestedRepair: null,
         },
       ],
       now: new Date('2030-01-01T00:00:00.000Z'),
