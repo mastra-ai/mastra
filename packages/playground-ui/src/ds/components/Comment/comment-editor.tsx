@@ -6,51 +6,38 @@ import { cn } from '@/lib/utils';
 
 export interface CommentEditorProps {
   initialBody: string;
-  /** Rejecting keeps the editor open with what was typed, so a failed save loses nothing. */
-  onSave?: (body: string) => Promise<void>;
+  /** Handed the trimmed draft. Closing is the caller's call, so a save that failed keeps what was typed. */
+  onSave: (body: string) => void;
   onClose: () => void;
+  /** The caller's save in flight: the box locks until it settles. */
+  isPending?: boolean;
+  /** Why the caller's last save failed. */
+  error?: string;
   'aria-label'?: string;
   className?: string;
 }
 
-/**
- * Owns the draft so a failed save keeps what was typed; closing is the parent's
- * call, and only ever happens on a save that landed or on cancel.
- */
+/** Owns the draft only; whether a save landed is the caller's mutation to report. */
 export function CommentEditor({
   initialBody,
   onSave,
   onClose,
+  isPending = false,
+  error,
   'aria-label': ariaLabel = 'Edit comment',
   className,
 }: CommentEditorProps) {
   const [draft, setDraft] = useState(initialBody);
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
+  const body = draft.trim();
+  const canSave = body.length > 0 && !isPending;
 
-  const save = async () => {
-    const body = draft.trim();
-    if (body.length === 0) {
-      setError('Comment body must not be empty.');
-      return;
-    }
+  const save = () => {
+    if (!canSave) return;
     if (body === initialBody) {
       onClose();
       return;
     }
-    // One save in flight per row: a second one would carry the same expected
-    // revision and race its own predecessor.
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      await onSave?.(body);
-      onClose();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save comment');
-    } finally {
-      setSaving(false);
-    }
+    onSave(body);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -58,7 +45,7 @@ export function CommentEditor({
     if (event.nativeEvent.isComposing) return;
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      void save();
+      save();
     }
   };
 
@@ -78,8 +65,8 @@ export function CommentEditor({
           <Button type="button" variant="ghost" size="xs" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" variant="outline" size="xs" disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : 'Save'}
+          <Button type="button" variant="outline" size="xs" disabled={!canSave} onClick={save}>
+            {isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>

@@ -206,7 +206,7 @@ describe('CommentList', () => {
     expect(patches[0]).toMatchObject({ body: 'first\nsecond' });
   });
 
-  it('refuses an emptied edit instead of closing on it', async () => {
+  it('locks an emptied edit instead of closing on it', async () => {
     const patches: unknown[] = [];
     server.use(
       http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
@@ -219,11 +219,12 @@ describe('CommentList', () => {
     renderList();
 
     await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
-    await user.clear(screen.getByRole('textbox', { name: 'Edit comment' }));
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, '{Enter}');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Comment body must not be empty.');
-    expect(screen.getByRole('textbox', { name: 'Edit comment' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(editor).toBeInTheDocument();
     expect(patches).toEqual([]);
   });
 

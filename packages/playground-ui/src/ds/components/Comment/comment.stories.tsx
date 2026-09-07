@@ -226,7 +226,14 @@ const EditableRow = () => {
             <CommentItemTimestamp dateTime="2026-09-04T10:30:00Z">31m</CommentItemTimestamp>
           </CommentItemHeader>
           {editing ? (
-            <CommentEditor initialBody={body} onSave={async next => setBody(next)} onClose={() => setEditing(false)} />
+            <CommentEditor
+              initialBody={body}
+              onSave={next => {
+                setBody(next);
+                setEditing(false);
+              }}
+              onClose={() => setEditing(false)}
+            />
           ) : (
             <CommentItemBody>{body}</CommentItemBody>
           )}
@@ -241,7 +248,7 @@ const EditableRow = () => {
   );
 };
 
-/** Editing in place: the draft survives a failed save, and only a landed save closes the box. */
+/** Editing in place: the caller closes the box once its save landed, and reports a pending or failed one through `isPending` and `error`. */
 export const Editing: Story = {
   render: () => <EditableRow />,
 };

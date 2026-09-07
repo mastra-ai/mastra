@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -183,45 +183,47 @@ describe('CommentEditor', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Edit comment' }), {
       target: { value },
     });
+  const saveButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Save' });
 
-  it('saves the trimmed draft and closes', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+  it('hands the trimmed draft to the caller and leaves closing to it', () => {
+    const onSave = vi.fn();
     const onClose = vi.fn();
     render(<CommentEditor initialBody="before" onSave={onSave} onClose={onClose} />);
 
     type('  after  ');
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(saveButton());
 
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith('after'));
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it('keeps the draft on screen and surfaces why a save failed', async () => {
-    const onClose = vi.fn();
-    render(
-      <CommentEditor
-        initialBody="before"
-        onSave={() => Promise.reject(new Error('Comment was edited elsewhere'))}
-        onClose={onClose}
-      />,
-    );
-
-    type('after');
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    expect((await screen.findByRole('alert')).textContent).toBe('Comment was edited elsewhere');
-    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Edit comment' }).value).toBe('after');
+    expect(onSave).toHaveBeenCalledWith('after');
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('refuses an empty body without calling the caller', () => {
+  it('locks while the caller reports a save in flight', () => {
+    const onSave = vi.fn();
+    render(<CommentEditor initialBody="before" onSave={onSave} onClose={vi.fn()} isPending />);
+
+    type('after');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit comment' }), { key: 'Enter' });
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Saving…' }).disabled).toBe(true);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('surfaces why the caller says the save failed', () => {
+    render(
+      <CommentEditor initialBody="before" onSave={vi.fn()} onClose={vi.fn()} error="Comment was edited elsewhere" />,
+    );
+
+    expect(screen.getByRole('alert').textContent).toBe('Comment was edited elsewhere');
+  });
+
+  it('locks an emptied draft instead of sending it', () => {
     const onSave = vi.fn();
     render(<CommentEditor initialBody="before" onSave={onSave} onClose={vi.fn()} />);
 
     type('   ');
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit comment' }), { key: 'Enter' });
 
-    expect(screen.getByRole('alert').textContent).toBe('Comment body must not be empty.');
+    expect(saveButton().disabled).toBe(true);
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -230,14 +232,14 @@ describe('CommentEditor', () => {
     const onClose = vi.fn();
     render(<CommentEditor initialBody="before" onSave={onSave} onClose={onClose} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(saveButton());
 
     expect(onSave).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('sends on Enter but keeps Shift+Enter for a new line', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+  it('saves on Enter but keeps Shift+Enter for a new line', () => {
+    const onSave = vi.fn();
     render(<CommentEditor initialBody="before" onSave={onSave} onClose={vi.fn()} />);
 
     const textarea = screen.getByRole('textbox', { name: 'Edit comment' });
@@ -246,6 +248,6 @@ describe('CommentEditor', () => {
     expect(onSave).not.toHaveBeenCalled();
 
     fireEvent.keyDown(textarea, { key: 'Enter' });
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith('after'));
+    expect(onSave).toHaveBeenCalledWith('after');
   });
 });

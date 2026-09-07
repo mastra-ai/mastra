@@ -21,4 +21,6 @@ Added a `thread` variant to the `Comment` component, plus `CommentQuote`, `Comme
 </Comment>
 ```
 
+`CommentEditor` owns only the draft: pass `isPending` and `error` from the mutation that saves it, and close it from that mutation's success.
+
 The existing `default` and `embed` variants are unchanged.

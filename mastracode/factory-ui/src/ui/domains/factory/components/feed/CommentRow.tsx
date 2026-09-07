@@ -17,9 +17,11 @@ import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Ref } from 'react';
 
+import { useEditWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
 import type { CommentQuoteDraft } from './quoteDraft';
+import { useMentionResolver } from './useMentionResolver';
 
 // A hand-picked passage is quoted as picked; quoting a whole comment gets more
 // room, since the reader has no highlight to tell them what mattered.
@@ -69,33 +71,79 @@ function RowAction({
   );
 }
 
+/** Mounted for one edit, so its mutation state is that edit's alone and leaves with the box. */
+function CommentRowEditor({
+  comment,
+  factoryProjectId,
+  onClose,
+}: {
+  comment: WorkItemComment;
+  factoryProjectId: string | undefined;
+  onClose: () => void;
+}) {
+  const editComment = useEditWorkItemCommentMutation({ workItemId: comment.workItemId, factoryProjectId });
+  const resolveMentions = useMentionResolver(factoryProjectId);
+
+  const saveEdit = async (body: string) => {
+    // An unreadable roster omits the field, so the server keeps the mention
+    // rows it already has instead of wiping them.
+    const mentions = await resolveMentions(body);
+    editComment.mutate(
+      { commentId: comment.id, input: { body, expectedRevision: comment.revision, ...(mentions ? { mentions } : {}) } },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <CommentEditor
+      initialBody={comment.body}
+      onSave={body => void saveEdit(body)}
+      onClose={onClose}
+      isPending={editComment.isPending}
+      error={editComment.error?.message}
+    />
+  );
+}
+
+function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
+  if (comment.deletedAt !== undefined) return <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>;
+
+  return (
+    <CommentItemBody ref={ref}>
+      <MarkdownRenderer>{comment.body}</MarkdownRenderer>
+      {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+    </CommentItemBody>
+  );
+}
+
 export function CommentRow({
   ref,
   comment,
+  factoryProjectId,
   currentUserId,
   showHeader,
   pending = false,
   highlighted = false,
   commentUrl,
   onQuote,
-  onSaveEdit,
   onDelete,
 }: {
   ref?: Ref<HTMLElement>;
   comment: WorkItemComment;
+  factoryProjectId: string | undefined;
   currentUserId?: string;
   showHeader: boolean;
   pending?: boolean;
   highlighted?: boolean;
   commentUrl?: string;
   onQuote?: (draft: CommentQuoteDraft) => void;
-  onSaveEdit?: (body: string) => Promise<void>;
   onDelete?: () => void;
 }) {
   const bodyRef = useRef<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const deleted = comment.deletedAt !== undefined;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
+  const showActions = !deleted && !editing && !pending;
   const authorName = commentAuthorName(comment);
 
   const quoteReply = () => {
@@ -123,24 +171,13 @@ export function CommentRow({
         {comment.replyTo?.quote ? (
           <CommentQuote authorName={comment.replyTo.authorName} quote={comment.replyTo.quote} className="mt-1" />
         ) : null}
-        {deleted ? (
-          <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>
-        ) : editing ? (
-          <CommentEditor
-            initialBody={comment.body}
-            onSave={onSaveEdit}
-            onClose={() => {
-              setEditing(false);
-            }}
-          />
+        {editing ? (
+          <CommentRowEditor comment={comment} factoryProjectId={factoryProjectId} onClose={() => setEditing(false)} />
         ) : (
-          <CommentItemBody ref={bodyRef}>
-            <MarkdownRenderer>{comment.body}</MarkdownRenderer>
-            {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
-          </CommentItemBody>
+          <CommentRowBody comment={comment} ref={bodyRef} />
         )}
       </CommentItemContent>
-      {!deleted && !editing && !pending ? (
+      {showActions ? (
         <CommentItemActions>
           {onQuote ? (
             <RowAction label="Quote reply" onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
@@ -152,13 +189,8 @@ export function CommentRow({
               <Link2 aria-hidden />
             </RowAction>
           ) : null}
-          {own && onSaveEdit ? (
-            <RowAction
-              label="Edit comment"
-              onClick={() => {
-                setEditing(true);
-              }}
-            >
+          {own ? (
+            <RowAction label="Edit comment" onClick={() => setEditing(true)}>
               <Pencil aria-hidden />
             </RowAction>
           ) : null}
