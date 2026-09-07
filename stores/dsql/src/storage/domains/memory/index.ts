@@ -48,6 +48,15 @@ type MessageRowFromDB = {
 function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
+
+/**
+ * Bind dates as UTC strings because node-postgres serializes Date parameters
+ * for TIMESTAMP columns using the process's local timezone.
+ */
+function toUtcISOString(date: Date): string {
+  return date.toISOString();
+}
+
 export class MemoryDSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   #db: DsqlDB;
@@ -313,6 +322,8 @@ export class MemoryDSQL extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const createdAt = toUtcISOString(thread.createdAt);
+    const updatedAt = toUtcISOString(thread.updatedAt);
 
     await withRetry(
       async () => {
@@ -340,10 +351,10 @@ export class MemoryDSQL extends MemoryStorage {
             thread.resourceId,
             thread.title,
             thread.metadata ? JSON.stringify(thread.metadata) : null,
-            thread.createdAt,
-            thread.createdAt,
-            thread.updatedAt,
-            thread.updatedAt,
+            createdAt,
+            createdAt,
+            updatedAt,
+            updatedAt,
           ],
         );
       },
@@ -1153,6 +1164,8 @@ export class MemoryDSQL extends MemoryStorage {
       record: {
         ...resource,
         metadata: JSON.stringify(resource.metadata),
+        createdAt: toUtcISOString(resource.createdAt),
+        updatedAt: toUtcISOString(resource.updatedAt),
       },
     });
 

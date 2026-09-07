@@ -1,23 +1,35 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import {
+  CommentEditor,
+  CommentItem,
+  CommentItemActions,
+  CommentItemAuthor,
+  CommentItemAvatar,
+  CommentItemBody,
+  CommentItemContent,
+  CommentItemHeader,
+  CommentItemTimestamp,
+  CommentQuote,
+} from '@mastra/playground-ui/components/Comment';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Link2, Pencil, Quote, Trash2, X } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Ref } from 'react';
 
+import { useEditWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { WorkItemComment } from '../../services/commentsWire';
-import { REVEAL_ON_CARD_HOVER } from '../BoardCardParts';
-import { CommentQuote } from './CommentQuote';
-import type { CommentQuoteDraft } from './CommentQuote';
+import type { CommentQuoteDraft } from './quoteDraft';
+import { useMentionResolver } from './useMentionResolver';
 
 // A hand-picked passage is quoted as picked; quoting a whole comment gets more
 // room, since the reader has no highlight to tell them what mattered.
 const MAX_SELECTION_QUOTE_CHARS = 280;
 const MAX_BODY_QUOTE_CHARS = 500;
 
-export function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
+function commentAuthorName(comment: Pick<WorkItemComment, 'author'>): string {
   return comment.author.displayName ?? comment.author.id;
 }
 
@@ -60,103 +72,83 @@ function RowAction({
   );
 }
 
-/**
- * Owns the draft so a failed save keeps what was typed; closing is the parent's
- * call, and only ever happens on a save that landed or on cancel.
- */
-function CommentEditor({
-  initialBody,
-  onSave,
+/** Mounted for one edit, so its mutation state is that edit's alone and leaves with the box. */
+function CommentRowEditor({
+  comment,
+  factoryProjectId,
   onClose,
 }: {
-  initialBody: string;
-  onSave?: (body: string) => Promise<void>;
+  comment: WorkItemComment;
+  factoryProjectId: string | undefined;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(initialBody);
-  const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
+  const editComment = useEditWorkItemCommentMutation({ workItemId: comment.workItemId, factoryProjectId });
+  const resolveMentions = useMentionResolver(factoryProjectId);
 
-  const save = async () => {
-    const body = draft.trim();
-    if (body.length === 0) {
-      setError('Comment body must not be empty.');
-      return;
-    }
-    if (body === initialBody) {
-      onClose();
-      return;
-    }
-    // One save in flight per row: a second one would carry the same expected
-    // revision and race its own predecessor.
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      await onSave?.(body);
-      onClose();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save comment');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // One pending state for the roster wait and the request: the box stays locked from the first Enter.
+  const saveEdit = useMutation({
+    mutationFn: async (body: string) => {
+      // An unreadable roster omits the field, so the server keeps the mention
+      // rows it already has instead of wiping them.
+      const mentions = await resolveMentions(body);
+      return editComment.mutateAsync({
+        commentId: comment.id,
+        input: { body, expectedRevision: comment.revision, ...(mentions ? { mentions } : {}) },
+      });
+    },
+    onSuccess: onClose,
+  });
 
   return (
-    <div className="mt-1 flex flex-col gap-1.5">
-      <textarea
-        value={draft}
-        onChange={event => setDraft(event.target.value)}
-        aria-label="Edit comment"
-        rows={3}
-        className="border-border1 bg-surface2 text-ui-sm text-icon6 focus:border-border2 w-full resize-y rounded-lg border px-2 py-1.5 outline-none"
-      />
-      {error ? (
-        <p role="alert" className="text-ui-xs text-error m-0">
-          {error}
-        </p>
-      ) : null}
-      <div className="flex items-center gap-1">
-        <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void save()}>
-          <Check aria-hidden />
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          <X aria-hidden />
-          Cancel
-        </Button>
-      </div>
-    </div>
+    <CommentEditor
+      initialBody={comment.body}
+      onSave={body => saveEdit.mutate(body)}
+      onClose={onClose}
+      isPending={saveEdit.isPending}
+      error={saveEdit.error?.message}
+    />
+  );
+}
+
+function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
+  if (comment.deletedAt !== undefined) return <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>;
+
+  return (
+    <CommentItemBody ref={ref}>
+      <MarkdownRenderer>{comment.body}</MarkdownRenderer>
+      {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
+    </CommentItemBody>
   );
 }
 
 export function CommentRow({
   ref,
   comment,
+  factoryProjectId,
   currentUserId,
   showHeader,
   pending = false,
   highlighted = false,
   commentUrl,
   onQuote,
-  onSaveEdit,
   onDelete,
 }: {
-  ref?: Ref<HTMLDivElement>;
+  ref?: Ref<HTMLElement>;
   comment: WorkItemComment;
+  factoryProjectId: string | undefined;
   currentUserId?: string;
   showHeader: boolean;
   pending?: boolean;
   highlighted?: boolean;
   commentUrl?: string;
   onQuote?: (draft: CommentQuoteDraft) => void;
-  onSaveEdit?: (body: string) => Promise<void>;
   onDelete?: () => void;
 }) {
-  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const deleted = comment.deletedAt !== undefined;
   const own = comment.author.kind === 'user' && comment.author.id === currentUserId;
+  const showActions = !deleted && !editing && !pending;
   const authorName = commentAuthorName(comment);
 
   const quoteReply = () => {
@@ -168,55 +160,30 @@ export function CommentRow({
   };
 
   return (
-    <div
-      ref={ref}
-      aria-busy={pending || undefined}
-      className={cn(
-        'group hover:bg-surface3/60 relative flex gap-2 rounded-lg px-2 transition-opacity duration-300',
-        showHeader ? 'py-1.5' : 'py-0.5',
-        pending && 'opacity-60',
-        highlighted && 'bg-accent1/10',
-      )}
-    >
-      <div className="w-6 shrink-0 pt-0.5">
+    <CommentItem ref={ref} aria-busy={pending || undefined} continued={!showHeader} highlighted={highlighted}>
+      <CommentItemAvatar>
         {showHeader ? <Avatar src={comment.author.avatarUrl} name={authorName} size="sm" /> : null}
-      </div>
-      <div className="min-w-0 flex-1">
+      </CommentItemAvatar>
+      <CommentItemContent>
         {showHeader ? (
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-ui-sm text-icon6 truncate font-medium">{authorName}</span>
-            <time dateTime={comment.occurredAt} className="text-ui-xs text-icon2 shrink-0">
+          <CommentItemHeader>
+            <CommentItemAuthor>{authorName}</CommentItemAuthor>
+            <CommentItemTimestamp dateTime={comment.occurredAt}>
               {relativeTime(comment.occurredAt)}
-            </time>
-          </div>
+            </CommentItemTimestamp>
+          </CommentItemHeader>
         ) : null}
         {comment.replyTo?.quote ? (
           <CommentQuote authorName={comment.replyTo.authorName} quote={comment.replyTo.quote} className="mt-1" />
         ) : null}
-        {deleted ? (
-          <p className="text-ui-sm text-icon2 m-0 italic">Comment deleted</p>
-        ) : editing ? (
-          <CommentEditor
-            initialBody={comment.body}
-            onSave={onSaveEdit}
-            onClose={() => {
-              setEditing(false);
-            }}
-          />
+        {editing ? (
+          <CommentRowEditor comment={comment} factoryProjectId={factoryProjectId} onClose={() => setEditing(false)} />
         ) : (
-          <div ref={bodyRef} className="text-ui-sm">
-            <MarkdownRenderer>{comment.body}</MarkdownRenderer>
-            {comment.editedAt ? <span className="text-ui-xs text-icon2 ml-1">(edited)</span> : null}
-          </div>
+          <CommentRowBody comment={comment} ref={bodyRef} />
         )}
-      </div>
-      {!deleted && !editing && !pending ? (
-        <div
-          className={cn(
-            'bg-surface2 border-border1 absolute -top-2 right-2 flex items-center gap-0.5 rounded-lg border px-0.5',
-            REVEAL_ON_CARD_HOVER,
-          )}
-        >
+      </CommentItemContent>
+      {showActions ? (
+        <CommentItemActions>
           {onQuote ? (
             <RowAction label="Quote reply" onClick={quoteReply} onMouseDown={event => event.preventDefault()}>
               <Quote aria-hidden />
@@ -227,13 +194,8 @@ export function CommentRow({
               <Link2 aria-hidden />
             </RowAction>
           ) : null}
-          {own && onSaveEdit ? (
-            <RowAction
-              label="Edit comment"
-              onClick={() => {
-                setEditing(true);
-              }}
-            >
+          {own ? (
+            <RowAction label="Edit comment" onClick={() => setEditing(true)}>
               <Pencil aria-hidden />
             </RowAction>
           ) : null}
@@ -242,8 +204,8 @@ export function CommentRow({
               <Trash2 aria-hidden />
             </RowAction>
           ) : null}
-        </div>
+        </CommentItemActions>
       ) : null}
-    </div>
+    </CommentItem>
   );
 }

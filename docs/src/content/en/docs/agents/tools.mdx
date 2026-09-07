@@ -293,7 +293,7 @@ export const weatherTool = createTool({
 })
 ```
 
-`toModelOutput` also works on client-side tools passed through `clientTools`. The mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result.
+`toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result, so the model receives the transformed content instead of the raw tool result.
 
 ## Transform tool payloads for UI and transcripts
 

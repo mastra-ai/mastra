@@ -8,6 +8,7 @@ export interface DynamicToolPartRendererProps {
   part: DynamicToolPart;
   metadata?: MessageMetadata;
   dataParts?: ReadonlyArray<DataMessagePart>;
+  readOnly?: boolean;
 }
 
 /**
@@ -15,7 +16,7 @@ export interface DynamicToolPartRendererProps {
  * `tool-${string}` parts). Derives the display tool name from `toolName`,
  * falling back to the `tool-` prefixed part type.
  */
-export const DynamicToolPartRenderer = ({ part, metadata, dataParts }: DynamicToolPartRendererProps) => {
+export const DynamicToolPartRenderer = ({ part, metadata, dataParts, readOnly }: DynamicToolPartRendererProps) => {
   const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
 
   return (
@@ -27,6 +28,7 @@ export const DynamicToolPartRenderer = ({ part, metadata, dataParts }: DynamicTo
       state={part.state}
       metadata={metadata}
       dataParts={dataParts}
+      readOnly={readOnly}
     />
   );
 };

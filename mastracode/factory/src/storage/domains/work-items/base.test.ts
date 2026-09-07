@@ -437,6 +437,57 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
+  it('pages each status on its own newest-first keyset', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const parkedIds: string[] = [];
+    for (const [index, at] of ['2030-01-01T00:00:00.000Z', '2030-01-01T00:05:00.000Z'].entries()) {
+      const now = new Date(at);
+      const current = await storage.get({ orgId: 'org1', id: created.item.id });
+      await storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: created.item.id,
+        ingress: { identity: `park-${index}`, triggerType: 'test' },
+        ruleSetVersion: 'rules-v1',
+        expectedRevision: current?.revision ?? created.item.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: `park-${index}` },
+        ],
+        causalChain: [],
+        now,
+      });
+      const [claimed] = await storage.claimDeferredDecisions({
+        ownerId: 'worker-1',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 1,
+      });
+      if (!claimed) throw new Error('Expected a claimable decision');
+      const proposed = await storage.proposeDeferredDecision({ ...scope, id: claimed.id, ownerId: 'worker-1' }, now);
+      if (!proposed) throw new Error('Expected a proposed decision');
+      parkedIds.push(proposed.id);
+    }
+
+    const page = await storage.listDecisionPageByStatus({ ...scope, status: 'proposed', limit: 1 });
+    expect(page).toMatchObject({ hasMore: true });
+    expect(page.decisions.map(decision => decision.id)).toEqual([parkedIds[1]]);
+
+    const next = await storage.listDecisionPageByStatus({
+      ...scope,
+      status: 'proposed',
+      before: { occurredAt: page.decisions[0]!.updatedAt, id: page.decisions[0]!.id },
+      limit: 5,
+    });
+    expect(next.decisions.map(decision => decision.id)).toEqual([parkedIds[0]]);
+    await expect(storage.listDecisionPageByStatus({ ...scope, status: 'failed', limit: 5 })).resolves.toMatchObject({
+      decisions: [],
+      hasMore: false,
+    });
+  });
+
   it('treats a concurrently deleted attention receipt as stale', async () => {
     const backend = new LibSQLFactoryStorage({ id: 'attention-receipt-race-test', url: ':memory:' });
     const storage = backend.registerDomain(new WorkItemsStorage());

@@ -48,9 +48,26 @@ export const emptyThreadTracesList: ListTracesLightResponse = {
 export const threadTracesFullList: ListTracesResponse = threadTracesList;
 export const emptyThreadTracesFullList: ListTracesResponse = emptyThreadTracesList;
 
+/** A child span of trace-a: the tool call behind the assistant reply. */
+export const traceAToolSpan = {
+  ...baseTrace,
+  spanId: 'span-a-tool',
+  name: 'Recipe lookup',
+  spanType: SpanType.TOOL_CALL,
+  parentSpanId: 'span-a',
+};
+
 export const traceASpans: GetTraceResponse = {
   traceId: 'trace-a',
-  spans: [{ ...baseTrace, parentSpanId: null }],
+  spans: [
+    {
+      ...baseTrace,
+      parentSpanId: null,
+      input: { messages: [{ role: 'user', content: 'cook pasta' }] },
+      output: { text: 'carbonara' },
+    },
+    traceAToolSpan,
+  ],
 };
 
 export const traceBSpans: GetTraceResponse = {

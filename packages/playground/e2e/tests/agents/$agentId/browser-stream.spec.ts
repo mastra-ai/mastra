@@ -75,7 +75,7 @@ test.describe('Browser stream WebSocket gating', () => {
         const body = await response.json();
         await route.fulfill({
           response,
-          json: { ...body, browserTools: ['browser_goto', 'browser_snapshot'] },
+          json: { ...body, hasBrowser: true, browserTools: ['browser_goto', 'browser_snapshot'] },
         });
       });
 

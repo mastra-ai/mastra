@@ -18,7 +18,18 @@ const baseSpan = {
   status: TraceStatus.SUCCESS,
 };
 
-export const rootSpan = { ...baseSpan, spanId: 'span-root', name: 'Root agent run', parentSpanId: null };
+export const rootSpan = {
+  ...baseSpan,
+  spanId: 'span-root',
+  name: 'Root agent run',
+  parentSpanId: null,
+  entityType: 'agent',
+  entityId: 'weather-agent',
+  entityName: 'Weather Agent',
+  threadId: 'weather-thread',
+  input: { messages: [{ role: 'user', content: 'Will it rain?' }] },
+  output: { text: 'No rain is expected.' },
+};
 export const childSpanOne = {
   ...baseSpan,
   spanId: 'span-child-1',
@@ -42,6 +53,6 @@ export const panelTraceSpans: GetTraceResponse = {
 
 export const spanDetailById: Record<string, GetSpanResponse> = {
   'span-root': { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
-  'span-child-1': { span: { ...childSpanOne, input: { arg: 1 }, output: { ok: true } } },
+  'span-child-1': { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
   'span-child-2': { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
 };

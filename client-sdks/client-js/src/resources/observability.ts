@@ -7,6 +7,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -35,9 +37,10 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -70,7 +73,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from '@mastra/core/storage';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 
@@ -228,6 +231,16 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   *
+   * @param params - Advanced trace query, including its required time range
+   * @returns Matching lightweight traces or distinct thread groups
+   */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.request('/observability/traces/query', { method: 'POST', body: params });
+  }
+
+  /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    *
    * Same filtering, ordering and delta-polling contract as {@link listTraces}, but rows
@@ -297,6 +310,22 @@ export class Observability extends BaseResource {
     return this.request(`/observability/traces/score`, {
       method: 'POST',
       body: { ...params },
+    });
+  }
+
+  /**
+   * Deletes traces by ID, cascading to all associated data: spans, trace
+   * roots/branches, and signal events (scores, feedback, metrics, logs) that
+   * reference the deleted traces. Signals without a trace ID are untouched.
+   * On ClickHouse-backed stores, reads may briefly return deleted rows until
+   * the lightweight delete is fully applied.
+   * @param params - IDs of the traces to delete
+   * @returns Promise resolving to `{ success: true }` once the delete is issued
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.request(`/observability/traces/delete`, {
+      method: 'POST',
+      body: { traceIds: params.traceIds },
     });
   }
 
@@ -395,6 +424,14 @@ export class Observability extends BaseResource {
     return this.request(`/observability/feedback`, {
       method: 'POST',
       body: params,
+    });
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.request(`/observability/feedback/${encodeURIComponent(params.feedbackId)}/review-status`, {
+      method: 'PATCH',
+      body: { reviewStatus: params.reviewStatus },
     });
   }
 

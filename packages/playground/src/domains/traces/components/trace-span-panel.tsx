@@ -5,9 +5,19 @@ import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hoo
 import type { ComponentProps, ReactNode } from 'react';
 
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
+import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
+import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { Link } from '@/lib/link';
 
 type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
+
+function getEntityHref(entityType: string | null | undefined, entityId: string | null | undefined) {
+  if (!entityId || !entityType) return undefined;
+  const normalizedEntityType = entityType.toLowerCase();
+  if (normalizedEntityType.includes('workflow')) return `/workflows/${encodeURIComponent(entityId)}/graph`;
+  if (normalizedEntityType.includes('agent')) return `/agents/${encodeURIComponent(entityId)}/chat/new`;
+  return undefined;
+}
 type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
 
 export interface TraceSpanPanelProps {
@@ -23,7 +33,6 @@ export interface TraceSpanPanelProps {
   onSpanClose?: () => void;
 
   // Trace-panel pass-through.
-  usage?: TraceDataPanelViewProps['usage'];
   anchorSpanId?: string;
   initialSpanId?: string | null;
   onPrevious?: () => void;
@@ -32,9 +41,19 @@ export interface TraceSpanPanelProps {
   onAddTraceMocksToItem?: TraceDataPanelViewProps['onAddTraceMocksToItem'];
   feedbackTabBadge?: ReactNode;
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
+  /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
+  showPartialThread?: boolean;
+  /** Span ids featured in the timeline (non-featured spans are faded). */
+  featuredSpanIds?: string[];
+  /** Called with the span ids behind a reconstructed message when the user asks to highlight them. */
+  onHighlightSpans?: (spanIds: string[]) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
+  usage?: TraceDataPanelViewProps['usage'];
   traceHref?: string;
+  collapsed?: TraceDataPanelViewProps['collapsed'];
+  onCollapsedChange?: TraceDataPanelViewProps['onCollapsedChange'];
+  showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
   className?: string;
 
   // Span-panel pass-through.
@@ -58,7 +77,6 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   onSpanClose,
-  usage,
   anchorSpanId,
   initialSpanId,
   onPrevious,
@@ -67,9 +85,16 @@ export function TraceSpanPanel({
   onAddTraceMocksToItem,
   feedbackTabBadge,
   feedbackTabSlot,
+  showPartialThread,
+  featuredSpanIds,
+  onHighlightSpans,
   scoresTabBadge,
   scoresTabSlot,
+  usage,
   traceHref,
+  collapsed,
+  onCollapsedChange,
+  showUnavailableFeaturesMsg,
   className,
   spanActiveTab,
   onSpanTabChange,
@@ -80,13 +105,27 @@ export function TraceSpanPanel({
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
 
+  // The trace summary links the entity to its Studio page; only Studio knows the routes.
+  const rootSpan = anchorSpanId
+    ? spans?.find(s => s.spanId === anchorSpanId)
+    : spans?.find(s => s.parentSpanId == null);
+  const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
+  const threadId = getTraceThreadId(rootSpan, anchorSpanId);
+
+  // Link to the advanced thread view (?variant=advanced), anchored on this trace's row.
+  const fullThreadHref =
+    rootSpan?.entityId && threadId
+      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${encodeURIComponent(threadId)}?variant=advanced&traceId=${encodeURIComponent(traceId)}`
+      : undefined;
+
   return (
     <TraceDataPanel
       className={className}
       traceId={traceId}
       spans={spans}
-      usage={usage}
       anchorSpanId={anchorSpanId}
+      entityHref={entityHref}
+      usage={usage}
       isLoading={isLoadingSpans}
       onClose={onClose}
       onSpanSelect={onSpanSelect}
@@ -98,8 +137,17 @@ export function TraceSpanPanel({
       placement="traces-list"
       LinkComponent={Link}
       traceHref={traceHref}
+      collapsed={collapsed}
+      onCollapsedChange={onCollapsedChange}
+      showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
       feedbackTabBadge={feedbackTabBadge}
       feedbackTabSlot={feedbackTabSlot}
+      featuredSpanIds={featuredSpanIds}
+      messagesPanelSlot={
+        showPartialThread && threadId ? (
+          <TraceMessagesPanel traceId={traceId} fullThreadHref={fullThreadHref} onHighlightSpans={onHighlightSpans} />
+        ) : undefined
+      }
       scoresTabBadge={scoresTabBadge}
       scoresTabSlot={scoresTabSlot}
       spanPanelSlot={

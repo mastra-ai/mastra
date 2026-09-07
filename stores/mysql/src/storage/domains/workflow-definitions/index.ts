@@ -35,6 +35,7 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   if (transformed.metadata != null) def.metadata = transformed.metadata as Record<string, unknown>;
   if (transformed.stateSchema != null) def.stateSchema = transformed.stateSchema;
   if (transformed.requestContextSchema != null) def.requestContextSchema = transformed.requestContextSchema;
+  if (transformed.schedule != null) def.schedule = transformed.schedule as WorkflowDefinition['schedule'];
   if (transformed.authorId != null) def.authorId = String(transformed.authorId);
   return def;
 }
@@ -67,6 +68,11 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
       tableName: TABLE_WORKFLOW_DEFINITIONS,
       schema: WORKFLOW_DEFINITIONS_SCHEMA,
     });
+    await this.operations.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: WORKFLOW_DEFINITIONS_SCHEMA,
+      ifNotExists: ['schedule'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -94,6 +100,7 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -132,6 +139,7 @@ export class WorkflowDefinitionsMySQL extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 

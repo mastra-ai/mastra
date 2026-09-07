@@ -22,6 +22,7 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 import { EntityType } from '@mastra/core/storage';
+import { coerceFeedbackReviewStatus } from './review-status';
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -491,6 +492,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     spanId: feedback.spanId ?? null,
     feedbackUserId: feedback.feedbackUserId ?? null,
     sourceId: feedback.sourceId ?? null,
+    reviewStatus: feedback.reviewStatus ?? 'needs-review',
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,
@@ -514,6 +516,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     spanId: nullableString(row.spanId),
     feedbackUserId: nullableString(row.feedbackUserId),
     sourceId: nullableString(row.sourceId),
+    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),

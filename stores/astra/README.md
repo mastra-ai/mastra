@@ -16,55 +16,38 @@ import { AstraVector } from '@mastra/astra';
 const vectorStore = new AstraVector({
   token: 'your-astra-token',
   endpoint: 'your-astra-endpoint',
-  keyspace: 'your-keyspace' // optional
+  keyspace: 'your-keyspace', // optional
 });
 
 // Create a new collection
-await vectorStore.createIndex({ indexName: 'myCollection', dimension: 1536, metric: 'cosine' });
+await vectorStore.createIndex({ indexName: 'myCollection', dimension: 3, metric: 'cosine' });
 
 // Add vectors
-const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const vectors = [
+  [0.1, 0.2, 0.3],
+  [0.3, 0.4, 0.5],
+];
 const metadata = [{ text: 'doc1' }, { text: 'doc2' }];
 const ids = await vectorStore.upsert({ indexName: 'myCollection', vectors, metadata });
 
 // Query vectors
 const results = await vectorStore.query({
   indexName: 'myCollection',
-  queryVector: [0.1, 0.2, ...],
+  queryVector: [0.1, 0.2, 0.3],
   topK: 10, // topK
   filter: { text: { $eq: 'doc1' } }, // optional filter
-  includeVector: false // includeVectors
+  includeVector: false, // includeVectors
 });
 ```
 
-## Configuration
+## Documentation
 
-The Astra DB vector store requires:
+- [@mastra/astra documentation](https://mastra.ai/reference/vectors/astra)
 
-- `token`: Your Astra DB token
-- `endpoint`: Your Astra DB endpoint
-- `keyspace`: (Optional) The keyspace to use
+## Changelog
 
-## Features
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/astra/CHANGELOG.md) for version history and release notes.
 
-- Vector similarity search with cosine, euclidean, and dot product metrics
-- Metadata filtering support
-- Batch vector upsert operations
-- Collection management (create, list, describe, delete)
-- Optional vector inclusion in query results
-- Automatic UUID generation for vectors
-- Built on top of @datastax/astra-db-ts client
+## Support
 
-## Methods
-
-- `createIndex({ indexName, dimension, metric? })`: Create a new collection
-- `upsert({ indexName, vectors, metadata?, ids })`: Add or update vectors
-- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
-- `listIndexes()`: List all collections
-- `describeIndex(indexName)`: Get collection statistics
-- `deleteIndex(indexName)`: Delete a collection
-
-## Related Links
-
-- [Astra DB Vector Search Documentation](https://docs.datastax.com/en/astra-db/docs/vector-search.html)
-- [Astra DB API Reference](https://docs.datastax.com/en/astra-db-serverless/api-reference/documents.html)
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

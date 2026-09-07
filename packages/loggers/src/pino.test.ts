@@ -699,3 +699,78 @@ describe('PinoLogger.child()', () => {
     expect(childLogger.getTransports()).toEqual(baseLogger.getTransports());
   });
 });
+
+describe('PinoLogger error serialization', () => {
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  it('serializes an Error logged under the `error` key', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+
+    logger.warn('Error listing tools for agent', {
+      agentName: 'test-agent',
+      error: new Error('ARCADE_API_KEY is missing or empty'),
+    });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.error).toMatchObject({
+      type: 'Error',
+      message: 'ARCADE_API_KEY is missing or empty',
+    });
+    expect(log.error.stack).toContain('ARCADE_API_KEY is missing or empty');
+  });
+
+  it("still serializes an Error logged under pino's `err` key", async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+
+    logger.warn('failed', { err: new Error('boom') });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.err).toMatchObject({ type: 'Error', message: 'boom' });
+  });
+
+  it('leaves non-Error values under `error` untouched', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+
+    logger.warn('failed', { error: { code: 'E42', detail: 'plain object' } });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.error).toEqual({ code: 'E42', detail: 'plain object' });
+  });
+
+  it('normalizes error-like plain objects under `error` while preserving their fields', async () => {
+    const logger = new PinoLogger({ transports: { memory: memoryStream } });
+
+    // Same as pino's stock behavior for `err`: anything with a string `message`
+    // is treated as error-like and gets `type`/`stack`, with own fields kept.
+    logger.warn('failed', { error: { message: 'invalid input', code: 'E42' } });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.error).toMatchObject({ type: 'Object', message: 'invalid input', code: 'E42' });
+  });
+
+  it('allows callers to override the default serializers', async () => {
+    const logger = new PinoLogger({
+      transports: { memory: memoryStream },
+      serializers: { error: () => 'redacted' },
+    });
+
+    logger.warn('failed', { error: new Error('secret') });
+
+    await waitForLogs(memoryStream);
+    const [log] = await memoryStream.listLogs();
+
+    expect(log.error).toBe('redacted');
+  });
+});

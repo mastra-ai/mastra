@@ -30,7 +30,12 @@ import type {
   RunRegistryEntry,
 } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
-import { rebuildRunToolsFromMastra, resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
+import {
+  rebuildRunToolsFromMastra,
+  resolveTool,
+  restoreRequestContext,
+  toolRequiresApproval,
+} from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 import { normalizeModelOutput } from './normalize-model-output';
 
@@ -516,13 +521,18 @@ export function createDurableToolCallStep() {
       const registryRequireToolApproval = registryEntry?.requireToolApproval;
       const effectiveRequireToolApproval =
         registryRequireToolApproval !== undefined ? registryRequireToolApproval : agentOptions.requireToolApproval;
+      // Prefer the live in-process request context. On a cross-process worker
+      // (or a resume after restart) the registry is empty, so fall back to the
+      // persisted `requestContextEntries` snapshot — the same source the tool
+      // rebuild uses — so context-aware approval predicates still see the
+      // request scope captured when the run started.
+      const approvalRequestContext =
+        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
-        requestContext: registryEntry?.requestContext
-          ? Object.fromEntries(
-              [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
-            )
-          : undefined,
+        requestContext: Object.fromEntries(
+          [...approvalRequestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+        ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
         workspace,

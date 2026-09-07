@@ -23,7 +23,7 @@ export interface SessionPreviewDetails {
 function getStatusLabel(status: SessionRowStatus | undefined) {
   if (status === 'initializing') return 'Initializing';
   if (status === 'working') return 'Agent working';
-  if (status === 'ready') return 'Ready';
+  if (status === 'ready') return 'Waiting on you';
   return undefined;
 }
 

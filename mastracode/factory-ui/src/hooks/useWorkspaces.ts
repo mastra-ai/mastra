@@ -39,6 +39,11 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   };
 }
 
+/** Every session row of the repository, factory workspaces and user sessions alike. */
+export function allSessionRows(data: WorkspacesData | undefined): FactoryUserSession[] {
+  return [...(data?.workspaces ?? []), ...(data?.userSessions ?? [])];
+}
+
 async function loadWorkspaces(baseUrl: string, projectRepositoryId: string, signal?: AbortSignal) {
   return splitSessions(await listUserSessions(baseUrl, projectRepositoryId, signal));
 }

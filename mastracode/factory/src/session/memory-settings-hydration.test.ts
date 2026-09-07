@@ -183,9 +183,9 @@ describe('hydrateSessionMemorySettings', () => {
     });
   });
 
-  it('seeds the tenant org from the session row so knowledge capture is scoped to it', async () => {
-    // Without this seed the capture side falls back to the session owner id —
-    // the controller's own id for web chat sessions — and every captured node
+  it('seeds the tenant org from the session row so knowledge curation is scoped to it', async () => {
+    // Without this seed the curation side falls back to the session owner id —
+    // the controller's own id for web chat sessions — and every curated node
     // lands under an org rung the knowledge reader never queries.
     const session = createSession();
     const dependencies = createDependencies();
@@ -236,7 +236,7 @@ describe('hydrateSessionMemorySettings', () => {
   });
 
   it('re-resolves a tagged session whose stored org is blank', async () => {
-    // The coordinator-hydrated early return has to agree with the capture side,
+    // The coordinator-hydrated early return has to agree with the curation side,
     // which trims: a blank org is unresolved, so this session still needs a seed.
     const session = createSession({ factoryProjectId: 'project-1', factoryOrgId: '   ' });
     const dependencies = createDependencies({ row: { orgId: 'org-1', userId: 'user-1' } as never });

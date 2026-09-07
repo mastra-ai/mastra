@@ -3,37 +3,20 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRightIcon, ExternalLinkIcon } from 'lucide-react';
-import { type ReactNode, useMemo } from 'react';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { ArrowRightIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { useExperimentScorerIds } from '@/domains/experiments/hooks/use-experiment-scorer-ids';
+import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
+import { resolveTargetName, TARGET_ICON, TARGET_LABEL } from '@/domains/experiments/utils/target-name';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentFlowChainProps {
   experiment: DatasetExperiment;
   className?: string;
 }
-
-const TARGET_ICON = {
-  agent: AgentIcon,
-  workflow: WorkflowIcon,
-  scorer: ScorersIcon,
-  processor: ProcessorIcon,
-} as const;
-
-const TARGET_LABEL = {
-  agent: 'Agent',
-  workflow: 'Workflow',
-  scorer: 'Scorer',
-  processor: 'Processor',
-} as const;
 
 /** One step's subject: a typed icon (tooltip names the type) plus its label. */
 function Node({
@@ -69,8 +52,7 @@ function Step({ label }: { label: string }) {
   );
 }
 
-const linkClass =
-  'text-neutral5 inline-flex items-center gap-1.5 hover:underline [&>svg]:text-neutral3 [&>svg]:size-3 [&>svg]:shrink-0';
+const linkClass = 'text-neutral5 inline-flex items-center gap-1.5 hover:underline';
 
 /**
  * Reads the experiment as the pipeline it actually is: every dataset item is sent
@@ -79,43 +61,17 @@ const linkClass =
  */
 export function ExperimentFlowChain({ experiment, className }: ExperimentFlowChainProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: agents } = useAgents();
-  const { data: workflows } = useWorkflows();
-  const { data: scorers } = useScorers();
+  const registries = useTargetRegistries();
+  const { scorers } = registries;
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(experiment.datasetId ?? '');
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
-
-  // Scorers are pinned on the experiment at create time, but that field is null
-  // when they resolve from the dataset or the items, so fall back to whichever
-  // scorers actually produced a score.
-  const scorerIds = useMemo(() => {
-    if (experiment.scorerIds?.length) return experiment.scorerIds;
-    if (!scoresByItemId) return [];
-    const ids = new Set<string>();
-    for (const scores of Object.values(scoresByItemId)) {
-      for (const score of scores) ids.add(score.scorerId);
-    }
-    return [...ids].sort();
-  }, [experiment.scorerIds, scoresByItemId]);
+  const scorerIds = useExperimentScorerIds(experiment);
 
   const scorerNames = scorerIds.map(id => scorers?.[id]?.scorer?.config?.name ?? id);
 
   const targetType = experiment.targetType;
   const targetId = experiment.targetId;
 
-  const targetName = () => {
-    if (!targetId) return 'External (caller-run)';
-    switch (targetType) {
-      case 'agent':
-        return agents?.[targetId]?.name ?? targetId;
-      case 'workflow':
-        return workflows?.[targetId]?.name ?? targetId;
-      case 'scorer':
-        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
-      default:
-        return targetId;
-    }
-  };
+  const targetName = () => resolveTargetName(experiment, registries);
 
   const targetHref = () => {
     if (!targetId) return null;
@@ -139,15 +95,9 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
     <div className={cn('flex items-center gap-3 overflow-x-auto', className)}>
       <Node icon={<DatasetsIcon />} typeLabel="Dataset">
         {experiment.datasetId ? (
-          <LinkComponent
-            href={paths.datasetLink(experiment.datasetId)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={linkClass}
-          >
+          <LinkComponent href={paths.datasetLink(experiment.datasetId)} className={linkClass}>
             {isDatasetLoading ? <Skeleton className="h-4 w-28" /> : (dataset?.name ?? experiment.datasetId)}
             {experiment.datasetVersion != null && <span className="text-neutral3">(v{experiment.datasetVersion})</span>}
-            <ExternalLinkIcon />
           </LinkComponent>
         ) : (
           <span className="text-neutral3">No dataset</span>
@@ -158,9 +108,8 @@ export function ExperimentFlowChain({ experiment, className }: ExperimentFlowCha
 
       <Node icon={<TargetIcon />} typeLabel={targetTypeLabel}>
         {href ? (
-          <LinkComponent href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          <LinkComponent href={href} className={linkClass}>
             {targetName()}
-            <ExternalLinkIcon />
           </LinkComponent>
         ) : (
           <span className="text-neutral3">{targetName()}</span>

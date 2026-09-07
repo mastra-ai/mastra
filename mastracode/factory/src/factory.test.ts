@@ -9,9 +9,11 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
@@ -61,6 +63,20 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+const projectRouteOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof projectRoutesModule.ProjectRoutes>[0]>,
+);
+vi.mock('./routes/projects', async importOriginal => {
+  const actual = await importOriginal<typeof projectRoutesModule>();
+  class TrackedProjectRoutes extends actual.ProjectRoutes {
+    constructor(options: ConstructorParameters<typeof actual.ProjectRoutes>[0]) {
+      super(options);
+      projectRouteOptions.push(options);
+    }
+  }
+  return { ...actual, ProjectRoutes: TrackedProjectRoutes };
+});
 
 // Track what the factory actually wires as the terminal-stage hook: the
 // cleanup must be constructed by production code (not just by its own unit
@@ -208,6 +224,17 @@ describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
+
+  it('rejects duplicate installed board ids at construction time', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).toThrow("board id 'work' is reserved for a built-in board");
+  });
 });
 
 describe('MastraFactory.prepare', () => {
@@ -253,8 +280,8 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
+    expect(blockingCalls).toHaveLength(3);
+    const blockingCall = blockingCalls[1];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -338,12 +365,11 @@ describe('MastraFactory.prepare', () => {
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
     const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
     expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
-    expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(rules).not.toHaveProperty('work');
+    expect(rules).not.toHaveProperty('review');
     expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(rules).not.toHaveProperty('github');
+    expect(rules).not.toHaveProperty('linear');
   });
 
   it('threads explicitly configured Factory rules without composing handler leaves', async () => {
@@ -838,6 +864,43 @@ describe('MastraFactory.prepare integrations', () => {
     await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
   });
 
+  it('sanitizes an invalid GitHub default branch when resolving a selected repository', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const sourceControlStorage = {
+      installations: { get: vi.fn(async () => installation) },
+      repositories: {
+        upsert: vi.fn(async ({ input }: { input: { defaultBranch: string } }) => input),
+      },
+    };
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage,
+      listInstallationRepos: vi.fn(async () => [
+        {
+          id: 456,
+          fullName: 'acme/api',
+          name: 'api',
+          owner: 'acme',
+          defaultBranch: 'invalid branch',
+          private: false,
+        },
+      ]),
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const repository = await resolveRepository?.({
+      integrationId: 'github',
+      orgId: 'org-1',
+      installationId: installation.id,
+      externalId: '456',
+      slug: 'acme/api',
+    });
+
+    expect(repository?.defaultBranch).toBe('main');
+  });
+
   it('initializes version-control capabilities with integration-scoped storage', async () => {
     const initialize = vi.fn();
     const custom = fakeIntegration({
@@ -954,7 +1017,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -997,7 +1060,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
   });
 
   /**

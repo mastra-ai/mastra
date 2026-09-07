@@ -137,7 +137,18 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     }
   }
 
-  if (typeName === 'ZodString') return generateContextualValue(fieldName);
+  if (typeName === 'ZodString') {
+    const hasDateTimeFormat = (def.checks ?? []).some((check: any) => {
+      const checkDef = check._zod?.def ?? check.def ?? check;
+      return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
+    });
+    if (hasDateTimeFormat) {
+      if (fieldName?.toLowerCase() === 'from') return '2026-01-01T00:00:00.000Z';
+      if (fieldName?.toLowerCase() === 'to') return '2026-01-02T00:00:00.000Z';
+      return '2026-01-01T00:00:00.000Z';
+    }
+    return generateContextualValue(fieldName);
+  }
   if (typeName === 'ZodNumber') {
     // Respect min/max constraints from Zod checks
     let min = -Infinity;
@@ -385,6 +396,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.scorerId = 'test-scorer';
   }
   if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
+  if (route.path.includes(':feedbackId')) params.feedbackId = 'test-feedback';
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';

@@ -13,7 +13,8 @@ import type {
 import type { GithubIssueReconciler } from './issue-reconciler.js';
 import type { GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
 
-export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 5 * 60_000;
+// Webhooks are the primary sync; the sweeps only catch drift, so hourly.
+export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 60 * 60_000;
 const MIN_LEASE_TTL_MS = 30_000;
 const LEASE_KEY = 'github:pull-request-reconcile';
 

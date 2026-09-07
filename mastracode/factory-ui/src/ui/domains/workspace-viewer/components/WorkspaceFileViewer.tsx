@@ -37,7 +37,7 @@ export function WorkspaceFileViewer({
   const isMarkdown = file?.language === 'markdown';
 
   return (
-    <section className="flex h-full min-w-0 flex-col" aria-label="Workspace file viewer">
+    <section className="flex min-h-0 min-w-0 grow flex-col" aria-label="Workspace file viewer">
       <div className="border-border1 flex shrink-0 items-center gap-2 border-b p-1.5">
         <Button
           size="icon-sm"

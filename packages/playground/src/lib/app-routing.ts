@@ -18,6 +18,17 @@ export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArg
   return redirect(`/agents/${params.agentId}/overview${search}`);
 };
 
+export const REVIEW_QUEUE_PATH = '/experiments/review-queue';
+
+/** Deep link into the review queue, optionally preselecting an experiment and featuring one of its results. */
+export const experimentReviewQueueLink = (experimentId?: string, resultId?: string) => {
+  const search = new URLSearchParams();
+  if (experimentId) search.set('experiment', experimentId);
+  if (resultId) search.set('review', resultId);
+  const query = search.toString();
+  return query ? `${REVIEW_QUEUE_PATH}?${query}` : REVIEW_QUEUE_PATH;
+};
+
 export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/overview`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,

@@ -1,4 +1,4 @@
-import { delay } from '@ai-sdk/provider-utils-v5';
+import { delay } from '@ai-sdk/provider-utils-v6';
 import { tool } from '@internal/ai-sdk-v5';
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV2,

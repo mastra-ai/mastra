@@ -16,6 +16,9 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
+const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
+/** Metadata keys mapped to dedicated Langfuse fields; never forwarded as trace metadata. */
+const DEDICATED_METADATA_KEYS = new Set(['userId', 'sessionId', 'threadId', 'traceName', 'version', 'langfuse']);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -251,6 +254,21 @@ export class LangfuseExporter extends BaseExporter {
  * This function mutates the attributes object in place.
  * @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
  */
+/**
+ * Serialize a root span's input/output for the trace-level attributes.
+ * Returns undefined (attribute omitted) for absent values and for values that
+ * cannot be JSON-serialized, so a bad payload never fails the span export.
+ */
+function serializeTraceIo(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function mapMastraToLangfuseAttributes(
   attributes: Record<string, any>,
   span: AnyExportedSpan,
@@ -355,6 +373,20 @@ function mapMastraToLangfuseAttributes(
   // filters. User-provided traceName (set via mastra.metadata.traceName) takes
   // precedence and is preserved.
   if (span.isRootSpan) {
+    // Trace input/output: mirror the root span's input/output onto the trace.
+    // Without this, Langfuse traces have empty trace-level input/output (the
+    // span data only reaches the root OBSERVATION), which breaks LLM-as-a-judge
+    // evaluators mapped to Trace input/output and leaves the trace view without
+    // the top-level request/response. Serialization failures (circular refs,
+    // bigint) skip the attribute rather than failing the span export.
+    const traceInput = serializeTraceIo(span.input);
+    if (traceInput !== undefined) {
+      attributes['langfuse.trace.input'] = traceInput;
+    }
+    const traceOutput = serializeTraceIo(span.output);
+    if (traceOutput !== undefined) {
+      attributes['langfuse.trace.output'] = traceOutput;
+    }
     if (span.type === SpanType.AGENT_RUN) {
       if (!attributes['langfuse.trace.name'] && (span.entityName || span.entityId)) {
         attributes['langfuse.trace.name'] = span.entityName ?? span.entityId;
@@ -374,6 +406,30 @@ function mapMastraToLangfuseAttributes(
       }
       if (span.entityName) {
         attributes['langfuse.trace.metadata.workflowName'] = span.entityName;
+      }
+    }
+
+    // Root-span metadata: forward the remaining mastra.metadata.* keys (runId,
+    // resourceId, user-supplied keys) to langfuse.trace.metadata.* so they are
+    // filterable trace metadata; Langfuse nests unmapped attributes under
+    // metadata.attributes. Dedicated keys, explicit metadata.langfuse.* values,
+    // and the identity keys above take precedence. Root only: Langfuse applies
+    // langfuse.trace.* from any span, so a child span could overwrite the trace.
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(MASTRA_METADATA_PREFIX)) {
+        continue;
+      }
+      const metadataKey = key.slice(MASTRA_METADATA_PREFIX.length);
+      if (DEDICATED_METADATA_KEYS.has(metadataKey) || value === null || value === undefined) {
+        continue;
+      }
+      const traceKey = `langfuse.trace.metadata.${metadataKey}`;
+      if (attributes[traceKey] !== undefined) {
+        continue;
+      }
+      const serialized = serializeTraceIo(value);
+      if (serialized !== undefined) {
+        attributes[traceKey] = serialized;
       }
     }
   }

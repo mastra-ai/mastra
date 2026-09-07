@@ -20,6 +20,8 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
     revision: 1,

@@ -2028,6 +2028,7 @@ describe('createToolCallStep requestContext forwarding', () => {
     expect(capturedOptions!.requestContext).toBe(requestContext);
     expect(capturedOptions!.requestContext!.get('testKey')).toBe('testValue');
     expect(capturedOptions!.requestContext!.get('apiClient')).toEqual({ fetch: expect.any(Function) });
+    expect(capturedOptions).not.toHaveProperty('observe');
     expect(result).toEqual({ result: { ok: true }, ...inputData });
   });
 

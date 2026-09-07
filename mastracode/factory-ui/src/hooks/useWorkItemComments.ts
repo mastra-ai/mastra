@@ -97,6 +97,16 @@ export function useWorkItemComments({
   });
 }
 
+/** Newest-first pages, so a fresh comment belongs at the head of the first one. */
+function prependComment(queryClient: QueryClient, rootKey: QueryKey, comment: WorkItemComment) {
+  queryClient.setQueriesData<CommentsData>({ queryKey: rootKey }, data => {
+    const [newest, ...older] = data?.pages ?? [];
+    if (!data || !newest) return data;
+    if (data.pages.some(page => page.comments.some(existing => existing.id === comment.id))) return data;
+    return { ...data, pages: [{ ...newest, comments: [comment, ...newest.comments] }, ...older] };
+  });
+}
+
 /**
  * Writes nothing into the query cache — a poll tick landing mid-flight would
  * replace the pages wholesale and drop the row. The pending row is rendered
@@ -110,6 +120,7 @@ export function useCreateWorkItemCommentMutation({ workItemId, factoryProjectId 
     mutationKey: createMutationKey(workItemId),
     mutationFn: (input: CreateWorkItemCommentInput) =>
       createWorkItemComment(baseUrl, requireWorkItemId(workItemId), input),
+    onSuccess: comment => prependComment(queryClient, queryKeys.workItemCommentsRoot(workItemId), comment),
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) }),

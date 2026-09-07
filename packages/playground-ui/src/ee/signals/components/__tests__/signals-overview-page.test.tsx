@@ -48,16 +48,10 @@ describe('SignalsOverviewPage', () => {
       render(<SignalsOverviewPage />);
 
       const definitions = screen.getByRole('list', { name: 'Trace signal definitions' });
-      expect(within(definitions).getByText(/what the user is trying to achieve/i)).not.toBeNull();
-      expect(
-        within(definitions).getByText(/whether the interaction was completed, unresolved, or blocked/i),
-      ).not.toBeNull();
-      expect(
-        within(definitions).getByText(
-          /observable actions and patterns in the trace, including tool use, retries, failures, and recovery/i,
-        ),
-      ).not.toBeNull();
-      expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
+      expect(within(definitions).getByText(/what the user wanted from the interaction/i)).not.toBeNull();
+      expect(within(definitions).getByText(/how the interaction ended/i)).not.toBeNull();
+      expect(within(definitions).getByText(/what the agent did in response/i)).not.toBeNull();
+      expect(within(definitions).getByText(/the tone the user expressed during the interaction/i)).not.toBeNull();
     });
 
     it('shows that Trace Intelligence is collecting traces', () => {

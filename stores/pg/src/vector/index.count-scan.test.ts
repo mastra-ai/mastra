@@ -96,7 +96,7 @@ describe('PgVector row counts', () => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       statements.push(sql);
 
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
       if (sql.includes('pg_attribute') && sql.includes('atttypmod')) {
@@ -122,7 +122,7 @@ describe('PgVector row counts', () => {
     await (vectorStore as any).cacheWarmupPromise;
 
     // The warmup did read the catalog...
-    expect(statements.some(sql => sql.includes('information_schema.columns'))).toBe(true);
+    expect(statements.some(sql => sql.includes('pg_attribute') && sql.includes('udt_name'))).toBe(true);
     // ...but never scanned the table for a count it does not use.
     expect(statements.filter(isCountQuery)).toEqual([]);
     // And it still populated the caches it exists for.
@@ -139,7 +139,7 @@ describe('PgVector row counts', () => {
     await vectorStore.query({ indexName, queryVector: [1, 2, 3] });
 
     // The query had to look the index up for itself, and it read the catalog to do it.
-    expect(statements.some(sql => sql.includes('information_schema.columns'))).toBe(true);
+    expect(statements.some(sql => sql.includes('pg_attribute') && sql.includes('udt_name'))).toBe(true);
     expect(statements.filter(isCountQuery)).toEqual([]);
   });
 

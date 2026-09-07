@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { CommentQuote } from '@mastra/playground-ui/components/Comment';
 import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@mastra/playground-ui/components/Composer';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUp } from 'lucide-react';
@@ -7,9 +8,8 @@ import { useRef, useState } from 'react';
 import { useFactoryMembers } from '../../../../../hooks/useFactoryMembers';
 import { useCreateWorkItemCommentMutation } from '../../../../../hooks/useWorkItemComments';
 import { ComposerSuggestions } from '../../../chat/components/ComposerParts';
-import { CommentQuote } from './CommentQuote';
-import type { CommentQuoteDraft } from './CommentQuote';
 import { mentionLabel } from './mentions';
+import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
 
@@ -85,7 +85,10 @@ export function CommentComposer({
       }}
       aria-label="Add a comment"
     >
-      <ComposerBox data-composing={variant === 'panel' && focused ? 'true' : undefined} className="rounded-xl">
+      <ComposerBox
+        data-composing={variant === 'panel' && focused ? 'true' : undefined}
+        className={variant === 'thread' ? 'rounded-none border-x-0 border-b-0' : 'rounded-xl'}
+      >
         <ComposerSuggestions
           items={mentions.suggestions.map(member => ({ id: member.id, label: mentionLabel(member) }))}
           activeIndex={mentions.activeIndex}
@@ -105,6 +108,7 @@ export function CommentComposer({
           value={draft}
           placeholder="Add a comment…"
           aria-label="Comment"
+          autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
           className={cn('text-ui-sm', variant === 'panel' && 'min-h-9 pt-2')}
           onChange={event => {

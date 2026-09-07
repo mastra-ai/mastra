@@ -93,6 +93,12 @@ Use `mapUserToResourceId` to derive this value from the verified user. After aut
 - Uses that value to scope memory and thread operations.
 - Ignores a conflicting resource ID supplied by the client.
 
+:::warning
+
+If `server.auth` is configured without `mapUserToResourceId`, there's no server-derived resource ID. Built-in routes then use the resource ID from the request itself (for example `memory.resource` in the body), so any authenticated caller can read and write threads under any resource ID. Mastra logs a warning at startup in this state. Always configure `mapUserToResourceId` when more than one user shares a deployment.
+
+:::
+
 Choose the narrowest boundary that matches how people should share state:
 
 | Desired boundary | Example mapping |

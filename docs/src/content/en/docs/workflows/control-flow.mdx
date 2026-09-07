@@ -805,6 +805,22 @@ export const batchProcessWorkflow = createWorkflow({
 1. The nested workflow's final output becomes one element in the result array
 1. After all nested workflows complete, the next step in the parent receives the full array
 
+## Labeling control-flow entries
+
+Every control-flow method accepts an optional final argument with a stable `id`, a `description`, and JSON-serializable `metadata`. These fields identify and describe the graph entry itself, separate from the steps inside it. They survive serialization and storage and appear in `serializedStepGraph`. They have no effect on execution.
+
+```typescript
+workflow
+  .parallel([validateStep, enrichStep], {
+    id: 'independent-enrichment',
+    description: 'Run independent enrichment tasks concurrently',
+    metadata: { title: 'Independent enrichment' },
+  })
+  .sleep(5000, { id: 'wait-before-retry', description: 'Pause before retrying' })
+```
+
+Visual editors and review tools can key layout and selection state by `id` and render `metadata.title` as a display label. For `.foreach()`, pass the fields in the same options object as `concurrency`. For `.map()`, `.sleep()`, and `.sleepUntil()`, a supplied `id` replaces the generated entry id.
+
 ## Choosing the right pattern
 
 Use this section as a reference for selecting the appropriate control flow method.

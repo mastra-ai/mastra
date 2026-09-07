@@ -14,6 +14,7 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 const ITEM_ID = 'item-1';
+const PROJECT_ID = 'project-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 
 const item: WorkItem = {
@@ -30,6 +31,8 @@ const item: WorkItem = {
   stageHistory: [],
   sessions: {},
   metadata: {},
+  triageType: null,
+  acceptedAt: null,
   commentCount: 2,
   feedActivityAt: null,
   revision: 1,
@@ -80,7 +83,7 @@ describe('CommentList', () => {
     );
     renderList();
 
-    const log = await screen.findByRole('log', { name: 'Comments' });
+    const log = await screen.findByRole('log', { name: 'Activity' });
     const first = await within(log).findByText('first words');
     const second = within(log).getByText('second words');
     expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -179,7 +182,32 @@ describe('CommentList', () => {
     expect(patches[0]).toEqual({ body: 'better', expectedRevision: 1, mentions: [] });
   });
 
-  it('refuses an emptied edit instead of closing on it', async () => {
+  it('saves an edit on Enter and keeps Shift+Enter for a new line', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.patch(`${COMMENTS_URL}/c1`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({ comment: comment('c1', 'first\nsecond') });
+      }),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'first{Shift>}{Enter}{/Shift}second');
+    expect(editor).toHaveValue('first\nsecond');
+    expect(patches).toHaveLength(0);
+
+    await user.type(editor, '{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toMatchObject({ body: 'first\nsecond' });
+  });
+
+  it('locks an emptied edit instead of closing on it', async () => {
     const patches: unknown[] = [];
     server.use(
       http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
@@ -192,11 +220,12 @@ describe('CommentList', () => {
     renderList();
 
     await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
-    await user.clear(screen.getByRole('textbox', { name: 'Edit comment' }));
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, '{Enter}');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Comment body must not be empty.');
-    expect(screen.getByRole('textbox', { name: 'Edit comment' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(editor).toBeInTheDocument();
     expect(patches).toEqual([]);
   });
 
@@ -233,7 +262,7 @@ describe('CommentList', () => {
       }),
     );
     const user = userEvent.setup();
-    renderList();
+    const { client } = renderList();
 
     await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
     const editor = screen.getByRole('textbox', { name: 'Edit comment' });
@@ -246,6 +275,42 @@ describe('CommentList', () => {
 
     release();
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    await waitForMutationsIdle(client);
+    expect(patches).toBe(1);
+  });
+
+  it('stays locked while the mention roster loads, so a second Enter sends nothing', async () => {
+    let patches = 0;
+    let releaseRoster = () => {};
+    const roster = new Promise<void>(resolve => {
+      releaseRoster = resolve;
+    });
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/mention-roster`, async () => {
+        await roster;
+        return HttpResponse.json({ members: [{ id: 'user-ada', name: 'Ada' }] });
+      }),
+      http.patch(`${COMMENTS_URL}/c1`, () => {
+        patches += 1;
+        return HttpResponse.json({ comment: comment('c1', 'ping @Ada') });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderList({ factoryProjectId: PROJECT_ID });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'ping @Ada{Enter}');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled());
+    expect(editor).toHaveAttribute('readonly');
+    await user.type(editor, '{Enter}');
+    expect(patches).toBe(0);
+
+    releaseRoster();
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    await waitForMutationsIdle(client);
     expect(patches).toBe(1);
   });
 

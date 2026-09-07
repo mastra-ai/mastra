@@ -56,5 +56,38 @@ export function createSkillsTests({ storage }: { storage: MastraStorage }) {
 
       expect(await skillsStorage.countVersions(skill.id)).toBe(1);
     });
+
+    it('getVersions returns all requested versions and omits missing ids', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const skill = createSkill(`skill-batch-${i}-${Date.now()}`);
+        await skillsStorage.create({ skill });
+        const latest = await skillsStorage.getLatestVersion(skill.id);
+        ids.push(latest!.id);
+      }
+
+      const versions = await skillsStorage.getVersions([...ids, 'missing-version-id']);
+      expect(versions.map(v => v.id).sort()).toEqual([...ids].sort());
+      expect(await skillsStorage.getVersions([])).toEqual([]);
+    });
+
+    it('listResolved resolves published skills with their active version in one batch', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const skill = createSkill(`skill-published-${i}-${Date.now()}`);
+        await skillsStorage.create({ skill });
+        const latest = await skillsStorage.getLatestVersion(skill.id);
+        await skillsStorage.update({ id: skill.id, activeVersionId: latest!.id, status: 'published' });
+        ids.push(skill.id);
+      }
+
+      const result = await skillsStorage.listResolved({ perPage: false, status: 'published' });
+      expect(result.skills).toHaveLength(5);
+      for (const skill of result.skills) {
+        expect(ids).toContain(skill.id);
+        expect(skill.resolvedVersionId).toBe(skill.activeVersionId);
+        expect(skill.instructions).toBe('Original instructions');
+      }
+    });
   });
 }

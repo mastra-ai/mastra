@@ -8,6 +8,7 @@ export interface ToolInvocationPartRendererProps {
   part: ToolInvocationPart;
   metadata?: MessageMetadata;
   dataParts?: ReadonlyArray<DataMessagePart>;
+  readOnly?: boolean;
 }
 
 /**
@@ -15,7 +16,12 @@ export interface ToolInvocationPartRendererProps {
  * `toolInvocation` payload (`args`/`result`) into `ToolCard`'s plain
  * `input`/`output` contract.
  */
-export const ToolInvocationPartRenderer = ({ part, metadata, dataParts }: ToolInvocationPartRendererProps) => {
+export const ToolInvocationPartRenderer = ({
+  part,
+  metadata,
+  dataParts,
+  readOnly,
+}: ToolInvocationPartRendererProps) => {
   const inv = part.toolInvocation;
   const input = 'args' in inv ? inv.args : undefined;
   const output = 'result' in inv ? inv.result : undefined;
@@ -29,6 +35,7 @@ export const ToolInvocationPartRenderer = ({ part, metadata, dataParts }: ToolIn
       state={inv.state}
       metadata={metadata}
       dataParts={dataParts}
+      readOnly={readOnly}
     />
   );
 };

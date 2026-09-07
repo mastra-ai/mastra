@@ -74,6 +74,18 @@ export function ExperimentResultPanel({
               Trace
             </Button>
           )}
+          {canFlag && (
+            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)}>
+              <ClipboardCheck />
+              Flag for Review
+            </Button>
+          )}
+          {result.status === 'needs-review' && onOpenInReview && (
+            <Button size="md" variant="primary" onClick={onOpenInReview}>
+              <ExternalLinkIcon />
+              Review
+            </Button>
+          )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         </ButtonsGroup>
       </DataPanel.Header>
@@ -126,49 +138,31 @@ export function ExperimentResultPanel({
 
               {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
 
-              {(result.status || tags.length > 0 || canFlag) && (
+              {(result.status || tags.length > 0) && (
                 <div className="grid gap-2">
                   <DataPanel.SectionHeading icon={<TagIcon />} className="mb-2">
                     Review
                   </DataPanel.SectionHeading>
-                  {(result.status || tags.length > 0) && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {result.status && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            result.status === 'needs-review'
-                              ? 'bg-orange-500/10 text-orange-400'
-                              : result.status === 'complete'
-                                ? 'bg-accent1/10 text-accent1'
-                                : 'bg-neutral3/10 text-neutral4'
-                          }`}
-                        >
-                          {result.status}
-                        </span>
-                      )}
-                      {tags.map(tag => (
-                        <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {canFlag && (
-                    <div>
-                      <Button size="sm" onClick={() => onFlagForReview!(result.id)}>
-                        <ClipboardCheck />
-                        Flag for Review
-                      </Button>
-                    </div>
-                  )}
-                  {result.status === 'needs-review' && onOpenInReview && (
-                    <div>
-                      <Button size="sm" onClick={onOpenInReview}>
-                        <ExternalLinkIcon />
-                        Review
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {result.status && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          result.status === 'needs-review'
+                            ? 'bg-orange-500/10 text-orange-400'
+                            : result.status === 'complete'
+                              ? 'bg-accent1/10 text-accent1'
+                              : 'bg-neutral3/10 text-neutral4'
+                        }`}
+                      >
+                        {result.status}
+                      </span>
+                    )}
+                    {tags.map(tag => (
+                      <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -312,12 +312,157 @@ mastra-server:
     targetCPUUtilizationPercentage: 80
 ```
 
+## Background workers
+
+By default, the server runs Mastra's background workers in-process. The `mastra-workers` subchart moves them into their own deployments (one per role) so workflow orchestration, scheduled workflows, and background tasks scale independently of the API. See [Workers](/docs/deployment/workers) for what each role does.
+
+Workers are **opt-in**: nothing is deployed unless you enable them.
+
+### Requirements
+
+Before enabling workers:
+
+- **A pull-capable PubSub backend** configured in your Mastra application: Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. Workers pull events from the broker, so request/response-only backends won't work. Put its connection string (for example `REDIS_URL`) in the same Secret the Server uses.
+- **A storage backend that supports the `schedules` domain**, if you enable the scheduler: PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, or Convex. Redis and ClickHouse don't support it, and the scheduler won't find due schedules on them.
+- **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process and every worker runs twice, double-firing every cron schedule. The chart refuses to render if you enable workers without it.
+
+:::warning Redis eviction policy
+Set `maxmemory-policy` to `noeviction` (or a `volatile-*` policy) on Redis or Valkey. The common default `allkeys-lru` evicts unacknowledged workflow events under memory pressure, and runs then stall with no error on either side. On managed Redis this is a parameter-group setting.
+:::
+
+### Build the worker artifact into your image
+
+Workers run the **same image** as the Server, but a different entrypoint inside it. `mastra build` alone doesn't produce that entrypoint, so add a second build and redirect its output:
+
+```bash
+mastra build --studio
+mastra worker build --output-dir .mastra/worker
+```
+
+`--output-dir` is required. Without it, `mastra worker build` writes to `.mastra/output` and **overwrites the server bundle**, leaving you with a worker-only image.
+
+The two bundles declare different dependencies — the worker pulls in packages such as `bufferutil` and `pg` that the server bundle doesn't list — so each needs its own `npm install`. Node resolves modules upward from the entrypoint, so the worker finds its packages in `.mastra/worker/node_modules`:
+
+```dockerfile title="Dockerfile"
+FROM node:22-slim
+WORKDIR /app
+
+# Server bundle and its dependencies.
+COPY .mastra/output/package.json .mastra/output/package-lock.json* ./
+RUN npm install --force --prefer-offline --no-audit --no-fund
+COPY .mastra/output ./
+
+# Worker bundle and its dependencies, which differ from the server's.
+COPY .mastra/worker/package.json .mastra/worker/package-lock.json* ./.mastra/worker/
+RUN cd .mastra/worker && npm install --force --prefer-offline --no-audit --no-fund
+COPY .mastra/worker ./.mastra/worker
+
+EXPOSE 4111
+CMD ["node", "index.mjs"]
+```
+
+```text title=".dockerignore"
+.mastra/output/node_modules
+.mastra/worker/node_modules
+```
+
+The server still starts with `CMD ["node", "index.mjs"]` and Studio assets stay at `/app/studio`, so nothing about the Server or Studio deployment changes. The worker entrypoint lands at `/app/.mastra/worker/index.mjs`, which is the chart's default `mastra-workers.command`. If you lay your image out differently, override that value to match.
+
+:::warning Use a new tag for each build
+Push each build under its own tag. The chart's default `imagePullPolicy` is `IfNotPresent`, so re-pushing an existing tag leaves nodes running the cached digest and your worker pods keep crashing on the old bundle.
+:::
+
+### Enable workers
+
+Workers run the **same image** as the Server — `mastra build` emits the worker entrypoint alongside the server entrypoint. Setting `global.image` once keeps every component on the same build:
+
+```yaml title="mastra-values.yaml"
+global:
+  image:
+    repository: your-registry/my-mastra-app
+    tag: '1.0.0'
+
+mastra-server:
+  existingSecret: mastra-app-env
+  # Required: stop the API from also running workers in-process.
+  workers:
+    splitDeployment: true
+
+mastra-workers:
+  enabled: true
+  server:
+    # Must match mastra-server.existingSecret; the chart verifies this.
+    existingSecret: mastra-app-env
+  roles:
+    orchestration:
+      enabled: true
+      replicaCount: 2
+    scheduler:
+      enabled: true
+    backgroundTasks:
+      enabled: true
+```
+
+Worker pods mount the **Server's** ConfigMap and Secret rather than defining their own, so their configuration is identical to the API's by construction. You never maintain two copies of the same environment.
+
+### Roles and scaling
+
+| Role | Scales | Notes |
+| - | - | - |
+| `orchestration` | Yes | Consumes the `workflows` topic and calls back into the API to execute steps. The consumer group distributes work across replicas. |
+| `scheduler` | **No — always 1** | Polls storage for due cron schedules. The chart pins it to one replica and uses the `Recreate` strategy, because a rolling update would briefly run two schedulers and fire every schedule twice. |
+| `backgroundTasks` | Yes | Executes agent tool calls marked `background: { enabled: true }` off the request path. |
+
+The two scalable roles support autoscaling. Utilization targets need matching resource requests, and the chart fails the render if you enable autoscaling without them:
+
+```yaml title="mastra-values.yaml"
+mastra-workers:
+  roles:
+    orchestration:
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 80
+```
+
+CPU utilization is a rough proxy for queue depth. To scale on the number of pending events, use [KEDA](https://keda.sh/) with a Redis Streams scaler against the same consumer group.
+
+### Separate worker images
+
+If your build produces separate API and worker images rather than one image with both entrypoints, the chart's default lockstep check will reject the mismatch. Opt out explicitly:
+
+```yaml title="mastra-values.yaml"
+mastra-workers:
+  image:
+    tag: worker
+    # Server and workers intentionally run different builds; keeping them on the
+    # same source commit becomes your responsibility.
+    allowServerSkew: true
+  command: ['node', 'index.mjs'] # match your worker image's entrypoint
+```
+
+The guard exists because a version skew between the API and the workers is silent on both sides: the workers start, consume the queue, and run stale step code against the new API.
+
+### Restarting workers after a config change
+
+Worker pods don't restart automatically when the Server's ConfigMap or Secret changes — Helm's checksum annotations only cover objects a chart owns, and those belong to `mastra-server`. Roll them yourself:
+
+```bash
+kubectl rollout restart deploy -n mastra   -l app.kubernetes.io/name=mastra-workers,app.kubernetes.io/instance=mastra
+```
+
 ## Production checklist
 
 - Reference credentials with `existingSecret` instead of plaintext values.
 - Set resource requests via `mastra-server.resources` and `mastra-studio.resources`.
 - Prefer standalone cert-manager and ingress controller installs over the bundled toggles; CRD lifecycle inside an umbrella chart complicates upgrades.
 - Enable multiple replicas only after configuring shared storage, distributed PubSub, shared cache, and the required process roles.
+- When running background workers, set `mastra-server.workers.splitDeployment: true`, run exactly one scheduler, and set `maxmemory-policy` to `noeviction` on Redis or Valkey.
 - The chart applies hardened defaults: non-root containers, read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
 
 ## Upgrade and uninstall
@@ -349,6 +494,10 @@ Your database and object store are unaffected, because the chart never manages s
 - **Pods crash with `Cannot find module '@libsql/linux-x64-gnu'` (or similar).** The image contains `node_modules` built for a different platform. Install dependencies inside the image and exclude host-built `node_modules` via `.dockerignore`, then rebuild with `--platform` matching your nodes.
 - **Pods crash-loop with a license error.** Production mode requires a valid `MASTRA_EE_LICENSE` in your secret when enterprise features are configured.
 - **Studio shows the server API instead of the UI.** The image was built without Studio assets. Rebuild with `mastra build --studio`.
+- **Worker pods crash-loop with `Cannot find module '/app/.mastra/worker/index.mjs'`.** The image was built without the worker artifact. Run `mastra worker build --output-dir .mastra/worker` and copy it into the image, or override `mastra-workers.command` to match your layout.
+- **Scheduled workflows fire twice.** The API is still running workers in-process alongside the worker Deployments. Set `mastra-server.workers.splitDeployment: true`.
+- **Workflows stall with no error.** The orchestration worker can't reach the API, or Redis evicted unacknowledged events. Check `mastra-workers.server.port` against `mastra-server.service.port`, confirm any restrictive NetworkPolicy admits worker pods, and verify `maxmemory-policy` is `noeviction`.
+- **Worker pods stay in `CreateContainerConfigError`.** They mount the Server's ConfigMap and Secret, so `mastra-workers.server.existingSecret` must match `mastra-server.existingSecret`, and `mastra-workers` can't be installed as a standalone release.
 - **Ingress has no address.** Confirm an ingress controller is running, or set `ingressController.install=true`.
 - **Certificates stay pending in gateway mode.** Some Gateway controllers can't serve ACME challenges until a listener certificate exists. Check the chart's per-cloud presets and release notes for the bootstrap procedure on your platform.
 
@@ -358,3 +507,5 @@ Your database and object store are unaffected, because the chart never manages s
 - [Mastra server](/docs/deployment/mastra-server): Build output and server behavior
 - [Deployment overview](/docs/deployment/overview)
 - [Workers](/docs/deployment/workers): Split background processing into separate containers
+- [Worker authentication](/docs/auth/workers): Secure worker-to-API communication
+- [Scheduled workflows](/docs/workflows/scheduled-workflows): Declare cron schedules on workflows

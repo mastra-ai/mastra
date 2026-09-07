@@ -10,6 +10,7 @@ const projectRoutes = (
   seed: FactoryStorageTestSeed,
   versionControlIntegrationIds?: string[],
   sessionRetirement?: ConstructorParameters<typeof ProjectRoutes>[0]['sessionRetirement'],
+  resolveRepository?: ConstructorParameters<typeof ProjectRoutes>[0]['resolveRepository'],
 ) =>
   new ProjectRoutes({
     auth: fakeRouteAuth(),
@@ -17,6 +18,7 @@ const projectRoutes = (
     sourceControl: seed.sourceControl,
     versionControlIntegrationIds,
     sessionRetirement,
+    resolveRepository,
   }).routes();
 
 describe('ProjectRoutes', () => {
@@ -222,15 +224,18 @@ describe('ProjectRoutes', () => {
       externalId: 'gl-1',
       accountName: 'acme-group',
     });
-    const githubRepository = await github.repositories.upsert({
-      orgId: 'org-1',
-      input: {
-        installationId: githubInstallation.id,
-        externalId: 'repo-1',
-        slug: 'acme/api',
-        defaultBranch: 'main',
-      },
-    });
+    const resolveRepository = vi.fn(
+      async ({
+        orgId,
+        installationId,
+        externalId,
+        slug,
+      }: Parameters<NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['resolveRepository']>>[0]) =>
+        github.repositories.upsert({
+          orgId,
+          input: { installationId, externalId, slug, defaultBranch: 'main' },
+        }),
+    );
     const gitlabRepository = await gitlab.repositories.upsert({
       orgId: 'org-1',
       input: {
@@ -245,7 +250,7 @@ describe('ProjectRoutes', () => {
       context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
       await next();
     });
-    mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab']));
+    mountApiRoutes(app as never, projectRoutes(seed, ['github', 'gitlab'], undefined, resolveRepository));
 
     const connect = async (integrationId: string, installationId: string) => {
       const response = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
@@ -278,7 +283,30 @@ describe('ProjectRoutes', () => {
       expect(response.status).toBe(201);
       return ((await response.json()) as { projectRepository: { id: string } }).projectRepository;
     };
-    const githubLink = await link(githubConnection.id, githubRepository.id, 'release');
+    const githubLinkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${githubConnection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          repository: { externalId: 'repo-1', slug: 'acme/api' },
+          branch: 'release',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/workspace/api',
+          setupCommand: 'pnpm install',
+          teardownCommand: 'pnpm local worktree teardown',
+        }),
+      },
+    );
+    expect(githubLinkResponse.status).toBe(201);
+    const githubLink = ((await githubLinkResponse.json()) as { projectRepository: { id: string } }).projectRepository;
+    expect(resolveRepository).toHaveBeenCalledWith({
+      integrationId: 'github',
+      orgId: 'org-1',
+      installationId: githubInstallation.id,
+      externalId: 'repo-1',
+      slug: 'acme/api',
+    });
     await link(gitlabConnection.id, gitlabRepository.id, 'trunk');
 
     const listResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`);

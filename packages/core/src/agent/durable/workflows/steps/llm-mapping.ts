@@ -84,12 +84,20 @@ export function createDurableLLMMappingStep() {
         state: SerializableDurableState;
       };
 
-      // 1. Deserialize message list
-      const messageList = new MessageList({
-        threadId: state.threadId,
-        resourceId: state.resourceId,
-      });
-      messageList.deserialize(llmOutput.messageListState);
+      // 1. Deserialize message list.
+      // Reuse the run's existing MessageList when the in-process registry has
+      // one (same pattern as resolve-runtime and finalize-run) so external
+      // consumers holding a reference to it — e.g. the stream adapter's
+      // MastraModelOutput, which reads it for scoringData — keep seeing state
+      // updates. A fresh instance here would orphan those references.
+      const registryEntry = globalRunRegistry.get(_runId);
+      const messageList = (
+        registryEntry?.messageList ??
+        new MessageList({
+          threadId: state.threadId,
+          resourceId: state.resourceId,
+        })
+      ).deserialize(llmOutput.messageListState);
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
@@ -99,7 +107,6 @@ export function createDurableLLMMappingStep() {
 
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
-      const registryEntry = globalRunRegistry.get(_runId);
       const registryTools = registryEntry?.tools;
 
       // Rebuild the MODEL_STEP span early so MAPPING child spans can nest under it

@@ -3,14 +3,17 @@
  * and agent-controller reads are driven through MSW so the card exercises the
  * same joins used by the live sidebar without adding a hover-time request.
  */
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { ReactNode } from 'react';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
 import { WorkspacesSection } from '../WorkspacesSection';
 import {
@@ -50,17 +53,28 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
   );
 }
 
-function renderSection() {
+afterEach(() => vi.restoreAllMocks());
+
+function mockMobileViewport() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+function renderSection(wrap: (section: ReactNode) => ReactNode = section => section) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`]}>
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={
-            <ChatSessionConfigProvider>
-              <WorkspacesSection />
-            </ChatSessionConfigProvider>
-          }
+          element={<ChatSessionConfigProvider>{wrap(<WorkspacesSection />)}</ChatSessionConfigProvider>}
         />
       </Routes>
     </MemoryRouter>,
@@ -165,6 +179,24 @@ describe('Workspace session hover details', () => {
       await user.tab();
 
       await waitFor(() => expect(screen.queryByLabelText(`${reviewName} session details`)).not.toBeInTheDocument());
+    });
+  });
+
+  describe('on a touch viewport', () => {
+    it('leaves the row bare instead of opening details under the tap', async () => {
+      mockMobileViewport();
+      stubSessionDetails(new Date().toISOString());
+      const user = userEvent.setup();
+      const { client } = renderSection(section => (
+        <MainSidebarProvider storageKey="session-hover-test">{section}</MainSidebarProvider>
+      ));
+
+      const workRow = await screen.findByRole('button', { name: workName });
+      await waitForMutationsIdle(client);
+      await user.hover(workRow);
+      await user.tab();
+
+      expect(screen.queryByLabelText(`${workName} session details`)).not.toBeInTheDocument();
     });
   });
 

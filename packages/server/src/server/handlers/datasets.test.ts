@@ -23,6 +23,7 @@ import {
   FINALIZE_EXPERIMENT_ROUTE,
   LIST_EXPERIMENT_RESULTS_ROUTE,
   UPDATE_DATASET_ROUTE,
+  UPDATE_EXPERIMENT_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
@@ -38,6 +39,64 @@ describe('Datasets Handlers', () => {
     mastra = new Mastra({
       logger: false,
       storage: mockStorage,
+    });
+  });
+
+  describe('PATCH /datasets/:datasetId/experiments/:experimentId', () => {
+    async function createNamedExperiment() {
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+      await dataset.addItem({ input: { prompt: 'hello' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        name: 'before',
+        description: 'before desc',
+      } as any)) as any;
+      return { dataset, experimentId: created.experimentId as string };
+    }
+
+    it('should update the experiment name and return the updated record', async () => {
+      // Given an experiment with an initial name
+      const { dataset, experimentId } = await createNamedExperiment();
+
+      // When the name is patched
+      const updated = (await UPDATE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+        name: 'after',
+      } as any)) as any;
+
+      // Then the record reflects the new name and keeps the description
+      expect(updated.name).toBe('after');
+      expect(updated.description).toBe('before desc');
+      const reloaded = (await GET_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any)) as any;
+      expect(reloaded.name).toBe('after');
+    });
+
+    it('should return 404 when the experiment does not exist', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+
+      await expect(
+        UPDATE_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: 'missing',
+          name: 'after',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('should reject an invalid body before the handler', () => {
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ name: 42 }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ metadata: [] }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ status: 'completed' }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ name: 'ok', description: 'd' }).success).toBe(true);
     });
   });
 

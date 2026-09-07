@@ -82,6 +82,13 @@ export const mastra = new Mastra({
     description:
       'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
   },
+  {
+    name: 'serializers',
+    type: "pino.LoggerOptions['serializers']",
+    isOptional: true,
+    description:
+      'Custom Pino serializers, merged over the defaults. By default the `error` key uses Pino’s standard error serializer (alongside the built-in `err`), so `logger.warn("...", { error })` records the type, message, and stack instead of an empty object.',
+  },
 ]}
 />
 

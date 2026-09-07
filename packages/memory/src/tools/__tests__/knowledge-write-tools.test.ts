@@ -1,7 +1,7 @@
 import { InMemoryStore, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../..';
 import { createKnowledgeWriteTools } from '../../processors/observational-memory/subconscious/knowledge-write-tools';
@@ -23,7 +23,7 @@ async function fixture() {
 }
 
 describe('Subconscious knowledge write tools', () => {
-  it('keeps snapshots of all nine public input schemas', async () => {
+  it('keeps snapshots of all ten public input schemas', async () => {
     const { tools } = await fixture();
     // Snapshot the resolved JSON Schema, not the wrapper: `tool.inputSchema` serializes to
     // an opaque `JsonSchemaWrapper` whose snapshot never changes when the schema does.
@@ -35,6 +35,167 @@ describe('Subconscious knowledge write tools', () => {
         ]),
       ),
     ).toMatchSnapshot();
+  });
+
+  it('creates a node and first record with code-owned provenance and capture time', async () => {
+    const { store, tools } = await fixture();
+    const before = Date.now();
+
+    const result = (await tools.knowledge_create!.execute?.(
+      {
+        name: 'Atlas Launch',
+        kind: 'project',
+        text: 'Project Atlas launches on 2026-09-15.',
+        nodeScope: 'resource',
+        scope: 'resource',
+        when: '2026-09-15T00:00:00.000Z',
+      },
+      {} as any,
+    )) as any;
+
+    expect(result.node).toMatchObject({
+      name: 'Atlas Launch',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    expect(result.record).toMatchObject({
+      node: result.node.id,
+      text: 'Project Atlas launches on 2026-09-15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'alpha',
+      when: new Date('2026-09-15T00:00:00.000Z'),
+    });
+    expect(result.record.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(await store.getNode(result.node.id)).toMatchObject({ name: 'Atlas Launch' });
+  });
+
+  it('preserves node-first partial-write semantics when the first record fails', async () => {
+    const { store, tools } = await fixture();
+    vi.spyOn(store, 'appendKnowledge').mockRejectedValueOnce(new Error('record write failed'));
+
+    await expect(
+      tools.knowledge_create!.execute?.(
+        { name: 'Partial Atlas', kind: 'project', text: 'This record fails.' },
+        {} as any,
+      ),
+    ).rejects.toThrow('record write failed');
+
+    expect(await store.resolveNode({ name: 'Partial Atlas', scope })).toBeTruthy();
+  });
+
+  it('rejects a non-RFC 3339 `when` at schema validation for create and append, before execute', async () => {
+    const { store, source, tools } = await fixture();
+    const createNode = vi.spyOn(store, 'createNode');
+    const append = vi.spyOn(store, 'appendKnowledge');
+
+    // `format: 'date-time'` alone is a silent no-op under the tool validator's Ajv (no formats
+    // plugin), so this proves the schema itself refuses before either tool body runs.
+    for (const when of ['next tuesday', '2026-09-15', '2026-09-15 10:00', 'not-a-date']) {
+      const created = (await tools.knowledge_create!.execute?.(
+        { name: `Bad ${when}`, kind: 'project', text: 'x', when },
+        {} as any,
+      )) as any;
+      expect(created?.error).toBe(true);
+      expect(created?.message).toContain('when');
+
+      const appended = (await tools.knowledge_append!.execute?.(
+        { node: source.id, text: 'x', when },
+        {} as any,
+      )) as any;
+      expect(appended?.error).toBe(true);
+      expect(appended?.message).toContain('when');
+    }
+    expect(createNode).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+
+    // Valid RFC 3339 values still reach execute and are stamped as real dates.
+    const ok = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Landed.', when: '2026-09-15T10:00:00+02:00' },
+      {} as any,
+    )) as any;
+    expect(ok.when).toEqual(new Date('2026-09-15T08:00:00.000Z'));
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores forged scope, provenance, timestamp, and version arguments at the tool boundary', async () => {
+    // A curator persuaded by an injected observation can only emit arguments the schema allows.
+    // Every code-owned field here is either rejected outright (additionalProperties: false) or
+    // overwritten by the tool's own scope/provenance/timestamp before storage sees it.
+    const { store, source, tools } = await fixture();
+    const createNode = vi.spyOn(store, 'createNode');
+    const forged = {
+      organizationId: 'evil-org',
+      sourceThreadId: 'victim-thread',
+      capturedAt: '1999-01-01T00:00:00.000Z',
+      version: 999,
+      maxScope: 'org',
+      deletedBy: 'admin',
+    };
+
+    for (const [tool, base] of [
+      ['knowledge_create', { name: 'Forged', kind: 'project', text: 'x' }],
+      ['knowledge_append', { node: source.id, text: 'x' }],
+    ] as const) {
+      for (const [key, value] of Object.entries(forged)) {
+        const result = (await tools[tool]!.execute?.({ ...base, [key]: value }, {} as any)) as any;
+        expect({ tool, key, error: result?.error, message: result?.message }).toMatchObject({
+          error: true,
+          message: expect.stringContaining(key),
+        });
+      }
+    }
+    expect(createNode).not.toHaveBeenCalled();
+
+    // Scope levels are the only scope input the model has, and the ceiling still wins.
+    for (const tool of ['knowledge_create', 'knowledge_append'] as const) {
+      const base =
+        tool === 'knowledge_create' ? { name: 'Escalate', kind: 'project', text: 'x' } : { node: source.id, text: 'x' };
+      await expect(tools[tool]!.execute?.({ ...base, scope: 'org' }, {} as any)).rejects.toThrow(/ceiling|scope/i);
+      const bogus = (await tools[tool]!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
+      expect(bogus?.error).toBe(true);
+    }
+
+    // What actually lands carries the curator's own provenance, never the observation's claims.
+    const before = Date.now();
+    const appended = (await tools.knowledge_append!.execute?.(
+      { node: source.id, text: 'Claims to come from victim-thread in 1999.', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(appended).toMatchObject({
+      sourceThreadId: 'alpha',
+      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      deletedAt: undefined,
+    });
+    expect(appended.capturedAt.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
+    const { store, tools } = await fixture();
+    const foreign = await store.createNode({
+      name: 'Other Tenant',
+      kind: 'project',
+      scope: ['org:other', 'resource:user-99'],
+    });
+    const foreignRecord = await store.appendKnowledge({
+      node: foreign.id,
+      text: 'private',
+      scope: ['org:other', 'resource:user-99'],
+      sourceThreadId: 'zeta',
+      resolutionScope: ['org:other', 'resource:user-99'],
+      defaultScope: ['org:other', 'resource:user-99'],
+    });
+    const append = vi.spyOn(store, 'appendKnowledge');
+    const remove = vi.spyOn(store, 'removeKnowledge');
+
+    await expect(tools.knowledge_append!.execute?.({ node: foreign.id, text: 'poisoned' }, {} as any)).rejects.toThrow(
+      'outside the curator',
+    );
+    await expect(tools.knowledge_remove!.execute?.({ recordId: foreignRecord.id }, {} as any)).rejects.toThrow(
+      'outside the curator',
+    );
+    expect(append).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(await store.getKnowledge({ id: foreignRecord.id })).toMatchObject({ text: 'private' });
   });
 
   it('keeps tool schemas free of top-level composition keywords Gemini rejects', async () => {
@@ -92,6 +253,17 @@ describe('Subconscious knowledge write tools', () => {
     expect(setKind.required).toEqual(['node', 'expectedVersion', 'kind']);
     expect(setKind.properties.kind.type).toBe('string');
     expect(setKind.properties.kind.nullable).toBeUndefined();
+
+    // The `when` date-time constraint is enforced locally by Ajv on the raw schema; on the wire the
+    // compat layer folds `format`/`pattern` into description text, so Google never sees keywords it
+    // might reject and the model still learns the expected shape.
+    for (const id of ['knowledge_create', 'knowledge_append']) {
+      const when = onTheWire(id).properties.when;
+      expect(when.type).toBe('string');
+      expect(when.pattern).toBeUndefined();
+      expect(when.format).toBeUndefined();
+      expect(when.description).toMatch(/date-time/);
+    }
   });
 
   it('rejects a node edit that changes nothing, before it can burn a version', async () => {
@@ -219,15 +391,10 @@ describe('Subconscious knowledge write tools', () => {
     ).rejects.toThrow('version');
   });
 
-  it('bounds reserved guidance and never exposes restoration', async () => {
+  it('never exposes restoration', async () => {
     const { tools } = await fixture();
-    await expect(
-      tools.knowledge_write_node_content!.execute?.(
-        { name: ' Capture-Guidance ', content: 'x'.repeat(4_001), scope: 'resource' },
-        {} as any,
-      ),
-    ).rejects.toThrow('limited');
     expect(Object.keys(tools)).toEqual([
+      'knowledge_create',
       'knowledge_append',
       'knowledge_remove',
       'knowledge_update_node',

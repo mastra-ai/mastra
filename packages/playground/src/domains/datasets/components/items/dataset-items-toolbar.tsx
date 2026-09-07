@@ -11,6 +11,10 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
+  /** Page-level content rendered before the list actions (e.g. created date). */
+  leftSlot?: React.ReactNode;
+  /** Page-level actions rendered after the list actions, on the same row. */
+  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -35,6 +39,8 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
+  leftSlot,
+  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -64,17 +70,19 @@ export function DatasetItemsToolbar({
   );
 
   const searchField = (
-    <SearchFieldBlock
-      name="search-items"
-      label="Search"
-      labelIsHidden
-      size="md"
-      placeholder="Search items..."
-      value={searchQuery ?? ''}
-      onChange={e => onSearchChange?.(e.target.value)}
-      onReset={() => onSearchChange?.('')}
-      disabled={!hasItems && !searchQuery}
-    />
+    <div className="w-full min-w-24">
+      <SearchFieldBlock
+        name="search-items"
+        label="Search"
+        labelIsHidden
+        size="md"
+        placeholder="Search items..."
+        value={searchQuery ?? ''}
+        onChange={e => onSearchChange?.(e.target.value)}
+        onReset={() => onSearchChange?.('')}
+        disabled={!hasItems && !searchQuery}
+      />
+    </div>
   );
 
   const selectionDropdown = selectedCount > 0 && (
@@ -120,13 +128,19 @@ export function DatasetItemsToolbar({
   );
 
   return (
-    <div className="flex w-full items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-4">
+    <div
+      className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 whitespace-nowrap"
+      data-testid="dataset-items-toolbar"
+    >
+      {/* The search keeps a sane minimum width; when the actions do not fit next to it
+          they wrap onto their own row instead of squeezing the search. */}
+      <div className="flex min-w-64 flex-1 items-center gap-4">
         {searchField}
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup>
+      <ButtonsGroup className="ml-auto flex-wrap justify-end">
+        {leftSlot}
         {selectionDropdown}
         {(hasItems || Boolean(searchQuery)) && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
@@ -150,6 +164,7 @@ export function DatasetItemsToolbar({
             </DropdownMenu>
           </ButtonsGroup>
         )}
+        {rightSlot}
       </ButtonsGroup>
     </div>
   );

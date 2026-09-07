@@ -1603,13 +1603,15 @@ export async function createNetworkLoop({
       // requireApproval can be:
       // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
       // - undefined (no approval needed)
-      // If needsApprovalFn exists, evaluate it with the tool args
+      // If needsApprovalFn exists, evaluate it with the tool args and the same
+      // request-context view the agentic loop provides.
       let toolRequiresApproval = (tool as any).requireApproval;
       const needsApprovalFn = getNeedsApprovalFn(tool);
       if (needsApprovalFn) {
-        // Evaluate the function with the parsed args
         try {
-          const needsApprovalResult = await needsApprovalFn(inputDataToUse);
+          const needsApprovalResult = await needsApprovalFn(inputDataToUse, {
+            requestContext: Object.fromEntries(requestContext.entries()),
+          });
           toolRequiresApproval = needsApprovalResult;
         } catch (error) {
           // Log error to help developers debug faulty needsApprovalFn implementations

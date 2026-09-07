@@ -166,6 +166,25 @@ describe('WorkflowDefinitionsLibSQL', () => {
     await expect(wd.get('wf-corrupt')).rejects.toThrow(/malformed JSON/i);
   });
 
+  it('preserves a malformed schedule value for lenient rehydration diagnostics', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({
+      id: 'wf-corrupt-schedule',
+      inputSchema,
+      outputSchema,
+      graph,
+      schedule: { cron: '0 0 * * *' },
+    });
+
+    await client.execute({
+      sql: `UPDATE "${TABLE_WORKFLOW_DEFINITIONS}" SET schedule = ? WHERE id = ?`,
+      args: ['{not valid json', 'wf-corrupt-schedule'],
+    });
+
+    const fetched = await wd.get('wf-corrupt-schedule');
+    expect(fetched?.schedule).toBe('{not valid json');
+  });
+
   it('falls back to update when a concurrent upsert wins the insert race', async () => {
     const wd = (await store.getStore('workflowDefinitions'))!;
 

@@ -2,9 +2,15 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PNPM_WORKSPACE, writeEmptyScaffold } from './utils';
+
+// writeEmptyScaffold resolves exact versions via `npm view`. These tests only
+// care about manifest shape, so skip the registry and fall back to the tag.
+vi.mock('./version-resolver', () => ({
+  resolveMastraPackageVersions: vi.fn(async () => undefined),
+}));
 
 /**
  * Verifies that the direct pnpm scaffold avoids packageManager metadata that

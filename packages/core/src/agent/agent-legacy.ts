@@ -51,7 +51,10 @@ import type {
 } from './types';
 
 import { resolveThreadIdFromArgs } from './utils';
-import { fireClientToolOutputHooks } from './workflows/prepare-stream/client-tool-output-hooks';
+import {
+  applyClientToolModelOutput,
+  fireClientToolOutputHooks,
+} from './workflows/prepare-stream/client-tool-output-hooks';
 
 const LEGACY_MEMORY_RUN_STATE_KEY = createRunScopeKey<MemoryRunState>('agent-legacy.memoryRunState');
 
@@ -329,12 +332,22 @@ export class AgentLegacyHandler {
         });
 
         // The legacy path has no abort signal to forward to the hook.
-        const fireClientHooks = () =>
-          fireClientToolOutputHooks({
+        const fireClientHooks = async () => {
+          await fireClientToolOutputHooks({
             messages,
             tools: convertedTools,
             logger: this.capabilities.logger,
           });
+          // Enrich ingested client tool results with the server tool's
+          // toModelOutput. The legacy v4 prompt conversion does not consume the
+          // metadata, but it persists with the message so later requests on the
+          // current paths restore the mapped output.
+          await applyClientToolModelOutput({
+            messageList,
+            tools: convertedTools,
+            logger: this.capabilities.logger,
+          });
+        };
 
         let messageList = new MessageList({
           threadId,

@@ -1,4 +1,4 @@
-import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
+import { injectJsonInstructionIntoMessages as injectJsonInstructionIntoMessagesV3 } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
@@ -54,6 +54,21 @@ export function resolveJsonPromptInjection(
 ): ResolvedJsonPromptInjection {
   if (value !== 'auto') return value;
   return capability === true ? undefined : 'inline';
+}
+
+type InjectJsonInstructionArgs = Parameters<typeof injectJsonInstructionIntoMessagesV3>[0];
+
+/**
+ * Typed V2 wrapper for the provider-utils v4 helper, which only reads and rewrites the
+ * leading system message's string content — a shape shared by V2 and V3 prompts.
+ */
+function injectJsonInstructionIntoMessages(
+  args: Omit<InjectJsonInstructionArgs, 'messages'> & { messages: LanguageModelV2Prompt },
+): LanguageModelV2Prompt {
+  return injectJsonInstructionIntoMessagesV3({
+    ...args,
+    messages: args.messages as unknown as InjectJsonInstructionArgs['messages'],
+  }) as unknown as LanguageModelV2Prompt;
 }
 
 function buildJsonInstruction(schema: unknown) {

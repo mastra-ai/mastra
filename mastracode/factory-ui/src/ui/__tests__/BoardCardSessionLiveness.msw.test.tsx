@@ -217,14 +217,50 @@ describe('Board card session liveness', () => {
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
   });
 
-  it('walks idle → working → ready as a run starts and finishes unseen', async () => {
+  it('hides Retry while the bound session is working, even for a retryable failure', async () => {
+    // A retryable failed decision would normally put Retry first on the card.
+    // While the session owns the branch, Open session is the only action.
     stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'failed',
+              attempts: 5,
+              failureOccurrence: 1,
+              source: null,
+              failureCode: 'repository_clone_failed',
+              canRetry: true,
+              lastError: 'Command failed with ENOENT',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    expect(within(card).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('walks idle → working → idle as a run starts and finishes', async () => {
+    const { refetchGate } = stubFactoryWithBoundSession();
+    refetchGate.resolve();
     const active = new Set<string>();
     server.use(
-      // Ungated sessions list: the attention pass refetches it on run end.
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
-        HttpResponse.json({ sessions: [boundSession] }),
-      ),
       http.get('*/api/agent-controller/:controllerId/active-runs', () =>
         HttpResponse.json({
           runs: [...active].map(resourceId => ({ runId: `run-${resourceId}`, resourceId, threadId: resourceId })),
@@ -241,14 +277,14 @@ describe('Board card session liveness', () => {
     active.add(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
     await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
-    // The button is the idle marker only; a running session hands over to the wick.
-    expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull();
+    // A running card's one button is the way into its session; the wick is its marker, so the pill stays quiet.
+    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
 
     active.delete(SESSION_ID);
     await client.invalidateQueries({ queryKey: activityKey });
-    // The finish was never opened, so the card holds the same "your turn" mark
-    // the sidebar row shows, instead of sliding silently back to idle.
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="ready"]')).not.toBeNull());
+    // A finished run is an idle session: the wick goes dark and the button returns, unlit.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).toBeNull());
+    expect(await screen.findByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {

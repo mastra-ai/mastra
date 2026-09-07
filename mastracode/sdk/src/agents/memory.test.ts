@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
+
 const memoryConstructorMock = vi.fn();
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
@@ -195,7 +197,7 @@ describe('getDynamicMemory', () => {
       maxScope: 'resource',
       pins: true,
     });
-    expect(requestContext.get('organizationId')).toBe('local');
+    expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
     // Outside the factory there is no project id, so the knowledge scope is untouched.
     expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
   });
@@ -215,20 +217,18 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('organizationId')).toBe('org-real');
   });
 
-  it('captures local (TUI/studio) knowledge under the explicit local scope, never the session owner', async () => {
+  it('curates local (TUI/studio) knowledge under the fixed local org, never the per-checkout session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const { getDynamicMemory, LOCAL_KNOWLEDGE_ORG_ID } = await import('./memory.js');
-    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
+    const { LOCAL_KNOWLEDGE_ORG_ID: exported } = await import('./memory.js');
 
     const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
     const org = requestContext.get('organizationId');
     expect(org).toBe('local');
+    expect(org).toBe(exported);
     expect(org).not.toBe('mastracode-owner');
-    expect(org).not.toBe('mastra-code');
-    expect(typeof getDynamicMemory).toBe('function');
   });
 
-  it('refuses to capture for a factory session whose organization never resolved', async () => {
+  it('refuses to curate for a factory session whose organization never resolved', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -241,13 +241,13 @@ describe('getDynamicMemory', () => {
       expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
       expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge capture disabled');
+      expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge curation disabled');
     } finally {
       errorSpy.mockRestore();
     }
   });
 
-  it('refuses to capture for a projectless factory session marked unresolved', async () => {
+  it('refuses to curate for a projectless factory session marked unresolved', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -359,7 +359,7 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
   });
 
-  it('enables capture-time pinning and the curation cadence only for opted-in factory sessions', async () => {
+  it('configures factory curation scope and limits', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
     const { config } = await createMemoryConfig(
@@ -370,8 +370,7 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       maxScope: 'resource',
-      pins: { capturePinning: true },
-      curationCadence: 3,
+      pins: true,
       maxSteps: 25,
     });
   });

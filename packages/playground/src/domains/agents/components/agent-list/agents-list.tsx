@@ -21,18 +21,18 @@ export interface AgentsListProps {
   hasSearch: boolean;
 }
 
-const agentsListColumns = 'minmax(12rem,20rem) minmax(16rem,30rem) auto auto auto auto';
+const agentsListColumns = 'minmax(12rem,20rem) minmax(0,1fr) auto auto auto auto';
 
 export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
   const { paths, Link } = useLinkComponent();
   const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length });
 
   if (isLoading) {
-    return <EntityListSkeleton columns={agentsListColumns} />;
+    return <EntityListSkeleton columns={agentsListColumns} fit="container" />;
   }
 
   return (
-    <EntityList columns={agentsListColumns} scrollRef={containerRef}>
+    <EntityList columns={agentsListColumns} fit="container" scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Purpose</EntityList.TopCell>

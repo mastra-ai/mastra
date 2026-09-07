@@ -15,7 +15,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -40,8 +40,11 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-
+import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { parseSupervisorResourceId } from './supervisor/session.js';
+import { timedPhase } from './timing.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -217,15 +220,26 @@ const factorySkillExtension: WorkspaceSkillExtension = {
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
+/**
+ * When a session's sandbox boots: on the agent's first command (`'lazy'`, the
+ * default) or as soon as the session's workspace is first resolved (`'eager'`).
+ * An eager start is fire-and-forget; if it fails, the lazy path still runs.
+ */
+export type FactorySandboxStart = 'lazy' | 'eager';
+
 export interface CreateWorkspaceFactoryOptions {
   /** Factory sandbox runtime config (session sandbox callback). */
   sandbox?: MastraFactorySandboxConfig;
+  /** Defaults to `'lazy'`. */
+  sandboxStart?: FactorySandboxStart;
   /** GitHub integration used to resolve Factory sessions and mint repo tokens. */
   github?: GithubIntegration;
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -269,7 +283,8 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
     inject: (token: string) => void;
@@ -293,6 +308,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
+    if (supervisorProjectId) {
+      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
+      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
+      return undefined;
+    }
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
@@ -348,9 +370,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // VM's own home so it resolves lazily at first start.
     // `runSetupOn` references `runSessionSetup`, defined below — it is only
     // invoked during start, long after this closure fully initializes.
-    const runSetupOn = (target: unknown, workdir: string) =>
-      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir);
-    const guardedSetup = createSessionSetupHook(runSetupOn, session.id, repoFullName);
+    const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
+      runSessionSetup(requireExec(target as WorkspaceSandbox), workdir, gate);
+    const guardedSetup = createSessionSetupHook(
+      runSetupOn,
+      session.id,
+      repoFullName,
+      projectRepository.setupCommand ?? undefined,
+    );
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -424,11 +451,27 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // stack a wrapper per call. Factory's setup runs first: a hook the
         // callback installed itself expects a prepared workspace.
         sandbox.setOnStart(previous => async args => {
-          await setupHook(args);
+          await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+            await setupHook(args);
+          });
           await previous?.(args);
         });
+        // Only a freshly constructed instance starts eagerly; the start itself
+        // waits for this resolver to finish because the start hook reads
+        // bindings declared further down.
+        startEagerly = eagerSandboxStart;
         return sandbox;
       });
+    let startEagerly = false;
+    const fireEagerStart = () => {
+      if (!startEagerly) return;
+      startEagerly = false;
+      Promise.resolve()
+        .then(() => sessionEntry.sandbox.start?.())
+        .catch(error => {
+          console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+        });
+    };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
@@ -586,7 +629,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // check out the session branch, run the configured setup command. Minted
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
-    const runSessionSetup = async (target: SessionSandbox, workdir: string): Promise<void> => {
+    const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
       const token = await getRepositoryToken();
       // The configured setup command may shell out to `gh`/https fetches, so
       // GH_TOKEN must exist before setup runs — and it must be the same
@@ -609,7 +652,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
-      if (projectRepository.setupCommand) {
+      if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
         // than failing every start: the first failure surfaced loudly in the
         // tool result that triggered it, and a permanently failing onStart
@@ -625,7 +668,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await runSetupCommand(target, workdir, projectRepository.setupCommand);
+          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
             try {
@@ -723,10 +767,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    // Fully lazy: nothing provisions until the first real sandbox operation
-    // (`ensureRunning()` inside the provider). A background warm-up at session
-    // start was considered and dropped — it speculatively created a VM for
-    // every session, including ones whose agent never touches the workspace.
+    fireEagerStart();
     return workspace;
   };
 }

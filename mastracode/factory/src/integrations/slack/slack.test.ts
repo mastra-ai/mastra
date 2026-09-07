@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   createChannelResourceIdResolver,
+  createChannelSessionResolver,
   createChannelSessionStartHook,
   resolveChannelThreadId,
   createHandlers,
@@ -526,6 +527,56 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   });
 });
 
+describe('channel session creation context (resolveSession)', () => {
+  it('seeds Factory ownership before the controller session is created', async () => {
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' }),
+      },
+      projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'conn-1' }) },
+      connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: 'fp-1' }) },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const requestContext = new RequestContext();
+
+    const session = await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'session-1' },
+      requestContext,
+    } as any);
+
+    expect(session).toEqual({ identity: 'session' });
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'session-1',
+      ownerId: 'code',
+      resourceId: 'session-1',
+      requestContext,
+      tags: { factoryProjectId: 'fp-1' },
+    });
+  });
+
+  it('keeps chat-only sessions free of Factory ownership', async () => {
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn() },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'thread-1', resourceId: 'channel:slack:C-1:1700.42' },
+    } as any);
+
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(controller.createSession.mock.calls[0]?.[0].tags?.factoryProjectId).toBeUndefined();
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'channel:slack:C-1:1700.42',
+      ownerId: 'code',
+      resourceId: 'channel:slack:C-1:1700.42',
+      requestContext: undefined,
+    });
+  });
+});
+
 describe('repo-backed thread ids (resolveThreadId)', () => {
   it('a repo-backed thread takes the session id as its thread id (web convention: threadId = sessionId)', () => {
     expect(resolveChannelThreadId({ resourceId: 'us-new', defaultThreadId: 'uuid-1' } as any)).toBe('us-new');
@@ -877,7 +928,7 @@ describe('session start (onSessionStart)', () => {
 
   // An ungated dispatch marks the session unresolved above every guard. Owner
   // recovery is the resolution, so it has to take the marker down with it —
-  // otherwise capture refuses for the life of the session over a stale flag.
+  // otherwise curation stays disabled for the life of the session over a stale flag.
   it('clears the unresolved marker when owner recovery resolves the organization', async () => {
     const deps = makeStartDeps();
     const session = makeSession();
@@ -888,7 +939,7 @@ describe('session start (onSessionStart)', () => {
     expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1', factoryOrgUnresolved: false });
   });
 
-  // The org rung knowledge capture scopes on. `gateDispatch` stamps it on the
+  // The org rung knowledge curation scopes on. `gateDispatch` stamps it on the
   // request context before the session exists, so it is in hand above every
   // guard below — and seeding it must not cost a storage read.
   const orgContext = (organizationId: unknown) => ({

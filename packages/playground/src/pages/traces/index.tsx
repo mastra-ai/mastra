@@ -41,6 +41,7 @@ import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceScoresTab } from '@/domains/traces/components/trace-scores-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { useSpanFeedback } from '@/domains/traces/hooks/use-span-feedback';
 import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
 
@@ -52,7 +53,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -210,10 +214,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         visibleColumns: traceColumns.preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)),
       }
     : traceColumns.preferences;
-  const selectedBranchAnchor =
-    url.listMode === 'branches' && anchorSpanId ? traceSpans?.find(span => span.spanId === anchorSpanId) : undefined;
-  const canShowSelectedTraceUsage =
-    url.listMode === 'traces' || (selectedBranchAnchor !== undefined && selectedBranchAnchor.parentSpanId == null);
   const listUsageEnabled =
     !usageColumnsUnavailable && !observabilityCapabilities.isLoading && hasTraceUsageColumn(displayedColumnPreferences);
   const traceUsage = useTraceUsage({
@@ -221,27 +221,15 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     enabled: listUsageEnabled,
     autoRefetch: autoRefetchTraces,
   });
-  const selectedTraceId = url.traceIdParam;
-  const selectedTraceCoveredByListUsage =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    listUsageEnabled &&
-    traces.some(trace => trace.traceId === selectedTraceId);
-  const selectedTraceUsageFromList = selectedTraceId ? traceUsage.data?.get(selectedTraceId) : undefined;
-  const selectedTraceNeedsOwnQuery =
-    canShowSelectedTraceUsage &&
-    selectedTraceId !== undefined &&
-    (!selectedTraceCoveredByListUsage ||
-      (!traceUsage.isFetching && traceUsage.data !== undefined && !traceUsage.data.has(selectedTraceId)));
-  // Fetch independently when the list query cannot supply the selected trace,
-  // such as when usage columns are hidden or a direct link is outside the loaded page.
+  const selectedTraceUsesListQuery = listUsageEnabled && traces.some(trace => trace.traceId === url.traceIdParam);
   const selectedTraceUsage = useTraceUsage({
-    traceIds: selectedTraceNeedsOwnQuery && selectedTraceId ? [selectedTraceId] : [],
-    enabled:
-      selectedTraceNeedsOwnQuery && !observabilityCapabilities.isLoading && observabilityCapabilities.supportsMetrics,
+    traceIds: url.traceIdParam ? [url.traceIdParam] : [],
+    enabled: listUsageEnabled && !selectedTraceUsesListQuery,
     autoRefetch: autoRefetchTraces,
   });
-
+  const selectedTraceUsageSummary = url.traceIdParam
+    ? (traceUsage.data?.get(url.traceIdParam) ?? selectedTraceUsage.data?.get(url.traceIdParam))
+    : undefined;
   // Storage providers that don't implement `listBranches` throw a known MastraError. When that
   // surfaces in branches mode, treat the provider as branches-incapable for the rest of the
   // session: flip the URL back to traces mode so the next query succeeds, and remove the
@@ -252,10 +240,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     setBranchesUnsupported(true);
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
-
-  const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),
@@ -285,6 +269,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
   // on the displayed root/anchor span being an agent.
   const isAgentTrace = anchorSpan?.entityType === 'agent';
+  // The side panel widens per column shown: Messages (agent turn) and/or span detail.
+  const hasMessagesColumn = !!getTraceThreadId(anchorSpan, anchorSpanId ?? undefined);
+  const hasSpanColumn = !!url.spanIdParam;
+  const sidePanelWidth =
+    hasMessagesColumn && hasSpanColumn ? 'full' : hasMessagesColumn || hasSpanColumn ? 'wide' : 'half';
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -377,8 +366,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onFilterTokensChange={url.handleFilterTokensChange}
         onClear={handleClear}
         onRemoveAll={url.handleRemoveAll}
-        onSave={persistence.handleSave}
-        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}
@@ -419,7 +406,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       {pageTopArea}
 
       <TracesLayout
-        sidePanelWide={!!url.spanIdParam}
+        sidePanelWidth={sidePanelWidth}
         listSlot={
           <TracesListView
             // Remount on mode switch: the virtualizer caches measurements / scroll state from
@@ -463,12 +450,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               key={`${url.traceIdParam}:${url.anchorSpanIdParam ?? ''}`}
               traceId={url.traceIdParam}
               spans={traceSpans}
-              usage={
-                canShowSelectedTraceUsage
-                  ? (selectedTraceUsageFromList ?? selectedTraceUsage.data?.get(url.traceIdParam))
-                  : undefined
-              }
               anchorSpanId={anchorSpanId}
+              usage={selectedTraceUsageSummary}
               isLoadingSpans={isLoadingTraceSpans}
               selectedSpanId={url.spanIdParam ?? null}
               onClose={url.handleTraceClose}
@@ -479,6 +462,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
+              showPartialThread
+              featuredSpanIds={url.highlightSpanIdsParam}
+              onHighlightSpans={url.handleHighlightSpans}
               feedbackTabBadge={traceFeedbackData?.pagination?.total ?? undefined}
               feedbackTabSlot={({ traceId: tid }) => <TraceFeedbackTab traceId={tid} />}
               scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}

@@ -75,6 +75,31 @@ Entries in the `graph` run in order. Each entry receives the previous entry's ou
 
 Code-defined workflows that use [`.agent()`](/reference/workflows/workflow-methods/agent) and [`.tool()`](/reference/workflows/workflow-methods/tool) produce the same declarative entries when serialized.
 
+### Identity and display fields
+
+Control-flow entries accept optional fields that identify and describe the entry without affecting execution:
+
+| Field | Type | Description |
+| - | - | - |
+| `id` | `string` | Stable identity for addressing the entry across edits and serialization. Optional on `parallel`, `conditional`, `foreach`, and `loop`; required on `mapping`, `sleep`, and `sleepUntil`. |
+| `description` | `string` | Human-readable intent of the control-flow operation |
+| `metadata` | `Record<string, unknown>` | Arbitrary JSON metadata preserved through storage, for example a display title for visual editors |
+
+```json
+{
+  "type": "parallel",
+  "id": "independent-enrichment",
+  "description": "Run independent document enrichment tasks concurrently",
+  "metadata": { "title": "Independent enrichment" },
+  "steps": [
+    { "type": "tool", "id": "extract-entities", "toolId": "entity-tool" },
+    { "type": "tool", "id": "classify", "toolId": "classify-tool" }
+  ]
+}
+```
+
+All three fields survive storage and rehydration, and they appear in `serializedStepGraph` for API and Studio consumers. Agent and tool steps carry the equivalent information on their own `description` and `options.metadata` fields.
+
 ### Agent steps
 
 An `agent` entry invokes a registered agent by ID. Agent steps accept `{ prompt: string }` as input and return `{ text: string }` by default.

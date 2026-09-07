@@ -290,7 +290,7 @@ Inside the sandbox, the environment variable holds an opaque placeholder. Dayton
 
 ### Computer use (desktop)
 
-Enable the [computer capability](/docs/sandbox/overview#computer-use-tools) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
+Enable the [computer capability](/docs/sandbox/computer) with `computerUse`. This adds screenshot, mouse, and keyboard control to the sandbox. When the sandbox is used in a workspace, agents automatically get the `mastra_workspace_computer_*` tools.
 
 Computer use is disabled by default. Set `computerUse: true` to start the desktop processes (Xvfb, xfce4, x11vnc, noVNC) lazily on the first computer operation:
 

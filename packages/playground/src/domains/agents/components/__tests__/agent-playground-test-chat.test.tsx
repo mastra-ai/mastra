@@ -84,6 +84,78 @@ describe('AgentPlaygroundTestChat', () => {
     });
   });
 
+  it('probes the browser session for a CLI browser provider (hasBrowser: true, no SDK browser tools)', async () => {
+    const onBrowserProbe = vi.fn();
+
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...v2Agent,
+          browserTools: [],
+          hasBrowser: true,
+          modelList: [],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}/browser/session`, () => {
+        onBrowserProbe();
+        return HttpResponse.json({ hasSession: false, screencastAvailable: true });
+      }),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json({ ok: true })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
+      http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({ enabled: false })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    );
+
+    renderEditorTestChat();
+
+    await screen.findByTestId('composer-run-options-trigger');
+
+    await waitFor(() => {
+      expect(onBrowserProbe).toHaveBeenCalled();
+    });
+  });
+
+  it('does not probe the browser session when the agent has no browser (hasBrowser: false)', async () => {
+    const onBrowserProbe = vi.fn();
+
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () =>
+        HttpResponse.json({
+          ...v2Agent,
+          browserTools: [],
+          hasBrowser: false,
+          modelList: [],
+        }),
+      ),
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}/browser/session`, () => {
+        onBrowserProbe();
+        return HttpResponse.json({ hasSession: false, screencastAvailable: true });
+      }),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json({ ok: true })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
+      http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({ enabled: false })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    );
+
+    renderEditorTestChat();
+
+    await screen.findByTestId('composer-run-options-trigger');
+
+    // Give the probe a chance to fire if it (incorrectly) would.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+    expect(onBrowserProbe).not.toHaveBeenCalled();
+  });
+
   it('accepts typed input in the composer textarea', async () => {
     server.use(
       http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json({ ...v2Agent, modelList: [] })),

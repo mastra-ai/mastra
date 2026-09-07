@@ -24,12 +24,58 @@ const feedbackData = {
   pagination: { page: 0, perPage: 10, total: 1, hasMore: false },
 } as unknown as ListFeedbackResponse;
 
+const withAuthor = (author: { id: string; name?: string; email?: string; avatarUrl?: string }) =>
+  ({ ...feedbackData, feedback: [{ ...feedbackData.feedback[0], author }] }) as unknown as ListFeedbackResponse;
+
 describe('FeedbackThread', () => {
   it('renders existing feedback as comments', () => {
     render(<FeedbackThread feedbackData={feedbackData} onSubmit={vi.fn()} />);
 
     expect(screen.getByText('this span looks wrong')).toBeTruthy();
     expect(screen.queryByText('user')).toBeNull();
+    expect(document.querySelector('[data-slot="comment-item-author"]')).toBeNull();
+    // The gutter stays so bodies align, but it is empty.
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')?.childElementCount).toBe(0);
+  });
+
+  it('renders the author avatar and name when the feedback has an author', () => {
+    render(
+      <FeedbackThread
+        feedbackData={withAuthor({ id: 'u1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/a.png' })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Marvin Frachet').getAttribute('data-slot')).toBe('comment-item-author');
+    const img = screen.getByAltText('Marvin Frachet') as HTMLImageElement;
+    expect(img.closest('[data-slot="comment-item-avatar"]')).toBeTruthy();
+    expect(img.src).toBe('https://example.com/a.png');
+  });
+
+  it('puts the avatar inline in the header for the embed variant', () => {
+    render(
+      <FeedbackThread
+        variant="embed"
+        feedbackData={withAuthor({ id: 'u1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/a.png' })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const img = screen.getByAltText('Marvin Frachet');
+    expect(img.closest('[data-slot="comment-item-header"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')).toBeNull();
+  });
+
+  it('falls back to email, then id, when the author has no name', () => {
+    const { rerender } = render(
+      <FeedbackThread feedbackData={withAuthor({ id: 'u1', email: 'm@x.io' })} onSubmit={vi.fn()} />,
+    );
+    expect(screen.getByText('m@x.io').getAttribute('data-slot')).toBe('comment-item-author');
+
+    rerender(<FeedbackThread feedbackData={withAuthor({ id: 'u1' })} onSubmit={vi.fn()} />);
+    expect(screen.getByText('u1').getAttribute('data-slot')).toBe('comment-item-author');
+    // No image: the avatar falls back to the initial.
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')?.textContent).toBe('U');
   });
 
   it('shows an empty state when there is no feedback', () => {

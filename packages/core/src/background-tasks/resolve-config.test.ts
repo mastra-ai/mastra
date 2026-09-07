@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveBackgroundConfig } from './resolve-config';
+import { isToolBackgroundEligible, resolveBackgroundConfig } from './resolve-config';
 
 /**
  * Regression tests for https://github.com/mastra-ai/mastra/issues/16783.
@@ -81,5 +81,75 @@ describe('resolveBackgroundConfig', () => {
     });
 
     expect(resolved.runInBackground).toBe(false);
+  });
+});
+
+/**
+ * Regression tests for https://github.com/mastra-ai/mastra/issues/22724.
+ *
+ * `isToolBackgroundEligible` is the single source of truth for whether a tool
+ * may be *advertised* as background-capable (schema `_background` injection and
+ * the background system prompt). It must match `resolveBackgroundConfig`'s
+ * base-enabled expression exactly.
+ */
+describe('isToolBackgroundEligible', () => {
+  it('returns false when nothing is configured', () => {
+    expect(isToolBackgroundEligible({ toolName: 'calculator' })).toBe(false);
+  });
+
+  it('returns true when the agent opts the tool in', () => {
+    expect(isToolBackgroundEligible({ toolName: 'research', agentConfig: { tools: { research: true } } })).toBe(true);
+  });
+
+  it('returns false when the agent opted in OTHER tools but not this one', () => {
+    expect(isToolBackgroundEligible({ toolName: 'readFile', agentConfig: { tools: { research: true } } })).toBe(false);
+  });
+
+  it('falls back to tool-level config when the agent config is silent for this tool', () => {
+    expect(
+      isToolBackgroundEligible({
+        toolName: 'research',
+        toolConfig: { enabled: true },
+        agentConfig: { tools: { other: true } },
+      }),
+    ).toBe(true);
+  });
+
+  it('falls back to tool-level config when there is no agent config at all', () => {
+    expect(isToolBackgroundEligible({ toolName: 'research', toolConfig: { enabled: true } })).toBe(true);
+  });
+
+  it('lets an explicit agent-level `enabled: false` override tool-level opt-in', () => {
+    expect(
+      isToolBackgroundEligible({
+        toolName: 'research',
+        toolConfig: { enabled: true },
+        agentConfig: { tools: { research: false } },
+      }),
+    ).toBe(false);
+  });
+
+  it('returns true for every tool when the agent uses `tools: "all"`', () => {
+    expect(isToolBackgroundEligible({ toolName: 'anything', agentConfig: { tools: 'all' } })).toBe(true);
+  });
+
+  it('strips the `agent-` prefix for sub-agent tools', () => {
+    expect(
+      isToolBackgroundEligible({ toolName: 'agent-biExecutor', agentConfig: { tools: { biExecutor: true } } }),
+    ).toBe(true);
+  });
+
+  it('strips the `workflow-` prefix for workflow tools', () => {
+    expect(isToolBackgroundEligible({ toolName: 'workflow-etl', agentConfig: { tools: { etl: true } } })).toBe(true);
+  });
+
+  it('returns false when the agent disabled background tasks entirely', () => {
+    expect(
+      isToolBackgroundEligible({
+        toolName: 'research',
+        toolConfig: { enabled: true },
+        agentConfig: { disabled: true, tools: 'all' },
+      }),
+    ).toBe(false);
   });
 });

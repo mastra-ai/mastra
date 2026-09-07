@@ -28,6 +28,8 @@ function item(revision: number, stage: string): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
     revision,

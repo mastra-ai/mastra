@@ -307,7 +307,7 @@ const instructions = sandbox.getInstructions?.()
 
 ## Computer capability
 
-Sandboxes with a controllable desktop environment implement the optional `SandboxComputer` interface on the `computer` property. When present on a statically configured sandbox, the workspace tools factory registers the `mastra_workspace_computer_*` tools automatically. See [Computer-use tools](/docs/sandbox/overview#computer-use-tools).
+Sandboxes with a controllable desktop environment implement the optional `SandboxComputer` interface on the `computer` property. When present on a statically configured sandbox, the workspace tools factory registers the `mastra_workspace_computer_*` tools automatically. See [Computer-use tools](/docs/sandbox/computer#computer-tools).
 
 Coordinates are pixels from the top-left corner of the display. Providers normalize their SDK semantics (key names, scroll units) onto this surface and expose richer native APIs through their own accessors.
 

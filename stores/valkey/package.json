@@ -1,6 +1,6 @@
 {
   "name": "@mastra/valkey",
-  "version": "0.2.1-alpha.0",
+  "version": "0.2.1",
   "description": "Valkey storage and cache provider for Mastra, powered by Valkey GLIDE",
   "type": "module",
   "main": "dist/index.js",

@@ -25,14 +25,9 @@ import { E2BSandbox } from './index';
 /** Access to a public repo: a clone URL and no credential. */
 const repoAccess = (cloneUrl: string) => async () => ({ cloneUrl });
 
-/** Make the head lookup (`git ls-remote`) report a fixed sha. */
+/** Make the github.com head lookup (REST API) report a fixed sha. */
 function mockHead(sha: string): void {
-  execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: unknown) => {
-    (cb as (e: Error | null, o: { stdout: string; stderr: string }) => void)(null, {
-      stdout: `${sha}\tHEAD\n`,
-      stderr: '',
-    });
-  });
+  fetchMock.mockImplementation(async () => new Response(`${sha}\n`, { status: 200 }));
 }
 
 /**
@@ -190,9 +185,9 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 // Mock the E2B SDK
 vi.mock('e2b', () => createMockSandboxApi());
 
-// Repo templates resolve their head sha through `git ls-remote`.
-const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
-vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => execFileMock(...args) }));
+// Repo templates resolve a github.com head sha through the GitHub REST API.
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
 
 describe('E2BSandbox', () => {
   beforeEach(async () => {

@@ -8,9 +8,11 @@ import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-bu
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
+import { ExperimentCrumb } from './domains/experiments/experiment-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
+import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
 import {
   agentIndexLoader,
@@ -59,7 +61,6 @@ import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
-import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
@@ -67,8 +68,11 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
+import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ExperimentItemPage from './pages/experiments/experiment/item';
+import ReviewQueuePage from './pages/experiments/review-queue';
+import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -346,11 +350,17 @@ export const routes: RouteObject[] = [
       {
         path: '/intelligence',
         element: <SignalsOverviewPage />,
+        handle: navHandle('/intelligence'),
+      },
+      {
+        path: '/intelligence/entities/:entityType/:entityId',
+        element: <SignalsEntityDetailPage />,
         handle: navHandleWithChildren('/intelligence', [
-          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+          { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
+      { path: '/inbox', element: <InboxPage />, handle: navHandle('/inbox') },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
@@ -613,6 +623,20 @@ export const routes: RouteObject[] = [
             },
             { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
+              path: '/experiments/compare',
+              element: <CompareExperimentsPage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }],
+              },
+            },
+            {
+              path: '/experiments/review-queue',
+              element: <ReviewQueuePage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
+              } satisfies RouteHeaderHandle,
+            },
+            {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
@@ -622,7 +646,8 @@ export const routes: RouteObject[] = [
                   navCrumb('/experiments'),
                   {
                     id: 'experiment',
-                    label: truncateItemIdCrumb(params.experimentId),
+                    Component: ExperimentCrumb,
+                    heading: 'Experiment',
                     to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
                   },
                 ],
@@ -639,17 +664,6 @@ export const routes: RouteObject[] = [
                   } satisfies RouteHeaderHandle,
                 },
               ],
-            },
-            {
-              path: '/datasets/:datasetId/experiments',
-              element: <CompareDatasetExperimentsPage />,
-              handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiments', label: 'Experiments' },
-                ],
-              },
             },
             {
               path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',

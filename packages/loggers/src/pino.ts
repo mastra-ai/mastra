@@ -31,6 +31,14 @@ export interface PinoLoggerOptions<CustomLevels extends string = never> {
    * @example 'message'
    */
   messageKey?: string;
+  /**
+   * Custom pino serializers, merged over Mastra's defaults.
+   * By default the `error` key is serialized with pino's standard error
+   * serializer (alongside pino's built-in `err`), so that
+   * `logger.warn('...', { error })` records the message and stack rather
+   * than an empty object.
+   */
+  serializers?: pino.LoggerOptions['serializers'];
 }
 
 interface PinoLoggerInternalOptions<CustomLevels extends string = never> extends PinoLoggerOptions<CustomLevels> {
@@ -99,6 +107,10 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
         mixin: correlationMixin,
         customLevels: options.customLevels,
         messageKey: options.messageKey ?? 'msg',
+        // Pino applies its error serializer only to `errorKey` (default `err`).
+        // Mastra logs errors as `{ error }` throughout, and an Error's `message`
+        // and `stack` are non-enumerable, so without this they serialize to `{}`.
+        serializers: { error: pino.stdSerializers.err, ...options.serializers },
       },
       options.overrideDefaultTransports
         ? options?.transports?.default

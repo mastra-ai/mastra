@@ -400,6 +400,11 @@ export interface SerializedAgent {
   workspaceTools: string[];
   /** Browser tool names available to this agent (if browser is configured) */
   browserTools: string[];
+  /**
+   * Whether the agent has any browser provider — agent-level SDK browser or
+   * workspace-level CLI browser. Gates the Studio browser viewer.
+   */
+  hasBrowser: boolean;
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -802,12 +807,15 @@ async function formatAgentList({
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
+  let workspaceBrowser = false;
   try {
     const workspace = await agent.getWorkspace({ requestContext });
     workspaceId = workspace?.id;
+    workspaceBrowser = Boolean(workspace?.browser);
   } catch {
     // Agent doesn't have a workspace or can't access it
   }
+  const hasBrowser = browserTools.length > 0 || workspaceBrowser;
 
   const model = llm?.getModel();
   const supportsMemory =
@@ -852,6 +860,7 @@ async function formatAgentList({
     skills: serializedSkills,
     workspaceTools,
     browserTools,
+    hasBrowser,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
@@ -1098,12 +1107,15 @@ async function formatAgent({
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
+  let workspaceBrowser = false;
   try {
     const workspace = await agent.getWorkspace({ requestContext });
     workspaceId = workspace?.id;
+    workspaceBrowser = Boolean(workspace?.browser);
   } catch {
     // Agent doesn't have a workspace or can't access it
   }
+  const hasBrowser = browserTools.length > 0 || workspaceBrowser;
 
   // Serialize requestContextSchema if present
   let serializedRequestContextSchema: string | undefined;
@@ -1126,6 +1138,7 @@ async function formatAgent({
     skills: serializedSkills,
     workspaceTools,
     browserTools,
+    hasBrowser,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,

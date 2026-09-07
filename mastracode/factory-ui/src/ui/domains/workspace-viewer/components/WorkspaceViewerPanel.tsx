@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
@@ -12,7 +13,7 @@ import { selectWorkspaceFilePreview } from './workspace-file-preview';
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
   threadId: string;
-  onExpandedChange?: (expanded: boolean) => void;
+  onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
   workItem?: WorkItem;
   factoryProjectId?: string;
@@ -28,7 +29,7 @@ type WorkspacePanelView =
 export function WorkspaceViewerPanel({
   workspacePath,
   threadId,
-  onExpandedChange,
+  onSizeChange,
   visible = true,
   workItem,
   factoryProjectId,
@@ -45,11 +46,16 @@ export function WorkspaceViewerPanel({
 
   const showOverview = () => {
     setView({ type: 'overview' });
-    onExpandedChange?.(false);
+    onSizeChange?.('compact');
   };
-  const showView = (type: 'files' | 'changes' | 'feed') => {
+  const showView = (type: 'files' | 'changes') => {
     setView({ type });
-    onExpandedChange?.(true);
+    onSizeChange?.('full');
+  };
+  // The feed grows with the conversation, so an empty one is a composer rather than a void.
+  const showFeed = () => {
+    setView({ type: 'feed' });
+    onSizeChange?.('half');
   };
 
   if (view.type === 'feed' && workItem) {
@@ -115,7 +121,7 @@ export function WorkspaceViewerPanel({
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
       commentCount={workItem?.commentCount}
-      onShowComments={workItem ? () => showView('feed') : undefined}
+      onShowComments={workItem ? showFeed : undefined}
     />
   );
 }

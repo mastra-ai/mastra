@@ -1,46 +1,11 @@
-import type { Agent, AgentConfig } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import type { KnowledgeScopeLevel } from '@mastra/core/storage';
 import type { z } from 'zod';
 
 import type { ExtractorOnExtractedContext } from '../extractor';
 
-export type SubconsciousBuiltInObservationAgent = 'capture' | 'remind';
-export type SubconsciousBuiltInReflectionAgent = 'curate' | 'learn';
+export type SubconsciousBuiltInObservationAgent = 'remind' | 'curate';
 export type SubconsciousModel = Exclude<AgentConfig['model'], undefined>;
-
-export interface SubconsciousCaptureOutput {
-  nodes: Array<{
-    name: string;
-    kind: string;
-    scope?: KnowledgeScopeLevel;
-    records: Array<{
-      text: string;
-      scope?: KnowledgeScopeLevel;
-      when?: string;
-      /** One short sentence: why the KnowledgeRecord is worth keeping (or must stay pinned). Stored as record metadata. */
-      reason?: string;
-      /** Present only when capture-time pinning is enabled; routes the item to the pin set. */
-      pin?: boolean;
-    }>;
-  }>;
-}
-
-export type SubconsciousDefaultCapture = (
-  context: ExtractorOnExtractedContext<SubconsciousCaptureOutput>,
-) => Promise<void>;
-
-export type SubconsciousCaptureHook = (
-  context: ExtractorOnExtractedContext<SubconsciousCaptureOutput> & {
-    defaultImplementation: SubconsciousDefaultCapture;
-  },
-) => Promise<SubconsciousCaptureOutput | void | undefined> | SubconsciousCaptureOutput | void | undefined;
-
-export interface SubconsciousCaptureConfig {
-  name: 'capture';
-  instructions?: string;
-  schema?: z.ZodTypeAny;
-  onExtracted?: SubconsciousCaptureHook;
-}
 
 export interface SubconsciousRemindConfig {
   name: 'remind';
@@ -49,7 +14,14 @@ export interface SubconsciousRemindConfig {
   maxSteps?: number;
 }
 
-export type SubconsciousBuiltInObservationConfig = SubconsciousCaptureConfig | SubconsciousRemindConfig;
+export interface SubconsciousCurateConfig {
+  name: 'curate';
+  instructions?: string;
+  model?: SubconsciousModel;
+  maxSteps?: number;
+}
+
+export type SubconsciousBuiltInObservationConfig = SubconsciousRemindConfig | SubconsciousCurateConfig;
 
 export interface SubconsciousCustomObservationConfig<T = unknown> {
   name: string;
@@ -58,54 +30,24 @@ export interface SubconsciousCustomObservationConfig<T = unknown> {
   onExtracted: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
 }
 
-export interface SubconsciousBuiltInReflectionConfig {
-  name: SubconsciousBuiltInReflectionAgent;
-  instructions?: string;
-  model?: SubconsciousModel;
-  maxSteps?: number;
-}
-
-export interface SubconsciousCustomReflectionConfig {
-  name: string;
-  instructions?: string;
-  agent?: Agent;
-  model?: SubconsciousModel;
-  maxSteps?: number;
-}
-
 export type SubconsciousObservationEntry =
   | SubconsciousBuiltInObservationAgent
   | SubconsciousBuiltInObservationConfig
   | SubconsciousCustomObservationConfig;
 
-export type SubconsciousReflectionEntry =
-  | SubconsciousBuiltInReflectionAgent
-  | SubconsciousBuiltInReflectionConfig
-  | SubconsciousCustomReflectionConfig;
-
 /** @experimental This API may change without notice. */
 export interface SubconsciousConfig {
   observation?: SubconsciousObservationEntry[];
-  reflection?: SubconsciousReflectionEntry[];
   model?: SubconsciousModel;
   defaultScope?: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
-  learnedGuidance?: boolean;
   tools?: boolean;
   activity?: false | { recentUpdates?: number };
   /**
    * Opt in to a curator-maintained pinned knowledge page that is delivered on every turn.
    * Off by default: the cost of a pin is per turn and permanent.
-   * `capturePinning` (off by default, even with `pins: true`) additionally lets the capture
-   * agent pin at observation time; capture-time pins are for durable user preferences and
-   * hard constraints only and share the same budget.
    */
-  pins?: boolean | { maxPins?: number; maxCharacters?: number; capturePinning?: boolean };
-  /**
-   * Run the curator after every N committed observation runs (in addition to any
-   * caller-driven `Memory.runCuration` triggers). Off by default.
-   */
-  curationCadence?: number;
+  pins?: boolean | { maxPins?: number; maxCharacters?: number };
   maxSteps?: number;
 }
 
@@ -113,19 +55,15 @@ export interface ResolvedSubconsciousAgent {
   name: string;
   instructions?: string;
   model?: SubconsciousModel;
-  agent?: Agent;
   maxSteps?: number;
   builtIn: boolean;
 }
 
 export interface ResolvedSubconsciousConfig {
   observation: ResolvedSubconsciousAgent[];
-  reflection: ResolvedSubconsciousAgent[];
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
-  learnedGuidance: boolean;
   tools: boolean;
   activity: false | { recentUpdates: number };
-  pins: false | { maxPins: number; maxCharacters: number; capturePinning: boolean };
-  curationCadence?: number;
+  pins: false | { maxPins: number; maxCharacters: number };
 }

@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { Link, Outlet, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 
@@ -117,12 +117,12 @@ function ExperimentPage() {
       isLoadingResults={resultsLoading}
       hasNextPage={hasNextPage}
     >
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full">
           <ExperimentTopArea experiment={experiment!} />
 
           <PageLayout.MainArea className="overflow-visible">
-            <ExperimentPageTabs
+            <ExperimentResultsSection
               experimentId={experimentId}
               datasetId={datasetId}
               experimentStatus={experiment!.status}

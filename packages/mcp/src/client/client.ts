@@ -4,7 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createTool } from '@mastra/core/tools';
+import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -1243,8 +1243,12 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP client validates
-   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   * Wraps the output schema with a validator that always succeeds. The tool's execute wrapper
+   * returns the full CallToolResult envelope when there is no structuredContent (and for
+   * in-band errors with `onToolError: 'return'`), which would never match the advertised
+   * outputSchema — so enforcement happens inside the execute wrapper, scoped to the
+   * structuredContent path (see buildToolFromListEntry). The JSON schema is surfaced here
+   * for documentation.
    */
   private convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
@@ -1413,6 +1417,13 @@ export class InternalMastraMCPClient extends MastraBase {
                 },
               }
             : {};
+        // Real validator for structuredContent. Kept separate from the Tool's outputSchema
+        // (whose validator is a no-op — see convertOutputSchema) because only the
+        // structuredContent success path should be validated, not envelope returns.
+        const rawOutputSchema = tool.outputSchema
+          ? (('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+          : undefined;
+        const outputValidator = rawOutputSchema ? toStandardSchema(rawOutputSchema) : undefined;
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -1494,6 +1505,24 @@ export class InternalMastraMCPClient extends MastraBase {
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
                 if (res.structuredContent !== undefined) {
+                  // Enforce the server-advertised outputSchema before the result reaches the
+                  // model. This covers both live-discovered tools and tools hydrated from a
+                  // cached catalog (which never populate the MCP SDK's tools/list output-schema
+                  // cache, so the SDK's own AJV check does not fire for them). On mismatch,
+                  // return the same structured ValidationError shape createTool produces so
+                  // the model can self-correct. Skipped for isError results, which are handled
+                  // above / by the `onToolError: 'return'` envelope path.
+                  if (!res.isError && outputValidator) {
+                    const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
+                    if (validation.error) {
+                      this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
+                        message: validation.error.message,
+                      });
+                      return validation.error;
+                    }
+                  }
+                  // Attach content metadata to the original structuredContent reference so the
+                  // hidden symbol channels (content/_meta) are preserved.
                   return attachMcpCallToolContent(
                     res.structuredContent,
                     res.content,

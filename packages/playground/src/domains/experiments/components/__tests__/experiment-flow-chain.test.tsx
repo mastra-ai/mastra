@@ -3,7 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ExperimentFlowChain } from '../experiment-flow-chain';
-import { experiments, noAgents, noWorkflows } from './fixtures/experiments';
+import { experiments, noAgents, noProcessors, noWorkflows } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
@@ -49,6 +49,7 @@ describe('ExperimentFlowChain', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/api/datasets/dataset-1`, () => HttpResponse.json(dataset)),
       http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
+      http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
       http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
       http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
       http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
@@ -71,6 +72,19 @@ describe('ExperimentFlowChain', () => {
     expect(screen.getByText('2 scorers')).toBeDefined();
     expect(screen.getByText('comparing ground truth')).toBeDefined();
     expect(screen.getByText('Score')).toBeDefined();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('opens the dataset and target links in the same tab', async () => {
+    const { queryClient } = renderChain(agentExperiment);
+
+    const datasetLink = await screen.findByRole('link', { name: /Entity extraction dataset/ });
+    const targetLink = screen.getByRole('link', { name: /example-entity-extraction-agent/ });
+    for (const link of [datasetLink, targetLink]) {
+      expect(link.getAttribute('target')).toBeNull();
+      expect(link.getAttribute('rel')).toBeNull();
+    }
 
     await waitForMutationsIdle(queryClient);
   });
