@@ -103,6 +103,7 @@ function startRequest(
   return {
     orgId: 'org-1',
     userId: 'user-1',
+    actor: { type: 'human' as const, id: 'user-1' },
     factoryProjectId: PROJECT_ID,
     sessionId: overrides.sessionId ?? 'session-1',
     threadTitle: 'Investigate issue 1',
@@ -129,16 +130,19 @@ function startRequest(
 
 describe('FactoryStartCoordinator', () => {
   it('commits the item session, exact binding, and durable pending start', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
       undefined,
       makeSourceControl() as never,
+      undefined,
+      seed.audit,
     );
 
-    const prepared = await coordinator.prepare(startRequest());
+    const prepared = await coordinator.prepare({ ...startRequest(), actorProfile: { name: 'Ada' } });
 
     expect(prepared).toMatchObject({
       threadId: 'session-1',
@@ -167,6 +171,22 @@ describe('FactoryStartCoordinator', () => {
       branch: 'factory/issue-1',
       startedBy: 'user-1',
     });
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([
+      expect.objectContaining({
+        action: 'factory.run.started',
+        actorId: 'user-1',
+        actorType: 'human',
+        targets: [{ type: 'work_item', id: prepared.workItemId, name: 'Fix issue 1' }],
+        metadata: {
+          role: 'work',
+          branch: 'factory/issue-1',
+          sessionId: 'session-1',
+          threadId: 'session-1',
+          bindingId: prepared.bindingId,
+          __actorProfile: { name: 'Ada' },
+        },
+      }),
+    ]);
   });
 
   it('seeds caller identity into an existing request context', async () => {
@@ -513,14 +533,17 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('replays the same durable pending kickoff and binding without dispatching it inline', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+  it('replays the same durable pending kickoff and binding without dispatching or auditing it again', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { controller, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
       undefined,
       makeSourceControl() as never,
+      undefined,
+      seed.audit,
     );
     const input = startRequest();
 
@@ -531,6 +554,7 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toHaveLength(1);
   });
 
   it('revokes only the prior binding for the same item role', async () => {

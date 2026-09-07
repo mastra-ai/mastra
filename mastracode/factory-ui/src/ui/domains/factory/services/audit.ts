@@ -13,7 +13,7 @@ export interface AuditActorProfile {
 export interface AuditEvent {
   id: string;
   actorId: string;
-  actorType: 'human' | 'agent';
+  actorType: 'human' | 'agent' | 'system';
   action: string;
   targets: AuditTarget[];
   metadata: Record<string, unknown>;
@@ -60,7 +60,7 @@ function isAuditEvent(value: unknown): value is AuditEvent {
     'actorId' in value &&
     typeof value.actorId === 'string' &&
     'actorType' in value &&
-    (value.actorType === 'human' || value.actorType === 'agent') &&
+    (value.actorType === 'human' || value.actorType === 'agent' || value.actorType === 'system') &&
     'action' in value &&
     typeof value.action === 'string' &&
     'targets' in value &&

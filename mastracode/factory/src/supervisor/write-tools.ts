@@ -131,13 +131,6 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
           ingress: { type: 'human', identity: `supervisor:${deps.userId}:${workItemId}:${item.revision}:${stage}` },
           cause: 'supervisor',
         });
-        await audit(
-          result.status === 'accepted' ? 'factory.work_item.stage_moved' : 'factory.work_item.transition_rejected',
-          { type: 'work_item', id: workItemId },
-          result.status === 'accepted'
-            ? { from, to: result.stage, revision: result.revision, transitionId: result.transitionId }
-            : { from, to: stage, code: result.code, reason: result.reason, transitionId: result.transitionId },
-        );
         if (result.status !== 'accepted') {
           throw new Error(`The transition was rejected (${result.code}): ${result.reason}`);
         }

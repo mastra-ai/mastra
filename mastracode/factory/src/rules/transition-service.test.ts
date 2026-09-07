@@ -1564,3 +1564,68 @@ describe('FactoryTransitionService', () => {
     });
   });
 });
+
+describe('audit trail', () => {
+  it('records every commit under the request actor, rule moves as the system, replays never', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      rules: defaultFactoryRules({ version: 'audit-test' }),
+      audit: seed.audit,
+    });
+    const sweep = {
+      ...request(item, { identity: 'sweep-1' }),
+      actor: { type: 'system' as const, id: 'sweep' },
+      ingress: { type: 'rule' as const, identity: 'sweep-1' },
+      cause: 'sweep',
+    };
+
+    const moved = await service.transition(sweep);
+    expect(moved.status).toBe('accepted');
+    expect(await service.transition(sweep)).toEqual(moved);
+    const stale = await service.transition({
+      ...request(item, { stage: 'review', identity: 'stale-1' }),
+      actorProfile: { name: 'Ada' },
+    });
+    expect(stale).toMatchObject({ status: 'rejected', code: 'stale' });
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events).toHaveLength(2);
+    expect(events.find(event => event.action === 'factory.work_item.stage_moved')).toMatchObject({
+      actorId: 'sweep',
+      actorType: 'system',
+      targets: [{ type: 'work_item', id: item.id, name: 'Fix the bug' }],
+      metadata: {
+        transitionId: moved.transitionId,
+        ingressType: 'rule',
+        cause: 'sweep',
+        ruleSetVersion: 'audit-test',
+        from: 'intake',
+        to: 'execute',
+        revision: 2,
+      },
+    });
+    expect(events.find(event => event.action === 'factory.work_item.transition_rejected')).toMatchObject({
+      actorId: 'user-1',
+      actorType: 'human',
+      metadata: { from: 'execute', to: 'review', code: 'stale', __actorProfile: { name: 'Ada' } },
+    });
+  });
+
+  it('does not call entering the stage a card already holds a move', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      rules: defaultFactoryRules({ version: 'audit-test' }),
+      audit: seed.audit,
+    });
+
+    expect(await service.transition({ ...request(item, { stage: 'intake' }), initialEntry: true })).toMatchObject({
+      status: 'accepted',
+    });
+
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toEqual([]);
+  });
+});

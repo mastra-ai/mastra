@@ -81,6 +81,7 @@ import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
+import { observeSessionRunEnd } from './session/run-end-capture.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -595,6 +596,7 @@ export class MastraFactory {
           rules,
           boards: this.#boards,
           storage: workItemsStorage,
+          audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -1023,6 +1025,7 @@ export class MastraFactory {
       observeSessionThreadTitle(session, {
         sourceControl: sourceControlStorage.forIntegration('github'),
       });
+      observeSessionRunEnd(session, { audit: auditDomain });
     });
 
     // Supervisor sessions carry their project in the resourceId; re-stamp

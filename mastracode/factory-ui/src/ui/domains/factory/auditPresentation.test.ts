@@ -58,6 +58,7 @@ describe('audit presentation', () => {
     expect(auditActionsForCategories(all)).toBeUndefined();
     expect(auditActionsForCategories(new Set<AuditNamespace>(['run']))).toEqual([
       'factory.run.started',
+      'factory.run.ended',
       'factory.run.approved',
       'factory.run.dismissed',
     ]);

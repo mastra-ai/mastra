@@ -2,38 +2,28 @@
  * Factory audit events domain — the append-only "who did what, when" trail
  * behind the software factory.
  *
- * One `audit_events` row records a single audited mutation (work-item change,
- * stage move, run start, worktree create/delete, git action, intake config
- * change). Rows are append-only: there is no update/delete API, and the table
- * is the local source of truth even when the WorkOS Audit Logs mirror is
- * unavailable.
+ * Rows are append-only: there is no update/delete API, and the table is the
+ * local source of truth even when the WorkOS Audit Logs mirror is unavailable.
+ * Tenancy is org-first, like `work_items`: `actor_id` records who acted but
+ * never scopes reads.
  *
- * Tenancy is **org-first**, like `work_items`: events are scoped by `org_id`
- * and (usually) `factory_project_id`; `actor_id` records who acted but never
- * scopes reads.
- *
- * v1 action taxonomy (register these in the WorkOS dashboard under
- * Audit Logs → Events for the export mirror to accept them):
- *   - factory.work_item.created
- *   - factory.work_item.updated
- *   - factory.work_item.stage_moved
- *   - factory.work_item.deleted
- *   - factory.run.started
- *   - factory.worktree.created
- *   - factory.worktree.deleted
- *   - factory.git.commit
- *   - factory.git.push
- *   - factory.git.pr_opened
- *   - factory.intake.config_updated
- *
- * v1.1 adds agent-level actions (also register these in WorkOS):
- *   - factory.agent.commit
- *   - factory.agent.push
- *   - factory.agent.pr_opened
+ * Actions (register these in the WorkOS dashboard under Audit Logs → Events
+ * for the export mirror to accept them):
+ *   - factory.work_item.created / updated / deleted
+ *   - factory.work_item.stage_moved / transition_rejected — every transition, any actor
+ *   - factory.work_item.comment_created / comment_edited / comment_deleted / comment_mentioned
+ *   - factory.work_item.labels_reconciled
+ *   - factory.run.started — every prepared kickoff, browser or rule
+ *   - factory.run.ended — every agent_end on a bound session, with its reason
+ *   - factory.run.approved / dismissed / retry
+ *   - factory.git.commit / push / pr_opened
+ *   - factory.agent.commit / push / signaled
+ *   - factory.intake.config_updated / binding_updated
+ *   - factory.feed.touched
  *
  * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
  * and `metadata.startedBy = <userId>` chaining accountability back to the human
- * whose message drove the run.
+ * whose message drove the run. Rule-driven events carry `actor_type = 'system'`.
  */
 
 import { FactoryStorageDomain } from '@mastra/core/storage';
@@ -50,7 +40,24 @@ export interface AuditTarget {
 }
 
 /** Who performed the audited action. */
-export type AuditActorType = 'human' | 'agent';
+export type AuditActorType = 'human' | 'agent' | 'system';
+
+/** Display name and avatar of a human actor, stamped at record time because MastraAuthStudio cannot resolve users by id. */
+export interface AuditActorProfileInput {
+  name?: string;
+  avatarUrl?: string;
+}
+
+export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
+
+export function auditActorProfile(
+  user: { name?: string; email?: string; avatarUrl?: string } | undefined,
+): AuditActorProfileInput | undefined {
+  const name = user?.name?.trim() || user?.email?.trim();
+  const avatarUrl = user?.avatarUrl?.trim();
+  if (!name && !avatarUrl) return undefined;
+  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
+}
 
 /** Request context captured alongside the event. */
 export interface AuditContext {
@@ -89,6 +96,7 @@ export interface RecordAuditEventInput {
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
   actorType?: AuditActorType;
+  actorProfile?: AuditActorProfileInput;
   /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
   action: string;
   targets: AuditTarget[];
@@ -239,7 +247,9 @@ export class AuditStorage extends FactoryStorageDomain {
       actor_type: input.actorType ?? 'human',
       action: input.action,
       targets: input.targets,
-      metadata: boundAuditMetadata(input.metadata),
+      metadata: boundAuditMetadata(
+        input.actorProfile ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: input.actorProfile } : input.metadata,
+      ),
       factory_project_id: input.factoryProjectId ?? null,
       project_repository_id: input.projectRepositoryId ?? null,
       context: input.context ?? {},

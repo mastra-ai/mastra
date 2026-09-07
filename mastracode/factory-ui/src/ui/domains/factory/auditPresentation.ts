@@ -24,15 +24,7 @@ export const AUDIT_CATEGORIES = [
     label: 'Runs',
     dotClass: 'bg-positive1',
     strokeClass: 'stroke-positive1',
-    actions: ['factory.run.started', 'factory.run.approved', 'factory.run.dismissed'],
-  },
-  {
-    namespace: 'worktree',
-    tone: 'neutral' satisfies BadgeVariant,
-    label: 'Worktrees',
-    dotClass: 'bg-neutral3',
-    strokeClass: 'stroke-neutral3',
-    actions: ['factory.worktree.created', 'factory.worktree.deleted'],
+    actions: ['factory.run.started', 'factory.run.ended', 'factory.run.approved', 'factory.run.dismissed'],
   },
   {
     namespace: 'git',
@@ -48,7 +40,7 @@ export const AUDIT_CATEGORIES = [
     label: 'Agent',
     dotClass: 'bg-accent6',
     strokeClass: 'stroke-accent6',
-    actions: ['factory.agent.commit', 'factory.agent.push', 'factory.agent.pr_opened'],
+    actions: ['factory.agent.commit', 'factory.agent.push'],
   },
   {
     namespace: 'intake',
@@ -156,6 +148,7 @@ export function auditVisibleMetadata(event: AuditEvent): Record<string, unknown>
 }
 
 export function auditMetadataPreview(event: AuditEvent): string {
+  if (event.action === 'factory.run.ended' && typeof event.metadata.reason === 'string') return event.metadata.reason;
   if (event.action === 'factory.work_item.stage_moved') {
     const from = event.metadata.from;
     const to = event.metadata.to;
@@ -173,6 +166,7 @@ export function auditMetadataPreview(event: AuditEvent): string {
 
 export function auditActorLabel(event: AuditEvent, actorName: string | undefined): string {
   if (event.actorType === 'human') return actorName ?? event.actorId;
+  if (event.actorType === 'system') return 'Factory';
   const agentName = event.metadata.agentName;
   return typeof agentName === 'string' ? agentName : (actorName ?? 'Agent');
 }

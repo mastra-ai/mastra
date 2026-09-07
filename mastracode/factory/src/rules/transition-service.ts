@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
+import type { AuditActorProfileInput, AuditActorType } from '../storage/domains/audit/base.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -47,6 +49,7 @@ export interface FactoryTransitionRequest {
   stage: FactoryRuleStage;
   expectedRevision: number;
   actor: FactoryRuleActor;
+  actorProfile?: AuditActorProfileInput;
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
@@ -62,6 +65,8 @@ export interface FactoryTransitionServiceOptions {
   rules: FactoryRules;
   storage: WorkItemsStorage;
   boards?: BoardRegistry;
+  /** Every commit, accepted or rejected, lands here as `stage_moved` / `transition_rejected` under the request's actor. */
+  audit?: AuditRecorder;
   timeoutMs?: number;
   /**
    * Called after a transition commits into a terminal stage (`done` /
@@ -113,6 +118,10 @@ function actorId(actor: FactoryRuleActor): string {
     case 'github':
       return `github:${actor.login}`;
   }
+}
+
+export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorType: AuditActorType } {
+  return { actorId: actorId(actor), actorType: actor.type === 'github' ? 'human' : actor.type };
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -203,11 +212,13 @@ export class FactoryTransitionService {
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
+  readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
+    this.#audit = options.audit;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
@@ -231,7 +242,56 @@ export class FactoryTransitionService {
     if (!item) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', 'Work item not found.');
     }
+    const result = await this.#evaluateAndCommit(request, transitionId, item);
+    await this.#recordTransition(request, item, result);
+    return result;
+  }
 
+  async #recordTransition(
+    request: FactoryTransitionRequest,
+    item: WorkItemRow,
+    result: FactoryTransitionResult,
+  ): Promise<void> {
+    if (!this.#audit) return;
+    const from = currentStage(item.stages);
+    if (result.status === 'accepted' && result.stage === from) return;
+    const outcome =
+      result.status === 'accepted'
+        ? { action: 'factory.work_item.stage_moved', to: result.stage, revision: result.revision }
+        : {
+            action: 'factory.work_item.transition_rejected',
+            to: request.stage,
+            code: result.code,
+            reason: result.reason,
+          };
+    const { action, ...detail } = outcome;
+    await this.#audit
+      .record({
+        orgId: request.orgId,
+        factoryProjectId: request.factoryProjectId,
+        ...auditActorOf(request.actor),
+        actorProfile: request.actorProfile,
+        action,
+        targets: [{ type: 'work_item', id: item.id, name: item.title }],
+        metadata: {
+          transitionId: result.transitionId,
+          ingressType: request.ingress.type,
+          cause: request.cause,
+          ruleSetVersion: this.#rules.version,
+          from,
+          ...detail,
+        },
+      })
+      .catch(error => {
+        console.warn(`[factory] audit failed for transition ${result.transitionId}:`, error);
+      });
+  }
+
+  async #evaluateAndCommit(
+    request: FactoryTransitionRequest,
+    transitionId: string,
+    item: WorkItemRow,
+  ): Promise<FactoryTransitionResult> {
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
       return this.#commitRejection(
         request,

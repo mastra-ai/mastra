@@ -7,7 +7,9 @@ import type { Context } from 'hono';
 import { getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
+import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile } from './base.js';
 import type {
+  AuditActorProfileInput,
   AuditContext,
   AuditEventPage,
   AuditEventRow,
@@ -39,6 +41,9 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
+/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends. */
+export type AuditRecorder = Pick<AuditDomain, 'record'>;
+
 /** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
 export interface AuditSink {
   id: string;
@@ -56,22 +61,7 @@ export interface AuditActorProfile {
   avatarUrl?: string;
 }
 
-/**
- * Reserved metadata key on `AuditEventRow.metadata` that carries the acting
- * human user's display name and avatar captured from the auth context at
- * record time. Read back by `#resolveActorProfiles` so names/avatars work
- * for every auth provider without requiring an `IUserProvider.getUser(id)`
- * implementation — the Studio provider proxies through the shared API and
- * cannot resolve arbitrary users by id.
- */
-const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
-
-interface StoredActorProfile {
-  name?: string;
-  avatarUrl?: string;
-}
-
-function readStoredActorProfile(metadata: Record<string, unknown> | undefined): StoredActorProfile | undefined {
+function readStoredActorProfile(metadata: Record<string, unknown> | undefined): AuditActorProfileInput | undefined {
   if (!metadata) return undefined;
   const raw = metadata[ACTOR_PROFILE_METADATA_KEY];
   if (!raw || typeof raw !== 'object') return undefined;
@@ -79,17 +69,6 @@ function readStoredActorProfile(metadata: Record<string, unknown> | undefined): 
   const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : undefined;
   const avatarUrl =
     typeof profile.avatarUrl === 'string' && profile.avatarUrl.trim() ? profile.avatarUrl.trim() : undefined;
-  if (!name && !avatarUrl) return undefined;
-  return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
-}
-
-function buildActorProfileMetadata(user: {
-  name?: string;
-  email?: string;
-  avatarUrl?: string;
-}): StoredActorProfile | undefined {
-  const name = user.name?.trim() || user.email?.trim();
-  const avatarUrl = user.avatarUrl?.trim();
   if (!name && !avatarUrl) return undefined;
   return { ...(name ? { name } : {}), ...(avatarUrl ? { avatarUrl } : {}) };
 }
@@ -225,17 +204,13 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     try {
       const tenant = this.#auth.tenant(context);
       if (!tenant?.orgId) return;
-      const user = getFactoryAuthUser(context);
-      const actorProfile = user ? buildActorProfileMetadata(user) : undefined;
-      const metadata = actorProfile
-        ? { ...input.metadata, [ACTOR_PROFILE_METADATA_KEY]: actorProfile }
-        : input.metadata;
       await this.record({
         orgId: tenant.orgId,
         actorId: tenant.userId,
+        actorProfile: auditActorProfile(getFactoryAuthUser(context)),
         action: input.action,
         targets: input.targets,
-        metadata,
+        metadata: input.metadata,
         factoryProjectId: input.factoryProjectId,
         projectRepositoryId: input.projectRepositoryId,
         context: auditRequestContext(context),

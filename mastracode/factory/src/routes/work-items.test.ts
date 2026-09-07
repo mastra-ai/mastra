@@ -9,7 +9,7 @@ import type { BoardRegistry } from '../boards/index.js';
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -19,6 +19,22 @@ import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-item
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
+
+const auditRecorder: AuditRecorder = {
+  async record(input) {
+    if (auditFailure) throw auditFailure;
+    auditRecorded.push({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      actorType: input.actorType,
+      action: input.action,
+      factoryProjectId: input.factoryProjectId,
+      targets: input.targets,
+      metadata: input.metadata,
+    });
+    return null;
+  },
+};
 
 const audit: AuditEmitter = {
   async emit({ context, input }) {
@@ -76,6 +92,7 @@ function buildApp(
         rules: builtInFactoryRules(),
         storage: seed.workItems,
         boards: boardRegistry,
+        audit: auditRecorder,
       }),
       startCoordinator,
       liveSessions: { isRunning: sessionId => running.has(sessionId) },
@@ -687,12 +704,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         requestContext,
       }),
     );
-    expect(auditRecorded).toContainEqual(
-      expect.objectContaining({
-        action: 'factory.run.started',
-        metadata: expect.objectContaining({ bindingId: 'binding-1', role: 'plan' }),
-      }),
-    );
+    expect(auditRecorded).toEqual([]);
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {
@@ -1999,24 +2011,14 @@ describe('audit events', () => {
     expect(auditRecorded).toEqual([]);
   });
 
-  it('records run.started when a PATCH introduces a new session role, but not on re-file', async () => {
+  it('files a session onto a role as an update, never as a run start', async () => {
     const item = await createItem();
     auditRecorded = [];
 
     const session = { sessionId: '/sb/wt/issue-42', branch: 'factory/issue-42', threadId: 't-1' };
     await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
-    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated', 'factory.run.started']);
-    expect(auditRecorded[1].metadata).toEqual({
-      role: 'work',
-      branch: 'factory/issue-42',
-      threadId: 't-1',
-      sessionId: '/sb/wt/issue-42',
-    });
-
-    // Re-filing the same role is not a new run.
-    auditRecorded = [];
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { sessions: { work: session } });
     expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.updated']);
+    expect(auditRecorded[0].metadata).toEqual({ fields: ['sessions'] });
   });
 
   it('records only updated when the patch does not move stages', async () => {

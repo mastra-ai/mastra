@@ -84,12 +84,7 @@ export interface ActivityDeed {
 
 export type ActivityEntry = ActivityMove | ActivityDeed;
 
-/**
- * The board writes every move into `stageHistory` transactionally; an audit row
- * is a best-effort write only two REST paths make, so it holds a fraction of
- * them. Taking moves from here shows that fraction twice and the rest not at
- * all — `factoryActivity` owns them.
- */
+/** `factoryActivity` owns moves from `stageHistory`; the audit copy would show each one twice. */
 const STAGE_MOVE_ACTION = 'factory.work_item.stage_moved';
 
 /** A card the board still holds, as the audit trail's bare target ids need it. */

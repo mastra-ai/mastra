@@ -14,7 +14,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRules } from '../rules/types.js';
+import type { FactoryRuleActor, FactoryRules } from '../rules/types.js';
 import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
@@ -26,7 +26,7 @@ import {
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
 import { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
-import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
@@ -84,7 +84,7 @@ export interface FactoryApiRoutesDeps {
   /** Optional user directory for resolving persisted owners to display profiles. */
   users?: Pick<IUserProvider, 'getUser' | 'getUsers'>;
   authStorage: AuthStorage;
-  audit: AuditEmitter;
+  audit: AuditEmitter & AuditRecorder;
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
@@ -206,6 +206,13 @@ async function reuseBoundSession(
   };
 }
 
+/** A person's approval is theirs to answer for; an agent's consent or an auto-run is the dispatcher's. */
+function ruleRunActor(approvedBy: string | undefined): FactoryRuleActor {
+  return approvedBy && !isAgentActor(approvedBy)
+    ? { type: 'human', id: approvedBy }
+    : { type: 'system', id: 'factory-rule-dispatcher' };
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -255,6 +262,7 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      actor: ruleRunActor(approver),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
@@ -475,6 +483,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        deps.audit,
       )
     : undefined;
   if (transitionService && startCoordinator) {

@@ -130,6 +130,9 @@ describe('prepareFactoryRuleBinding', () => {
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ userId: 'user-1' }),
     );
+    expect(prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: { type: 'system', id: 'factory-rule-dispatcher' } }),
+    );
   });
 
   it('reuses the role session the work item already holds instead of minting a replacement', async () => {
@@ -160,6 +163,7 @@ describe('prepareFactoryRuleBinding', () => {
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(sessionId).toBe(existing.sessionId);
     expect(userId).toBe('original-owner');
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ actor: { type: 'human', id: 'approver-1' } }));
     await expect(
       sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
     ).resolves.toHaveLength(1);

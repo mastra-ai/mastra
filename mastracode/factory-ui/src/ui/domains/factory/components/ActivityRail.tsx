@@ -7,7 +7,6 @@ import {
   Check,
   ChevronRight,
   Eye,
-  FolderGit2,
   GitCommitHorizontal,
   Hammer,
   Inbox,
@@ -59,7 +58,6 @@ const DEED_GLYPHS: Record<string, LucideIcon> = {
   run: Play,
   git: GitCommitHorizontal,
   agent: Bot,
-  worktree: FolderGit2,
   intake: Inbox,
   work_item: SquarePen,
 };
@@ -67,6 +65,7 @@ const DEED_GLYPHS: Record<string, LucideIcon> = {
 /** The verb that makes the rail read as prose; anything new falls back to its own label. */
 const DEED_PHRASES: Record<string, string> = {
   'run.started': 'started a run on',
+  'run.ended': 'ended a run on',
   'run.approved': 'approved the run on',
   'run.dismissed': 'dismissed the run on',
   'git.commit': 'committed to',
@@ -74,9 +73,6 @@ const DEED_PHRASES: Record<string, string> = {
   'git.pr_opened': 'opened a pull request for',
   'agent.commit': 'committed to',
   'agent.push': 'pushed to',
-  'agent.pr_opened': 'opened a pull request for',
-  'worktree.created': 'set up a worktree for',
-  'worktree.deleted': 'cleaned up the worktree of',
   'work_item.comment_created': 'commented:',
   'work_item.comment_edited': 'edited a comment:',
   'work_item.comment_deleted': 'deleted a comment:',

@@ -19,6 +19,7 @@ const ACTION_LABELS: Record<string, string> = {
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.deleted': 'Removed the item',
   'factory.run.started': 'Started a run',
+  'factory.run.ended': 'Run ended',
   'factory.run.approved': 'Started a suggested run',
   'factory.run.dismissed': 'Dismissed a suggested run',
 };
@@ -42,6 +43,7 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
   }
+  if (event.actorType === 'system') return { id: event.actorId, name: 'Factory' };
   return actors[event.actorId];
 }
 
