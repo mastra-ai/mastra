@@ -1,10 +1,8 @@
 /**
- * The Intake sentinel auto-loads the next candidate page when it scrolls into
- * view. Filters, cards already on the board, and drafts all shorten what a
- * loaded page adds to the column, so a sentinel that fetched whenever it was
- * merely in view chained through every open pull request of the repository.
- * Now only a scroll into view fetches; a sentinel that is already there waits
- * for a click.
+ * Filters, cards already on the board, and drafts can leave a loaded page with
+ * nothing visible, so the Intake sentinel stays in view. A sentinel that fetched
+ * whenever it was in view chained through every open pull request; now coming
+ * into view loads one page and the next waits for a scroll or a click.
  */
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -128,19 +126,19 @@ function renderReviewBoard() {
 describe('Intake candidate paging', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('does not fetch on its own when the sentinel is already in view', async () => {
+  it('loads one page on its own when the sentinel starts in view, then waits for a click', async () => {
     stubIntersectionObserver(true);
     const requestedPages = stubReviewBoard();
     const { client } = renderReviewBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
-    await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
+    await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
     await waitForMutationsIdle(client);
-    expect(requestedPages).toEqual(['1']);
+    expect(requestedPages).toEqual(['1', '2']);
 
     await userEvent.click(within(intake).getByRole('button', { name: 'Load more candidates' }));
-    await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
-    expect(requestedPages).toEqual(['1', '2']);
+    await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
+    expect(requestedPages).toEqual(['1', '2', '3']);
   });
 
   it('fetches one page per scroll into view, never chaining into the next', async () => {

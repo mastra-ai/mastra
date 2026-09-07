@@ -4,4 +4,4 @@
 
 Fixed the board's Intake column pulling every open pull request or issue of the repository on its own, behind a spinner, whenever a filter, cards already on the board, or drafts left the loaded pages with little to show.
 
-Scrolling to the end of the column still loads the next page. When that page adds nothing to scroll past, the Load more button takes over instead of the next page loading by itself. The Activity, Attention, and Rules lists follow the same rule.
+Reaching the end of the column now loads one page. A page that adds nothing to scroll past leaves the end where it is, so the next page waits for a scroll or the Load more button instead of loading by itself. The Activity, Attention, and Rules lists follow the same rule.
