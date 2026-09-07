@@ -250,18 +250,6 @@ vi.mock('../agents/model.js', () => ({
   resolveModel: resolveModelMock,
 }));
 
-vi.mock('../agents/subagents/execute.js', () => ({
-  executeSubagent: {},
-}));
-
-vi.mock('../agents/subagents/explore.js', () => ({
-  exploreSubagent: {},
-}));
-
-vi.mock('../agents/subagents/plan.js', () => ({
-  planSubagent: {},
-}));
-
 vi.mock('../agents/tools.js', () => ({
   createDynamicTools: vi.fn(),
   createToolHooks: vi.fn(),
@@ -502,6 +490,55 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
+
+  it.each([{}, { subagents: undefined }])(
+    'registers native defaults when subagents is omitted or undefined (%j)',
+    async config => {
+      const { createMastraCode } = await import('../index.js');
+      await createMastraCode(config);
+      const { subagents, modes } = controllerConstructorMock.mock.calls[0]![0];
+      expect(subagents.map((agent: { id: string }) => agent.id)).toEqual(['explore', 'plan', 'execute']);
+      for (const [index, modeId] of ['fast', 'plan', 'build'].entries()) {
+        expect(subagents[index].defaultModelId).toBe(
+          modes.find((mode: { id: string }) => mode.id === modeId).defaultModelId,
+        );
+        expect(subagents[index].instructions).toBeTruthy();
+      }
+    },
+  );
+
+  it('preserves an explicit empty subagent list', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ subagents: [] });
+    expect(controllerConstructorMock.mock.calls[0]![0].subagents).toEqual([]);
+  });
+
+  it('uses the default custom mode model when native modes are absent', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }] });
+    expect(
+      controllerConstructorMock.mock.calls[0]![0].subagents.map(
+        (agent: { defaultModelId: string }) => agent.defaultModelId,
+      ),
+    ).toEqual(['openai/review-model', 'openai/review-model', 'openai/review-model']);
+  });
+
+  it('filters custom controller tools without mutating definitions or replacing models', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const definition = {
+      id: 'review',
+      name: 'Review',
+      description: 'Review changes',
+      instructions: 'Review changes',
+      defaultModelId: 'openai/custom-model',
+      allowedControllerTools: ['task_write', 'task_check'],
+    };
+    await createMastraCode({ subagents: [definition], disabledTools: ['task_write'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].subagents).toEqual([
+      { ...definition, allowedControllerTools: ['task_check'] },
+    ]);
+    expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
+  });
 
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
