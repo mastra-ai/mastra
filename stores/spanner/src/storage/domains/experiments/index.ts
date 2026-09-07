@@ -5,7 +5,6 @@ import {
   calculatePagination,
   createStorageErrorId,
   ExperimentsStorage,
-  hasErrorCode,
   normalizePerPage,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
@@ -140,11 +139,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
             | undefined;
           let purgeMetadata: Record<string, unknown> | null = null;
           if (datasetId) {
-            await tx.run({
-              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASETS, 'table name')}
+            // A no-op DML write takes an exclusive lock on the dataset row. Purge uses
+            // the same mutation so either transaction retries and observes the winner.
+            await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASETS, 'table name')}
+                    SET ${quoteIdent('version', 'column name')} = ${quoteIdent('version', 'column name')}
                     WHERE ${quoteIdent('id', 'column name')} = @datasetId`,
               params: { datasetId },
-              json: true,
             });
             const [itemRows] = await tx.run({
               sql: `SELECT ${quoteIdent('metadata', 'column name')} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}

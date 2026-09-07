@@ -901,6 +901,19 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            // Experiment-result writes use the same no-op DML mutation. The shared
+            // exclusive lock ensures the losing transaction retries after purge.
+            const [datasetRowCount] = await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASETS, 'table name')}
+                    SET ${quoteIdent('version', 'column name')} = ${quoteIdent('version', 'column name')}
+                    WHERE ${quoteIdent('id', 'column name')} = @datasetId`,
+              params: { datasetId },
+            });
+            if (Number(datasetRowCount) === 0) {
+              await tx.commit();
+              return;
+            }
+
             const [rows] = await tx.run({
               sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id AND ${quoteIdent('datasetId', 'column name')} = @datasetId LIMIT 1`,
               params: { id, datasetId },
