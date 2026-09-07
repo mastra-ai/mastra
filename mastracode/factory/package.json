@@ -37,7 +37,6 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "smoke:dist": "node --input-type=module -e \"import('./dist/index.js').then(() => console.log('dist import ok')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "check": "tsc --noEmit",
-    "generate:slack-emoji": "node scripts/generate-slack-emoji.mjs",
     "test": "vitest run",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."

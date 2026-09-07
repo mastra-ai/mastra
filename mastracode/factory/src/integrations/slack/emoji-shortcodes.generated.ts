@@ -1,9 +1,8 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  *
- * Generated from https://raw.githubusercontent.com/iamcal/emoji-data/master/emoji.json
- * by mastracode/factory/scripts/generate-slack-emoji.mjs.
- * Run `pnpm generate:slack-emoji` from mastracode/factory to regenerate.
+ * Source: https://raw.githubusercontent.com/iamcal/emoji-data/master/emoji.json
+ * Regenerate: node scripts/generate-slack-emoji.mjs (from mastracode/factory)
  */
 
 export const emojiByShortcode: Record<string, string> = {
