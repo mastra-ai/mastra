@@ -1437,6 +1437,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       // but is jarring in a printed remediation command. The name is what
       // the user actually types.
       environmentName: environment.name,
+      // Unified deploy is the only flow that provisions a worker service
+      // from the build manifest, so it alone opts into the workers check.
+      checkWorkers: true,
     });
 
     // If preflight flagged a blocking issue that a managed database would
@@ -1476,6 +1479,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         hasEnvFile: hasAmbientEnvFile,
         managedEnvVarNames: mergedManagedNames,
         environmentName: environment.name,
+        checkWorkers: true,
       });
     } else {
       issues = autoProvisioned.issues;

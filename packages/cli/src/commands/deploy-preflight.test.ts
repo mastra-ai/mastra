@@ -612,7 +612,7 @@ describe('preflightBuildOutput', () => {
         custom: [],
       });
 
-      const issues = await preflightBuildOutput(tmpDir, {});
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
       const issue = issues.find(i => i.code === 'MISSING_ENV_VAR' && i.message.includes('Background tasks'));
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe('warning');
@@ -633,7 +633,7 @@ describe('preflightBuildOutput', () => {
         custom: [],
       });
 
-      const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'non-url' });
+      const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'non-url' }, { checkWorkers: true });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue?.autofix).toMatchObject({ provider: 'redis' });
     });
@@ -648,7 +648,11 @@ describe('preflightBuildOutput', () => {
         custom: [],
       });
 
-      const issues = await preflightBuildOutput(tmpDir, { REDIS_URL: 'redis://prod.example:6379' });
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        { REDIS_URL: 'redis://prod.example:6379' },
+        { checkWorkers: true },
+      );
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue).toBeUndefined();
     });
@@ -663,7 +667,7 @@ describe('preflightBuildOutput', () => {
         custom: [],
       });
 
-      const issues = await preflightBuildOutput(tmpDir, {}, { managedEnvVarNames: ['REDIS_URL'] });
+      const issues = await preflightBuildOutput(tmpDir, {}, { managedEnvVarNames: ['REDIS_URL'], checkWorkers: true });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue).toBeUndefined();
     });
@@ -671,7 +675,7 @@ describe('preflightBuildOutput', () => {
     it('does not flag when workers.json is absent (older deployer or no background tasks)', async () => {
       writeBundle(`export default {};`);
 
-      const issues = await preflightBuildOutput(tmpDir, {});
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue).toBeUndefined();
     });
@@ -680,7 +684,7 @@ describe('preflightBuildOutput', () => {
       writeBundle(`export default {};`);
       writeWorkersManifest(null);
 
-      const issues = await preflightBuildOutput(tmpDir, {});
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue).toBeUndefined();
     });
@@ -689,7 +693,7 @@ describe('preflightBuildOutput', () => {
       writeBundle(`export default {};`);
       writeWorkersManifest({ enabled: false });
 
-      const issues = await preflightBuildOutput(tmpDir, {});
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));
       expect(workerIssue).toBeUndefined();
     });
@@ -697,6 +701,21 @@ describe('preflightBuildOutput', () => {
     it('does not flag when workers.json is malformed JSON', async () => {
       writeBundle(`export default {};`);
       writeFileSync(join(tmpDir, '.mastra', 'output', 'workers.json'), '{ not-json');
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { checkWorkers: true });
+      const workerIssue = issues.find(i => i.message.includes('Background tasks'));
+      expect(workerIssue).toBeUndefined();
+    });
+
+    it('skips the check entirely without checkWorkers (legacy studio/server deploys strip the manifest)', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
 
       const issues = await preflightBuildOutput(tmpDir, {});
       const workerIssue = issues.find(i => i.message.includes('Background tasks'));

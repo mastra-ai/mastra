@@ -12,6 +12,7 @@ import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
+import { resolveLegacyWorkersManifestOverride } from '../../utils/workers-manifest-guard.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -21,84 +22,6 @@ import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-}
-
-/**
- * Platform-workers rollout gate.
- *
- * On every deploy where the built `workers.json` declares a non-null worker
- * manifest, consult PostHog for the `platform-workers` flag scoped to the
- * user's org. When OFF, return an archive-only `workers.json` override so the
- * platform receives no manifest and provisions no dedicated worker service.
- * The reusable build output remains unchanged for later deploys.
- *
- * Fail-CLOSED: any PostHog error, disabled telemetry, or missing analytics
- * client falls through to "flag off" → downgrade. A user must NEVER accidentally
- * get workers because a flag lookup failed.
- *
- * Returns a report so `runStudioDeploy` can print the correct one-line notice.
- */
-export async function applyWorkersFlagGuard(deps: {
-  outputDir: string;
-  orgId: string;
-  analytics: {
-    isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean>;
-  } | null;
-  fs?: {
-    readFile: (path: string) => Promise<string>;
-  };
-}): Promise<{
-  status: 'no-manifest' | 'already-null' | 'preserved' | 'downgraded';
-  manifestOverride?: string;
-}> {
-  const { readFile: readFn } = deps.fs ?? {
-    readFile: async (p: string) => readFile(p, 'utf-8'),
-  };
-
-  const manifestPath = join(deps.outputDir, 'workers.json');
-
-  let raw: string;
-  try {
-    raw = await readFn(manifestPath);
-  } catch {
-    return { status: 'no-manifest' };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    // A malformed manifest is upstream's problem — don't try to fix it here.
-    return { status: 'no-manifest' };
-  }
-
-  if (parsed === null || parsed === undefined) {
-    return { status: 'already-null' };
-  }
-
-  // Fail-closed: no analytics → treat as flag-off → downgrade. Users on
-  // MASTRA_TELEMETRY_DISABLED=1 will emit no manifest until we build a proper
-  // out-of-band flag transport. That's the conservative rollout stance.
-  //
-  // Defensive try/catch: `PosthogAnalytics.isFeatureEnabled` catches internally
-  // today, but we do not want this guard to break the deploy if a future
-  // refactor (or a custom analytics stub) violates the contract.
-  let flagOn = false;
-  if (deps.analytics) {
-    try {
-      flagOn = await deps.analytics.isFeatureEnabled('platform-workers', {
-        groups: { organization: deps.orgId },
-      });
-    } catch {
-      flagOn = false;
-    }
-  }
-
-  if (flagOn) {
-    return { status: 'preserved' };
-  }
-
-  return { status: 'downgraded', manifestOverride: JSON.stringify(null) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -639,19 +562,17 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  // Platform-workers rollout gate. If the deploying user is not opted into
-  // the `platform-workers` PostHog flag, overwrite `.mastra/output/workers.json`
-  // with `null` so the platform receives no manifest and provisions no
-  // dedicated worker service. The app still runs its BackgroundTaskWorker
-  // in-process (mode: 'full' default), so background tasks execute — just
-  // co-located with the API replica.
-  const workersGuard = await applyWorkersFlagGuard({
-    outputDir: join(targetDir, '.mastra', 'output'),
-    orgId,
-    analytics: getAnalytics(),
-  });
-  if (workersGuard.status === 'downgraded') {
-    p.log.warn('Background workers not yet enabled for your account — deploy will run in single-process mode.');
+  // Legacy pipeline: never ship a worker manifest. Only the unified
+  // `mastra deploy` flow may trigger worker-service provisioning, so
+  // overwrite `.mastra/output/workers.json` with `null` inside the archive.
+  // The app still runs its BackgroundTaskWorker in-process (mode: 'full'
+  // default), so background tasks execute — just co-located with the API
+  // replica.
+  const workersGuard = await resolveLegacyWorkersManifestOverride(join(targetDir, '.mastra', 'output'));
+  if (workersGuard.status === 'stripped') {
+    p.log.info(
+      'Background workers run in-process on studio deploys — use `mastra deploy` for a dedicated worker service.',
+    );
   }
 
   // If the user didn't pass --env-file and no ambient .env* file exists,

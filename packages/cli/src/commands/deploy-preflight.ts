@@ -178,9 +178,18 @@ export async function preflightBuildOutput(
      * Omit for lint / studio contexts.
      */
     environmentName?: string;
+    /**
+     * Whether this deploy path can provision a dedicated worker service from
+     * the build's `workers.json` manifest. Only the unified `mastra deploy`
+     * (environment) flow passes true — legacy `studio deploy`/`server deploy`
+     * strip the manifest from their artifacts and run workers in-process, so
+     * surfacing a workers-need-REDIS_URL issue there would be noise.
+     * Defaults to false.
+     */
+    checkWorkers?: boolean;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true, managedEnvVarNames, environmentName } = options;
+  const { hasEnvFile = true, managedEnvVarNames, environmentName, checkWorkers = false } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -220,7 +229,10 @@ export async function preflightBuildOutput(
   // If the extracted manifest says workers are enabled but no REDIS_URL is
   // in scope, surface a missing-env-var issue with the same `redis` autofix
   // used elsewhere so `maybeAutoProvisionDatabases` can offer inline attach.
-  issues.push(...(await checkWorkersNeedRedis(outputDir, envVars, managedEnvVarNames)));
+  // Opt-in: only the unified deploy flow provisions workers.
+  if (checkWorkers) {
+    issues.push(...(await checkWorkersNeedRedis(outputDir, envVars, managedEnvVarNames)));
+  }
 
   return issues;
 }
