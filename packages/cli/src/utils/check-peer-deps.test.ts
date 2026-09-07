@@ -1,7 +1,11 @@
-import { getPackageInfo } from 'local-pkg';
-import { describe, expect, it, vi } from 'vitest';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { checkMastraPeerDeps, logPeerDepWarnings } from './check-peer-deps.js';
+import { getPackageInfo } from 'local-pkg';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { checkMastraPeerDeps, detectPackageManager, logPeerDepWarnings } from './check-peer-deps.js';
 import type { MastraPackageInfo } from './mastra-packages.js';
 
 // Mock local-pkg
@@ -202,5 +206,51 @@ describe('logPeerDepWarnings', () => {
     expect(consoleSpy).toHaveBeenCalled();
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('detectPackageManager', () => {
+  const temporaryDirectories: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(temporaryDirectories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  });
+
+  async function createNestedProject(lockfile?: string) {
+    const workspace = await mkdtemp(join(tmpdir(), 'mastra-package-manager-'));
+    const project = join(workspace, 'apps', 'api');
+    temporaryDirectories.push(workspace);
+    await mkdir(project, { recursive: true });
+
+    if (lockfile) {
+      await writeFile(join(workspace, lockfile), '');
+    }
+
+    return { project, workspace };
+  }
+
+  it('detects pnpm from an ancestor workspace lockfile', async () => {
+    const { project } = await createNestedProject('pnpm-lock.yaml');
+
+    expect(detectPackageManager(project)).toBe('pnpm');
+  });
+
+  it('detects yarn from an ancestor workspace lockfile', async () => {
+    const { project } = await createNestedProject('yarn.lock');
+
+    expect(detectPackageManager(project)).toBe('yarn');
+  });
+
+  it('uses the closest lockfile when workspaces are nested', async () => {
+    const { project, workspace } = await createNestedProject('pnpm-lock.yaml');
+    await writeFile(join(workspace, 'apps', 'yarn.lock'), '');
+
+    expect(detectPackageManager(project)).toBe('yarn');
+  });
+
+  it('falls back to npm when no lockfile is found', async () => {
+    const { project } = await createNestedProject();
+
+    expect(detectPackageManager(project)).toBe('npm');
   });
 });
