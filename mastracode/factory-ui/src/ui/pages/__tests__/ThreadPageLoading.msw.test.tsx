@@ -53,10 +53,13 @@ function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
   messages = [],
+  sessionState = {},
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
+  /** What the session-state snapshot adds: a run in flight, the message it has streamed so far. */
+  sessionState?: Record<string, unknown>;
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
@@ -115,6 +118,7 @@ function stubThreadRoute({
         modelId: 'openai/gpt-4o-mini',
         threadId: activeThreadId,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        ...sessionState,
       }),
     ),
     http.post(`${AC}/sessions/:resourceId/thread`, async ({ request }) => {
@@ -212,6 +216,58 @@ describe('ThreadPage loading shell', () => {
 
     messagesGate.resolve();
     await screen.findByText('There are no user turns in this thread.');
+    observer.disconnect();
+
+    expect(renderedEmptyState).toBe(false);
+  });
+
+  it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({
+      sessionState: {
+        running: true,
+        currentMessage: {
+          id: 'live-1',
+          role: 'assistant',
+          createdAt: '2026-09-08T10:00:00.000Z',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Checking out the pull request.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+              },
+            ],
+          },
+        },
+      },
+    });
+    renderThreadRoute();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    // The transcript reveals the step part by part: the text lands first, the tool card follows.
+    expect(await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 4000 })).toBeInTheDocument();
+    expect(document.body).toHaveTextContent('Checking out the pull request.');
+    expect(screen.queryByText('What can I help you build?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+  });
+
+  it('shows the run thinking, never the empty prompt, while a joined run has streamed nothing yet', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ sessionState: { running: true } });
+    renderThreadRoute();
+    sessionGate.resolve();
+
+    let renderedEmptyState = false;
+    const observer = new MutationObserver(records => {
+      renderedEmptyState ||= records.some(record =>
+        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
+      );
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    messagesGate.resolve();
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
     observer.disconnect();
 
     expect(renderedEmptyState).toBe(false);

@@ -9,8 +9,11 @@ import { SessionPreparationOverlay } from './SessionPreparationOverlay';
 import { TaskPanel } from './TaskPanel';
 import { Transcript } from './Transcript';
 import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
+import type { ChatConnectionApi } from '../context/ChatConnectionContext';
 import { ChatMessageBoundary } from '../context/ChatSessionProvider';
+import { useChatConnection } from '../context/useChatConnection';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 
 interface SessionChatSurfaceProps {
@@ -22,6 +25,11 @@ interface SessionChatSurfaceProps {
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
   stageSurface?: ReactNode;
+}
+
+function runStateKnown(connection: ChatConnectionApi, resourceReady: boolean): boolean {
+  const draftNeverConnects = !resourceReady;
+  return draftNeverConnects || connection.state !== undefined || connection.status === 'error';
 }
 
 export function SessionChatSurface({
@@ -36,6 +44,9 @@ export function SessionChatSurface({
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
   const { historyInitializing, preparing } = useChatMessagePreparation();
+  const connection = useChatConnection();
+  const { resourceReady } = useChatSessionContext();
+  const showEmptyState = transcript.entries.length === 0 && !busy && runStateKnown(connection, resourceReady);
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
 
   return (
@@ -59,7 +70,7 @@ export function SessionChatSurface({
               <ChatShell.Column className="flex-1">
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
-                  {transcript.entries.length === 0 && emptyState}
+                  {showEmptyState && emptyState}
                   <Transcript tail={<ActivityLine />} />
                 </ChatMessageBoundary>
               </ChatShell.Column>

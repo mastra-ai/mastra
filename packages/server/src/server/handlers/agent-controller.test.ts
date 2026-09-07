@@ -652,6 +652,52 @@ describe('agent-controller routes', () => {
       expect(res.running).toBe(true);
     });
 
+    it('returns the in-flight assistant message of the running thread, and nothing once the run ends', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      const liveThreadId = session.thread.requireId();
+      const otherThread = await session.thread.create({ title: 'Other thread' });
+      await session.thread.switch({ threadId: liveThreadId });
+      const message = {
+        id: 'live-1',
+        role: 'assistant',
+        threadId: liveThreadId,
+        resourceId: 'user-1',
+        createdAt: new Date('2026-09-08T10:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Checking out the pull request.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+            },
+          ],
+        },
+      };
+      session.displayState.apply({ type: 'agent_start' } as any);
+      session.displayState.apply({ type: 'message_update', message } as any);
+      const readState = (threadId?: string) =>
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-1',
+          threadId,
+        } as any) as Promise<{ currentMessage?: { id: string; createdAt?: string; content: { parts: unknown[] } } }>;
+
+      const running = await readState();
+      expect(running.currentMessage).toMatchObject({ id: 'live-1', createdAt: '2026-09-08T10:00:00.000Z' });
+      expect(running.currentMessage?.content.parts).toHaveLength(2);
+
+      const otherThreadState = await readState(otherThread.id);
+      expect(otherThreadState.currentMessage).toBeUndefined();
+
+      session.displayState.apply({ type: 'agent_end' } as any);
+      const idle = await readState();
+      expect(idle.currentMessage).toBeUndefined();
+    });
+
     it('returns the durable task list for initial UI hydration', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

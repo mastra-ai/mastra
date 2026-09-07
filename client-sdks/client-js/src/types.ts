@@ -3737,7 +3737,12 @@ export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['ag
 
 export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
 
-export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+type AgentControllerSessionStateWire = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+
+/** `currentMessage` is hydrated like a `listMessages()` row: its `createdAt` is a `Date`. */
+export type AgentControllerSessionState = Omit<AgentControllerSessionStateWire, 'currentMessage'> & {
+  currentMessage?: MastraDBMessage;
+};
 
 /**
  * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent

@@ -1,7 +1,7 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, MastraDBMessage } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -44,6 +44,7 @@ export function useAgentControllerConnection({
   const sseStateRef = useRef<SseConnectionState>('never');
   const taskEventGeneration = useRef(0);
   const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
+  const liveMessageIds = useRef(new Set<string>());
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -109,6 +110,12 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    if (
+      isKnownAgentControllerEvent(event) &&
+      (event.type === 'message_start' || event.type === 'message_update' || event.type === 'message_end')
+    ) {
+      liveMessageIds.current.add(event.message.id);
+    }
     if (tasks) {
       taskEventGeneration.current += 1;
       liveTasks.current = { threadId: sessionThreadId, tasks };
@@ -136,6 +143,16 @@ export function useAgentControllerConnection({
     }
     onEvent(event);
   };
+
+  const inFlightMessage = syncQuery.data?.running ? syncQuery.data.currentMessage : undefined;
+  const replayInFlightMessage = useEffectEvent((message: MastraDBMessage) =>
+    onEvent({ type: 'message_update', message }),
+  );
+  // The stream replays nothing on subscribe: the snapshot stands in until the next delta.
+  useEffect(() => {
+    if (!inFlightMessage || liveMessageIds.current.has(inFlightMessage.id)) return;
+    replayInFlightMessage(inFlightMessage);
+  }, [inFlightMessage]);
 
   useAgentControllerEvents({
     session,

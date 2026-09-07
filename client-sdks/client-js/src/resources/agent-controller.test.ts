@@ -190,6 +190,31 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
+  it('hydrates the in-flight message timestamp returned by session state', async () => {
+    mockJson({
+      controllerId: 'code',
+      resourceId: 'user-1',
+      threadId: 't-1',
+      modeId: 'build',
+      modelId: 'm',
+      running: true,
+      currentMessage: {
+        id: 'live-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
+        createdAt: '2026-09-08T10:00:00.000Z',
+      },
+    });
+
+    const state = await client.getAgentController('code').session('user-1').state();
+
+    expect(state.running).toBe(true);
+    expect(state.currentMessage?.createdAt).toEqual(new Date('2026-09-08T10:00:00.000Z'));
+    expect(state.currentMessage && agentControllerMessageText(state.currentMessage)).toBe(
+      'Checking out the pull request.',
+    );
+  });
+
   it('requests session state for a specific thread', async () => {
     mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
 

@@ -51,6 +51,10 @@ type SerializedMastraDBMessage = WireEventOf<'message_start'>['message'];
 /** An `AgentControllerThread` before {@link hydrateThread} turns its timestamps back into `Date`s. */
 type SerializedThread = WireEventOf<'thread_created'>['thread'];
 
+type SerializedSessionState = Omit<AgentControllerSessionState, 'currentMessage'> & {
+  currentMessage?: SerializedMastraDBMessage;
+};
+
 /**
  * Notifications reach a session as agent signals carried on messages, not as
  * controller events. These two arms predate that and no controller emits them.
@@ -602,9 +606,10 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
-  state(options?: { threadId?: string }): Promise<AgentControllerSessionState> {
+  async state(options?: { threadId?: string }): Promise<AgentControllerSessionState> {
     const path = options?.threadId ? `${this.base()}?threadId=${encodeURIComponent(options.threadId)}` : this.base();
-    return this.request(this.url(path));
+    const { currentMessage, ...state } = await this.request<SerializedSessionState>(this.url(path));
+    return currentMessage ? { ...state, currentMessage: hydrateMessage(currentMessage) } : state;
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
