@@ -7,7 +7,6 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
 import { createObservabilityContext, resolveExportedSpanId } from '../observability';
-import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -673,26 +672,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   // =============================================================================
 
   /**
-   * Serialize a RequestContext Map to a plain object for JSON serialization.
-   * Used by durable execution engines to persist context across step replays.
-   */
-  serializeRequestContext(requestContext: RequestContext): Record<string, any> {
-    let obj: Record<string, any>;
-    if (typeof requestContext.toJSON === 'function') {
-      obj = requestContext.toJSON();
-    } else {
-      obj = {};
-      requestContext.forEach((value, key) => {
-        obj[key] = value;
-      });
-    }
-    // Never persist the framework-managed bearer token in durable snapshots.
-    // A resumed authenticated request supplies its own fresh live token.
-    delete obj[MASTRA_AUTH_TOKEN_KEY];
-    return obj;
-  }
-
-  /**
    * Deserialize a plain object back to a RequestContext instance.
    * Used to restore context after durable execution replay.
    */
@@ -743,6 +722,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    rootRun?: import('./types').WorkflowRunIdentity;
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
@@ -847,6 +827,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastExecutionContext || {
             workflowId,
             runId,
+            rootRun: params.rootRun,
             executionPath: [i],
             stepExecutionPath,
             activeStepsPath: {},
@@ -903,6 +884,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const executionContext: ExecutionContext = {
         workflowId,
         runId,
+        rootRun: params.rootRun,
         executionPath: [i],
         stepExecutionPath,
         activeStepsPath: {},

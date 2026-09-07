@@ -2221,6 +2221,11 @@ export type StorageWorkspaceRef =
 
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
+  /** Initial execution data persisted atomically with a start claim. */
+  context?: WorkflowRunState['context'];
+  value?: WorkflowRunState['value'];
+  requestContext?: WorkflowRunState['requestContext'];
+  timestamp?: number;
   result?: StepResult<any, any, any, any>;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;

@@ -8,7 +8,7 @@ import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schem
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { OutputWriter, StepResult, StepMetadata } from './types';
+import type { OutputWriter, StepResult, StepMetadata, WorkflowRunIdentity } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
@@ -33,6 +33,8 @@ export type ExecuteFunctionParams<
   runId: string;
   resourceId?: string;
   workflowId: string;
+  /** Outermost run, if the execution engine has retained its identity. */
+  rootRun?: WorkflowRunIdentity;
   mastra: Mastra;
   requestContext: RequestContext<TRequestContext>;
   actor?: ActorSignal;

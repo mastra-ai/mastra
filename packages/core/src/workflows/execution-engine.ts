@@ -6,6 +6,7 @@ import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import type {
   OutputWriter,
   SerializedStepFlowEntry,
@@ -121,6 +122,16 @@ export abstract class ExecutionEngine extends MastraBase {
     return this.logger;
   }
 
+  /** Serialize durable context without persisting the live request's bearer token. */
+  serializeRequestContext(requestContext: RequestContext): Record<string, any> {
+    const result =
+      typeof requestContext.toJSON === 'function'
+        ? requestContext.toJSON()
+        : Object.fromEntries(requestContext.entries());
+    delete result[MASTRA_AUTH_TOKEN_KEY];
+    return result;
+  }
+
   /**
    * Invokes the onStart lifecycle callback if it is defined, before any step runs.
    * Errors are intentionally propagated so the hook can gate the run (for example a
@@ -214,6 +225,7 @@ export abstract class ExecutionEngine extends MastraBase {
   abstract execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    rootRun?: WorkflowRunState['rootRun'];
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
