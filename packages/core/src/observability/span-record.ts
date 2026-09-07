@@ -5,6 +5,10 @@ import type { SpanType } from './types';
  * Narrows a stored span record to one or more span types, typing its
  * `attributes`, `input` and `output` for that type.
  *
+ * The check is on `spanType` only. Payloads are not validated: the typed view
+ * trusts that the producer for that span type wrote the shape core declares,
+ * the same trust `SpanTypeMap` already places in `attributes`.
+ *
  * Kept free of runtime imports so browser bundles that only need the guard
  * do not pull in the rest of the observability utilities.
  *

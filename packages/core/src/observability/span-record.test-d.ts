@@ -1,7 +1,14 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
 import { isSpanRecordOfType } from './span-record';
-import type { AgentRunInput, ModelGenerationInput, ModelStepInput, ModelStepOutput, UsageStats } from './types';
+import type {
+  AgentRunInput,
+  ModelGenerationInput,
+  ModelStepInput,
+  ModelStepOutput,
+  ModelStepResult,
+  UsageStats,
+} from './types';
 import { SpanType } from './types';
 
 describe('isSpanRecordOfType types', () => {
@@ -25,6 +32,11 @@ describe('isSpanRecordOfType types', () => {
     if (isSpanRecordOfType(span, SpanType.MODEL_STEP)) {
       expectTypeOf(span.input).toEqualTypeOf<ModelStepInput | null | undefined>();
       expectTypeOf(span.output).toEqualTypeOf<ModelStepOutput | null | undefined>();
+    }
+
+    if (isSpanRecordOfType(span, SpanType.MODEL_INFERENCE)) {
+      expectTypeOf(span.input).toEqualTypeOf<ModelStepInput | null | undefined>();
+      expectTypeOf(span.output).toEqualTypeOf<ModelStepResult | null | undefined>();
     }
 
     if (isSpanRecordOfType(span, SpanType.TOOL_CALL)) {
