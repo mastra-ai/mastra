@@ -747,6 +747,30 @@ describe('Slack thread work-item creation', () => {
     expect(call.input.externalSource.url).toBe(actions.children[0].url);
   });
 
+  it('titles the card with the emoji the sender typed', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: 'ship the :rocket: please' };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert.mock.calls[0][0].input.title).toBe('ship the 🚀 please');
+  });
+
+  it('cuts a long title between characters, never inside an emoji', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: '😀'.repeat(100) };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    const title = deps.upsert.mock.calls[0][0].input.title;
+    expect([...title]).toHaveLength(80);
+    expect(title.endsWith('😀…')).toBe(true);
+  });
+
   it('a routed @-mention also creates an execute-stage work item (no per-origin split)', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeWorkItemDeps();
@@ -1092,6 +1116,19 @@ describe('Slack aside ingest', () => {
     await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside('ship it'), defaultHandler, handlerCtx());
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
+  });
+
+  it('lands the emoji the sender typed, and leaves a custom workspace emoji as written', async () => {
+    const { thread, deps } = makeAsideDeps();
+
+    await createHandlers(deps as any).onSubscribedMessage!(
+      thread,
+      makeAside('aside: nice :thumbsup::skin-tone-3: — ship it :party-parrot:'),
+      vi.fn(),
+      handlerCtx(),
+    );
+
+    expect(deps.feed.createComment.mock.calls[0][0].body).toBe('nice 👍🏼 — ship it :party-parrot:');
   });
 
   it('stores an unlinked sender aside under their Slack identity, silently (no Connect card)', async () => {
