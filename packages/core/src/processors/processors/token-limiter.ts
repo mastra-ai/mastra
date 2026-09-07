@@ -480,7 +480,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', TokenLi
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
   }): Promise<MastraDBMessage[]> {
-    // Always process output results (this is the main/original functionality)
+    if (this.trimMode === 'memory-only') return args.messages;
     const { messages, abort } = args;
     const limit = this.maxTokens;
 

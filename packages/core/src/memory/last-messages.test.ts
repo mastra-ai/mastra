@@ -88,6 +88,18 @@ describe('token-based memory history', () => {
     expect(list.getAllSystemMessages()).toHaveLength(1);
   });
 
+  it('preserves non-streaming output in memory-only mode', async () => {
+    const messages = [{ ...message('A response that exceeds the zero token budget'), role: 'assistant' as const }];
+    const original = structuredClone(messages);
+    const abort = vi.fn((reason?: string): never => {
+      throw new Error(reason);
+    });
+    const limiter = new TokenLimiterProcessor({ limit: 0, trimMode: 'memory-only' });
+    await expect(limiter.processOutputResult({ messages, abort })).resolves.toBe(messages);
+    expect(messages).toEqual(original);
+    expect(abort).not.toHaveBeenCalled();
+  });
+
   it('keeps the boundary monotonic and accumulates removals at the same timestamp', () => {
     const first = advanceMemoryTokenBoundary(undefined, [message('first', 1)], 100, 25)!;
     expect(advanceMemoryTokenBoundary(first, [message('older')], 100, 25)).toBe(first);
