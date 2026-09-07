@@ -8,6 +8,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
@@ -40,6 +41,7 @@ export interface SupervisorMessageReader {
 export interface SupervisorReadDependencies {
   scope: SupervisorScope;
   workItems: WorkItemsStorage;
+  boards: BoardRegistry;
   comments: WorkItemCommentsStorage;
   audit: AuditStorage;
   messageReader?: SupervisorMessageReader;
@@ -234,7 +236,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
         'Deterministic list of things wrong with this Factory right now (failed or stuck decisions, stalled starts, orphaned or missing seats, proposals and held cards waiting on a person, label drift). Each finding carries evidence and the standard repair. Explain these; do not invent findings that are not listed.',
       inputSchema: z.object({}).strict(),
       execute: async (): Promise<FactoryHealthReport> =>
-        runFactoryHealthCheck(deps.workItems, scope, { now: now(), thresholds: deps.healthThresholds }),
+        runFactoryHealthCheck(deps.workItems, deps.boards, scope, { now: now(), thresholds: deps.healthThresholds }),
     }),
 
     factory_inspect_work_item: createTool({

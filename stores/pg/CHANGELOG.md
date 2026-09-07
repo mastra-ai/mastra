@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed vector operations timing out with small PostgreSQL connection pools when index metadata is not cached. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
 ## 1.23.0-alpha.2
 
 ### Minor Changes

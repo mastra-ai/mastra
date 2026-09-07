@@ -43,9 +43,10 @@ const releaseBoard = defineBoard({
   title: 'Release',
   initialPhase: 'queued',
   phases: {
-    queued: { title: 'Queued', next: 'shipped' },
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
     shipped: {
       title: 'Shipped',
+      kind: 'terminal',
       onEnter: {
         manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
       },
@@ -95,8 +96,8 @@ const releaseBoard = defineBoard({
   initialPhase: 'approval',
   transitionPolicy: releasePolicy,
   phases: {
-    approval: { title: 'Approval', next: 'shipped' },
-    shipped: { title: 'Shipped' },
+    approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'working', role: 'release' },
   },
 });
 // Install through new MastraFactory({ storage, boards: [releaseBoard] }).
@@ -110,7 +111,48 @@ Policies must be side-effect-free. They run on initial entry, reentry, and same-
 
 A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
 
-**Remaining limitations:** Phase execution semantics are not generalized by this API. Working/resting interpretation, role routing, terminal cleanup, consent, and kickoff behavior still include built-in naming assumptions. For example, naming a phase `shipped` does not make it a runtime terminal phase. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Built-in board replacement and customization remain unsupported.
+
+### Board phase semantics
+
+Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
+
+- `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
+- `working` — an agent seat carries the card. `role` is required (same identifier rules as decision roles) and names the seat a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a role; `phaseForRole` returns the first in declaration order.
+- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `role` is not allowed.
+
+```typescript
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+    shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+});
+```
+
+Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, the closed-PR and issue sweeps, and supervisor findings all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+
+Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, the supervisor neither revokes nor starts a seat for it, and a rule-started run from rest with no lane for its role is rejected.
+
+**Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
+
+```typescript
+// before
+phases: { queued: { title: 'Queued', next: 'shipped' }, shipped: { title: 'Shipped' } }
+// after
+phases: {
+  queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+  shipped: { title: 'Shipped', kind: 'terminal' },
+}
+```
+
+**Remaining limitations:** Rule-decision and tool-input validation still accept only the built-in board IDs and phase names, so custom-board lifecycle handlers cannot emit `transition` or `upsertLinkedWorkItem` decisions into custom phases, and the `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
 ### GitHub event rules
 

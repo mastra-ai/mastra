@@ -12,7 +12,7 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. For custom-board handlers, edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
+4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
@@ -58,7 +58,15 @@ The policy receives a deeply readonly snapshot with ISO-string dates. Return `un
 
 Policies must be side-effect-free and share the lifecycle timeout budget. Initial entry, reentry, and same-stage requests evaluate policy; completed replay does not. Concurrent attempts may evaluate more than once, and timing out does not cancel work started by a callback. Do not access storage or integrations from a policy.
 
-Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Working/resting phase semantics, role routing, terminal cleanup, consent, and kickoff behavior still contain built-in naming assumptions; custom policies do not generalize them. Do not advertise a custom `shipped` phase as terminal or invent built-in replacement APIs.
+Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Phase meaning is declared on the phase (`kind`), not in the policy. Do not invent built-in replacement APIs.
+
+## Configure board phase semantics
+
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `src/boards/work.ts` and `src/boards/review.ts`.
+
+Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
+
+To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Decision and tool-input validation still accept only built-in board IDs and phase names, so custom-board handlers cannot emit `transition` decisions into custom phases yet.
 
 ## Apply supported overrides
 

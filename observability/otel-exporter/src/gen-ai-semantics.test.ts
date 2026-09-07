@@ -49,6 +49,47 @@ function createSpan(type: SpanType, metadata?: Record<string, unknown>): AnyExpo
   } as AnyExportedSpan;
 }
 
+describe('getAttributes - tool attributes', () => {
+  it.each([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])(
+    'preserves shared tool attributes for %s',
+    type => {
+      const span = createSpan(type);
+      span.entityName = 'lookup';
+      span.attributes = { toolDescription: 'Look up a record', toolType: 'tool', toolCallId: 'call-1' };
+      expect(getAttributes(span)).toMatchObject({
+        'gen_ai.tool.name': 'lookup',
+        'gen_ai.tool.description': 'Look up a record',
+        'gen_ai.tool.type': 'tool',
+        'gen_ai.tool.call.id': 'call-1',
+      });
+    },
+  );
+
+  it.each(['9.9.9', undefined])('exports MCP server metadata with version %s', serverVersion => {
+    const span = createSpan(SpanType.MCP_TOOL_CALL);
+    span.attributes = { mcpServer: 'roster', serverVersion };
+    const attrs = getAttributes(span);
+    expect(attrs['server.address']).toBe('roster');
+    expect(attrs['mastra.mcp_tool_call.server_name']).toBe('roster');
+    if (serverVersion) {
+      expect(attrs['mastra.mcp_tool_call.server_version']).toBe(serverVersion);
+    } else {
+      expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_version');
+    }
+    expect(attrs).not.toHaveProperty('gen_ai.tool.description');
+    expect(attrs).not.toHaveProperty('gen_ai.tool.type');
+  });
+
+  it.each([SpanType.TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])('does not export MCP metadata for %s', type => {
+    const attrs = getAttributes(createSpan(type));
+    expect(attrs).not.toHaveProperty('server.address');
+    expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_name');
+    expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_version');
+    expect(attrs).not.toHaveProperty('gen_ai.tool.description');
+    expect(attrs).not.toHaveProperty('gen_ai.tool.type');
+  });
+});
+
 describe('getAttributes - token usage', () => {
   it('should extract basic tokens', () => {
     const span = createModelGenerationSpan({

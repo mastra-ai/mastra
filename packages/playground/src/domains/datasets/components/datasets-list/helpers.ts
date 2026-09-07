@@ -6,7 +6,8 @@ export const DATASET_EXPERIMENT_OPTIONS = [
   { value: 'without', label: 'Without experiments' },
 ] as const;
 
-export function getDatasetTagOptions(datasets: DatasetRecord[]) {
+/** Distinct tags across all datasets, sorted alphabetically. */
+export function getAllDatasetTags(datasets: DatasetRecord[]): string[] {
   const tagSet = new Set<string>();
 
   for (const dataset of datasets) {
@@ -17,10 +18,9 @@ export function getDatasetTagOptions(datasets: DatasetRecord[]) {
     }
   }
 
-  return [
-    { value: 'all', label: 'All tags' },
-    ...Array.from(tagSet)
-      .sort()
-      .map(tag => ({ value: tag, label: tag })),
-  ];
+  return Array.from(tagSet).sort();
+}
+
+export function getDatasetTagOptions(datasets: DatasetRecord[]) {
+  return [{ value: 'all', label: 'All tags' }, ...getAllDatasetTags(datasets).map(tag => ({ value: tag, label: tag }))];
 }
