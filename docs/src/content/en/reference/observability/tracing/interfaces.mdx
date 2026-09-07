@@ -906,7 +906,7 @@ interface ModelStepResult {
 
 ### `InterruptedSpanOutput`
 
-Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, or the caller aborted.
+Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans when the run stops before the span's own result exists: a durable run suspended, or the caller aborted. `MODEL_INFERENCE` spans never carry it.
 
 ```typescript
 interface InterruptedSpanOutput {
