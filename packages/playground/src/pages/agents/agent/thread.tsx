@@ -9,7 +9,6 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -160,9 +159,10 @@ function AgentThread() {
                                 threadId={actualThreadId}
                                 isLoading={isThreadsLoading}
                               />
-                              <div key={actualThreadId} className="relative h-full min-h-0">
-                                <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                              <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
+                                <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0">
                                   <Header>
+                                    <MainSidebar.MobileTrigger className="-ml-1" />
                                     <HeaderTitle>Thread</HeaderTitle>
                                     {/* "new" is not a stored thread yet, so there is nothing to trace. */}
                                     {!isNewThread && (
@@ -178,13 +178,7 @@ function AgentThread() {
                                       </HeaderAction>
                                     )}
                                   </Header>
-                                  <div
-                                    className={cn(
-                                      'relative grid min-h-0 flex-1',
-                                      // The advanced view manages its own scroll container.
-                                      !isAdvancedVariant && 'overflow-y-auto pt-6',
-                                    )}
-                                  >
+                                  <div className="relative grid min-h-0 flex-1">
                                     {isAdvancedVariant ? (
                                       <ThreadViewByTrace threadId={actualThreadId} />
                                     ) : (
