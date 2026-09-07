@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, normalize, posix, resolve, win32 } from 'node:path';
-import { estimateTokenCount } from 'tokenx';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import { signalToXmlMarkup } from '../agent/signals';
+import { estimateTokenCount } from '../utils/tokenx';
 import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
@@ -219,8 +219,8 @@ function getReminderMarkup(reminderText: string, instructionPath: string): strin
   });
 }
 
-function truncateToTokenLimit(content: string, maxTokens: number): string {
-  const estimatedTokens = estimateTokenCount(content);
+async function truncateToTokenLimit(content: string, maxTokens: number): Promise<string> {
+  const estimatedTokens = await estimateTokenCount(content);
   if (estimatedTokens <= maxTokens) {
     return content;
   }
@@ -229,7 +229,7 @@ function truncateToTokenLimit(content: string, maxTokens: number): string {
   const sliceEnd = Math.min(content.length, approximateCharLimit);
   const newlineIndex = content.lastIndexOf('\n', sliceEnd);
   const truncatedContent = content.slice(0, newlineIndex > 0 ? newlineIndex : sliceEnd).trimEnd();
-  const shownTokens = estimateTokenCount(truncatedContent);
+  const shownTokens = await estimateTokenCount(truncatedContent);
 
   return `${truncatedContent}\n\n[truncated — showing first ~${shownTokens} of ~${estimatedTokens} estimated tokens]`;
 }
@@ -343,7 +343,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       return messageList;
     }
 
-    const reminderText = this.getReminderText(instructionPath, reader);
+    const reminderText = await this.getReminderText(instructionPath, reader);
     if (!reminderText) {
       return messageList;
     }
@@ -364,11 +364,11 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return messageList;
   }
 
-  private getReminderText(instructionPath: string, reader: ReminderFileReader): string | undefined {
+  private async getReminderText(instructionPath: string, reader: ReminderFileReader): Promise<string | undefined> {
     try {
       const content = reader.readFile(instructionPath).trim();
       if (content.length > 0) {
-        return truncateToTokenLimit(content, this.maxTokens);
+        return await truncateToTokenLimit(content, this.maxTokens);
       }
     } catch {
       // Fall back to configured reminder text if file cannot be read.
