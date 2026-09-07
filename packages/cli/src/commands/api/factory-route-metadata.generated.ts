@@ -442,6 +442,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "board",
       "cause",
       "expectedRevision",
+      "reenter",
       "requestId",
       "stage"
     ],
@@ -1994,7 +1995,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
-        }
+        },
+        "reenter": {}
       },
       "required": [
         "board",
