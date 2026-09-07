@@ -242,7 +242,7 @@ export function computeFactoryHealth(
         evidence: item
           ? `Binding ${binding.id} (${binding.role}) is still active though the card is in ${stage ?? item.stages.join('+')}.`
           : `Binding ${binding.id} (${binding.role}) is active for work item ${binding.workItemId}, which no longer exists.`,
-        since: binding.createdAt.toISOString(),
+        since: item ? (stageEnteredAt(item)?.toISOString() ?? null) : null,
         suggestedRepair: { action: 'revoke-binding', bindingId: binding.id },
       });
       continue;

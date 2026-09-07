@@ -239,6 +239,7 @@ describe('computeFactoryHealth', () => {
     );
     expect(report.findings.map(f => f.id).sort()).toEqual(['seat-orphaned:b-done', 'seat-orphaned:b-gone']);
     expect(report.findings.every(f => f.suggestedRepair?.action === 'revoke-binding')).toBe(true);
+    expect(report.findings.map(f => f.since)).toEqual([ago(2 * HOUR).toISOString(), null]);
   });
 
   it('flags a working-lane card with no seat and nothing in flight, naming the role to start', () => {

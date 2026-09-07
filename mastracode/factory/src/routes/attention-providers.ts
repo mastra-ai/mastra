@@ -444,7 +444,7 @@ export class SupervisorFindingAttentionProvider implements AttentionProvider {
                 evidence: finding.evidence,
                 title: finding.title,
                 detail: finding.evidence,
-                since: finding.since,
+                since: finding.since ?? null,
                 suggestedRepair: finding.suggestedRepair,
                 workItemId: finding.workItemId,
                 occurredAt: row.openedAt.toISOString(),
