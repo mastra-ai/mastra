@@ -1,7 +1,7 @@
 /**
  * Attention over HTTP with every provider live: mention items and counts, the
  * per-kind receipt currency, read-all across kinds, the merged cursor, and the
- * activity tier that sits below the badge.
+ * kind filter beside the per-kind summary.
  */
 
 import { Hono } from 'hono';
@@ -162,21 +162,18 @@ describe('supervisor finding attention items', () => {
           read: false,
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
-      badgeCount: 1,
-      latestOccurrenceUnread: true,
+      kinds: { 'supervisor-finding': { open: 1, unread: 1, latest: { unread: true } } },
     });
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+    ).resolves.toMatchObject({ items: [], kinds: { 'supervisor-finding': { open: 1, unread: 0 } } });
 
     expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0 },
+      { items: [], kinds: { 'supervisor-finding': { open: 0 } } },
     );
   });
 });
@@ -204,21 +201,18 @@ describe('mention attention items', () => {
           target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
-      badgeCount: 1,
-      latestOccurrenceUnread: true,
+      kinds: { mention: { open: 1, unread: 1, latest: { unread: true } } },
     });
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/mention/${comment.id}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+    ).resolves.toMatchObject({ items: [], kinds: { mention: { open: 1, unread: 0 } } });
 
     expect((await request('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0 },
+      { items: [], kinds: { mention: { open: 0 } } },
     );
     await expect(
       (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=archived`)).json(),
@@ -226,7 +220,7 @@ describe('mention attention items', () => {
 
     expect((await request('POST', `${receiptPath}/restore`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'mention', read: true, archived: false }], openCount: 1 },
+      { items: [{ kind: 'mention', read: true, archived: false }], kinds: { mention: { open: 1 } } },
     );
   });
 
@@ -241,7 +235,7 @@ describe('mention attention items', () => {
     });
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0, unreadCount: 0 },
+      { items: [], kinds: { mention: { open: 0, unread: 0 } } },
     );
   });
 
@@ -311,11 +305,11 @@ describe('mention attention items', () => {
     }
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'mention', detail: 'real' }], openCount: 1, unreadCount: 1, badgeCount: 1 },
+      { items: [{ kind: 'mention', detail: 'real' }], kinds: { mention: { open: 1, unread: 1 } } },
     );
   });
 
-  it('keeps the latest pointer on an unread item even when a read one is newer', async () => {
+  it('reports the newest item of each kind with its own read state', async () => {
     const item = await seedWorkItem();
     await seedMention({ workItemId: item.id, body: 'older unread', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
     const failure = await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
@@ -327,15 +321,15 @@ describe('mention attention items', () => {
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       {
-        latestOccurrenceAt: '2030-01-01T00:00:05.000Z',
-        latestOccurrenceUnread: true,
-        unreadCount: 1,
-        openCount: 2,
+        kinds: {
+          mention: { open: 1, unread: 1, latest: { at: '2030-01-01T00:00:05.000Z', unread: true } },
+          'automation-failed': { open: 1, unread: 0, latest: { at: '2030-01-01T00:00:10.000Z', unread: false } },
+        },
       },
     );
   });
 
-  it('sums counts across kinds for badge math', async () => {
+  it('counts every kind apart', async () => {
     const item = await seedWorkItem();
     await seedFailure(item, new Date('2030-01-01T00:00:10.000Z'));
     await seedMention({ workItemId: item.id, body: 'one', occurredAt: new Date('2030-01-01T00:00:05.000Z') });
@@ -343,10 +337,11 @@ describe('mention attention items', () => {
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       {
-        openCount: 3,
-        unreadCount: 3,
-        badgeCount: 3,
-        latestOccurrenceAt: '2030-01-01T00:00:15.000Z',
+        kinds: {
+          'automation-failed': { open: 1, unread: 1 },
+          mention: { open: 2, unread: 2, latest: { at: '2030-01-01T00:00:15.000Z' } },
+          activity: { open: 0, unread: 0, latest: null },
+        },
       },
     );
   });
@@ -411,7 +406,7 @@ describe('mention attention items', () => {
     await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { unreadCount: 0, openCount: 2 },
+      { kinds: { 'automation-failed': { open: 1, unread: 0 }, mention: { open: 1, unread: 0 } } },
     );
     await expect(
       seed.workItems.listAttentionReceipts({
@@ -479,8 +474,7 @@ describe('proposed attention items', () => {
             archived: false,
           },
         ],
-        openCount: 1,
-        unreadCount: 1,
+        kinds: { 'automation-proposed': { open: 1, unread: 1 } },
       },
     );
 
@@ -491,7 +485,7 @@ describe('proposed attention items', () => {
     );
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [], openCount: 0, unreadCount: 0 },
+      { items: [], kinds: { 'automation-proposed': { open: 0, unread: 0 } } },
     );
     await expect(
       seed.workItems.listAttentionReceipts({
@@ -517,7 +511,7 @@ describe('proposed attention items', () => {
     ]);
   });
 
-  it('counts in the badge exactly the items it can list', async () => {
+  it('counts each kind exactly as it lists it', async () => {
     const item = await seedWorkItem();
     await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
     await seedFailure(item, new Date('2030-01-01T00:01:00.000Z'));
@@ -525,19 +519,24 @@ describe('proposed attention items', () => {
 
     const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
     expect(page.items).toHaveLength(3);
-    expect(page.badgeCount).toBe(3);
-    expect(page.unreadCount).toBe(3);
-    expect(page).not.toHaveProperty('approvalCount');
+    expect(page.kinds).toMatchObject({
+      'automation-proposed': { open: 1, unread: 1 },
+      'automation-failed': { open: 1, unread: 1 },
+      mention: { open: 1, unread: 1 },
+    });
   });
 
-  it('read-all zeroes the badge and leaves the run parked', async () => {
+  it('read-all reads the proposal and leaves the run parked', async () => {
     const item = await seedWorkItem();
     await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
 
     expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'automation-proposed', read: true }], badgeCount: 0, unreadCount: 0, openCount: 1 },
+      {
+        items: [{ kind: 'automation-proposed', read: true }],
+        kinds: { 'automation-proposed': { open: 1, unread: 0 } },
+      },
     );
   });
 });
@@ -555,7 +554,7 @@ describe('activity attention items', () => {
     });
   }
 
-  it('lists a comment on a followed item without ever reaching the badge', async () => {
+  it('lists a comment on a followed item with its own count and newest pointer', async () => {
     const item = await seedWorkItem();
     const comment = await seedActivity(item.id, 'moved this to review', new Date('2030-01-01T00:00:00.000Z'));
 
@@ -574,14 +573,12 @@ describe('activity attention items', () => {
           target: { kind: 'work-item', workItemId: item.id, commentId: comment.id },
         },
       ],
-      openCount: 0,
-      unreadCount: 0,
-      badgeCount: 0,
-      activityUnreadCount: 1,
+      kinds: {
+        activity: { open: 1, unread: 1, latest: { at: '2030-01-01T00:00:00.000Z', unread: true } },
+        mention: { open: 0, unread: 0, latest: null },
+      },
     });
-    // The sound is the badge tier's alone.
-    expect(page.latestOccurrenceKey).toBeNull();
-    expect(page.latestOccurrenceUnread).toBe(false);
+    expect(page.kinds.activity.latest.key).toBe(page.items[0].key);
   });
 
   it('re-unreads on the next comment and 409s the receipt the bump left behind', async () => {
@@ -591,12 +588,15 @@ describe('activity attention items', () => {
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/activity/${item.id}`;
     expect((await request('POST', `${receiptPath}/1/read`)).status).toBe(200);
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', read: true }], activityUnreadCount: 0 },
+      { items: [{ kind: 'activity', read: true }], kinds: { activity: { unread: 0 } } },
     );
 
     await seedActivity(item.id, 'second', new Date('2030-01-01T00:00:10.000Z'));
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { items: [{ kind: 'activity', occurrence: 2, detail: 'second', read: false }], activityUnreadCount: 1 },
+      {
+        items: [{ kind: 'activity', occurrence: 2, detail: 'second', read: false }],
+        kinds: { activity: { unread: 1 } },
+      },
     );
 
     const stale = await request('POST', `${receiptPath}/1/read`);
@@ -639,17 +639,17 @@ describe('activity attention items', () => {
     expect(second.items).toMatchObject([{ kind: 'activity', workItemId: item.id, occurrence: 1 }]);
   });
 
-  it('read-all clears the activity tier too', async () => {
+  it('read-all clears activity too', async () => {
     const item = await seedWorkItem();
     await seedActivity(item.id, 'ping', new Date('2030-01-01T00:00:00.000Z'));
 
     expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
 
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
-      { activityUnreadCount: 0, items: [{ kind: 'activity', read: true }] },
+      { kinds: { activity: { unread: 0 } }, items: [{ kind: 'activity', read: true }] },
     );
   });
-  it('keeps the badge tier in the page budget when activity is newer', async () => {
+  it('lists only the requested kinds so a preview keeps its page budget', async () => {
     const mentionItem = await seedWorkItem('Mentioned item');
     const mention = await seedMention({
       workItemId: mentionItem.id,
@@ -664,17 +664,16 @@ describe('activity attention items', () => {
     const merged = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2`)).json();
     expect(merged.items.map((entry: { kind: string }) => entry.kind)).toEqual(['activity', 'activity']);
 
-    const badge = await (
-      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&tier=badge`)
+    const requested = await (
+      await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=2&kind=mention&kind=automation-failed`)
     ).json();
-    expect(badge.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
-    expect(badge.badgeCount).toBe(1);
-    expect(badge.activityUnreadCount).toBe(2);
+    expect(requested.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
+    expect(requested.kinds).toMatchObject({ mention: { unread: 1 }, activity: { unread: 2 } });
   });
 
-  it('rejects an unknown tier', async () => {
-    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?tier=bogus`);
+  it('rejects an unknown kind', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?kind=bogus`);
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: 'invalid_attention_tier' });
+    expect(await response.json()).toEqual({ error: 'invalid_attention_kind' });
   });
 });

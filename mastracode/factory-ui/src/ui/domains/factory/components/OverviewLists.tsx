@@ -244,7 +244,7 @@ function attentionWhere(item: FactoryAttentionItem): string {
 
 /** Read and archive stay on the attention page — a preview that acts is a second inbox. */
 export function AttentionPreview({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'badge');
+  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const items = attention.data?.items ?? [];
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
