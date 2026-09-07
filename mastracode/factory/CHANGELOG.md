@@ -1,5 +1,11 @@
 # @mastra/factory
 
+## 0.13.0-alpha.10
+
+### Patch Changes
+
+- Fixed hosted Factory bearer requests to select only organizations proven by the authenticated user's memberships. ([#23196](https://github.com/mastra-ai/mastra/pull/23196))
+
 ## 0.13.0-alpha.9
 
 ### Patch Changes
