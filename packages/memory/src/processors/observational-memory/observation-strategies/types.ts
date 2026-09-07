@@ -6,7 +6,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Extractor } from '../extractor';
-import type { ObservationModelContext, ObserveHooks } from '../types';
+import type { ObservationModelContext, ObserveHooks, ObserveTrigger } from '../types';
 
 /** Parameters for running an observation via a strategy. */
 export interface ObservationRunOpts {
@@ -30,6 +30,8 @@ export interface ObservationRunOpts {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  /** Which pipeline path initiated this cycle; forwarded to transform hooks. */
+  trigger?: ObserveTrigger;
   agent?: ProcessorContext['agent'];
   sendSignal?: ProcessorContext['sendSignal'];
   sendStateSignal?: ProcessorContext['sendStateSignal'];

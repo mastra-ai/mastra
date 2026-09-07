@@ -120,6 +120,7 @@ export class ObservationStep {
         observabilityContext: this.turn.observabilityContext,
         lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
         reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
+        trigger: 'turn-sync',
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -447,6 +448,7 @@ export class ObservationStep {
           observabilityContext: this.turn.observabilityContext,
           lastActivityAt: getLastActivityFromMessages(getObservableMessages(messageList)),
           reflectionHooks: om.composeHooks(undefined, { threadId, resourceId, trigger: 'turn-sync' }),
+          trigger: 'turn-sync',
         });
 
         return {

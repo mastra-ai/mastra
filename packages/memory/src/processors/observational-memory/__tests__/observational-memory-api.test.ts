@@ -780,6 +780,172 @@ name: Tyler
     });
   });
 
+  describe('transform hooks', () => {
+    /** Serialize every prompt the mock model received so we can assert on its contents. */
+    function capturePrompts(model: MockLanguageModelV2) {
+      const doGenerate = vi.spyOn(model, 'doGenerate');
+      const doStream = vi.spyOn(model, 'doStream');
+      return () => JSON.stringify([...doGenerate.mock.calls, ...doStream.mock.calls].map(call => call[0]?.prompt));
+    }
+
+    it('beforeObservation receives the unobserved messages with context and can filter them', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const beforeObservation = vi.fn(({ messages }: { messages: MastraDBMessage[] }) => ({
+        messages: messages.filter(m => !JSON.stringify(m.content).includes('SECRET')),
+      }));
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation } });
+      const messages = createBulkMessages(10, threadId);
+      messages.push({ ...createTestMessage('my password is SECRET-TOKEN', 'user', `${threadId}-secret`), threadId });
+
+      await transformOm.observe({ threadId, resourceId: 'res-1', messages });
+
+      expect(beforeObservation).toHaveBeenCalledOnce();
+      expect(beforeObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId: 'res-1', trigger: 'manual', messages }),
+      );
+      expect(prompts()).toContain('Message 0');
+      expect(prompts()).not.toContain('SECRET-TOKEN');
+      // Filtered messages are still marked as observed.
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(`${threadId}-secret`);
+    });
+
+    it('beforeObservation returning nothing passes messages through unchanged', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const transformOm = createOM(storage, { observerModel, hooks: { beforeObservation: vi.fn() } });
+
+      const result = await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(result.observed).toBe(true);
+      expect(prompts()).toContain('Message 9');
+    });
+
+    it('beforeObservation returning no messages skips the observer model call', async () => {
+      const observerModel = createMockObserverModel();
+      const prompts = capturePrompts(observerModel);
+      const onObservationEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        observerModel,
+        hooks: { beforeObservation: () => ({ messages: [] }), onObservationEnd },
+      });
+      const messages = createBulkMessages(10, threadId);
+
+      const result = await transformOm.observe({ threadId, messages });
+
+      expect(result.observed).toBe(true);
+      expect(prompts()).toBe('[]');
+      expect(onObservationEnd).toHaveBeenCalledOnce();
+      const record = await transformOm.getRecord(threadId);
+      expect(record?.observedMessageIds).toContain(messages[0]!.id);
+    });
+
+    it('afterObservation can replace the observation text before it is persisted', async () => {
+      const afterObservation = vi.fn(async ({ observations }: { observations: string }) => ({
+        observations: observations.replace('User discussed various topics', 'REWRITTEN BY HOOK'),
+      }));
+      const transformOm = createOM(storage, { hooks: { afterObservation } });
+
+      await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(afterObservation).toHaveBeenCalledOnce();
+      expect(afterObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId,
+          trigger: 'manual',
+          observations: expect.stringContaining('User discussed various topics'),
+        }),
+      );
+      const stored = await transformOm.getObservations(threadId);
+      expect(stored).toContain('REWRITTEN BY HOOK');
+      expect(stored).not.toContain('User discussed various topics');
+    });
+
+    it('a throwing transform hook fails the cycle without persisting observations', async () => {
+      const hookError = new Error('redaction failed');
+      const onObservationEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        hooks: {
+          afterObservation: async () => {
+            throw hookError;
+          },
+          onObservationEnd,
+        },
+      });
+
+      await expect(transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) })).rejects.toBe(
+        hookError,
+      );
+
+      expect(onObservationEnd).toHaveBeenCalledWith(expect.objectContaining({ error: hookError }));
+      expect(await transformOm.getObservations(threadId)).toBeFalsy();
+    });
+
+    it('fires transform hooks on the async-buffer path with trigger async-buffer', async () => {
+      const beforeObservation = vi.fn();
+      const afterObservation = vi.fn(() => ({ observations: '* buffered and rewritten' }));
+      const transformOm = createOM(storage, {
+        messageTokens: 500,
+        bufferTokens: 0.2,
+        hooks: { beforeObservation, afterObservation },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+      const result = await transformOm.buffer({ threadId });
+      expect(result.buffered).toBe(true);
+      await transformOm.waitForBuffering(threadId, undefined, 5000);
+
+      expect(beforeObservation).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'async-buffer' }));
+      expect(afterObservation).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'async-buffer' }));
+      const status = await transformOm.getStatus({ threadId });
+      expect(status.record?.bufferedObservationChunks?.[0]?.observations).toContain('buffered and rewritten');
+    });
+
+    it('fires transform hooks per thread on the resource-scoped multi-thread path', async () => {
+      const resourceId = 'res-transform';
+      const otherThreadId = `${threadId}-other`;
+      for (const id of [threadId, otherThreadId]) {
+        await storage.saveThread({
+          thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+        });
+      }
+      const beforeObservation = vi.fn();
+      const afterObservation = vi.fn(({ threadId: id }: { threadId?: string }) => ({
+        observations: `* rewritten for ${id}`,
+      }));
+      const observerModel = createMockObserverModel(
+        `<observations>\n<thread id="${threadId}">\n* First thread\n</thread>\n<thread id="${otherThreadId}">\n* Second thread\n</thread>\n</observations>`,
+      );
+      // Each thread alone (~430 tokens) is below the threshold, so the
+      // strategy batches both into a single multi-thread observer call.
+      // Pending tokens on the record make observe()'s pre-check pass.
+      const resourceOm = createOM(storage, {
+        scope: 'resource',
+        messageTokens: 600,
+        observerModel,
+        hooks: { beforeObservation, afterObservation },
+      });
+      const currentThreadMessages = createBulkMessages(10, threadId).map(m => ({ ...m, resourceId }));
+      await storage.saveMessages({
+        messages: [...currentThreadMessages, ...createBulkMessages(10, otherThreadId).map(m => ({ ...m, resourceId }))],
+      });
+      const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      await resourceOm.getStorage().setPendingMessageTokens(record.id, 600);
+
+      const result = await resourceOm.observe({ threadId, resourceId, messages: currentThreadMessages });
+
+      expect(result.observed).toBe(true);
+      const beforeThreadIds = beforeObservation.mock.calls.map(call => (call[0] as { threadId?: string }).threadId);
+      expect(beforeThreadIds.sort()).toEqual([threadId, otherThreadId].sort());
+      expect(beforeObservation).toHaveBeenCalledWith(expect.objectContaining({ resourceId, trigger: 'manual' }));
+      const afterThreadIds = afterObservation.mock.calls.map(call => (call[0] as { threadId?: string }).threadId);
+      expect(afterThreadIds.sort()).toEqual([threadId, otherThreadId].sort());
+      expect(result.record.activeObservations).toContain(`rewritten for ${threadId}`);
+      expect(result.record.activeObservations).toContain(`rewritten for ${otherThreadId}`);
+    });
+  });
+
   describe('reflected flag', () => {
     it('should return reflected=true when observation triggers reflection', async () => {
       // Very low reflection threshold to force reflection
@@ -1748,6 +1914,80 @@ describe('reflect()', () => {
     expect(result.usage).toEqual(
       expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
     );
+  });
+
+  describe('transform hooks', () => {
+    it('beforeReflection rewrites what the reflector sees and afterReflection rewrites what is persisted', async () => {
+      const reflectorModel = createMockReflectorModel();
+      const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
+      const doStream = vi.spyOn(reflectorModel, 'doStream');
+      const beforeReflection = vi.fn(() => ({ observations: '* REPLACED INPUT FOR REFLECTOR' }));
+      const afterReflection = vi.fn(() => ({ observations: '* REPLACED REFLECTION OUTPUT' }));
+      const transformOm = createOM(storage, {
+        observationTokens: 50_000,
+        reflectorModel,
+        hooks: { beforeReflection, afterReflection },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await transformOm.observe({ threadId });
+      const original = await transformOm.getObservations(threadId);
+
+      const result = await transformOm.reflect(threadId);
+
+      expect(result.reflected).toBe(true);
+      expect(beforeReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, trigger: 'manual', observations: original }),
+      );
+      const prompts = JSON.stringify([...doGenerate.mock.calls, ...doStream.mock.calls].map(call => call[0]?.prompt));
+      expect(prompts).toContain('REPLACED INPUT FOR REFLECTOR');
+      expect(prompts).not.toContain('User discussed various topics');
+      expect(afterReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, trigger: 'manual', observations: expect.stringContaining('Condensed') }),
+      );
+      expect(result.record.activeObservations).toContain('REPLACED REFLECTION OUTPUT');
+      expect(result.record.activeObservations).not.toContain('Condensed');
+    });
+
+    it('a throwing afterReflection aborts reflect() without creating a generation', async () => {
+      const hookError = new Error('reflection transform failed');
+      const onReflectionEnd = vi.fn();
+      const transformOm = createOM(storage, {
+        observationTokens: 50_000,
+        hooks: {
+          afterReflection: async () => {
+            throw hookError;
+          },
+          onReflectionEnd,
+        },
+      });
+      await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+      await transformOm.observe({ threadId });
+      const before = await transformOm.getRecord(threadId);
+
+      // reflect() reports model/transform failures via the result + end hook
+      // rather than throwing (only lifecycle hook failures propagate).
+      const result = await transformOm.reflect(threadId);
+
+      expect(result.reflected).toBe(false);
+      expect(onReflectionEnd).toHaveBeenCalledWith(expect.objectContaining({ error: hookError }));
+      const after = await transformOm.getRecord(threadId);
+      expect(after!.generationCount).toBe(before!.generationCount);
+      expect(after!.activeObservations).toBe(before!.activeObservations);
+    });
+
+    it('fires reflection transforms for threshold-triggered reflection during observe()', async () => {
+      const beforeReflection = vi.fn();
+      const afterReflection = vi.fn(() => ({ observations: '* rewritten sync reflection' }));
+      const transformOm = createOM(storage, { observationTokens: 5, hooks: { beforeReflection, afterReflection } });
+
+      const result = await transformOm.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+      expect(result.reflected).toBe(true);
+      expect(beforeReflection).toHaveBeenCalledOnce();
+      expect(beforeReflection).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+      expect(afterReflection).toHaveBeenCalledOnce();
+      expect(result.record.activeObservations).toContain('rewritten sync reflection');
+    });
   });
 
   it('should create a new generation on reflect', async () => {

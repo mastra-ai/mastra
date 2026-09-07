@@ -120,6 +120,7 @@ export abstract class ObservationStrategy {
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
