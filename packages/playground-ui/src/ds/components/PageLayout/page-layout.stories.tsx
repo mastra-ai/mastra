@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon, WrenchIcon } from 'lucide-react';
+import { PlusIcon, CircleSlashIcon } from 'lucide-react';
 
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
@@ -80,7 +80,7 @@ export const CenteredEmptyState: Story = {
     <div className="bg-surface1 h-136">
       <NoDataPageLayout>
         <EmptyState
-          iconSlot={<WrenchIcon />}
+          iconSlot={<CircleSlashIcon />}
           titleSlot="No tools yet"
           descriptionSlot="Add a tool to let agents act on external systems."
         />

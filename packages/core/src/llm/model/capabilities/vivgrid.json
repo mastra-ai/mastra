@@ -12,6 +12,7 @@
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
+    "gpt-6-astra",
     "kimi-k3"
   ],
   "temperature": [
@@ -47,6 +48,7 @@
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
+    "gpt-6-astra",
     "kimi-k3"
   ]
 }

@@ -26,6 +26,8 @@ function Chevron({ expanded, className }: { expanded: boolean; className: string
 }
 
 interface TranscriptRowProps {
+  /** Sits ahead of the icon column — the clock a tool row keeps. */
+  leading?: ReactNode;
   /** Glyph naming the kind of row, held in the leading column every row shares. */
   icon?: ReactNode;
   label: string;
@@ -55,9 +57,20 @@ function RowDetail({ detail }: { detail: string }) {
 }
 
 /** The one row shape every transcript line uses, so tools, signals and notifications share a rhythm. */
-export function TranscriptRow({ icon, label, detail, summary, running, expanded, rule, trailing }: TranscriptRowProps) {
+export function TranscriptRow({
+  leading,
+  icon,
+  label,
+  detail,
+  summary,
+  running,
+  expanded,
+  rule,
+  trailing,
+}: TranscriptRowProps) {
   return (
     <Shimmer active={Boolean(running)} className={ROW_LINE}>
+      {leading}
       <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
       <Txt as="span" variant="ui-sm" className="text-icon3 max-w-[55%] shrink-0 truncate">
         {label}

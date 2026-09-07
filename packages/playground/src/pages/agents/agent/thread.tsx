@@ -11,7 +11,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { ArrowLeft, ChartNoAxesGantt, Plus, X } from 'lucide-react';
+import { ArrowLeft, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -29,13 +29,11 @@ import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { ThreadAside } from '@/domains/conversation/components/thread-aside';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { useDeleteThread, useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
-import { ThreadTraces } from '@/domains/traces/components/thread-traces';
 import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -87,8 +85,6 @@ function AgentThread() {
       { replace: true },
     );
   };
-  // Traces aside (chat view only). The column is keyed by thread, so this resets when switching threads.
-  const [tracesAside, setTracesAside] = useState<TracesAsideState>('closed');
   const suggestedPrompts = getAgentSuggestedPrompts(agent?.metadata);
 
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
@@ -171,23 +167,13 @@ function AgentThread() {
                                     {/* "new" is not a stored thread yet, so there is nothing to trace. */}
                                     {!isNewThread && (
                                       <HeaderAction>
-                                        {!isAdvancedVariant && (
-                                          <Button
-                                            variant="outline"
-                                            className="hidden lg:inline-flex"
-                                            onClick={() => setTracesAside(tracesAside === 'open' ? 'closing' : 'open')}
-                                          >
-                                            <ChartNoAxesGantt />
-                                            Traces
-                                          </Button>
-                                        )}
                                         <Switch
                                           id="thread-advanced-view"
                                           checked={isAdvancedVariant}
                                           onCheckedChange={setAdvancedVariant}
                                         />
                                         <label htmlFor="thread-advanced-view" className="text-ui-sm text-neutral4">
-                                          Advanced view
+                                          Show traces
                                         </label>
                                       </HeaderAction>
                                     )}
@@ -218,13 +204,6 @@ function AgentThread() {
                                     )}
                                   </div>
                                 </div>
-                                {!isNewThread && !isAdvancedVariant && tracesAside !== 'closed' && (
-                                  <ThreadTracesAside
-                                    threadId={actualThreadId}
-                                    state={tracesAside}
-                                    onStateChange={setTracesAside}
-                                  />
-                                )}
                               </div>
                             </div>
                           </MainSidebarProvider>
@@ -243,44 +222,6 @@ function AgentThread() {
 }
 
 export default AgentThread;
-
-type TracesAsideState = 'closed' | 'open' | 'closing';
-
-/** Slide-in aside listing the thread traces. Mounted while `state !== 'closed'` so the exit animation can play. */
-const ThreadTracesAside = ({
-  threadId,
-  state,
-  onStateChange,
-}: {
-  threadId: string;
-  state: Exclude<TracesAsideState, 'closed'>;
-  onStateChange: (state: TracesAsideState) => void;
-}) => {
-  // Mirrored from ThreadTraces to drive the aside title/width; reset naturally when the aside unmounts.
-  const [isTraceOpen, setIsTraceOpen] = useState(false);
-  const [isTraceSpanOpen, setIsTraceSpanOpen] = useState(false);
-
-  return (
-    <div
-      onAnimationEnd={e => {
-        if (e.target === e.currentTarget && state === 'closing') {
-          onStateChange('closed');
-        }
-      }}
-      className={cn(
-        'absolute top-3 right-3 bottom-3 z-20 hidden transition-[width] duration-300 ease-out lg:top-4 lg:right-4 lg:bottom-4 lg:block',
-        state === 'closing'
-          ? 'animate-out fade-out-0 slide-out-to-right-full fill-mode-forwards'
-          : 'animate-in fade-in-0 slide-in-from-right-full',
-        isTraceSpanOpen ? 'w-[70%]' : 'w-[40%]',
-      )}
-    >
-      <ThreadAside title={isTraceOpen ? undefined : 'Traces'} onClose={() => onStateChange('closing')}>
-        <ThreadTraces threadId={threadId} onTraceOpenChange={setIsTraceOpen} onSpanOpenChange={setIsTraceSpanOpen} />
-      </ThreadAside>
-    </div>
-  );
-};
 
 interface ThreadSidebarProps {
   agentId: string;

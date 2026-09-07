@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  authoredFeedbackResponse,
   feedbackRecord,
   listFeedbackResponse,
   SPAN_ID,
@@ -142,5 +143,15 @@ describe('feedback tabs delete', () => {
     await screen.findByText('👍');
 
     expect(screen.queryByRole('button', { name: 'Delete feedback' })).toBeNull();
+  });
+
+  it('shows the resolved author avatar and name on trace feedback', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+
+    expect((await screen.findByText('Marvin Frachet')).getAttribute('data-slot')).toBe('comment-item-author');
+    expect((screen.getByAltText('Marvin Frachet') as HTMLImageElement).src).toBe('https://example.com/marvin.png');
+    expect(screen.getByText('Looks off to me')).toBeTruthy();
   });
 });

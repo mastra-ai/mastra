@@ -126,6 +126,10 @@ export function boardCardStatus(input: BoardCardStatusInput): BoardCardStatus {
   if (decision && !runAnnouncedByWick(decision, input.sessionStatus)) {
     return { kind: 'busy', label: automationCopy(decision).busy };
   }
+  // A live session owns the card, so parked suggestions wait until it stops.
+  if (input.sessionStatus === 'initializing' || input.sessionStatus === 'working') {
+    return { kind: 'idle' };
+  }
   // Nothing is moving on its own. A held card's live question is the
   // maintainer's decision, even when a run has been suggested for it: the
   // card cannot start that run until it is accepted.

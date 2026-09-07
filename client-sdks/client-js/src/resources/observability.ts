@@ -39,7 +39,6 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
@@ -78,7 +77,7 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from '@mastra/core/storage';
-import type { ClientOptions } from '../types';
+import type { ClientOptions, ListFeedbackResponse } from '../types';
 import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
 

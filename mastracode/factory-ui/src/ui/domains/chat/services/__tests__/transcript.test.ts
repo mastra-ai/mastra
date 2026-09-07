@@ -1,11 +1,12 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
   message: { content: { parts: unknown[] } };
+  runtimeTools?: Record<string, { createdAt?: number }>;
 };
 
 function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
@@ -497,6 +498,31 @@ describe('transcript reducer message entries', () => {
         },
       },
     ]);
+  });
+
+  it('stamps a live tool call when it starts and keeps that stamp across a repeated start', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-05T15:42:05.000Z'));
+      const started = transcriptReducer(initialTranscript, {
+        type: 'event',
+        event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
+      });
+      const entry = started.entries[0];
+      if (!isMessageEntry(entry)) throw new Error('expected a message entry');
+      expect(entry.runtimeTools?.['tool-1']?.createdAt).toBe(Date.parse('2026-09-05T15:42:05.000Z'));
+
+      vi.setSystemTime(new Date('2026-09-05T15:42:09.000Z'));
+      const restarted = transcriptReducer(started, {
+        type: 'event',
+        event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: {} },
+      });
+      const again = restarted.entries[0];
+      if (!isMessageEntry(again)) throw new Error('expected a message entry');
+      expect(again.runtimeTools?.['tool-1']?.createdAt).toBe(Date.parse('2026-09-05T15:42:05.000Z'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stamps isError on the mirrored part when tool_end reports a failure', () => {
@@ -1579,5 +1605,52 @@ describe('transcript reducer entry identity', () => {
     });
 
     expect(next.entries).toHaveLength(2);
+  });
+});
+
+describe('live user signals sent by someone else', () => {
+  function liveSignal(id: string, text: string, author: { id: string; name: string }): MastraDBMessage {
+    const payload = {
+      id,
+      type: 'user',
+      tagName: 'user',
+      contents: text,
+      createdAt: '2026-07-27T16:00:00.000Z',
+      providerOptions: { mastra: { author } },
+    };
+    return {
+      id,
+      role: 'signal',
+      createdAt: new Date(payload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        metadata: { signal: payload },
+      },
+    };
+  }
+
+  it('draws a teammate message the moment its live event lands', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-1', 'hello from Ada', { id: 'user_ada', name: 'Ada' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-1');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from Ada' }]);
+  });
+
+  it("keeps the viewer's own message a single bubble behind its optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from me' });
+    const message = liveSignal('sig-2', 'hello from me', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text),
+    );
+    expect(drawable).toHaveLength(1);
+    expect(drawable[0]?.id).toMatch(/^local-/);
   });
 });

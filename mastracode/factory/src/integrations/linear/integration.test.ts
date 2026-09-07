@@ -8,6 +8,7 @@ vi.mock('../issue-reconcile-worker.js', () => ({
   },
 }));
 
+import { defaultLinearRules } from './default-rules.js';
 import { LinearIntegration } from './integration.js';
 import type { LinearIssue, LinearIssueDetail } from './integration.js';
 
@@ -40,6 +41,29 @@ afterEach(() => {
 });
 
 describe('LinearIntegration capability surface', () => {
+  it('owns isolated immutable rules with defaults and constructor overrides', () => {
+    const handler = vi.fn();
+    const rules = { issueObserved: handler, issueClosed: null };
+    const first = new LinearIntegration({ clientId: 'client', clientSecret: 'secret', rules });
+    rules.issueObserved = vi.fn();
+    expect(first.rules.issueObserved).toBe(handler);
+    expect(first.rules.issueClosed).toBeNull();
+    expect(Object.isFrozen(first.rules)).toBe(true);
+    expect(integration().rules).toEqual(defaultLinearRules);
+  });
+
+  it('validates rules at construction', () => {
+    expect(
+      () =>
+        new LinearIntegration({
+          clientId: 'client',
+          clientSecret: 'secret',
+          // @ts-expect-error Validate JavaScript configuration at the boundary.
+          rules: { issueObserved: false },
+        }),
+    ).toThrow(/must be a function/);
+  });
+
   it('normalizes Linear issues through the shared Intake contract', async () => {
     const linear = integration();
     const listActiveIssues = vi
