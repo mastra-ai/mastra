@@ -1129,6 +1129,16 @@ export class MastraClient extends BaseResource {
     return this.observability.listScoresBySpan(params);
   }
 
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
+  }
+
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
   score(params: {
     scorerName: string;

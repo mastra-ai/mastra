@@ -1,19 +1,16 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { SchemaConfigSection } from './schema-config-section';
-import type { DatasetTargetType } from './target-type-options';
-import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from './target-type-options';
 
 export interface EditDatasetFormProps {
   dataset: {
     id: string;
     name: string;
     description?: string;
-    targetType?: string | null;
     inputSchema?: Record<string, unknown> | null;
     groundTruthSchema?: Record<string, unknown> | null;
     requestContextSchema?: Record<string, unknown> | null;
@@ -28,7 +25,6 @@ type SchemaValue = Record<string, unknown> | null;
 type EditDatasetFormState = {
   name: string;
   description: string;
-  targetType: DatasetTargetType | '';
   inputSchema: SchemaValue;
   groundTruthSchema: SchemaValue;
   requestContextSchema: SchemaValue;
@@ -37,7 +33,6 @@ type EditDatasetFormState = {
 
 type EditDatasetFormAction =
   | { type: 'setStringField'; field: 'name' | 'description'; value: string }
-  | { type: 'setTargetType'; value: DatasetTargetType | '' }
   | { type: 'setSchemas'; inputSchema: SchemaValue; groundTruthSchema: SchemaValue; requestContextSchema: SchemaValue }
   | { type: 'setValidationError'; validationError: string | null };
 
@@ -45,7 +40,6 @@ function getInitialFormState(dataset: Dataset): EditDatasetFormState {
   return {
     name: dataset.name,
     description: dataset.description ?? '',
-    targetType: isDatasetTargetType(dataset.targetType) ? dataset.targetType : '',
     inputSchema: dataset.inputSchema ?? null,
     groundTruthSchema: dataset.groundTruthSchema ?? null,
     requestContextSchema: dataset.requestContextSchema ?? null,
@@ -57,8 +51,6 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
   switch (action.type) {
     case 'setStringField':
       return { ...state, [action.field]: action.value };
-    case 'setTargetType':
-      return { ...state, targetType: action.value };
     case 'setSchemas':
       return {
         ...state,
@@ -105,7 +97,6 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         datasetId: dataset.id,
         name: formState.name.trim(),
         description: formState.description.trim() || undefined,
-        targetType: formState.targetType || undefined,
         inputSchema: formState.inputSchema,
         groundTruthSchema: formState.groundTruthSchema,
         requestContextSchema: formState.requestContextSchema,
@@ -148,17 +139,6 @@ export function EditDatasetForm({ dataset, onSuccess, onCancel }: EditDatasetFor
         value={formState.description}
         onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
         placeholder="Enter dataset description (optional)"
-      />
-
-      <SelectFieldBlock
-        label="Target type"
-        name="edit-dataset-target-type"
-        placeholder="Select a target type (optional)"
-        options={[...DATASET_TARGET_TYPE_OPTIONS]}
-        value={formState.targetType}
-        onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
-        helpText="What this dataset evaluates. Drives the Target column and the Target filter."
-        disabled={updateDataset.isPending}
       />
 
       <SchemaConfigSection

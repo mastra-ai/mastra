@@ -8,7 +8,13 @@ import type { ClickhouseReplicationConfig } from './db/replication';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
-export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
+export { TABLE_DELETION_REQUESTS, recordDeletionRequest } from './domains/observability/v-next';
+export type {
+  VNextObservabilityConfig,
+  RetentionConfig,
+  DeletionRequestRow,
+  RecordDeletionRequestArgs,
+} from './domains/observability/v-next';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 

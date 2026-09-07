@@ -1,5 +1,6 @@
 import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from '../instances';
 import { SensitiveDataFilter } from './sensitive-data-filter';
@@ -444,6 +445,39 @@ describe('Tracing', () => {
         expect(attributes?.['sensitiveData']).toBeUndefined();
         expect(attributes?.['problematicObject']).toBeUndefined();
       });
+
+      it('should redact sensitive fields in requestContext', () => {
+        const processor = new SensitiveDataFilter({ sensitiveFields: ['apiToken'] });
+
+        const mockSpan = {
+          id: 'test-span-request-context',
+          name: 'test-span',
+          type: SpanType.AGENT_RUN,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: { agentId: 'agent-123' },
+          requestContext: {
+            apiToken: 'live-token', // Should be redacted
+            tenantId: 'tenant-1', // Should NOT be redacted
+            user: { id: 'user-1', apiToken: 'live-token' }, // Nested key should be redacted
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        expect(filtered).not.toBeNull();
+
+        const requestContext = filtered!.requestContext as any;
+        expect(requestContext?.['apiToken']).toBe('[REDACTED]');
+        expect(requestContext?.['tenantId']).toBe('tenant-1');
+        expect(requestContext?.['user']?.['id']).toBe('user-1');
+        expect(requestContext?.['user']?.['apiToken']).toBe('[REDACTED]');
+      });
     });
 
     describe('indexed redaction style', () => {
@@ -516,6 +550,25 @@ describe('Tracing', () => {
         expect((first.attributes as any).apiKey).toBe('[APIKEY_1]');
         expect((second.attributes as any).apiKey).toBe('[APIKEY_1]');
         expect((second.attributes as any).secret).toBe('[SECRET_1]');
+      });
+
+      it('should keep the same token when a span is processed again', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', {
+          attributes: { apiKey: 'sk-live', nested: { password: 'hunter2' } },
+          input: JSON.stringify({ token: 'sk-live' }),
+        });
+
+        processor.process(span);
+        const again = processor.process(span)!;
+
+        expect((again.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((again.attributes as any).nested.password).toBe('[PASSWORD_1]');
+        expect(JSON.parse(again.input as string).token).toBe('[APIKEY_1]');
+
+        const sibling = processor.process(makeSpan('trace-1', { attributes: { apiKey: 'sk-live' } }))!;
+        expect((sibling.attributes as any).apiKey).toBe('[APIKEY_1]');
       });
 
       it('should number tokens independently per trace', () => {
@@ -611,6 +664,20 @@ describe('Tracing', () => {
         }
       });
 
+      it('should share tokens between requestContext and the other span fields', () => {
+        const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
+
+        const span = makeSpan('trace-1', { attributes: { apiKey: 'sk-first' } });
+        span.requestContext = { apiKey: 'sk-first', user: { apiKey: 'sk-second' } };
+
+        const filtered = processor.process(span)!;
+
+        // The same value maps to the same token no matter which field carries it
+        expect((filtered.attributes as any).apiKey).toBe('[APIKEY_1]');
+        expect((filtered.requestContext as any).apiKey).toBe('[APIKEY_1]');
+        expect((filtered.requestContext as any).user.apiKey).toBe('[APIKEY_2]');
+      });
+
       it('should fall back to the full redaction token once the per-trace value cap is reached', () => {
         const processor = new SensitiveDataFilter({ redactionStyle: 'indexed' });
 
@@ -629,6 +696,35 @@ describe('Tracing', () => {
     });
 
     describe('as part of the default config', () => {
+      it('should keep indexed tokens stable across span events', () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'test-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter({ redactionStyle: 'indexed' })],
+        });
+
+        const span = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { apiKey: 'sk-live' } as any,
+        });
+        span.update({ metadata: { step: 1 } });
+        const child = span.createChildSpan({
+          type: SpanType.TOOL_CALL,
+          name: 'test-tool',
+          attributes: { apiKey: 'sk-live' } as any,
+        });
+        child.end();
+        span.end();
+
+        expect(testExporter.events).toHaveLength(5);
+        for (const event of testExporter.events) {
+          expect((event.exportedSpan.attributes as any)?.['apiKey']).toBe('[APIKEY_1]');
+        }
+      });
+
       it('should automatically filter sensitive data in default tracing', () => {
         const tracing = new DefaultObservabilityInstance({
           serviceName: 'test-tracing',
@@ -663,6 +759,39 @@ describe('Tracing', () => {
         // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
         expect((updatedSpan.attributes as any)?.['apiKey']).toBe('[REDACTED]');
+      });
+
+      it('should redact the request context snapshot captured on exported spans', () => {
+        const tracing = new DefaultObservabilityInstance({
+          serviceName: 'test-tracing',
+          name: 'test-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [testExporter],
+          spanOutputProcessors: [new SensitiveDataFilter()],
+        });
+
+        const requestContext = new RequestContext();
+        requestContext.set('token', 'live-token');
+        requestContext.set('tenantId', 'tenant-1');
+        requestContext.set('user', { id: 'user-1', password: 'hunter2' });
+
+        const span = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'agent-123' },
+          requestContext,
+        });
+        span.end();
+
+        // The raw values never reach the exporter, on the start or the end event
+        for (const event of testExporter.events) {
+          const exported = event.exportedSpan.requestContext as any;
+          expect(exported?.['token']).toBe('[REDACTED]');
+          expect(exported?.['tenantId']).toBe('tenant-1');
+          expect(exported?.['user']?.['id']).toBe('user-1');
+          expect(exported?.['user']?.['password']).toBe('[REDACTED]');
+        }
+        expect(testExporter.events.length).toBeGreaterThan(0);
       });
     });
   });

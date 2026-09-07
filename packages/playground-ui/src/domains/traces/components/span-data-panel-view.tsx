@@ -14,6 +14,7 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { truncateString } from '@/lib/truncate-string';
 
 function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
@@ -77,9 +78,10 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel className={className}>
-      <DataPanel.Header>
-        <DataPanel.Heading>
-          Span <b># {spanId}</b>
+      {/* 32px buttons + border would overflow min-h-14 by 1px; keep this header level with its neighbours. */}
+      <DataPanel.Header className="py-2">
+        <DataPanel.Heading className="whitespace-nowrap">
+          Span <b># {truncateString(spanId, 12)}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto shrink-0">
           <DataPanel.NextPrevNav

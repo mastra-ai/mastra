@@ -19,6 +19,7 @@ import {
   GET_TRACE_ROUTE,
   GET_TRACE_LIGHT_ROUTE,
   GET_SPAN_ROUTE,
+  DELETE_TRACES_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
@@ -47,6 +48,7 @@ const createMockObservabilityStore = () => ({
   listTraces: vi.fn(),
   listTracesLight: vi.fn(),
   listBranches: vi.fn(),
+  batchDeleteTraces: vi.fn(),
   listMetrics: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
@@ -1065,6 +1067,60 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow();
 
       expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting branch');
+    });
+  });
+
+  describe('DELETE_TRACES_ROUTE', () => {
+    it('should validate a trace ID array and exclude tenant scope from the public route', () => {
+      const schema = DELETE_TRACES_ROUTE.bodySchema!;
+
+      expect(schema.safeParse({ traceIds: ['trace-1', 'trace-2'] }).success).toBe(true);
+      expect(schema.safeParse({}).success).toBe(false);
+      expect(schema.safeParse({ traceIds: 'trace-1' }).success).toBe(false);
+      expect(schema.safeParse({ traceIds: Array.from({ length: 1001 }, (_, index) => `trace-${index}`) }).success).toBe(
+        false,
+      );
+      expect(schema.parse({ traceIds: ['trace-1'], organizationId: 'org-1' })).toEqual({ traceIds: ['trace-1'] });
+      expect(DELETE_TRACES_ROUTE.maxBodySize).toBe(256 * 1024);
+    });
+
+    it('should delete traces and return success', async () => {
+      mockObservabilityStore.batchDeleteTraces.mockResolvedValue(undefined);
+
+      const result = await DELETE_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceIds: ['trace-1', 'trace-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.batchDeleteTraces).toHaveBeenCalledWith({ traceIds: ['trace-1', 'trace-2'] });
+    });
+
+    it('should throw 501 when observability store is not available', async () => {
+      const mastraWithoutObservability = createMockMastra({
+        getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
+      });
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithoutObservability }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should call handleError when the store throws', async () => {
+      const storeError = new Error('boom');
+      mockObservabilityStore.batchDeleteTraces.mockRejectedValue(storeError);
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow('boom');
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storeError, 'Error deleting traces');
     });
   });
 

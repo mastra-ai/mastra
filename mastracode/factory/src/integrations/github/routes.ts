@@ -21,6 +21,7 @@ import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
@@ -225,7 +226,7 @@ function parseResourceNumber(raw: string | undefined): number | null {
   return parsed > 0 ? parsed : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['status: auto-triaged', 'status: needs approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set<string>([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;

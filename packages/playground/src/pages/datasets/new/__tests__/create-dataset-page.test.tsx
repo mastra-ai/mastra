@@ -44,19 +44,61 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('CreateDatasetPage', () => {
-  it('shows the target-type picker for a generic (non-scoped) create', () => {
+  it('never asks for a target type, whether generic or pre-scoped', () => {
     renderPage();
-    expect(screen.queryByText('Target type')).not.toBeNull();
-  });
+    expect(screen.queryByText('Target type')).toBeNull();
+    cleanup();
 
-  it('hides the picker when the page is pre-scoped to a target via query params', () => {
     renderPage('/datasets/new?targetType=agent&targetIds=weather-agent');
     expect(screen.queryByText('Target type')).toBeNull();
   });
 
-  it('ignores an invalid targetType query param and stays generic', () => {
+  it('creates a generic dataset without any targetType in the payload', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.post(`${BASE_URL}/api/datasets`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          id: 'ds-generic',
+          name: 'My DS',
+          version: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }),
+    );
+
+    renderPage();
+    fireEvent.change(screen.getByPlaceholderText('Enter dataset name'), { target: { value: 'My DS' } });
+    fireEvent.click(screen.getByRole('button', { name: /create dataset/i }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).not.toHaveProperty('targetType');
+    expect((await screen.findByTestId('dataset-probe')).textContent).toBe('ds-generic');
+  });
+
+  it('ignores an invalid targetType query param and creates a generic dataset', async () => {
+    let body: Record<string, unknown> | undefined;
+    server.use(
+      http.post(`${BASE_URL}/api/datasets`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          id: 'ds-generic',
+          name: 'My DS',
+          version: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }),
+    );
+
     renderPage('/datasets/new?targetType=banana&targetIds=x');
-    expect(screen.queryByText('Target type')).not.toBeNull();
+    fireEvent.change(screen.getByPlaceholderText('Enter dataset name'), { target: { value: 'My DS' } });
+    fireEvent.click(screen.getByRole('button', { name: /create dataset/i }));
+
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body).not.toHaveProperty('targetType');
+    expect(body).not.toHaveProperty('targetIds');
   });
 
   it('sends targetType and targetIds from query params, then navigates to the new dataset', async () => {

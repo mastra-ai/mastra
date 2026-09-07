@@ -7,7 +7,7 @@ description: "Browse Crusoe model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/crusoe.svg" alt="Crusoe logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Crusoe
 
-Access 8 Crusoe models through Mastra's model router. Authentication is handled automatically using the `CRUSOE_API_KEY` environment variable.
+Access 11 Crusoe models through Mastra's model router. Authentication is handled automatically using the `CRUSOE_API_KEY` environment variable.
 
 Learn more in the [Crusoe documentation](https://docs.crusoecloud.com/managed-inference/overview).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "crusoe/deepseek-ai/DeepSeek-V3-0324"
+  model: "crusoe/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
 
 // Generate a response
@@ -106,6 +106,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.83
   },
   {
+    "model": "crusoe/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.05,
+    "outputCost": 0.2
+  },
+  {
+    "model": "crusoe/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.3,
+    "outputCost": 2.4
+  },
+  {
     "model": "crusoe/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -116,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.05,
     "outputCost": 0.2
+  },
+  {
+    "model": "crusoe/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.22,
+    "outputCost": 0.8
   },
   {
     "model": "crusoe/zai/GLM-5.1",
@@ -156,7 +192,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.inference.crusoecloud.com/v1",
-    id: "crusoe/deepseek-ai/DeepSeek-V3-0324",
+    id: "crusoe/Qwen/Qwen3-235B-A22B-Instruct-2507",
     apiKey: process.env.CRUSOE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -175,7 +211,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "crusoe/zai/GLM-5.2"
-      : "crusoe/deepseek-ai/DeepSeek-V3-0324";
+      : "crusoe/Qwen/Qwen3-235B-A22B-Instruct-2507";
   }
 });
 ```

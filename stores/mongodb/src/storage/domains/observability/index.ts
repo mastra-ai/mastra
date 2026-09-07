@@ -1013,6 +1013,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       const collection = await this.getCollection(TABLE_SPANS);
 

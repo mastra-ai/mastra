@@ -1,5 +1,11 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.9-alpha.0
+
+### Patch Changes
+
+- Fixed realtime connections hanging when session creation fails. Connections now reject on handshake errors, early socket closure, or a 15-second timeout configurable with connectTimeoutMs. ([#23143](https://github.com/mastra-ai/mastra/pull/23143))
+
 ## 0.13.8
 
 ### Patch Changes

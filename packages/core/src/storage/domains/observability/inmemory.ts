@@ -1120,15 +1120,49 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
       if (traceEntry) {
+        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
+        if (!this.matchesDeleteScope(scopeReference, args)) {
+          continue;
+        }
         this.db.traceCursorIds.delete(traceId);
         for (const spanId of Object.keys(traceEntry.spans)) {
           this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
         }
       }
       this.db.traces.delete(traceId);
+    }
+
+    // Cascade: remove trace-linked signal events. Records without a traceId are untouched.
+    this.deleteTraceLinkedRecords(this.db.metricRecords, this.db.metricCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.logRecords, this.db.logCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.scoreRecords, this.db.scoreCursorIds, traceIds, args);
+    this.deleteTraceLinkedRecords(this.db.feedbackRecords, this.db.feedbackCursorIds, traceIds, args);
+  }
+
+  /** Returns true when the record matches the optional tenant scope in delete args. */
+  private matchesDeleteScope(
+    record: { organizationId?: string | null; resourceId?: string | null } | null | undefined,
+    args: BatchDeleteTracesArgs,
+  ): boolean {
+    if (args.organizationId !== undefined && record?.organizationId !== args.organizationId) return false;
+    if (args.resourceId !== undefined && record?.resourceId !== args.resourceId) return false;
+    return true;
+  }
+
+  /** Removes signal records linked to the given trace ids (and matching the optional tenant scope). */
+  private deleteTraceLinkedRecords<
+    T extends { traceId?: string | null; organizationId?: string | null; resourceId?: string | null },
+  >(records: T[], cursorIds: Map<T, number>, traceIds: Set<string>, args: BatchDeleteTracesArgs): void {
+    for (let i = records.length - 1; i >= 0; i--) {
+      const record = records[i]!;
+      if (record.traceId != null && traceIds.has(record.traceId) && this.matchesDeleteScope(record, args)) {
+        cursorIds.delete(record);
+        records.splice(i, 1);
+      }
     }
   }
 

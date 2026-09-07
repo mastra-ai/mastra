@@ -639,7 +639,9 @@ export class FactoryDecisionDispatcher {
           board: decision.board,
           stage: decision.stage,
           expectedRevision: item.revision,
-          actor: { type: 'system', id: 'factory-rule-dispatcher' },
+          actor: record.approvedBy
+            ? { type: 'human', id: record.approvedBy }
+            : { type: 'system', id: 'factory-rule-dispatcher' },
           ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}` },
           cause: 'rule_decision',
           causalChain: nextChain,
