@@ -51,6 +51,14 @@ After running an experiment, the **Experiments** tab shows all runs for that dat
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
 
+## Delete experiments
+
+In Studio, open the global **Experiments** list and select **Delete Experiment** from a row, or delete the experiment from its details page. The global list also lets you delete experiments orphaned by dataset deletion, which no longer have a dataset details page.
+
+Deleting an experiment permanently removes its result records and the observability traces it produced. Trace deletion also removes spans and trace-linked scores, feedback, metrics, and logs. If your storage adapter doesn't support trace deletion, Mastra logs a warning and still deletes the experiment and its result records.
+
+You can also delete experiments with the [Core API](/reference/datasets/deleteExperiment), [Client SDK](/reference/client-js/datasets#deleteexperiment), or [server routes](/reference/server/routes#delete-an-experiment).
+
 ## Experiment targets
 
 You can point an experiment at a registered agent, workflow, or scorer.

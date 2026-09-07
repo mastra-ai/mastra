@@ -434,10 +434,13 @@ describe('DatasetsManager', () => {
 
       // The cascade collects trace ids from the experiment's results, which the
       // relational delete would otherwise have already removed.
-      const spy = vi.spyOn(experimentsStorage, 'listExperimentResults');
+      const listResults = vi.spyOn(experimentsStorage, 'listExperimentResults');
+      const deleteExperiment = vi.spyOn(experimentsStorage, 'deleteExperiment');
       await mgr.deleteExperiment({ experimentId: exp.id });
 
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ experimentId: exp.id }));
+      expect(listResults).toHaveBeenCalledWith(expect.objectContaining({ experimentId: exp.id }));
+      expect(deleteExperiment).toHaveBeenCalledWith({ id: exp.id, filters: undefined });
+      expect(listResults.mock.invocationCallOrder[0]!).toBeLessThan(deleteExperiment.mock.invocationCallOrder[0]!);
       expect(await mgr.getExperiment({ experimentId: exp.id })).toBeNull();
     });
   });
