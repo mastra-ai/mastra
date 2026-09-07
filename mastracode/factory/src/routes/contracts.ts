@@ -104,6 +104,7 @@ const metadataSchema = z
 
 export const createWorkItemBodySchema = z.object({
   title: rawBoundedTrimmed(500),
+  board: z.string().min(1).max(128).optional(),
   externalSource: externalSourceSchema.optional(),
   parentWorkItemId: uuidSchema.nullable().optional(),
   stages: stagesSchema.optional(),
@@ -114,10 +115,12 @@ export const createWorkItemBodySchema = z.object({
 export const updateWorkItemBodySchema = z
   .object({
     title: rawBoundedTrimmed(500).optional(),
+    board: z.string().min(1).max(128).optional(),
     parentWorkItemId: uuidSchema.nullable().optional(),
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
+    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -139,46 +142,12 @@ export const transitionBodySchema = z
     ...(input.reenter === true ? { reenter: true } : {}),
   }));
 
-const invocationSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('prompt'), prompt: nonEmptyTrimmed(16_384) }),
-  z.object({ type: z.literal('skill'), skillName: nonEmptyTrimmed(64), arguments: z.string().max(16_384) }),
-]);
-
-const threadTagsSchema = z
-  .unknown()
-  .optional()
-  .transform(value => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([key, entry]) => {
-          if (typeof entry !== 'string') return false;
-          const normalizedKey = key.trim();
-          const normalizedValue = entry.trim();
-          return (
-            normalizedKey.length > 0 &&
-            normalizedKey.length <= 64 &&
-            normalizedValue.length > 0 &&
-            normalizedValue.length <= 256
-          );
-        })
-        .map(([key, entry]) => [key, (entry as string).trim()]),
-    );
-  });
-
 export const startWorkItemBodySchema = z.object({
   sessionId: trimmedUuidSchema,
   threadTitle: nonEmptyTrimmed(512),
-  threadTags: threadTagsSchema,
   kickoffKey: trimmedUuidSchema,
-  preapprovePlans: z
-    .unknown()
-    .optional()
-    .transform(value => value === true),
-  invocation: invocationSchema.optional(),
-  destinationStage: z.enum(['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled']),
   workItem: z.object({
-    id: trimmedUuidSchema.optional(),
+    id: trimmedUuidSchema,
     role: nonEmptyTrimmed(32),
     input: createWorkItemBodySchema,
   }),
@@ -206,7 +175,7 @@ export const attentionQuerySchema = z.object({
 const attentionActionPathSchema = z
   .object({
     id: uuidSchema,
-    kind: z.enum(['automation-failed', 'mention', 'activity', 'supervisor-finding']),
+    kind: z.enum(['automation-failed', 'automation-proposed', 'mention', 'activity', 'supervisor-finding']),
     sourceId: z.string().min(1).max(256),
     occurrence: z.string().regex(/^(0|[1-9]\d*)$/),
   })

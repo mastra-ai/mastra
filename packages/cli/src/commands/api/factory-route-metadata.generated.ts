@@ -209,8 +209,10 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "board",
       "metadata",
       "parentWorkItemId",
+      "plansPreapproved",
       "sessions",
       "stages",
       "title"
@@ -374,12 +376,8 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "destinationStage",
-      "invocation",
       "kickoffKey",
-      "preapprovePlans",
       "sessionId",
-      "threadTags",
       "threadTitle",
       "workItem"
     ],
@@ -415,6 +413,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "board",
       "externalSource",
       "metadata",
       "parentWorkItemId",
@@ -968,17 +967,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "title": {
           "$ref": "#/$defs/__schema0"
         },
-        "parentWorkItemId": {
+        "board": {
           "$ref": "#/$defs/__schema1"
         },
-        "stages": {
+        "parentWorkItemId": {
           "$ref": "#/$defs/__schema2"
         },
+        "stages": {
+          "$ref": "#/$defs/__schema3"
+        },
         "sessions": {
-          "$ref": "#/$defs/__schema4"
+          "$ref": "#/$defs/__schema5"
         },
         "metadata": {
-          "$ref": "#/$defs/__schema5"
+          "$ref": "#/$defs/__schema6"
+        },
+        "plansPreapproved": {
+          "$ref": "#/$defs/__schema9"
         }
       },
       "$defs": {
@@ -987,6 +992,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "maxLength": 500
         },
         "__schema1": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema2": {
           "anyOf": [
             {
               "type": "string",
@@ -997,20 +1007,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema2": {
+        "__schema3": {
           "minItems": 1,
           "maxItems": 16,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema3"
+            "$ref": "#/$defs/__schema4"
           }
         },
-        "__schema3": {
+        "__schema4": {
           "type": "string",
           "maxLength": 64,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
-        "__schema4": {
+        "__schema5": {
           "type": "object",
           "propertyNames": {
             "type": "string",
@@ -1043,25 +1053,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
-        "__schema5": {
+        "__schema6": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema6"
+              "$ref": "#/$defs/__schema7"
             },
             {
-              "$ref": "#/$defs/__schema7"
+              "$ref": "#/$defs/__schema8"
             }
           ]
         },
-        "__schema6": {
+        "__schema7": {
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
           "additionalProperties": {}
         },
-        "__schema7": {
+        "__schema8": {
           "type": "null"
+        },
+        "__schema9": {
+          "type": "boolean",
+          "const": true
         }
       }
     },
@@ -1158,6 +1172,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "enum": [
             "automation-failed",
+            "automation-proposed",
             "mention",
             "activity",
             "supervisor-finding"
@@ -1224,6 +1239,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "enum": [
             "automation-failed",
+            "automation-proposed",
             "mention",
             "activity",
             "supervisor-finding"
@@ -1290,6 +1306,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "enum": [
             "automation-failed",
+            "automation-proposed",
             "mention",
             "activity",
             "supervisor-finding"
@@ -1513,67 +1530,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "minLength": 1,
           "maxLength": 512
         },
-        "threadTags": {},
         "kickoffKey": {
           "$ref": "#/$defs/__schema0"
-        },
-        "preapprovePlans": {},
-        "invocation": {
-          "oneOf": [
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "const": "prompt"
-                },
-                "prompt": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 16384
-                }
-              },
-              "required": [
-                "type",
-                "prompt"
-              ]
-            },
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "const": "skill"
-                },
-                "skillName": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64
-                },
-                "arguments": {
-                  "type": "string",
-                  "maxLength": 16384
-                }
-              },
-              "required": [
-                "type",
-                "skillName",
-                "arguments"
-              ]
-            }
-          ]
-        },
-        "destinationStage": {
-          "type": "string",
-          "enum": [
-            "intake",
-            "triage",
-            "planning",
-            "execute",
-            "review",
-            "done",
-            "canceled"
-          ]
         },
         "workItem": {
           "type": "object",
@@ -1592,6 +1550,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "title": {
                   "type": "string",
                   "maxLength": 500
+                },
+                "board": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
                 },
                 "externalSource": {
                   "anyOf": [
@@ -1698,6 +1661,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           },
           "required": [
+            "id",
             "role",
             "input"
           ]
@@ -1707,7 +1671,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "sessionId",
         "threadTitle",
         "kickoffKey",
-        "destinationStage",
         "workItem"
       ],
       "$defs": {
@@ -1798,6 +1761,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "title": {
           "type": "string",
           "maxLength": 500
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         },
         "externalSource": {
           "anyOf": [
