@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import { LibSQLVector } from './index.js';
 
 const libSQLVectorDB = new LibSQLVector({
-  url: 'file::memory:?cache=shared',
+  url: process.env.LIBSQL_TEST_URL ?? 'file::memory:?cache=shared',
   id: 'libsql-shared-test',
 });
 
@@ -371,5 +371,37 @@ describe('LibSQLVector local-file concurrency', () => {
     releaseInitialization();
     await expect(operation).resolves.toEqual([]);
     expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LibSQLVector bare :memory: concurrency', () => {
+  // Regression for mastra-ai/mastra#22328: a bare `:memory:` url has a single
+  // connection, so interleaved upserts, queries and index reads must queue
+  // behind each other's interactive transactions instead of failing with
+  // TRANSACTION_ACTIVE.
+  it('preserves every write across interleaved upserts and reads', async () => {
+    const vector = new LibSQLVector({ id: 'bare-memory-vector', url: ':memory:' });
+    const indexName = 'bare_memory_vectors';
+    await vector.createIndex({ indexName, dimension: 3 });
+
+    const writerCount = 8;
+    await Promise.all([
+      ...Array.from({ length: writerCount }, (_, index) =>
+        vector.upsert({
+          indexName,
+          ids: [`vector-${index}`, `vector-${index}-b`],
+          vectors: [
+            [index + 1, 0, 0],
+            [0, index + 1, 0],
+          ],
+          metadata: [{ label: `write-${index}` }, { label: `write-${index}-b` }],
+        }),
+      ),
+      ...Array.from({ length: writerCount }, () => vector.describeIndex({ indexName })),
+      ...Array.from({ length: writerCount }, () => vector.query({ indexName, queryVector: [1, 0, 0], topK: 3 })),
+    ]);
+
+    await expect(vector.describeIndex({ indexName })).resolves.toMatchObject({ count: writerCount * 2 });
+    await vector.close();
   });
 });
