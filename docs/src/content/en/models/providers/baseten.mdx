@@ -7,7 +7,7 @@ description: "Browse Baseten model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
 
-Access 21 Baseten models through Mastra's model router. Authentication is handled automatically using the `BASETEN_API_KEY` environment variable.
+Access 22 Baseten models through Mastra's model router. Authentication is handled automatically using the `BASETEN_API_KEY` environment variable.
 
 Learn more in the [Baseten documentation](https://docs.baseten.co).
 
@@ -260,6 +260,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 1.4,
     "outputCost": 4.4
+  },
+  {
+    "model": "baseten/zai-org/GLM-5.3-Fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 2.1,
+    "outputCost": 6.6
   },
   {
     "model": "baseten/zai-org/GLM-5.3-Flash",

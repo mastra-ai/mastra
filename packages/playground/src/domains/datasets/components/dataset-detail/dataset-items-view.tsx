@@ -21,6 +21,7 @@ export interface DatasetItemsViewProps {
   onNavigateToDataset?: (datasetId: string) => void;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
+  belowToolbarSlot?: React.ReactNode;
 }
 
 export function DatasetItemsView({
@@ -29,6 +30,7 @@ export function DatasetItemsView({
   onNavigateToDataset,
   leftSlot,
   rightSlot,
+  belowToolbarSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
@@ -117,6 +119,7 @@ export function DatasetItemsView({
           items={items}
           leftSlot={leftSlot}
           rightSlot={rightSlot}
+          belowToolbarSlot={belowToolbarSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}

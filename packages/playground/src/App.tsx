@@ -628,7 +628,7 @@ export const routes: RouteObject[] = [
                         ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
                         : undefined,
                   },
-                  { id: 'dataset-item-versions', label: 'Versions' },
+                  { id: 'dataset-item-versions', label: 'Item Version History' },
                 ],
               } satisfies RouteHeaderHandle,
             },

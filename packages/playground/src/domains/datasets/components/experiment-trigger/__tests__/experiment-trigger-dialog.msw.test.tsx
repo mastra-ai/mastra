@@ -74,6 +74,9 @@ function setupHandlers() {
       const dataset = datasets.find(d => d.id === params.datasetId);
       return dataset ? HttpResponse.json(dataset) : HttpResponse.json({ error: 'not found' }, { status: 404 });
     }),
+    http.get(`${BASE_URL}/api/datasets/:datasetId/items`, () =>
+      HttpResponse.json({ items: [], pagination: { total: 3, page: 0, perPage: 50, hasMore: false } }),
+    ),
     http.get(`${BASE_URL}/api/datasets/:datasetId/versions`, ({ params }) =>
       HttpResponse.json(params.datasetId === 'dataset-1' ? datasetVersionsResponse : emptyVersionsResponse),
     ),
@@ -335,9 +338,69 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 2' })).toBeDefined());
       selectOption('Select a dataset...', 'dataset-2');
 
-      // dataset-2 has a requestContextSchema: schema-driven form replaces the JSON editor
+      // dataset-2 has a requestContextSchema: disclosure switches to the schema-driven form, still collapsed
+      expect(screen.queryByText('Request Context')).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /Request Context \(JSON, optional\)/ }));
       expect(await screen.findByText('Request Context')).toBeDefined();
-      await waitFor(() => expect(screen.queryByText('Request Context (JSON, optional)')).toBeNull());
+      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
+    });
+
+    it('keeps the raw JSON editor collapsed until the disclosure is opened', async () => {
+      setupHandlers();
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+
+      // Collapsed by default
+      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
+
+      // When the disclosure is opened
+      fireEvent.click(screen.getByRole('button', { name: /Request Context \(JSON, optional\)/ }));
+
+      // Then the editor is revealed
+      expect(await screen.findByLabelText('Request context JSON')).toBeDefined();
+    });
+  });
+
+  describe('readiness status', () => {
+    const status = () => screen.getByTestId('experiment-run-status');
+
+    it('should list the missing fields and enable Run once name, dataset and target are set', async () => {
+      setupHandlers();
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+
+      expect(status().textContent).toContain('Missing name, dataset, target');
+      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
+
+      typeName('Prompt v2');
+      expect(status().textContent).toContain('Missing dataset, target');
+
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
+      selectOption('Select a dataset...', 'dataset-1');
+      expect(status().textContent).toContain('Missing target');
+
+      await pickAgentTarget();
+      expect(status().textContent).toContain('Ready');
+      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('should submit on Ctrl+Enter only when the form is ready', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
+
+      // Not ready (no name): shortcut is ignored
+      fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(triggerCalls).toHaveLength(0);
+
+      // Ready: shortcut submits
+      typeName('Prompt v2');
+      fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.name).toBe('Prompt v2');
     });
   });
 });

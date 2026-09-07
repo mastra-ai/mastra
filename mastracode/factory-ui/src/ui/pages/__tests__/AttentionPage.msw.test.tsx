@@ -9,10 +9,10 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import type {
   FactoryActivityAttentionItem,
   FactoryAutomationFailedAttentionItem,
+  FactoryAutomationProposedAttentionItem,
   FactoryAttentionView,
   FactoryMentionAttentionItem,
 } from '../../domains/factory/services/attention';
-import type { FactoryDecisionSummary } from '../../domains/factory/services/decisions';
 import { AttentionContent } from '../AttentionPage';
 
 const FACTORY_ID = 'factory-1';
@@ -38,23 +38,20 @@ function item(id: string, title: string, read: boolean): FactoryAutomationFailed
   };
 }
 
-function proposal(id: string, type: string, role: string, workItemId: string): FactoryDecisionSummary {
+function proposedItem(id: string, title: string): FactoryAutomationProposedAttentionItem {
   return {
-    id,
-    evaluationId: `evaluation-${id}`,
-    workItemId,
-    type,
-    role,
-    status: 'proposed',
-    attempts: 0,
-    failureOccurrence: 0,
-    source: null,
-    failureCode: null,
-    canRetry: false,
-    lastError: null,
-    createdAt: '2026-08-20T10:00:00.000Z',
-    updatedAt: '2026-08-20T10:00:00.000Z',
-    completedAt: null,
+    key: `factory:${FACTORY_ID}:attention:automation-proposed:${id}:0`,
+    kind: 'automation-proposed',
+    decisionId: id,
+    occurrence: 0,
+    workItemId: `item-${id}`,
+    title,
+    detail: 'Waiting for approval to run triage',
+    decisionType: 'invokeSkill',
+    occurredAt: '2026-08-20T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: `item-${id}`, board: 'work' },
   };
 }
 
@@ -113,7 +110,6 @@ describe('AttentionPage', () => {
         return HttpResponse.json({
           items: visible,
           openCount: items.filter(attentionItem => !attentionItem.archived).length,
-          approvalCount: 0,
           badgeCount: items.filter(attentionItem => !attentionItem.read && !attentionItem.archived).length,
           unreadCount: items.filter(attentionItem => !attentionItem.read && !attentionItem.archived).length,
           hasMore: false,
@@ -170,44 +166,26 @@ describe('AttentionPage', () => {
     expect(await screen.findByText('No archived attention items.')).toBeVisible();
   });
 
-  it('groups the approval queue by role and runs one proposal from the inbox', async () => {
-    let proposals = [
-      proposal('decision-9', 'invokeSkill', 'review', 'item-1'),
-      proposal('decision-8', 'invokeSkill', 'triage', 'item-2'),
-      proposal('decision-7', 'invokeSkill', 'triage', 'item-3'),
-    ];
-    const approved: string[] = [];
+  it('releases a suggested run from the inbox row', async () => {
+    let items = [proposedItem('decision-8', 'Fix the flaky auth test')];
+    const settled: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
         HttpResponse.json({
-          items: [],
-          openCount: proposals.length,
-          approvalCount: proposals.length,
-          badgeCount: proposals.length,
-          unreadCount: 0,
+          items,
+          openCount: items.length,
+          badgeCount: items.length,
+          unreadCount: items.length,
           hasMore: false,
           latestOccurrenceKey: null,
           latestOccurrenceAt: null,
           latestOccurrenceUnread: false,
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: [
-            { id: 'item-1', title: 'Bump vite to 7', stage: 'review', stageHistory: [], metadata: {} },
-            { id: 'item-2', title: 'Fix the flaky auth test', stage: 'triage', stageHistory: [], metadata: {} },
-            { id: 'item-3', title: 'Drop the dead flag', stage: 'triage', stageHistory: [], metadata: {} },
-          ],
-          runningSessionIds: [],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-        HttpResponse.json({ decisions: proposals }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/approve`, ({ params }) => {
-        approved.push(String(params.decisionId));
-        proposals = proposals.filter(decision => decision.id !== params.decisionId);
-        return HttpResponse.json({ decision: { ...proposals[0], status: 'pending' } });
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
+        settled.push(`${params.action}:${params.decisionId}`);
+        items = items.filter(attentionItem => attentionItem.decisionId !== params.decisionId);
+        return HttpResponse.json({ decision: { id: params.decisionId, status: 'pending' } });
       }),
     );
     const user = userEvent.setup();
@@ -217,52 +195,34 @@ describe('AttentionPage', () => {
       </MemoryRouter>,
     );
 
-    // Three proposals, two shapes: the queue reads as two rows, not three.
-    const triage = await screen.findByRole('button', { name: /2 triage runs/ });
-    expect(screen.getByRole('button', { name: /1 review run/ })).toBeVisible();
-    expect(screen.queryByText('Fix the flaky auth test')).not.toBeInTheDocument();
-
-    await user.click(triage);
     expect(await screen.findByText('Fix the flaky auth test')).toBeVisible();
-    expect(screen.getByText('Drop the dead flag')).toBeVisible();
-    expect(screen.queryByText('Bump vite to 7')).not.toBeInTheDocument();
-
-    const row = screen.getByText('Fix the flaky auth test').closest('li');
-    await user.click(within(row!).getByRole('button', { name: 'Run' }));
+    await user.click(screen.getByRole('button', { name: 'Run Fix the flaky auth test' }));
     await waitForMutationsIdle(client);
-    expect(approved).toEqual(['decision-8']);
-    await waitFor(() => expect(screen.getByRole('button', { name: /1 triage run/ })).toBeVisible());
+
+    expect(settled).toEqual(['approve:decision-8']);
+    await waitFor(() => expect(screen.queryByText('Fix the flaky auth test')).not.toBeInTheDocument());
   });
 
-  it('clears a whole proposal group only after the dismissal is confirmed', async () => {
-    let proposals = [
-      proposal('decision-8', 'invokeSkill', 'triage', 'item-2'),
-      proposal('decision-7', 'invokeSkill', 'triage', 'item-3'),
-    ];
-    const dismissed: string[] = [];
+  it('turns a suggested run down from the inbox row', async () => {
+    let items = [proposedItem('decision-7', 'Drop the dead flag')];
+    const settled: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
         HttpResponse.json({
-          items: [],
-          openCount: proposals.length,
-          approvalCount: proposals.length,
-          badgeCount: proposals.length,
-          unreadCount: 0,
+          items,
+          openCount: items.length,
+          badgeCount: items.length,
+          unreadCount: items.length,
           hasMore: false,
           latestOccurrenceKey: null,
           latestOccurrenceAt: null,
           latestOccurrenceUnread: false,
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
-        HttpResponse.json({ decisions: proposals }),
-      ),
-      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/dismiss`, ({ params }) => {
-        dismissed.push(String(params.decisionId));
-        proposals = proposals.filter(decision => decision.id !== params.decisionId);
-        return HttpResponse.json({
-          decision: { ...proposal('x', 'invokeSkill', 'triage', 'item-2'), status: 'dismissed' },
-        });
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
+        settled.push(`${params.action}:${params.decisionId}`);
+        items = items.filter(attentionItem => attentionItem.decisionId !== params.decisionId);
+        return HttpResponse.json({ decision: { id: params.decisionId, status: 'dismissed' } });
       }),
     );
     const user = userEvent.setup();
@@ -272,14 +232,12 @@ describe('AttentionPage', () => {
       </MemoryRouter>,
     );
 
-    // First click only arms the confirmation: 2 runs cannot go on one stray click.
-    await user.click(await screen.findByRole('button', { name: 'Dismiss all' }));
-    expect(dismissed).toEqual([]);
-
-    await user.click(await screen.findByRole('button', { name: 'Dismiss 2?' }));
+    expect(await screen.findByText('Drop the dead flag')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Dismiss Drop the dead flag' }));
     await waitForMutationsIdle(client);
-    expect(dismissed).toEqual(['decision-8', 'decision-7']);
-    await waitFor(() => expect(screen.queryByText(/triage runs/)).not.toBeInTheDocument());
+
+    expect(settled).toEqual(['dismiss:decision-7']);
+    await waitFor(() => expect(screen.queryByText('Drop the dead flag')).not.toBeInTheDocument());
   });
 
   it('renders mentions beside failures, deep-links to the comment, and pages with the cursor', async () => {
@@ -295,7 +253,6 @@ describe('AttentionPage', () => {
         return HttpResponse.json({
           items: before === KIND_CURSOR ? secondPage : firstPage,
           openCount: 3,
-          approvalCount: 0,
           badgeCount: 3,
           unreadCount: 3,
           hasMore: before !== KIND_CURSOR,
@@ -346,7 +303,6 @@ describe('AttentionPage', () => {
         return HttpResponse.json({
           items: matching.slice(0, 25),
           openCount: allItems.length,
-          approvalCount: 0,
           badgeCount: allItems.length,
           unreadCount: allItems.length,
           hasMore: matching.length > 25,
@@ -378,7 +334,6 @@ describe('AttentionPage', () => {
             item('decision-1', 'Fix the loader', false),
           ],
           openCount: 2,
-          approvalCount: 0,
           badgeCount: 2,
           unreadCount: 2,
           activityUnreadCount: 1,
@@ -422,7 +377,6 @@ describe('AttentionPage', () => {
         HttpResponse.json({
           items,
           openCount: items.length,
-          approvalCount: 0,
           badgeCount: items.length,
           unreadCount: items.length,
           activityUnreadCount: 0,

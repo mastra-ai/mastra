@@ -14,11 +14,14 @@ import {
   type FactoryAttentionView,
   type FactoryActivityAttentionItem,
   type FactoryAutomationFailedAttentionItem,
+  type FactoryAutomationProposedAttentionItem,
   type FactoryMentionAttentionItem,
   type FactorySupervisorFindingAttentionItem,
 } from '../../services/attention';
 import { playAttentionSoundOnce } from '../../services/attentionSound';
-import { ATTENTION_PREVIEW_LIMIT, SidebarAttention } from '../SidebarAttention';
+import { ATTENTION_PREVIEW_LIMIT } from '../../../../../hooks/useFactoryAttention';
+import { AttentionPreview } from '../OverviewLists';
+import { SidebarAttention } from '../SidebarAttention';
 
 const FACTORY_ID = 'factory-1';
 const DECISION_ID = 'decision-1';
@@ -91,6 +94,23 @@ function attentionItem(occurrence = 1): FactoryAutomationFailedAttentionItem {
     read: false,
     target: { kind: 'thread', sessionId: 'session-attention', threadId: 'thread-attention' },
     archived: false,
+  };
+}
+
+function proposedItem(): FactoryAutomationProposedAttentionItem {
+  return {
+    key: `factory:${FACTORY_ID}:attention:automation-proposed:${DECISION_ID}:0`,
+    kind: 'automation-proposed',
+    decisionId: DECISION_ID,
+    occurrence: 0,
+    workItemId: 'item-1',
+    title: 'Fix the loader',
+    detail: 'Waiting for approval to run review',
+    decisionType: 'invokeSkill',
+    occurredAt: '2026-08-20T10:00:00.000Z',
+    read: false,
+    archived: false,
+    target: { kind: 'work-item', workItemId: 'item-1', board: 'work' },
   };
 }
 
@@ -175,14 +195,16 @@ function renderAttention() {
 function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
 }
-function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCount = 0) {
+function stubAttention(initialItems: FactoryAttentionItem[]) {
   let items = initialItems;
-  let approvalCount = initialApprovalCount;
   const retried: string[] = [];
+  const settled: string[] = [];
+  const listed: string[] = [];
   const receipts: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, ({ request }) => {
       const url = new URL(request.url);
+      listed.push(url.search);
       const view = attentionView(url.searchParams.get('view'));
       const limit = Number(url.searchParams.get('limit') ?? 50);
       const visible = items.filter(item => {
@@ -198,9 +220,8 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
       const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
       return HttpResponse.json({
         items: tiered.slice(0, limit),
-        openCount: badge.filter(item => !item.archived).length + approvalCount,
-        approvalCount,
-        badgeCount: unread(badge) + approvalCount,
+        openCount: badge.filter(item => !item.archived).length,
+        badgeCount: unread(badge),
         unreadCount: unread(badge),
         activityUnreadCount: unread(activity),
         latestOccurrenceKey: latest?.key ?? null,
@@ -233,16 +254,20 @@ function stubAttention(initialItems: FactoryAttentionItem[], initialApprovalCoun
       items = items.filter(item => item.kind !== 'automation-failed' || item.decisionId !== params.decisionId);
       return HttpResponse.json({ decision: { id: params.decisionId, status: 'retry' } });
     }),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
+      settled.push(`${params.decisionId}/${params.action}`);
+      items = items.filter(item => item.kind !== 'automation-proposed' || item.decisionId !== params.decisionId);
+      return HttpResponse.json({ decision: { id: params.decisionId, status: params.action } });
+    }),
   );
   return {
     setItems: (nextItems: FactoryAttentionItem[]) => {
       items = nextItems;
     },
     retried,
+    settled,
     receipts,
-    setApprovalCount: (count: number) => {
-      approvalCount = count;
-    },
+    listed,
   };
 }
 
@@ -422,21 +447,54 @@ describe('Sidebar attention', () => {
     expect(screen.getByRole('link', { name: 'Open thread for Fix the loader' })).toBeVisible();
   });
 
-  it('shows proposed work as one project queue', async () => {
-    stubAttention([], 12);
+  it('a parked run shows as a row you can release', async () => {
+    const api = stubAttention([proposedItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 12 waiting for approval, 12 open' }));
+    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
 
-    expect(screen.getByText('waiting for approval')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /items waiting for approval/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View all attention' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/attention`,
-    );
-    expect(screen.queryByRole('button', { name: /mark/i })).not.toBeInTheDocument();
+    expect(await screen.findByText('Fix the loader')).toBeVisible();
+    expect(screen.getByText('Waiting for approval to run review')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Run Fix the loader' }));
+    await waitForMutationsIdle(client);
+
+    expect(api.settled).toEqual([`${DECISION_ID}/approve`]);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Needs attention' })).toBeInTheDocument());
   });
+  it('the sidebar and the Overview preview share one attention query', async () => {
+    const api = stubAttention([attentionItem()]);
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/overview`]}>
+        <MainSidebarProvider storageKey="sidebar-attention-shared" mobileBreakpoint={0}>
+          <Routes>
+            <Route
+              path="/factories/:factoryId/*"
+              element={
+                <>
+                  <MainSidebar>
+                    <MainSidebar.Bottom>
+                      <MainSidebar.NavList>
+                        <SidebarAttention />
+                      </MainSidebar.NavList>
+                    </MainSidebar.Bottom>
+                  </MainSidebar>
+                  <AttentionPreview factoryProjectId={FACTORY_ID} />
+                </>
+              }
+            />
+          </Routes>
+        </MainSidebarProvider>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
+    expect(await screen.findByText('No active Factory binding for role work.')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(api.listed).toEqual(['?view=open&tier=badge&limit=25']);
+  });
+
   it('deduplicates persisted sound claims by scope and occurrence', async () => {
     await playAttentionSoundOnce('user-1:factory-1', 'failure-1');
     const notesPerPlayback = oscillatorStart.mock.calls.length;

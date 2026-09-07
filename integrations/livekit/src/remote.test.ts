@@ -288,6 +288,22 @@ describe('createRemoteAgentReplyGenerator — streaming', () => {
     expect('memory' in server.state.requests[1]!.json!).toBe(false);
   });
 
+  it('forwards memory.options (e.g. readOnly) in the body', async () => {
+    const server = await startFakeServer(respondWithChunks([{ type: 'text-delta', payload: { text: 'ok' } }]));
+    const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'test', retries: 0 });
+    await readAll(
+      (await gen(
+        makeCtx({ memory: { thread: 't1', resource: 'r1', options: { readOnly: true } } }),
+      )) as ReadableStream<string>,
+    );
+
+    expect(server.state.requests[0]!.json!.memory).toEqual({
+      thread: 't1',
+      resource: 'r1',
+      options: { readOnly: true },
+    });
+  });
+
   it('sends static headers and a resolved async header function', async () => {
     const server = await startFakeServer(respondWithChunks([{ type: 'text-delta', payload: { text: 'ok' } }]));
     const staticGen = createRemoteAgentReplyGenerator({

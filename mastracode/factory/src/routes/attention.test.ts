@@ -424,6 +424,124 @@ describe('mention attention items', () => {
   });
 });
 
+const PROPOSED_TRIAGE = { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' } as const;
+
+async function seedProposal(
+  workItem: WorkItemRow,
+  now: Date,
+  decision: Record<string, unknown> = PROPOSED_TRIAGE,
+): Promise<FactoryDeferredDecisionRecord> {
+  await seed.workItems.commitRuleEvaluation({
+    orgId: 'org1',
+    factoryProjectId: PROJECT_ID,
+    workItemId: workItem.id,
+    ingress: { identity: `attention-proposal-${now.getTime()}`, triggerType: 'test' },
+    ruleSetVersion: 'rules-v1',
+    expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
+    actor: { type: 'system', id: 'rules' },
+    outcome: { status: 'accepted' },
+    decisions: [{ ...decision, idempotencyKey: `attention-proposal-${now.getTime()}` }],
+    causalChain: [],
+    now,
+  });
+  const [claimed] = await seed.workItems.claimDeferredDecisions({
+    ownerId: 'worker-1',
+    now,
+    leaseExpiresAt: new Date(now.getTime() + 60_000),
+    limit: 1,
+  });
+  if (!claimed) throw new Error('Expected a claimable decision');
+  const proposed = await seed.workItems.proposeDeferredDecision(
+    { id: claimed.id, orgId: claimed.orgId, factoryProjectId: claimed.factoryProjectId, ownerId: 'worker-1' },
+    now,
+  );
+  if (!proposed) throw new Error('Expected a proposed decision');
+  return proposed;
+}
+
+describe('proposed attention items', () => {
+  it('lists a parked run and leaves the inbox once it is approved', async () => {
+    const item = await seedWorkItem('Fix the login flow');
+    const proposal = await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      {
+        items: [
+          {
+            kind: 'automation-proposed',
+            decisionId: proposal.id,
+            occurrence: 0,
+            workItemId: item.id,
+            title: 'Fix the login flow',
+            detail: 'Waiting for approval to run triage',
+            decisionType: 'invokeSkill',
+            read: false,
+            archived: false,
+          },
+        ],
+        openCount: 1,
+        unreadCount: 1,
+      },
+    );
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/automation-proposed/${proposal.id}/0`;
+    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
+    expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${proposal.id}/approve`)).status).toBe(
+      200,
+    );
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0, unreadCount: 0 },
+    );
+    await expect(
+      seed.workItems.listAttentionReceipts({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        userId: 'u1',
+        identities: [{ kind: 'automation-proposed', sourceId: proposal.id, occurrence: 0 }],
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('says where a parked move goes instead of which role it runs', async () => {
+    const item = await seedWorkItem('Fix the login flow');
+    await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'), {
+      type: 'transition',
+      board: 'work',
+      stage: 'planning',
+    });
+
+    const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?search=planning`)).json();
+    expect(page.items).toMatchObject([
+      { kind: 'automation-proposed', detail: 'Waiting for approval to move to planning', decisionType: 'transition' },
+    ]);
+  });
+
+  it('counts in the badge exactly the items it can list', async () => {
+    const item = await seedWorkItem();
+    await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
+    await seedFailure(item, new Date('2030-01-01T00:01:00.000Z'));
+    await seedMention({ workItemId: item.id, body: 'Look @you', occurredAt: new Date('2030-01-01T00:02:00.000Z') });
+
+    const page = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(page.items).toHaveLength(3);
+    expect(page.badgeCount).toBe(3);
+    expect(page.unreadCount).toBe(3);
+    expect(page).not.toHaveProperty('approvalCount');
+  });
+
+  it('read-all zeroes the badge and leaves the run parked', async () => {
+    const item = await seedWorkItem();
+    await seedProposal(item, new Date('2030-01-01T00:00:00.000Z'));
+
+    expect((await request('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`)).status).toBe(200);
+
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [{ kind: 'automation-proposed', read: true }], badgeCount: 0, unreadCount: 0, openCount: 1 },
+    );
+  });
+});
+
 describe('activity attention items', () => {
   /** `u1` created the item, so any comment by someone else fans out to them. */
   async function seedActivity(workItemId: string, body: string, occurredAt: Date) {

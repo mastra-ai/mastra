@@ -15,6 +15,7 @@ import type {
   FactoryAttentionKind,
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
+  FactoryDispatchStatus,
   FactorySupervisorFindingRecord,
   WorkItemRow,
   WorkItemsStorage,
@@ -149,10 +150,6 @@ export function factoryDecisionType(decision: FactoryDeferredDecisionRecord): st
   return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
 }
 
-function failureOccurredAt(decision: FactoryDeferredDecisionRecord): Date {
-  return decision.completedAt ?? decision.updatedAt;
-}
-
 export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentionReceiptRecord | undefined): boolean {
   if (view === 'archived') return receipt?.state === 'archived';
   if (view === 'unread') return receipt === undefined;
@@ -182,46 +179,62 @@ export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
   return review ? 'review' : 'work';
 }
 
-export class AutomationFailedAttentionProvider implements AttentionProvider {
-  readonly kind = 'automation-failed' as const;
-  readonly #workItems: WorkItemsStorage;
+/** One deferred-decision status seen as attention: failures and parked runs differ only by this. */
+export interface DecisionAttentionSpec {
+  kind: FactoryAttentionKind;
+  status: FactoryDispatchStatus;
+  identity(decision: FactoryDeferredDecisionRecord): FactoryAttentionIdentity;
+  occurredAt(decision: FactoryDeferredDecisionRecord): Date;
+  title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  extra?(decision: FactoryDeferredDecisionRecord): Record<string, unknown>;
+  matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
+}
 
-  constructor({ workItems }: { workItems: WorkItemsStorage }) {
+export class DecisionAttentionProvider implements AttentionProvider {
+  readonly kind: FactoryAttentionKind;
+  readonly #workItems: WorkItemsStorage;
+  readonly #spec: DecisionAttentionSpec;
+
+  constructor({ workItems }: { workItems: WorkItemsStorage }, spec: DecisionAttentionSpec) {
     this.#workItems = workItems;
+    this.#spec = spec;
+    this.kind = spec.kind;
   }
 
   async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    const [failedCount, receiptCount, archivedCount] = await Promise.all([
+    const [total, receiptCount, archivedCount] = await Promise.all([
       this.#workItems.countDeferredDecisionsByStatuses({
         orgId: scope.orgId,
         factoryProjectId: scope.factoryProjectId,
-        statuses: ['failed'],
+        statuses: [this.#spec.status],
       }),
       this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind }),
       this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind, state: 'archived' }),
     ]);
     return {
-      open: Math.max(0, failedCount - archivedCount),
-      unread: Math.max(0, failedCount - receiptCount),
+      open: Math.max(0, total - archivedCount),
+      unread: Math.max(0, total - receiptCount),
     };
   }
 
   async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
-    const page = await this.#workItems.listFailedDecisionPage({
+    const page = await this.#workItems.listDecisionPageByStatus({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
+      status: this.#spec.status,
       limit: 1,
     });
     const newest = page.decisions[0];
     if (!newest) return null;
-    const identity = factoryDecisionAttentionIdentity(newest.id, newest.failureOccurrence);
+    const identity = this.#spec.identity(newest);
     const receipts = await this.#workItems.listAttentionReceipts({
       ...receiptScope(scope),
       identities: [identity],
     });
     return {
       key: factoryAttentionKey(scope.factoryProjectId, identity),
-      at: failureOccurredAt(newest),
+      at: this.#spec.occurredAt(newest),
       unread: receipts.length === 0,
     };
   }
@@ -229,15 +242,16 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
   #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
     return scanBatches<FactoryDeferredDecisionRecord>(
       async cursor => {
-        const page = await this.#workItems.listFailedDecisionPage({
+        const page = await this.#workItems.listDecisionPageByStatus({
           orgId: scope.orgId,
           factoryProjectId: scope.factoryProjectId,
+          status: this.#spec.status,
           before: cursor,
           limit: SCAN_PAGE_SIZE,
         });
         return { rows: page.decisions, hasMore: page.hasMore };
       },
-      decision => ({ occurredAt: failureOccurredAt(decision), id: decision.id }),
+      decision => ({ occurredAt: this.#spec.occurredAt(decision), id: decision.id }),
       before,
     );
   }
@@ -250,15 +264,30 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {
-        const identity = factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
+        const identity = this.#spec.identity(decision);
         const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
         if (!matchesView(view, receipt)) continue;
         const item = decision.workItemId ? itemById.get(decision.workItemId) : undefined;
-        if (search && !matchesFailureSearch(decision, item, search)) continue;
+        if (search && !this.#spec.matches(decision, item, search)) continue;
+        const occurredAt = this.#spec.occurredAt(decision);
         entries.push({
-          occurredAt: failureOccurredAt(decision),
-          resumeCursor: { occurredAt: failureOccurredAt(decision), id: decision.id },
-          item: toFailureItem(scope, decision, item, receipt),
+          occurredAt,
+          resumeCursor: { occurredAt, id: decision.id },
+          item: {
+            key: factoryAttentionKey(scope.factoryProjectId, identity),
+            kind: this.kind,
+            decisionId: decision.id,
+            occurrence: identity.occurrence,
+            workItemId: decision.workItemId,
+            title: this.#spec.title(decision, item),
+            detail: this.#spec.detail(decision, item),
+            decisionType: factoryDecisionType(decision),
+            ...this.#spec.extra?.(decision),
+            occurredAt: occurredAt.toISOString(),
+            read: receipt !== undefined,
+            archived: receipt?.state === 'archived',
+            target: attentionTarget(decision, item),
+          },
         });
       }
       return entries;
@@ -271,7 +300,7 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
   ): Promise<Map<string, FactoryAttentionReceiptRecord>> {
     const receipts = await this.#workItems.listAttentionReceipts({
       ...receiptScope(scope),
-      identities: decisions.map(decision => factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence)),
+      identities: decisions.map(decision => this.#spec.identity(decision)),
     });
     return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
   }
@@ -295,14 +324,29 @@ export class AutomationFailedAttentionProvider implements AttentionProvider {
     return markScanRead(this.#scan(scope, before), async decisions => {
       await this.#workItems.markAttentionReceiptsRead({
         ...receiptScope(scope),
-        identities: decisions.map(decision =>
-          factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence),
-        ),
+        identities: decisions.map(decision => this.#spec.identity(decision)),
         now,
       });
     });
   }
 }
+
+export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
+  kind: 'automation-failed',
+  status: 'failed',
+  identity: decision => factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence),
+  occurredAt: decision => decision.completedAt ?? decision.updatedAt,
+  title: (decision, item) => item?.title ?? factoryDispatchFailureMetadata(decision.failureCode).label,
+  detail: decision => decision.lastError?.slice(0, 512) ?? factoryDispatchFailureMetadata(decision.failureCode).label,
+  extra: decision => ({
+    failureCode: decision.failureCode,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+  }),
+  matches: (decision, item, search) =>
+    item?.title.toLowerCase().includes(search) === true ||
+    decision.lastError?.toLowerCase().includes(search) === true ||
+    factoryDecisionType(decision).toLowerCase().includes(search),
+};
 
 interface ResolvedMention {
   mention: WorkItemMentionRow;
@@ -563,44 +607,6 @@ export class MentionAttentionProvider implements AttentionProvider {
       });
     });
   }
-}
-
-function matchesFailureSearch(
-  decision: FactoryDeferredDecisionRecord,
-  item: WorkItemRow | undefined,
-  search: string,
-): boolean {
-  return (
-    item?.title.toLowerCase().includes(search) === true ||
-    decision.lastError?.toLowerCase().includes(search) === true ||
-    factoryDecisionType(decision).toLowerCase().includes(search)
-  );
-}
-
-function toFailureItem(
-  scope: AttentionScope,
-  decision: FactoryDeferredDecisionRecord,
-  item: WorkItemRow | undefined,
-  receipt: FactoryAttentionReceiptRecord | undefined,
-) {
-  const failure = factoryDispatchFailureMetadata(decision.failureCode);
-  const identity = factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence);
-  return {
-    key: factoryAttentionKey(scope.factoryProjectId, identity),
-    kind: 'automation-failed' as const,
-    decisionId: decision.id,
-    occurrence: decision.failureOccurrence,
-    workItemId: decision.workItemId,
-    title: item?.title ?? failure.label,
-    detail: decision.lastError?.slice(0, 512) ?? failure.label,
-    decisionType: factoryDecisionType(decision),
-    failureCode: decision.failureCode,
-    canRetry: failure.canRetry,
-    occurredAt: failureOccurredAt(decision).toISOString(),
-    read: receipt !== undefined,
-    archived: receipt?.state === 'archived',
-    target: attentionTarget(decision, item),
-  };
 }
 
 function matchesMentionSearch({ item, comment }: ResolvedMention, search: string): boolean {
