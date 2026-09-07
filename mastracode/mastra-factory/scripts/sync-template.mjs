@@ -297,6 +297,27 @@ function writeReadme() {
   fs.copyFileSync(source, path.join(outDir, 'README.md'));
 }
 
+function installFactorySkill() {
+  console.log('sync-template: installing Mastra Factory skill...');
+  execFileSync(
+    'npx',
+    [
+      '--yes',
+      'skills',
+      'add',
+      'mastra-ai/skills',
+      '--skill',
+      'mastra-factory',
+      '--agent',
+      'universal',
+      'claude-code',
+      '--copy',
+      '-y',
+    ],
+    { cwd: outDir, stdio: 'inherit' },
+  );
+}
+
 function copySourceFile(relativePath) {
   const source = path.join(webRoot, relativePath);
   if (!fs.existsSync(source)) throw new Error(`sync-template: source file not found: ${source}`);
@@ -328,6 +349,7 @@ writeGitignore();
 writeNpmrc();
 writePnpmWorkspace();
 writeReadme();
+installFactorySkill();
 
 console.log(`sync-template: done. Template written to ${outDir}`);
 console.log('The sync-softwarefactory-template workflow pushes this to the template repo on main.');
