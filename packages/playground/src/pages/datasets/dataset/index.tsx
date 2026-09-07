@@ -118,7 +118,7 @@ function DatasetPage() {
 
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full" className="grid-rows-[1fr] p-0">
           <PageLayout.MainArea>
             <DatasetItemsView

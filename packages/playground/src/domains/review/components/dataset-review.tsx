@@ -916,7 +916,11 @@ export function DatasetReview({
 
         {detailPanel &&
           (detailPanelVariant === 'overlay' ? (
-            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>{detailPanel}</RouteItemOverlay>
+            <RouteItemOverlay label={`Review item ${featuredItem?.id ?? ''}`}>
+              <div className="[&>section]:bg-surface3 h-full min-h-0 p-3 [&>section]:rounded-lg [&>section]:shadow-lg">
+                {detailPanel}
+              </div>
+            </RouteItemOverlay>
           ) : (
             detailPanel
           ))}
