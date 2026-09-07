@@ -35,7 +35,12 @@ function Agent() {
     return <AgentViewLoadingSkeleton />;
   }
 
-  if (error && !is404NotFoundError(error)) {
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
     return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 

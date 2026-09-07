@@ -79,7 +79,7 @@ const renderAt = (initialEntry: string) => {
     </MastraReactProvider>,
   );
 
-  return router;
+  return { router, queryClient };
 };
 
 function installHandlers() {
@@ -151,7 +151,24 @@ describe('Agent overview page', () => {
       renderAt(`/agents/${AGENT_ID}/overview`);
 
       expect(await screen.findByText('Failed to load agent')).not.toBeNull();
+      expect(screen.getByText(/No model available/)).not.toBeNull();
       expect(screen.queryByText('Agent not found')).toBeNull();
+    });
+
+    it('shows "Agent not found" when a refetch returns 404 after the agent was previously loaded', async () => {
+      installHandlers();
+      const { queryClient } = renderAt(`/agents/${AGENT_ID}/overview`);
+
+      await screen.findAllByRole('tab');
+      expect(screen.queryByText('Agent not found')).toBeNull();
+
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(notFoundError, { status: 404 })),
+      );
+      await queryClient.invalidateQueries({ queryKey: ['agent', AGENT_ID] });
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.queryByText('Failed to load agent')).toBeNull();
     });
 
     it('shows the Overview tab first and active', async () => {
