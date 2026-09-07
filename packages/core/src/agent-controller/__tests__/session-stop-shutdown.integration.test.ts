@@ -14,6 +14,7 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable';
 import { Mastra } from '../../mastra';
 import { createWorkflow, createStep } from '../../workflows';
+import type { WorkflowRunState } from '../../workflows/types';
 import { Workspace } from '../../workspace';
 import { AgentController } from '../agent-controller';
 
@@ -24,6 +25,18 @@ const deferred = () => {
   });
   return { promise, resolve };
 };
+const describeError = (error: unknown): unknown =>
+  error instanceof AggregateError
+    ? { message: error.message, errors: error.errors.map(describeError) }
+    : error instanceof Error
+      ? { message: error.message, cause: error.cause ? describeError(error.cause) : undefined }
+      : String(error);
+const snapshotStatus = (snapshot: string | WorkflowRunState | null | undefined) =>
+  (typeof snapshot === 'string' ? (JSON.parse(snapshot) as WorkflowRunState) : snapshot)?.status;
+function requireNativeAgent(agent: unknown) {
+  if (!(agent instanceof Agent)) throw new TypeError('Expected a native Agent');
+  return agent;
+}
 const bounded = <T>(promise: Promise<T>, label: string) =>
   Promise.race([
     promise,
@@ -114,7 +127,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
                     controller.enqueue({
                       type: 'finish',
                       finishReason: 'tool-calls',
-                      usage: { inputTokens: 1, outputTokens: 1 },
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
                     });
                     controller.close();
                   },
@@ -128,7 +141,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
       const workspace = new Workspace({ id: 'proof-workspace', name: 'Local', skills: () => [] });
       const controller = new AgentController({
         id: 'proof-controller',
-        agent,
+        agent: requireNativeAgent(agent),
         storage,
         workspace,
         defaultModeId: 'chat',
@@ -201,7 +214,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
       const parent = beforeRows.runs.find(row => row.workflowName === 'durable-agentic-loop');
       assert(parent);
       parentRunId = parent.runId;
-      expect(beforeRows.runs.filter(row => row.snapshot?.status === 'suspended')).toHaveLength(3);
+      expect(beforeRows.runs.filter(row => snapshotStatus(row.snapshot) === 'suspended')).toHaveLength(3);
       removeEvents();
       await bounded(host.mastra.shutdown(), 'writer normal shutdown');
       order.push('writer-shutdown-finished');
@@ -222,14 +235,14 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
       removeEvents = fresh.subscribe(event => {
         if (event.type === 'error') errors.push(String(event.error));
       });
-      await fresh.thread.switch({ threadId });
+      expect(fresh.thread.getId()).toBe(threadId);
       restoredRunId = fresh.getCurrentRunId();
       expect(restoredRunId).toBeNull();
       expect(host.controller.getCurrentAgent(fresh).getMastraInstance()).toBe(host.mastra);
       const store = await host.storage.getStore('workflows');
       assert(store);
       const restoredRows = await store.listWorkflowRuns({});
-      expect(restoredRows.runs.filter(row => row.snapshot?.status === 'suspended')).toHaveLength(3);
+      expect(restoredRows.runs.filter(row => snapshotStatus(row.snapshot) === 'suspended')).toHaveLength(3);
       if (boundary === 'late-stop') {
         const currentAgent = host.controller.getCurrentAgent(fresh);
         const suspended = vi.spyOn(currentAgent, 'listSuspendedRuns');
@@ -305,7 +318,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
         afterRows = (await readback.listWorkflowRuns({})).runs.map(row => ({
           workflowName: row.workflowName,
           runId: row.runId,
-          status: row.snapshot?.status,
+          status: snapshotStatus(row.snapshot),
         }));
         const pendingRows = (afterRows as Array<{ status?: string }>).filter(row =>
           ['running', 'pending', 'waiting', 'suspended'].includes(row.status ?? ''),
@@ -321,7 +334,7 @@ it.each(['discovery', 'snapshot', 'write', 'discovery-error', 'write-error', 'la
       if (shutdown)
         await bounded(
           shutdown.catch(error => {
-            errors.push(String(error));
+            errors.push(JSON.stringify(describeError(error)));
           }),
           'cleanup shutdown',
         );
