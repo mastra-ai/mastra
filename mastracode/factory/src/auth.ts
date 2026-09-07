@@ -11,6 +11,7 @@ import {
 } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 
 import type { RouteAuth } from './routes/route.js';
 import { actorFromAuthUser } from './storage/domains/comments/actor.js';
@@ -398,7 +399,14 @@ export async function ensureFactoryAuthUser(
   const user = await authenticateRequest(provider, token, c.req.raw);
   if (!user) return undefined;
 
-  await ensureUserOrg(provider, user);
+  const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+  if (requestedOrganizationId) {
+    if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+      throw new HTTPException(403, { message: 'organization_forbidden' });
+    }
+  } else {
+    await ensureUserOrg(provider, user);
+  }
 
   c.set(FACTORY_AUTH_USER_KEY, user);
   return user;
