@@ -344,18 +344,21 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
     // Attribute-dependent fields (description, type, MCP server)
     if (span.attributes) {
+      const toolAttrs = span.attributes as ToolCallAttributes;
+      if (toolAttrs.toolDescription) {
+        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+      }
+      if (toolAttrs.toolType) {
+        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+      }
       if (span.type === SpanType.MCP_TOOL_CALL) {
         const mcpAttrs = span.attributes as MCPToolCallAttributes;
         if (mcpAttrs.mcpServer) {
           attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+          attributes[`mastra.${spanType}.server_name`] = mcpAttrs.mcpServer;
         }
-      } else {
-        const toolAttrs = span.attributes as ToolCallAttributes;
-        if (toolAttrs.toolDescription) {
-          attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
-        }
-        if (toolAttrs.toolType) {
-          attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+        if (mcpAttrs.serverVersion) {
+          attributes[`mastra.${spanType}.server_version`] = mcpAttrs.serverVersion;
         }
       }
     }
