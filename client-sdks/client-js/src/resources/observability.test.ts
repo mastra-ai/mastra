@@ -99,6 +99,37 @@ describe('Observability Methods', () => {
     });
   });
 
+  describe('deleteTraces()', () => {
+    it('should POST trace IDs to the delete endpoint', async () => {
+      const response = new Response(undefined, {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+      response.json = () => Promise.resolve({ success: true });
+      (global.fetch as any).mockResolvedValueOnce(response);
+
+      const result = await client.deleteTraces({ traceIds: ['trace-123', 'trace-456'] });
+
+      expect(result).toEqual({ success: true });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/delete`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ traceIds: ['trace-123', 'trace-456'] }),
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
+    });
+
+    it('should handle HTTP errors gracefully', async () => {
+      const errorResponse = new Response('Server Error', { status: 500, statusText: 'Server Error' });
+      (global.fetch as any).mockResolvedValueOnce(errorResponse);
+
+      await expect(client.deleteTraces({ traceIds: ['trace-123'] })).rejects.toThrow();
+    });
+  });
+
   /**
    * Legacy getTraces() API tests
    * Uses the old parameter structure for backward compatibility:
@@ -444,6 +475,38 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(client.listTraces()).rejects.toThrow();
+    });
+  });
+
+  describe('queryTraces()', () => {
+    it('should post the advanced query body unchanged', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        where: {
+          scores: {
+            some: {
+              op: 'and' as const,
+              args: [
+                { op: 'eq' as const, left: { path: 'scorerId' }, right: { literal: 'factuality' } },
+                { op: 'lt' as const, left: { path: 'score' }, right: { literal: 0.6 } },
+              ],
+            },
+          },
+        },
+        page: { limit: 25 },
+      };
+
+      await client.queryTraces(request);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
     });
   });
 
@@ -994,6 +1057,26 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(client.listFeedback()).rejects.toThrow();
+    });
+  });
+
+  describe('updateFeedbackReviewStatus()', () => {
+    it('should update feedback review status with the correct PATCH request', async () => {
+      mockSuccessfulResponse();
+
+      await client.updateFeedbackReviewStatus({ feedbackId: 'feedback/123', reviewStatus: 'reviewed' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/feedback/feedback%2F123/review-status`,
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({
+            ...clientOptions.headers,
+            'content-type': 'application/json',
+          }),
+          body: JSON.stringify({ reviewStatus: 'reviewed' }),
+        }),
+      );
     });
   });
 

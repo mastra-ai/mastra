@@ -43,6 +43,11 @@
     "databricks-gemini-3-flash",
     "databricks-gemini-3-pro",
     "databricks-glm-5-2",
+    "databricks-gpt-5-1",
+    "databricks-gpt-5-2",
+    "databricks-gpt-5-4",
+    "databricks-gpt-5-4-mini",
+    "databricks-gpt-5-4-nano",
     "databricks-gpt-oss-120b",
     "databricks-gpt-oss-20b"
   ],

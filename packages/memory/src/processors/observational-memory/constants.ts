@@ -165,13 +165,15 @@ By default recall returns **low** detail: truncated text and tool names only. Ea
 - Use \`detail: "high"\` to get full message content including tool arguments and results. This will only return the high detail version of a single message part at a time.
 - Use \`partIndex\` with a cursor to fetch a single part at full detail — for example, to read one specific tool result or code block without loading every part.
 
-If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content.
+If the result says \`truncated: true\`, the output was cut to fit the token budget. You can paginate or use \`partIndex\` to target specific content. If a single part is itself too large, follow the returned \`nextCharOffset\` as described below.
 
 ### Following up on truncated parts
 Low-detail results may include truncation hints like:
 \`[truncated — call recall cursor="..." partIndex=N detail="high" for full content]\`
 
 **When you see these hints and need the full content, make the exact call described in the hint.** This is the normal workflow: first recall at low detail to scan, then drill into specific parts at high detail. Do not stop at the low-detail result if the user asked for exact content.
+
+If a single part is larger than the token budget, the \`partIndex\` result is \`truncated: true\` and includes \`nextCharOffset\`. Repeat the same call with \`charOffset\` set to that exact value to read the next chunk from where the previous one ended. Keep following \`nextCharOffset\` until the result no longer includes it — the chunks together contain the full part. Retrying without \`charOffset\` returns the same prefix again.
 
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it

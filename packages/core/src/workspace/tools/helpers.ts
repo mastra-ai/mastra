@@ -13,6 +13,22 @@ import type { LSPDiagnostic, DiagnosticSeverity } from '../lsp/types';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
 
+const NUMERIC_STRING_REGEX = /^-?\d+(?:\.\d+)?$/;
+
+/**
+ * Preprocessor for numeric tool params: models sometimes send numbers as
+ * strings (e.g. `"10"` instead of `10`), and a strict `z.number()` rejects
+ * the call outright. Coerce unambiguous numeric strings; anything else
+ * passes through unchanged so schema validation still reports it.
+ */
+export function coerceNumericString(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const trimmed = value.trim();
+  return NUMERIC_STRING_REGEX.test(trimmed) ? Number(trimmed) : value;
+}
+
 /**
  * Extract workspace from tool execution context.
  * Throws if workspace is not available.

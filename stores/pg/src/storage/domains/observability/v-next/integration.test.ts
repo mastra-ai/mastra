@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
+import { parseTraceQueryRequest, planTraceQuery, TraceQueryExecutionError, TraceStatus } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,9 +9,18 @@ import type { DbClient, QueryValues } from '../../../client';
 import { PoolAdapter } from '../../../client';
 import { PostgresStoreVNext } from '../../../index';
 import { connectionString, TEST_CONFIG } from '../../../test-utils';
-import { ALL_SIGNAL_TABLES, qualifiedTable, TABLE_DISCOVERY, TABLE_LOG_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import {
+  ALL_SIGNAL_TABLES,
+  qualifiedTable,
+  TABLE_DISCOVERY,
+  TABLE_LOG_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_SPAN_EVENTS,
+} from './ddl';
+import * as discoveryOps from './discovery';
 import { ensurePartmanHypertables } from './partitioning';
 import { decodeDeltaCursor } from './polling';
+import { compilePostgresTraceQuery, runWithPostgresTraceQueryTimeout } from './trace-query';
 import { ObservabilityStoragePostgresVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -73,6 +83,22 @@ function dayAt(dayOffset: number, hour = 12, minute = 0, second = 0): Date {
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + dayOffset, hour, minute, second),
   );
+}
+
+interface ExplainPlanNode {
+  'Node Type'?: string;
+  'Relation Name'?: string;
+  Alias?: string;
+  'Index Name'?: string;
+  'Actual Rows'?: number;
+  'Actual Loops'?: number;
+  Plans?: ExplainPlanNode[];
+}
+
+function collectPlanNodes(node: ExplainPlanNode, result: ExplainPlanNode[] = []): ExplainPlanNode[] {
+  result.push(node);
+  for (const child of node.Plans ?? []) collectPlanNodes(child, result);
+  return result;
 }
 
 function yyyymmdd(date: Date): string {
@@ -339,6 +365,214 @@ async function insertAllSignals(harness: DomainHarness): Promise<void> {
 
 describe('ObservabilityStoragePostgresVNext — integration', () => {
   describe.skipIf(!integrationEnabled)('init() — TimescaleDB path', () => {
+    it('cancels timed-out work and does not leak statement_timeout through the pool', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'timeout',
+      });
+
+      try {
+        await expect(
+          runWithPostgresTraceQueryTimeout(harness.client, 10, transaction =>
+            transaction.query('SELECT pg_sleep(0.1)'),
+          ),
+        ).rejects.toBeInstanceOf(TraceQueryExecutionError);
+
+        const setting = await harness.client.one<{ statement_timeout: string }>('SHOW statement_timeout');
+        expect(setting.statement_timeout).toBe('0');
+        expect(await harness.client.one<{ value: number }>('SELECT 1 AS value')).toEqual({ value: 1 });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('excludes null-ended roots before endedAt pagination', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'trace_query_null_ended',
+      });
+      const startedAt = new Date('2026-08-25T10:00:00.000Z');
+
+      try {
+        await harness.domain.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'completed-a',
+              spanId: 'root-completed-a',
+              parentSpanId: null,
+              startedAt,
+              endedAt: new Date('2026-08-25T10:00:03.000Z'),
+            }),
+            makeSpan({
+              traceId: 'pending-root',
+              spanId: 'root-pending',
+              parentSpanId: null,
+              isEvent: false,
+              startedAt,
+              endedAt: null,
+            }),
+            makeSpan({
+              traceId: 'completed-b',
+              spanId: 'root-completed-b',
+              parentSpanId: null,
+              startedAt,
+              endedAt: new Date('2026-08-25T10:00:02.000Z'),
+            }),
+          ],
+        });
+
+        const traceIds: string[] = [];
+        const endedAtValues: string[] = [];
+        let after: string | undefined;
+        do {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: {
+                from: new Date(startedAt.getTime() - 1_000).toISOString(),
+                to: new Date(startedAt.getTime() + 1_000).toISOString(),
+              },
+              orderBy: [{ field: 'endedAt', direction: 'desc' }],
+              page: { limit: 1, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await harness.domain.queryTraces(plan);
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          traceIds.push(...response.traces.map(trace => trace.traceId));
+          endedAtValues.push(...response.traces.map(trace => trace.endedAt));
+          after = response.page.next ?? undefined;
+        } while (after);
+
+        expect(traceIds).toEqual(['completed-a', 'completed-b']);
+        expect(endedAtValues).not.toContain('1970-01-01T00:00:00.000Z');
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('uses root indexes and bounds related scans to candidate trace IDs', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(TIMESCALE_URL),
+        schemaPrefix: 'trace_query_plan',
+      });
+      const startedAt = new Date('2026-08-25T10:00:00.000Z');
+      const root = makeSpan({
+        traceId: 'candidate-trace',
+        spanId: 'candidate-root',
+        parentSpanId: null,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1_000),
+      });
+      const child = makeSpan({
+        traceId: 'candidate-trace',
+        spanId: 'candidate-child',
+        parentSpanId: 'candidate-root',
+        spanType: SpanType.TOOL_CALL,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 500),
+      });
+      const irrelevantSpans = Array.from({ length: 1_000 }, (_, index) =>
+        makeSpan({
+          traceId: `irrelevant-${String(index).padStart(4, '0')}`,
+          spanId: `irrelevant-span-${index}`,
+          parentSpanId: 'irrelevant-root',
+          startedAt,
+          endedAt: new Date(startedAt.getTime() + 500),
+        }),
+      );
+      const irrelevantScores = Array.from({ length: 1_000 }, (_, index) =>
+        makeScore({
+          scoreId: `irrelevant-score-${index}`,
+          traceId: `irrelevant-${String(index).padStart(4, '0')}`,
+          timestamp: startedAt,
+        }),
+      );
+
+      try {
+        await harness.domain.batchCreateSpans({ records: [root, child, ...irrelevantSpans] });
+        await harness.domain.batchCreateScores({
+          scores: [
+            makeScore({ scoreId: 'candidate-score', traceId: 'candidate-trace', timestamp: startedAt }),
+            ...irrelevantScores,
+          ],
+        });
+        await harness.client.none(`ANALYZE ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)}`);
+        await harness.client.none(`ANALYZE ${qualifiedTable(harness.schema, TABLE_SCORE_EVENTS)}`);
+
+        const explain = async (request: Record<string, unknown>) => {
+          const plan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: {
+                from: new Date(startedAt.getTime() - 1_000).toISOString(),
+                to: new Date(startedAt.getTime() + 2_000).toISOString(),
+              },
+              ...request,
+            }),
+          );
+          const compiled = compilePostgresTraceQuery(harness.schema, plan);
+          const row = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+            `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${compiled.text}`,
+            compiled.values,
+          );
+          return collectPlanNodes(row['QUERY PLAN'][0]!.Plan);
+        };
+
+        const spanNodes = await explain({
+          where: {
+            spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } },
+          },
+        });
+        const scoreNodes = await explain({
+          where: { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+        });
+        const repeatedSpanNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { spans: { none: { op: 'exists', path: 'error' } } },
+            ],
+          },
+        });
+        const repeatedScoreNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+              { scores: { some: { op: 'eq', left: { path: 'scorerId' }, right: { literal: 'quality' } } } },
+            ],
+          },
+        });
+        const mixedNodes = await explain({
+          where: {
+            op: 'and',
+            args: [
+              { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.TOOL_CALL } } } },
+              { scores: { some: { op: 'lt', left: { path: 'score' }, right: { literal: 0.6 } } } },
+            ],
+          },
+        });
+        const groupedNodes = await explain({ group: { by: ['threadId'] } });
+
+        for (const nodes of [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes, groupedNodes]) {
+          expect(nodes.some(node => node['Index Name']?.includes('mastra_span_events_root_'))).toBe(true);
+        }
+        expect(groupedNodes.some(node => node['Relation Name'] === TABLE_SCORE_EVENTS)).toBe(false);
+        expect(
+          groupedNodes
+            .filter(node => node.Alias?.startsWith('r'))
+            .reduce((sum, node) => sum + (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0), 0),
+        ).toBeLessThan(10);
+        const relatedRows = [spanNodes, scoreNodes, repeatedSpanNodes, repeatedScoreNodes, mixedNodes].map(nodes =>
+          nodes
+            .filter(node => node.Alias === 's')
+            .reduce((sum, node) => sum + (node['Actual Rows'] ?? 0) * (node['Actual Loops'] ?? 0), 0),
+        );
+        expect(Math.max(...relatedRows)).toBeLessThan(20);
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('detects timescaledb and reports partitionMode === "timescale"', async () => {
       const harness = await createHarness({
         connection: parseConnectionString(TIMESCALE_URL),
@@ -952,6 +1186,266 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
     });
   });
 
+  describe('discovery — lookback window', () => {
+    // `ttlSeconds: 0` forces every call to recompute and block on the result,
+    // so each assertion below observes the refresh query itself rather than a
+    // cached value. That lets one harness exercise several window sizes.
+    const forceRefresh = (lookbackSeconds: number) => ({ ttlSeconds: 0, lookbackSeconds });
+
+    it('scans only events inside the window, and all history when disabled', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_discovery_lookback' });
+
+      try {
+        const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+        // Two spans in the same table, four hours apart, so a window between
+        // them proves the predicate rather than an empty table.
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-recent',
+            spanId: 'discovery-lookback-recent-root',
+            serviceName: 'recent-service',
+            startedAt: hoursAgo(2),
+            endedAt: hoursAgo(2),
+            tags: ['recent-tag'],
+          }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-older',
+            spanId: 'discovery-lookback-older-root',
+            serviceName: 'older-service',
+            startedAt: hoursAgo(6),
+            endedAt: hoursAgo(6),
+            tags: ['older-tag'],
+          }),
+        });
+
+        const windowed = await discoveryOps.getTags(harness.client, harness.schema, {}, forceRefresh(4 * 60 * 60));
+        expect(windowed.tags).toEqual(['recent-tag']);
+
+        const unbounded = await discoveryOps.getTags(harness.client, harness.schema, {}, forceRefresh(0));
+        expect(unbounded.tags).toEqual(['older-tag', 'recent-tag']);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('bounds each signal table on its own partition time column', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_discovery_lookback_cols' });
+
+      try {
+        const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+        // Spans are bounded on "endedAt"; logs and metrics on "timestamp".
+        // Putting the old rows in the log/metric tables catches a predicate
+        // that used the span column everywhere.
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-lookback-cols',
+            spanId: 'discovery-lookback-cols-root',
+            serviceName: 'recent-service',
+            startedAt: hoursAgo(1),
+            endedAt: hoursAgo(1),
+          }),
+        });
+        await harness.domain.batchCreateLogs({
+          logs: [makeLog({ timestamp: hoursAgo(6), serviceName: 'older-log-service' })],
+        } as Parameters<typeof harness.domain.batchCreateLogs>[0]);
+        await harness.domain.batchCreateMetrics({
+          metrics: [makeMetric({ timestamp: hoursAgo(6), name: 'older_metric', serviceName: 'older-metric-service' })],
+        } as Parameters<typeof harness.domain.batchCreateMetrics>[0]);
+
+        const serviceNames = await discoveryOps.getServiceNames(
+          harness.client,
+          harness.schema,
+          {},
+          forceRefresh(4 * 60 * 60),
+        );
+        expect(serviceNames.serviceNames).toEqual(['recent-service']);
+
+        const metricNames = await discoveryOps.getMetricNames(
+          harness.client,
+          harness.schema,
+          {},
+          forceRefresh(4 * 60 * 60),
+        );
+        expect(metricNames.names).toEqual([]);
+
+        const allServiceNames = await discoveryOps.getServiceNames(harness.client, harness.schema, {}, forceRefresh(0));
+        expect(allServiceNames.serviceNames).toEqual(['older-log-service', 'older-metric-service', 'recent-service']);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('discovery — cross-process refresh claim', () => {
+    it('stamps the cache row before refreshing so other processes skip the duplicate scan', async () => {
+      let resolveRefresh: (() => void) | undefined;
+      const refreshStarted = Promise.withResolvers<void>();
+      const refreshGate = new Promise<void>(resolve => {
+        resolveRefresh = resolve;
+      });
+
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                refreshStarted.resolve();
+                await refreshGate;
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        await harness.domain.createSpan({
+          span: makeSpan({
+            traceId: 'discovery-claim-trace',
+            spanId: 'discovery-claim-root',
+            serviceName: 'fresh-service',
+          }),
+        });
+
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        const first = await harness.domain.getServiceNames({});
+        expect(first.serviceNames).toEqual(['stale-service']);
+
+        // While the refresh is still running, the row must already look
+        // fresh — that stamp is what a second process reads to decide it has
+        // nothing to do.
+        await refreshStarted.promise;
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ refreshedAt: Date }>(
+            `SELECT "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(new Date(row.refreshedAt).getTime()).toBeGreaterThan(staleRefreshedAt.getTime());
+        });
+
+        resolveRefresh?.();
+
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ values: string[] }>(
+            `SELECT "values" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(row.values).toEqual(['fresh-service']);
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('hands the claim back when the refresh fails so the cache row stays stale', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim_release',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                throw new Error('boom');
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        const result = await harness.domain.getServiceNames({});
+        expect(result.serviceNames).toEqual(['stale-service']);
+
+        // A failed refresh must not leave behind a stamp that suppresses the
+        // next attempt — the row goes back to the timestamp it had.
+        await vi.waitFor(async () => {
+          const row = await harness.baseClient.one<{ refreshedAt: Date }>(
+            `SELECT "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+          );
+          expect(new Date(row.refreshedAt).getTime()).toBe(staleRefreshedAt.getTime());
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('does not roll back a newer successful refresh when an earlier claimant fails late', async () => {
+      let failRefresh: (() => void) | undefined;
+      const refreshStarted = Promise.withResolvers<void>();
+      const refreshGate = new Promise<void>((_, reject) => {
+        failRefresh = () => reject(new Error('boom'));
+      });
+
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_discovery_claim_late_fail',
+        discovery: { ttlSeconds: 1 },
+        wrapClient: client =>
+          wrapClient(client, {
+            manyOrNone: async (query: string, values?: QueryValues) => {
+              if (query.includes('SELECT v FROM (') && query.includes('"serviceName" AS v')) {
+                refreshStarted.resolve();
+                await refreshGate;
+              }
+              return client.manyOrNone(query, values);
+            },
+          }),
+      });
+
+      try {
+        const staleRefreshedAt = new Date(Date.now() - 60_000);
+        await seedDiscoveryCache(
+          harness.baseClient,
+          harness.schema,
+          'service_names',
+          ['stale-service'],
+          staleRefreshedAt,
+        );
+
+        // Claimant A wins the claim and blocks inside its refresh.
+        const first = await harness.domain.getServiceNames({});
+        expect(first.serviceNames).toEqual(['stale-service']);
+        await refreshStarted.promise;
+
+        // While A is stuck, its claim outlives the TTL and claimant B (another
+        // process) claims and completes a refresh, stamping a fresh row.
+        const bRefreshedAt = new Date(Date.now() + 5_000);
+        await seedDiscoveryCache(harness.baseClient, harness.schema, 'service_names', ['b-service'], bRefreshedAt);
+
+        // A's refresh now fails. Its release must not rewind B's fresh row.
+        failRefresh?.();
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        const row = await harness.baseClient.one<{ values: string[]; refreshedAt: Date }>(
+          `SELECT "values", "refreshedAt" FROM ${qualifiedTable(harness.schema, TABLE_DISCOVERY)} WHERE "cacheKey" = 'service_names'`,
+        );
+        expect(row.values).toEqual(['b-service']);
+        expect(new Date(row.refreshedAt).getTime()).toBe(bRefreshedAt.getTime());
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
   describe('discovery — refresh failure surfaces', () => {
     it('routes refresh failures to the framework logger and the next reader retries', async () => {
       let refreshAttempts = 0;
@@ -1372,6 +1866,84 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.domain.batchCreateSpans({ records: [span] });
 
         expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('event-sourced collapse — in-progress spans', () => {
+    it('lists a started span as running, then as ended once the end row lands', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_running' });
+
+      try {
+        const base = {
+          traceId: 'collapse-running-trace',
+          spanId: 'collapse-running-span',
+          startedAt: dayAt(0, 16),
+        };
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: undefined }) });
+
+        const running = await harness.domain.listTraces({ filters: { status: TraceStatus.RUNNING } });
+        expect(running.spans.map(s => s.spanId)).toEqual([base.spanId]);
+        expect(running.spans[0]!.endedAt).toBeNull();
+        expect(await harness.domain.listTraces({ filters: { status: TraceStatus.SUCCESS } })).toMatchObject({
+          spans: [],
+        });
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: dayAt(0, 16, 5) }) });
+
+        const all = await harness.domain.listTraces({});
+        expect(all.spans.map(s => s.spanId)).toEqual([base.spanId]);
+        expect(all.spans[0]!.endedAt).toEqual(dayAt(0, 16, 5));
+        expect(all.pagination.total).toBe(1);
+        expect((await harness.domain.listTraces({ filters: { status: TraceStatus.RUNNING } })).spans).toEqual([]);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('collapses a zero-duration span whose start and end share a timestamp', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_zero' });
+
+      try {
+        const at = dayAt(0, 17);
+        const base = { traceId: 'collapse-zero-trace', spanId: 'collapse-zero-span', startedAt: at };
+
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: undefined }) });
+        await harness.domain.createSpan({ span: makeSpan({ ...base, endedAt: at }) });
+
+        // Both rows share the (traceId, spanId, endedAt) key, so the end row has
+        // to overwrite the pending one rather than be dropped as a duplicate.
+        expect(await countRows(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toBe(1);
+
+        const listed = await harness.domain.listTraces({});
+        expect(listed.spans).toHaveLength(1);
+        expect(listed.spans[0]!.endedAt).toEqual(at);
+      } finally {
+        await harness.close();
+      }
+    });
+
+    it('shows one trace when a suspended run opens a second root on resume', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_collapse_resume' });
+
+      try {
+        const traceId = 'collapse-resume-trace';
+        await harness.domain.createSpan({
+          span: makeSpan({ traceId, spanId: 'root-suspended', startedAt: dayAt(0, 18), endedAt: dayAt(0, 18, 1) }),
+        });
+        await harness.domain.createSpan({
+          span: makeSpan({ traceId, spanId: 'root-resumed', startedAt: dayAt(0, 19), endedAt: undefined }),
+        });
+
+        const listed = await harness.domain.listTraces({});
+        expect(listed.pagination.total).toBe(1);
+        expect(listed.spans.map(s => s.spanId)).toEqual(['root-resumed']);
+
+        const root = await harness.domain.getRootSpan({ traceId });
+        expect(root?.span.spanId).toBe('root-resumed');
       } finally {
         await harness.close();
       }

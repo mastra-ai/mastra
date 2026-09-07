@@ -1,11 +1,10 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.58.0-alpha.13",
+  "version": "1.65.0-alpha.7",
   "description": "",
   "type": "module",
   "files": [
     "dist",
-    "CHANGELOG.md",
     "versions.json"
   ],
   "main": "dist/index.js",

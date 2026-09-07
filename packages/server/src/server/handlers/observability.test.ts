@@ -19,6 +19,7 @@ import {
   GET_TRACE_ROUTE,
   GET_TRACE_LIGHT_ROUTE,
   GET_SPAN_ROUTE,
+  DELETE_TRACES_ROUTE,
   SCORE_TRACES_ROUTE,
   LIST_SCORES_BY_SPAN_ROUTE,
 } from './observability';
@@ -47,6 +48,7 @@ const createMockObservabilityStore = () => ({
   listTraces: vi.fn(),
   listTracesLight: vi.fn(),
   listBranches: vi.fn(),
+  batchDeleteTraces: vi.fn(),
   listMetrics: vi.fn(),
   listLogs: vi.fn(),
   listScores: vi.fn(),
@@ -58,6 +60,7 @@ const createMockObservabilityStore = () => ({
   getScorePercentiles: vi.fn(),
   listFeedback: vi.fn(),
   createFeedback: vi.fn(),
+  updateFeedbackReviewStatus: vi.fn(),
   getFeedbackAggregate: vi.fn(),
   getFeedbackBreakdown: vi.fn(),
   getFeedbackTimeSeries: vi.fn(),
@@ -170,9 +173,37 @@ describe('Observability Handlers', () => {
         traceId: 'test-trace-123',
       });
 
-      expect(result).toEqual(mockTrace);
+      expect(result).toEqual({
+        traceId: 'test-trace-123',
+        spans: [{ ...createSampleSpan(), status: 'success' }],
+      });
       expect(mockObservabilityStore.getTrace).toHaveBeenCalledWith({ traceId: 'test-trace-123' });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should derive span status from error and endedAt', async () => {
+      const mockTrace: TraceRecord = {
+        traceId: 'test-trace-123',
+        spans: [
+          createSampleSpan({ spanId: 'span-success' }),
+          createSampleSpan({ spanId: 'span-error', error: { message: 'boom' } }),
+          createSampleSpan({ spanId: 'span-running', endedAt: null }),
+        ],
+      };
+
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(mockTrace);
+
+      const result = (await GET_TRACE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceId: 'test-trace-123',
+      })) as { spans: Array<{ spanId: string; status: string }> };
+
+      const statuses = Object.fromEntries(result.spans.map(span => [span.spanId, span.status]));
+      expect(statuses).toEqual({
+        'span-success': 'success',
+        'span-error': 'error',
+        'span-running': 'running',
+      });
     });
 
     it('should throw 404 when trace not found', async () => {
@@ -1039,6 +1070,60 @@ describe('Observability Handlers', () => {
     });
   });
 
+  describe('DELETE_TRACES_ROUTE', () => {
+    it('should validate a trace ID array and exclude tenant scope from the public route', () => {
+      const schema = DELETE_TRACES_ROUTE.bodySchema!;
+
+      expect(schema.safeParse({ traceIds: ['trace-1', 'trace-2'] }).success).toBe(true);
+      expect(schema.safeParse({}).success).toBe(false);
+      expect(schema.safeParse({ traceIds: 'trace-1' }).success).toBe(false);
+      expect(schema.safeParse({ traceIds: Array.from({ length: 1001 }, (_, index) => `trace-${index}`) }).success).toBe(
+        false,
+      );
+      expect(schema.parse({ traceIds: ['trace-1'], organizationId: 'org-1' })).toEqual({ traceIds: ['trace-1'] });
+      expect(DELETE_TRACES_ROUTE.maxBodySize).toBe(256 * 1024);
+    });
+
+    it('should delete traces and return success', async () => {
+      mockObservabilityStore.batchDeleteTraces.mockResolvedValue(undefined);
+
+      const result = await DELETE_TRACES_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        traceIds: ['trace-1', 'trace-2'],
+      });
+
+      expect(result).toEqual({ success: true });
+      expect(mockObservabilityStore.batchDeleteTraces).toHaveBeenCalledWith({ traceIds: ['trace-1', 'trace-2'] });
+    });
+
+    it('should throw 501 when observability store is not available', async () => {
+      const mastraWithoutObservability = createMockMastra({
+        getStore: vi.fn(() => Promise.resolve(undefined)) as MastraCompositeStore['getStore'],
+      });
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithoutObservability }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow(HTTPException);
+    });
+
+    it('should call handleError when the store throws', async () => {
+      const storeError = new Error('boom');
+      mockObservabilityStore.batchDeleteTraces.mockRejectedValue(storeError);
+
+      await expect(
+        DELETE_TRACES_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          traceIds: ['trace-1'],
+        }),
+      ).rejects.toThrow('boom');
+
+      expect(handleErrorSpy).toHaveBeenCalledWith(storeError, 'Error deleting traces');
+    });
+  });
+
   describe('SCORE_TRACES_ROUTE', () => {
     let scoreTracesMock: ReturnType<typeof vi.fn>;
 
@@ -1708,6 +1793,33 @@ describe('Observability Handlers', () => {
     });
   });
 
+  describe('UPDATE_FEEDBACK_REVIEW_STATUS_ROUTE', () => {
+    it('should update and return the feedback review status', async () => {
+      const feedback = {
+        feedbackId: 'feedback-123',
+        timestamp: new Date('2026-09-01T12:00:00.000Z'),
+        traceId: 'trace-123',
+        feedbackSource: 'user',
+        feedbackType: 'comment',
+        value: 'Needs follow-up',
+        reviewStatus: 'reviewed' as const,
+      };
+      (mockObservabilityStore.updateFeedbackReviewStatus as ReturnType<typeof vi.fn>).mockResolvedValue(feedback);
+
+      const result = await NEW_ROUTES.UPDATE_FEEDBACK_REVIEW_STATUS.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
+
+      expect(result).toEqual(feedback);
+      expect(mockObservabilityStore.updateFeedbackReviewStatus).toHaveBeenCalledWith({
+        feedbackId: 'feedback-123',
+        reviewStatus: 'reviewed',
+      });
+    });
+  });
+
   describe('CREATE_FEEDBACK_ROUTE', () => {
     it('should create feedback successfully', async () => {
       (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -1757,6 +1869,38 @@ describe('Observability Handlers', () => {
 
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
         feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
+      });
+    });
+
+    it('should default reviewStatus to needs-review', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: { traceId: 'trace-123', source: 'user', feedbackType: 'comment', value: 'hi' },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'needs-review' }),
+      });
+    });
+
+    it('should preserve a caller-supplied reviewStatus', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: {
+          traceId: 'trace-123',
+          source: 'studio',
+          feedbackType: 'rating',
+          value: 1,
+          reviewStatus: 'reviewed',
+        },
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ reviewStatus: 'reviewed' }),
       });
     });
 

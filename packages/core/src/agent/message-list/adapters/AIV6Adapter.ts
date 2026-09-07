@@ -220,9 +220,87 @@ function findApprovalRequest(
         return part;
       }
     }
+
+    const pendingToolApprovals = message.content.metadata?.pendingToolApprovals;
+    if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+      continue;
+    }
+
+    for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+      if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+        continue;
+      }
+
+      const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+      if (typeof toolCallId !== 'string') {
+        continue;
+      }
+
+      const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+      const pendingApprovalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+      if (pendingApprovalId !== approvalId) {
+        continue;
+      }
+
+      const existingPart = findToolInvocationPart(message.content.parts || [], toolCallId);
+      if (!existingPart) {
+        continue;
+      }
+
+      return createToolInvocationPart({
+        toolCallId: existingPart.toolInvocation.toolCallId,
+        toolName: existingPart.toolInvocation.toolName,
+        args: existingPart.toolInvocation.args,
+        state: 'approval-requested',
+        approval: { id: pendingApprovalId },
+        providerMetadata: existingPart.providerMetadata,
+        providerExecuted: existingPart.providerExecuted,
+        title: existingPart.title,
+        preliminary: existingPart.preliminary,
+      });
+    }
   }
 
   return undefined;
+}
+
+function rehydratePendingToolApprovals(parts: AIV6Type.UIMessage['parts'], metadata: Record<string, unknown>) {
+  const pendingToolApprovals = metadata.pendingToolApprovals;
+  if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+    return;
+  }
+
+  for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+    if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+      continue;
+    }
+
+    const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+    if (typeof toolCallId !== 'string') {
+      continue;
+    }
+
+    const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+    const approvalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+
+    const toolPartIndex = parts.findIndex(
+      part => AIV6.isToolUIPart(part) && part.toolCallId === toolCallId && part.state === 'input-available',
+    );
+    if (toolPartIndex === -1) {
+      continue;
+    }
+
+    const toolPart = parts[toolPartIndex];
+    if (!toolPart || !AIV6.isToolUIPart(toolPart) || toolPart.state !== 'input-available') {
+      continue;
+    }
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      state: 'approval-requested',
+      approval: { id: approvalId },
+    } as AIV6Type.UIMessage['parts'][number];
+  }
 }
 
 function createLegacyToolInvocations(
@@ -284,7 +362,8 @@ export class AIV6Adapter {
     const hasTextParts = dbParts.some(part => part.type === 'text');
 
     for (const part of dbParts) {
-      parts.push(AIV6Adapter.toUIPart(part));
+      const uiPart = AIV6Adapter.toUIPart(part);
+      if (uiPart) parts.push(uiPart);
     }
 
     if (!hasToolInvocationParts || !hasReasoningParts || !hasFileParts || !hasTextParts) {
@@ -315,6 +394,8 @@ export class AIV6Adapter {
         }
       }
     }
+
+    rehydratePendingToolApprovals(parts, metadata);
 
     return {
       id: dbMsg.id,
@@ -484,7 +565,7 @@ export class AIV6Adapter {
     };
   }
 
-  private static toUIPart(part: MastraMessagePart): AIV6Type.UIMessage['parts'][number] {
+  private static toUIPart(part: MastraMessagePart): AIV6Type.UIMessage['parts'][number] | undefined {
     if (part.type === 'tool-invocation') {
       const base = withOptionalFields(
         {
@@ -617,17 +698,20 @@ export class AIV6Adapter {
       ) as AIV6Type.UIMessage['parts'][number];
     }
 
-    return AIV6Adapter.toUIPartFromV5(
-      AIV5Adapter.toUIMessage({
-        id: 'tmp',
-        role: 'assistant',
-        createdAt: new Date(),
-        content: {
-          format: 2,
-          parts: [part],
-        },
-      }).parts[0]!,
-    );
+    const v5Part = AIV5Adapter.toUIMessage({
+      id: 'tmp',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [part],
+      },
+    }).parts[0];
+
+    // The v5 bridge legitimately omits some parts (e.g. reasoning with no text and no
+    // details, which streaming emits before the first reasoning delta arrives).
+    // Signal "no part" instead of dereferencing undefined.
+    return v5Part ? AIV6Adapter.toUIPartFromV5(v5Part) : undefined;
   }
 
   private static toUIPartFromV5(part: AIV5Type.UIMessage['parts'][number]): AIV6Type.UIMessage['parts'][number] {

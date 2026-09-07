@@ -153,7 +153,11 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     await collection.insertOne(toDoc(task));
   }
 
-  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
+  async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: { expectedStatus?: BackgroundTask['status'] },
+  ): Promise<boolean> {
     const $set: Record<string, any> = {};
 
     if ('status' in update) $set.status = update.status;
@@ -165,10 +169,14 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if ('suspendedAt' in update) $set.suspendedAt = update.suspendedAt?.toISOString() ?? null;
     if ('completedAt' in update) $set.completedAt = update.completedAt?.toISOString() ?? null;
 
-    if (Object.keys($set).length === 0) return;
+    if (Object.keys($set).length === 0) return false;
 
     const collection = await this.getCollection();
-    await collection.updateOne({ id: taskId }, { $set });
+    const result = await collection.updateOne(
+      { id: taskId, ...(options?.expectedStatus ? { status: options.expectedStatus } : {}) },
+      { $set },
+    );
+    return result.matchedCount > 0;
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {

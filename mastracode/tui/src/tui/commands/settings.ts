@@ -204,6 +204,16 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
+    // Display an explicit provider choice as Auto while its API key is missing,
+    // matching the runtime resolver's fallback. The saved preference is kept so
+    // the choice comes back when the key does.
+    webSearchProvider:
+      (globalSettings.preferences.webSearchProvider === 'tavily' && !process.env.TAVILY_API_KEY) ||
+      (globalSettings.preferences.webSearchProvider === 'parallel' && !process.env.PARALLEL_API_KEY)
+        ? 'auto'
+        : globalSettings.preferences.webSearchProvider,
+    tavilyKeyAvailable: !!process.env.TAVILY_API_KEY,
+    parallelKeyAvailable: !!process.env.PARALLEL_API_KEY,
   };
 
   return new Promise<void>(resolve => {
@@ -257,7 +267,8 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         ctx.stop();
         const label = backend === 'pg' ? 'PostgreSQL' : 'LibSQL';
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
-        process.exit(0);
+        if (ctx.exit) ctx.exit(0);
+        else process.exit(0);
       },
       onExperimentalGithubSignalsChange: async enabled => {
         if (enabled && !(await ensureGitcrawlReady(ctx))) return false;
@@ -266,6 +277,12 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         saveSettings(current);
         ctx.showInfo(`Experimental GitHub signals: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
+      },
+      onWebSearchProviderChange: provider => {
+        const current = loadSettings();
+        current.preferences.webSearchProvider = provider;
+        saveSettings(current);
+        ctx.showInfo(`Web search provider: ${provider}`);
       },
       onApiKeys: () => {
         ctx.state.ui.hideOverlay();

@@ -8,21 +8,18 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
+import type { OktaUser, MastraAuthOktaOptions } from './types.js';
+import { mapOktaClaimsToUser } from './types.js';
 
 /**
  * Trim trailing slashes. Index scan instead of regex to avoid backtracking
@@ -33,17 +30,6 @@ function trimTrailingSlashes(value: string): string {
   while (end > 0 && value[end - 1] === '/') end--;
   return value.slice(0, end);
 }
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
-}
-
-import type { OktaUser, MastraAuthOktaOptions } from './types.js';
-import { mapOktaClaimsToUser } from './types.js';
 
 /** Default cookie name for Okta sessions */
 const DEFAULT_COOKIE_NAME = 'okta_session';

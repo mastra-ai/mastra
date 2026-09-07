@@ -942,8 +942,8 @@ export class DatasetsMySQL extends DatasetsStorage {
 
       if (args.datasetVersion !== undefined) {
         [rows] = await this.pool.execute<RowDataPacket[]>(
-          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` = ? AND \`isDeleted\` = 0`,
-          [args.id, args.datasetVersion],
+          `SELECT * FROM ${tableItemsName} WHERE \`id\` = ? AND \`datasetVersion\` <= ? AND (\`validTo\` IS NULL OR \`validTo\` > ?) AND \`isDeleted\` = 0 ORDER BY \`datasetVersion\` DESC LIMIT 1`,
+          [args.id, args.datasetVersion, args.datasetVersion],
         );
       } else {
         [rows] = await this.pool.execute<RowDataPacket[]>(

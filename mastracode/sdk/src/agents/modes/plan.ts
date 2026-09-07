@@ -32,7 +32,12 @@ export const planMode: AgentControllerMode = {
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.`,
+- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.
+
+## Workflows
+- You can INSPECT saved workflows via \`list-workflows\` and \`get-workflow\`.
+- You CANNOT build, run, or delete workflows in this mode.
+- If the user asks for a workflow design, include it in the implementation plan stored at the session-specific plan path, then call \`submit_plan({ path })\` as required above. After approval, build mode can save and run it.`,
 
   metadata: {
     default: false,

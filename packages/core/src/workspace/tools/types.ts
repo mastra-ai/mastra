@@ -247,6 +247,45 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
   maxMediaBytes?: number;
 }
 
+/**
+ * Extended configuration for the computer (desktop) tools.
+ *
+ * Applies to the `mastra_workspace_computer_*` tools emitted when the
+ * workspace sandbox supports the computer capability.
+ *
+ * @example
+ * ```ts
+ * tools: {
+ *   // Don't attach a screenshot to click results
+ *   mastra_workspace_computer_click: { screenshotAfterAction: false },
+ *
+ *   // Require approval for typing on the desktop
+ *   mastra_workspace_computer_type: { requireApproval: true },
+ * }
+ * ```
+ */
+export interface ComputerToolConfig extends WorkspaceToolConfig {
+  /**
+   * For action tools (click/type/scroll/…): attach a fresh screenshot to the
+   * tool result after the action completes, so computer-use loops see the
+   * resulting desktop state without an extra screenshot call. Default: true.
+   * Ignored by the screenshot tool itself.
+   */
+  screenshotAfterAction?: boolean;
+  /**
+   * Delay (ms) between an action and its post-action screenshot, giving the
+   * UI time to react (menus, animations). Default: 500.
+   */
+  screenshotDelayMs?: number;
+  /**
+   * Maximum screenshot size (in bytes) to return inline as a media part.
+   * Larger screenshots fall back to text-only output rather than being
+   * fully base64-encoded into the model context and persisted in storage.
+   * Defaults to 10 MiB (10 * 1024 * 1024).
+   */
+  maxMediaBytes?: number;
+}
+
 // =============================================================================
 // Top-Level Tools Config
 // =============================================================================
@@ -316,11 +355,15 @@ export type WorkspaceToolsConfig = {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {
   [K in typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?: ReadFileToolConfig;
+} & {
+  [K in (typeof WORKSPACE_TOOLS.COMPUTER)[keyof typeof WORKSPACE_TOOLS.COMPUTER]]?: ComputerToolConfig;
 } & Partial<
     Record<
       Exclude<
         WorkspaceToolName,
-        typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND | typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE
+        | typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND
+        | typeof WORKSPACE_TOOLS.FILESYSTEM.READ_FILE
+        | (typeof WORKSPACE_TOOLS.COMPUTER)[keyof typeof WORKSPACE_TOOLS.COMPUTER]
       >,
       WorkspaceToolConfig
     >

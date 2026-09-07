@@ -1,12 +1,5 @@
-import {
-  FACTORY_GITHUB_EVENTS,
-  FACTORY_LINEAR_EVENTS,
-  FACTORY_RULE_BOARDS,
-  FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
-} from './types.js';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from './types.js';
 import type {
-  FactoryBoardRules,
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
@@ -139,30 +132,10 @@ function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> 
   return sanitized;
 }
 
-function validateBoardRules(rules: unknown, label: string): asserts rules is FactoryBoardRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError(`${label} must be an object.`);
-  for (const [stage, sources] of Object.entries(rules)) {
-    enumValue(stage, FACTORY_RULE_STAGES, `${label} stage`);
-    if (!isPlainObject(sources)) throw new FactoryRuleValidationError(`${label}.${stage} must be an object.`);
-    for (const [source, leaf] of Object.entries(sources)) {
-      enumValue(source, FACTORY_RULE_SOURCES, `${label}.${stage} source`);
-      if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`${label}.${stage}.${source} must be an object.`);
-      assertExactKeys(leaf, ['onEnter', 'onExit'], `${label}.${stage}.${source}`);
-      for (const handler of Object.values(leaf)) {
-        if (handler !== undefined && typeof handler !== 'function') {
-          throw new FactoryRuleValidationError(`${label}.${stage}.${source} handlers must be functions.`);
-        }
-      }
-    }
-  }
-}
-
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'tools'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
-  validateBoardRules(rules.work, 'Factory rules.work');
-  validateBoardRules(rules.review, 'Factory rules.review');
 
   if (!isPlainObject(rules.tools)) throw new FactoryRuleValidationError('Factory rules.tools must be an object.');
   for (const [toolName, leaf] of Object.entries(rules.tools)) {
@@ -172,26 +145,6 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
     if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
       throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.github)) throw new FactoryRuleValidationError('Factory rules.github must be an object.');
-  for (const [event, leaf] of Object.entries(rules.github)) {
-    enumValue(event, FACTORY_GITHUB_EVENTS, 'Factory GitHub event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.github.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.github.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.github.${event}.onEvent must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.linear)) throw new FactoryRuleValidationError('Factory rules.linear must be an object.');
-  for (const [event, leaf] of Object.entries(rules.linear)) {
-    enumValue(event, FACTORY_LINEAR_EVENTS, 'Factory Linear event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.linear.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.linear.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
     }
   }
 }
@@ -220,7 +173,14 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       };
     }
     case 'transition': {
-      assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage', 'message'], 'Factory transition decision');
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        'Factory transition decision',
+      );
+      if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory transition reenter must be a boolean.');
+      }
       let message: { text: string; role?: string } | undefined;
       if (value.message !== undefined) {
         if (!isPlainObject(value.message)) {
@@ -242,6 +202,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory transition board'),
         stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory transition stage'),
         ...(message ? { message } : {}),
+        ...(value.reenter === true ? { reenter: true } : {}),
       };
     }
     case 'upsertLinkedWorkItem': {
@@ -270,22 +231,34 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'invokeSkill': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'role', 'skillName', 'arguments', 'precedingMessage'],
+        ['type', 'idempotencyKey', 'role', 'skillName', 'prompt', 'arguments', 'precedingMessage', 'cancelInFlight'],
         'Factory invoke skill decision',
       );
+      // A run activates a skill or carries a prompt, never both: they are two
+      // ways to author the same kickoff message, so accepting both would leave
+      // the dispatcher picking a winner.
+      if ((value.skillName === undefined) === (value.prompt === undefined)) {
+        throw new FactoryRuleValidationError('Factory skill invocation needs exactly one of skillName or prompt.');
+      }
       const args = optionalBoundedString(value.arguments, 'Factory skill arguments', MAX_ARGUMENTS_LENGTH);
       const precedingMessage = optionalBoundedString(
         value.precedingMessage,
         'Factory skill preceding message',
         MAX_MESSAGE_LENGTH,
       );
+      if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
+      }
       return {
         type,
         ...commonCommitFields(value),
         role: boundedString(value.role, 'Factory skill role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
-        skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE),
+        ...(value.skillName === undefined
+          ? { prompt: boundedString(value.prompt, 'Factory skill prompt', MAX_MESSAGE_LENGTH) }
+          : { skillName: boundedString(value.skillName, 'Factory skill name', MAX_SKILL_NAME_LENGTH, SKILL_NAME_RE) }),
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
+        ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
       };
     }
     case 'sendMessage': {
@@ -305,10 +278,17 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.prepareBinding !== undefined && typeof value.prepareBinding !== 'boolean') {
         throw new FactoryRuleValidationError('Factory message prepareBinding must be a boolean.');
       }
+      if (value.prepareBinding === true && value.role === undefined) {
+        throw new FactoryRuleValidationError('Factory message prepareBinding requires a role.');
+      }
+      const role =
+        value.role === undefined
+          ? undefined
+          : boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE);
       return {
         type,
         ...commonCommitFields(value),
-        role: boundedString(value.role, 'Factory message role', MAX_ROLE_LENGTH, IDENTIFIER_RE),
+        ...(role ? { role } : {}),
         message: boundedString(value.message, 'Factory message', MAX_MESSAGE_LENGTH),
         ...(priority ? { priority } : {}),
         ...(idleBehavior ? { idleBehavior } : {}),

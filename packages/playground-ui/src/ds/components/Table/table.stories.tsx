@@ -34,21 +34,21 @@ export const Default: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
             <TxtCell>Jan 14, 2026</TxtCell>
           </Row>
           <Row>
             <TxtCell>Item Two</TxtCell>
             <Cell>
-              <Badge variant="default">Pending</Badge>
+              <Badge>Pending</Badge>
             </Cell>
             <TxtCell>Jan 13, 2026</TxtCell>
           </Row>
           <Row>
             <TxtCell>Item Three</TxtCell>
             <Cell>
-              <Badge variant="error">Error</Badge>
+              <Badge variant="red">Error</Badge>
             </Cell>
             <TxtCell>Jan 12, 2026</TxtCell>
           </Row>
@@ -70,13 +70,13 @@ export const SmallSize: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Item Two</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
         </Tbody>
@@ -124,13 +124,13 @@ export const WithEntryCell: Story = {
           <Row>
             <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<Bot />} />
             <Cell>
-              <Badge variant="success">Online</Badge>
+              <Badge variant="green">Online</Badge>
             </Cell>
           </Row>
           <Row>
             <EntryCell name="Data Analysis Agent" description="Processes analytics data" icon={<Bot />} />
             <Cell>
-              <Badge variant="default">Idle</Badge>
+              <Badge>Idle</Badge>
             </Cell>
           </Row>
         </Tbody>
@@ -178,19 +178,19 @@ export const SelectedRow: Story = {
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row selected>
             <TxtCell>Selected Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="green">Active</Badge>
             </Cell>
           </Row>
         </Tbody>

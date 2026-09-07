@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
+import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
@@ -12,10 +12,11 @@ export const getProcessOutputTool = createTool({
 
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
   toModelOutput: sandboxToModelOutput,
+  outputSchema: z.string(),
   inputSchema: z.object({
     pid: z.string().describe('The process ID returned when the background command was started'),
     tail: z
-      .number()
+      .preprocess(coerceNumericString, z.number())
       .optional()
       .describe(
         `Number of lines to return, similar to tail -n. Positive or negative returns last N lines from end. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
@@ -58,9 +59,14 @@ Use this after starting a background command with execute_command (background: t
         });
       }
 
-      // If wait requested, block until process exits with streaming callbacks
+      // If wait requested, block until process exits with streaming callbacks.
+      // The run's abortSignal is forwarded so aborting the run (e.g. a user
+      // stop) interrupts a blocking wait instead of outliving the turn: the
+      // handle kills the process on abort, mirroring the spawn-time
+      // `abortSignal` convention.
       if (shouldWait && handle.exitCode === undefined) {
         const result = await handle.wait({
+          abortSignal: context?.abortSignal,
           onStdout: context?.writer
             ? async (data: string) => {
                 await context.writer!.custom({

@@ -42,10 +42,12 @@ function createGateway(): MastraCodeGateway {
 describe('MastraCodeGateway', () => {
   const prevAnthropicKey = process.env.ANTHROPIC_API_KEY;
   const prevOpenAIKey = process.env.OPENAI_API_KEY;
+  const prevKimiApiKey = process.env.KIMI_API_KEY;
 
   beforeEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.KIMI_API_KEY;
     writeAuthJson({});
   });
 
@@ -54,6 +56,8 @@ describe('MastraCodeGateway', () => {
     else process.env.ANTHROPIC_API_KEY = prevAnthropicKey;
     if (prevOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = prevOpenAIKey;
+    if (prevKimiApiKey === undefined) delete process.env.KIMI_API_KEY;
+    else process.env.KIMI_API_KEY = prevKimiApiKey;
   });
 
   afterAll(() => {
@@ -121,6 +125,28 @@ describe('MastraCodeGateway', () => {
         routerId: 'anthropic/claude-opus-4-8',
       });
       expect(auth?.bearerToken).toBe('oauth');
+    });
+
+    it('uses stored Kimi OAuth credentials before an API key', () => {
+      process.env.KIMI_API_KEY = 'sk-kimi-test';
+      writeAuthJson({
+        'kimi-for-coding': {
+          type: 'oauth',
+          access: 'a',
+          refresh: 'r',
+          expires: Date.now() + 1_000_000,
+          deviceId: '0123456789abcdef0123456789abcdef',
+        },
+      });
+
+      const auth = MastraCodeGateway.resolveProviderAuth({
+        gatewayId: 'mastracode',
+        providerId: 'kimi-for-coding',
+        modelId: 'kimi-for-coding',
+        routerId: 'kimi-for-coding/kimi-for-coding',
+      });
+
+      expect(auth).toEqual({ bearerToken: 'oauth', source: 'gateway' });
     });
 
     it('returns undefined when the provider has no credentials', () => {

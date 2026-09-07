@@ -8,6 +8,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -15,6 +16,13 @@ import type {
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
 import { ExperimentsStorage } from './base';
+
+function cloneExperimentResultMetadata(result: ExperimentResult): ExperimentResult {
+  return {
+    ...result,
+    metadata: result.metadata === null ? null : structuredClone(result.metadata),
+  };
+}
 
 export class ExperimentsInMemory extends ExperimentsStorage {
   private db: InMemoryDB;
@@ -37,8 +45,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
       agentVersion: input.agentVersion ?? null,
-      targetType: input.targetType,
-      targetId: input.targetId,
+      targetType: input.targetType ?? null,
+      targetId: input.targetId ?? null,
+      scorerIds: input.scorerIds ?? null,
       name: input.name,
       description: input.description,
       metadata: input.metadata,
@@ -188,10 +197,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       input: input.input,
       output: input.output,
       groundTruth: input.groundTruth,
+      metadata: input.metadata ?? null,
       error: input.error,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
+      attempt: input.attempt ?? 0,
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
@@ -201,8 +212,44 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       projectId: input.projectId ?? null,
       createdAt: now,
     };
-    this.db.experimentResults.set(result.id, result);
-    return result;
+    this.db.experimentResults.set(result.id, cloneExperimentResultMetadata(result));
+    return cloneExperimentResultMetadata(result);
+  }
+
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    const attempt = input.attempt ?? 0;
+    const existing = Array.from(this.db.experimentResults.values()).find(
+      r => r.experimentId === input.experimentId && r.itemId === input.itemId && (r.attempt ?? 0) === attempt,
+    );
+    if (!existing) {
+      return this.addExperimentResult({ ...input, attempt });
+    }
+    // Last write wins on the natural key; keep row id + createdAt stable.
+    const replaced: ExperimentResult = {
+      id: existing.id,
+      experimentId: input.experimentId,
+      itemId: input.itemId,
+      itemDatasetVersion: input.itemDatasetVersion,
+      input: input.input,
+      output: input.output,
+      groundTruth: input.groundTruth,
+      metadata: input.metadata ?? null,
+      error: input.error,
+      startedAt: input.startedAt,
+      completedAt: input.completedAt,
+      retryCount: input.retryCount,
+      attempt,
+      traceId: input.traceId ?? null,
+      status: input.status ?? null,
+      tags: input.tags ?? null,
+      comment: existing.comment ?? null,
+      toolMockReport: input.toolMockReport ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
+      createdAt: existing.createdAt,
+    };
+    this.db.experimentResults.set(existing.id, cloneExperimentResultMetadata(replaced));
+    return cloneExperimentResultMetadata(replaced);
   }
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
@@ -219,8 +266,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       tags: input.tags !== undefined ? input.tags : existing.tags,
       comment: input.comment !== undefined ? input.comment : existing.comment,
     };
-    this.db.experimentResults.set(input.id, updated);
-    return updated;
+    this.db.experimentResults.set(input.id, cloneExperimentResultMetadata(updated));
+    return cloneExperimentResultMetadata(updated);
   }
 
   async getExperimentResultById(args: {
@@ -235,7 +282,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
       return null;
     }
-    return row;
+    return cloneExperimentResultMetadata(row);
   }
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
@@ -264,7 +311,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     const end = perPageInput === false ? results.length : start + perPage;
 
     return {
-      results: results.slice(start, end),
+      results: results.slice(start, end).map(cloneExperimentResultMetadata),
       pagination: {
         total: results.length,
         page,

@@ -284,7 +284,7 @@ function ThreadRailItem({
         onMouseEnter={event => onHoverChange(index, event.currentTarget)}
         onFocus={event => onHoverChange(index, event.currentTarget)}
         className={cn(
-          'duration-normal relative block h-px cursor-pointer rounded-full transition-[width,background-color] ease-out',
+          'relative block h-px cursor-pointer rounded-full transition-[width,background-color] duration-normal ease-out',
           "before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']",
           'focus-visible:ring-2 focus-visible:ring-accent1/40 focus-visible:outline-hidden',
           size,
@@ -335,8 +335,8 @@ function ThreadRailPreview({
       )}
       style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
     >
-      <div ref={previewSizerRef} data-testid="thread-rail-preview-sizer" aria-hidden className="invisible grid">
-        <ThreadRailPreviewContent turn={currentTurn} className="col-start-1 row-start-1 p-3.5" />
+      <div ref={previewSizerRef} data-testid="thread-rail-preview-sizer" aria-hidden className="invisible">
+        <ThreadRailPreviewContent turn={currentTurn} className="p-3.5" />
       </div>
       <div data-testid="thread-rail-preview-viewport" className="absolute inset-0">
         <div className="relative h-full">

@@ -1,10 +1,9 @@
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-const { renderBannerMock, updateStatusLineMock, getUserIdMock } = vi.hoisted(() => ({
+const { renderBannerMock, updateStatusLineMock } = vi.hoisted(() => ({
   renderBannerMock: vi.fn(),
   updateStatusLineMock: vi.fn(),
-  getUserIdMock: vi.fn(),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -57,10 +56,6 @@ vi.mock('../components/idle-counter.js', () => ({
 
 vi.mock('../status-line.js', () => ({
   updateStatusLine: updateStatusLineMock,
-}));
-
-vi.mock('@mastra/code-sdk/utils/project', () => ({
-  getUserId: getUserIdMock,
 }));
 
 import { renderBanner } from '../components/banner.js';
@@ -121,7 +116,6 @@ function createState(modeCount = 2) {
 describe('buildLayout startup header', () => {
   it('renders banner, project frontmatter, startup hints, containers, footer, and editor focus in order', () => {
     renderBannerMock.mockReturnValue('BANNER v1.2.3');
-    getUserIdMock.mockReturnValue('user-abc');
     const refreshModelAuthStatus = vi.fn();
     const { state, uiChildren, editorChildren, footerChildren, editor } = createState();
 
@@ -129,15 +123,14 @@ describe('buildLayout startup header', () => {
 
     expect(renderBanner).toHaveBeenCalledWith('1.2.3', 'Acme Code');
     expect(textOf(uiChildren[1])).toBe('BANNER v1.2.3');
-    expect(textOf(uiChildren[2])).toBe(
-      [
-        'Project: demo-project',
-        'Resource ID: resource-123',
-        'Branch: feature/banner',
-        'Worktree of: /repos/main',
-        'User: user-abc',
-      ].join('\n'),
+    const projectDetails = textOf(uiChildren[2]);
+    expect(projectDetails).toBe(
+      ['Project: demo-project', 'Resource ID: resource-123', 'Branch: feature/banner', 'Worktree of: /repos/main'].join(
+        '\n',
+      ),
     );
+    expect(projectDetails).not.toContain('User:');
+    expect(projectDetails).not.toContain('@');
     expect(textOf(uiChildren[4])).toBe('  ⇧+Tab cycle modes · /help info & shortcuts');
     expect(uiChildren[6]).toBe(state.chatContainer);
     expect(uiChildren[7]).toBe(state.taskProgress);
@@ -153,7 +146,6 @@ describe('buildLayout startup header', () => {
 
   it('omits the mode-cycle startup hint when there is only one mode', () => {
     renderBannerMock.mockReturnValue('BANNER v1.2.3');
-    getUserIdMock.mockReturnValue('user-abc');
     const { state, uiChildren } = createState(1);
 
     buildLayout(state, vi.fn());

@@ -2,10 +2,16 @@ import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
-import { Navigate, Outlet, useLocation } from 'react-router';
+import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 
 export const RootGuards = () => {
-  return <AuthGuard />;
+  return (
+    <>
+      {/* Data routers keep the window scroll across navigations without this. */}
+      <ScrollRestoration />
+      <AuthGuard />
+    </>
+  );
 };
 
 const AuthGuard = () => {

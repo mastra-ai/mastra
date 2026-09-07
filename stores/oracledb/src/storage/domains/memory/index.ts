@@ -83,6 +83,7 @@ const DEFAULT_MESSAGE_SAVE_BATCH_SIZE = 200;
 const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 
 export class MemoryOracle extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   // Memory owns all tables needed for normal message history plus observational memory state.
   static readonly MANAGED_TABLES = [

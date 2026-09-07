@@ -45,15 +45,6 @@ export function useSendAgentControllerMessageMutation(args: AgentControllerRunMu
   });
 }
 
-export function useSteerAgentControllerMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
-  const invalidateSession = useSessionInvalidation(args);
-  return useMutation({
-    mutationFn: (text: string) => requireAgentControllerSession(session).steer(text),
-    onSuccess: invalidateSession,
-  });
-}
-
 export function useFollowUpAgentControllerMutation(args: AgentControllerRunMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);

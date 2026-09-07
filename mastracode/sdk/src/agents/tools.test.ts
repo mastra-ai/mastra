@@ -1,8 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const webToolMocks = vi.hoisted(() => ({
+  configuredTools: undefined as
+    | {
+        web_search: { description: string };
+        web_extract: { description: string };
+      }
+    | undefined,
+}));
 
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
+  createConfiguredWebTools: () => webToolMocks.configuredTools,
+  hasParallelKey: () => false,
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
@@ -24,6 +35,25 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
 }
 
 describe('createDynamicTools', () => {
+  afterEach(() => {
+    webToolMocks.configuredTools = undefined;
+  });
+
+  it('exposes the configured model-independent web provider', () => {
+    const parallelSearch = { description: 'parallel search' };
+    const parallelExtract = { description: 'parallel extract' };
+    webToolMocks.configuredTools = {
+      web_search: parallelSearch,
+      web_extract: parallelExtract,
+    };
+
+    const getDynamicTools = createDynamicTools();
+    const tools = getDynamicTools({ requestContext: createRequestContext({}) });
+
+    expect(tools.web_search).toBe(parallelSearch);
+    expect(tools.web_extract).toBe(parallelExtract);
+  });
+
   it('merges extra tools into the exposed tool map', async () => {
     const customTool = {
       description: 'custom',

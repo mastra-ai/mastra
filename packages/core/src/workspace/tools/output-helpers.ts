@@ -1,5 +1,7 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
+import { isValidationError } from '../../tools/validation';
+
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
 
@@ -31,10 +33,17 @@ export function stripAnsi(text: string): string {
  *
  * Returns `{ type: 'text', value: '...' }` to match the AI SDK's
  * expected tool-result output format.
+ *
+ * Mastra validation-error envelopes (e.g. from output-schema validation
+ * failures) are tagged as `{ type: 'error-json', value }` so providers
+ * receive a valid tool-result output instead of an untagged object.
  */
 export function sandboxToModelOutput(output: unknown): unknown {
   if (typeof output === 'string') {
     return { type: 'text', value: stripAnsi(output) };
+  }
+  if (isValidationError(output)) {
+    return { type: 'error-json', value: output };
   }
   return output;
 }

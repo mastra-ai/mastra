@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Checkout automation scripts
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 5
+        timeout-minutes: 20
         with:
           persist-credentials: false
           sparse-checkout: |

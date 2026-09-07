@@ -7,17 +7,55 @@ afterEach(() => {
 
 describe('getFileContentType', () => {
   it('returns the content-type header when the HEAD request succeeds', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        'content-type': 'image/png',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await expect(getFileContentType('https://example.com/image.png')).resolves.toBe('image/png');
+    // Only the headers are needed, so the body must never be downloaded.
+    expect(fetchSpy).toHaveBeenCalledWith('https://example.com/image.png', { method: 'HEAD' });
+  });
+
+  it('prefers the served content-type over the one the extension implies', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        headers: new Headers({
-          'content-type': 'image/png',
-        }),
+        headers: new Headers({ 'content-type': 'image/webp' }),
       }),
     );
 
-    await expect(getFileContentType('https://example.com/image.png')).resolves.toBe('image/png');
+    // The server re-encodes on the fly, so `.png` in the path is stale.
+    await expect(getFileContentType('https://example.com/photo.png')).resolves.toBe('image/webp');
+  });
+
+  it('ignores the content-type header of a failed HEAD request', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: new Headers({ 'content-type': 'text/html' }),
+      }),
+    );
+
+    // An error page's own content type says nothing about the file.
+    await expect(getFileContentType('https://example.com/files/report.pdf')).resolves.toBe('application/pdf');
+  });
+
+  it('falls back to the extension when a successful HEAD carries no content-type', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+      }),
+    );
+
+    await expect(getFileContentType('https://example.com/files/report.pdf')).resolves.toBe('application/pdf');
   });
 
   it('falls back to the absolute URL pathname when the HEAD request is not ok', async () => {

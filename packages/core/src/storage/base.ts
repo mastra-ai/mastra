@@ -24,6 +24,7 @@ import type {
   NotificationsStorage,
   ThreadStateStorage,
   WorkflowDefinitionsStorage,
+  KnowledgeStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -53,6 +54,7 @@ export type StorageDomains = {
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
+  knowledge?: KnowledgeStorage;
 };
 
 /**
@@ -71,6 +73,48 @@ export const EDITOR_DOMAINS = [
   'favorites',
   'toolProviderConnections',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
+
+/**
+ * Every domain key of {@link StorageDomains}. Drives the composite store's
+ * constructor resolution so no domain can be silently skipped by a
+ * hand-maintained list. The exhaustiveness guard below turns a missing key
+ * into a compile error.
+ */
+export const DOMAIN_KEYS = [
+  'memory',
+  'workflows',
+  'workflowDefinitions',
+  'scores',
+  'observability',
+  'agents',
+  'datasets',
+  'experiments',
+  'promptBlocks',
+  'scorerDefinitions',
+  'mcpClients',
+  'mcpServers',
+  'workspaces',
+  'skills',
+  'favorites',
+  'blobs',
+  'backgroundTasks',
+  'schedules',
+  'channels',
+  'harness',
+  'toolProviderConnections',
+  'notifications',
+  'threadState',
+  'knowledge',
+] as const satisfies ReadonlyArray<keyof StorageDomains>;
+
+/**
+ * Compile-time exhaustiveness guard: if a key is added to `StorageDomains`
+ * without being added to `DOMAIN_KEYS`, `MissingDomainKeys` stops being
+ * `never` and the `true` assignment below becomes a type error.
+ */
+type MissingDomainKeys = Exclude<keyof StorageDomains, (typeof DOMAIN_KEYS)[number]>;
+const _domainKeysExhaustive: MissingDomainKeys extends never ? true : never = true;
+void _domainKeysExhaustive;
 
 /**
  * Normalizes perPage input for pagination queries.
@@ -376,41 +420,27 @@ export class MastraCompositeStore extends MastraBase {
         return defaultStores?.[key];
       };
 
-      // Build the composed stores object
-      this.stores = {
-        memory: resolve('memory'),
-        workflows: resolve('workflows'),
-        workflowDefinitions: resolve('workflowDefinitions'),
-        scores: resolve('scores'),
-        observability: resolve('observability'),
-        agents: resolve('agents'),
-        datasets: resolve('datasets'),
-        experiments: resolve('experiments'),
-        promptBlocks: resolve('promptBlocks'),
-        scorerDefinitions: resolve('scorerDefinitions'),
-        mcpClients: resolve('mcpClients'),
-        mcpServers: resolve('mcpServers'),
-        workspaces: resolve('workspaces'),
-        skills: resolve('skills'),
-        favorites: resolve('favorites'),
-        blobs: resolve('blobs'),
-        backgroundTasks: resolve('backgroundTasks'),
-        schedules: resolve('schedules'),
-        channels: resolve('channels'),
-        harness: resolve('harness'),
-        toolProviderConnections: resolve('toolProviderConnections'),
-        notifications: resolve('notifications'),
-        // The thread-state domain always has an in-memory store wired by default
-        // so the built-in task tools work out of the box without a configured
-        // backend. Configure a durable backend for state that must survive a
-        // process restart. An explicit `false` override still disables the
-        // domain entirely — the in-memory fallback only applies when the
-        // domain is left unset.
-        threadState:
-          domainOverrides.threadState === false
-            ? undefined
-            : (resolve('threadState') ?? new InMemoryThreadStateStorage()),
-      } as StorageDomains;
+      // Build the composed stores object by iterating the typed key list so
+      // no domain can be dropped from a hand-maintained assignment block.
+      const composed: Partial<StorageDomains> = {};
+      const assign = <K extends keyof StorageDomains>(key: K): void => {
+        composed[key] = resolve(key);
+      };
+      for (const key of DOMAIN_KEYS) {
+        assign(key);
+      }
+      // Special case: the thread-state domain always has an in-memory store
+      // wired by default so the built-in task tools work out of the box
+      // without a configured backend. Configure a durable backend for state
+      // that must survive a process restart. An explicit `false` override
+      // still disables the domain entirely — the in-memory fallback only
+      // applies when the domain is left unset (resolve already returned
+      // undefined for a `false` override, so the guard below keeps disable
+      // semantics intact).
+      if (domainOverrides.threadState !== false) {
+        composed.threadState = composed.threadState ?? new InMemoryThreadStateStorage();
+      }
+      this.stores = composed as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
   }
@@ -579,29 +609,13 @@ export class MastraCompositeStore extends MastraBase {
     };
 
     if (this.stores) {
-      maybeInit(this.stores.memory);
-      maybeInit(this.stores.workflows);
-      maybeInit(this.stores.workflowDefinitions);
-      maybeInit(this.stores.scores);
-      maybeInit(this.stores.observability);
-      maybeInit(this.stores.agents);
-      maybeInit(this.stores.datasets);
-      maybeInit(this.stores.experiments);
-      maybeInit(this.stores.promptBlocks);
-      maybeInit(this.stores.scorerDefinitions);
-      maybeInit(this.stores.mcpClients);
-      maybeInit(this.stores.mcpServers);
-      maybeInit(this.stores.workspaces);
-      maybeInit(this.stores.skills);
-      maybeInit(this.stores.favorites);
-      maybeInit(this.stores.blobs);
-      maybeInit(this.stores.backgroundTasks);
-      maybeInit(this.stores.schedules);
-      maybeInit(this.stores.channels);
-      maybeInit(this.stores.harness);
-      maybeInit(this.stores.toolProviderConnections);
-      maybeInit(this.stores.notifications);
-      maybeInit(this.stores.threadState);
+      // Iterate every registered domain instead of naming them one by one, so
+      // a domain added to the stores map can never silently dodge init. The
+      // typeof guard skips subclass-set entries that don't expose an init
+      // method.
+      for (const domain of Object.values(this.stores)) {
+        if (typeof domain?.init === 'function') maybeInit(domain);
+      }
     }
 
     await Promise.all(initTasks);

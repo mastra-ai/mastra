@@ -47,12 +47,16 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'github-signals-multi-subscribe'
+  | 'github-signals-legacy-upgrade'
+  | 'github-signals-tool-multi-subscribe'
   | 'github-signals-incremental'
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
   | 'goal-duration-tool-approval'
+  | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
@@ -82,9 +86,12 @@ export type ScenarioName =
   | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
+  | 'profile-command'
   | 'prune-command'
+  | 'prune-render-state'
   | 'visible-commands'
   | 'integration-commands'
+  | 'knowledge-browser'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
@@ -100,6 +107,7 @@ export type ScenarioName =
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
+  | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
   | 'models-pack-activation-persistence'
@@ -118,6 +126,7 @@ export type ScenarioName =
   | 'om-threshold-persistence'
   | 'onboarding-om-follows-login'
   | 'quiet-settings'
+  | 'web-search-provider-settings'
   | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
   | 'report-issue-command'
@@ -126,6 +135,7 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
+  | 'subconscious-activity-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
@@ -143,6 +153,7 @@ export type ScenarioName =
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
   | 'stream-error-retry'
+  | 'streaming-render-stability'
   | 'streaming-tool-args'
   | 'subagent-delegation'
   | 'subagent-plan-execute-tools'
@@ -164,6 +175,7 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
+  | 'workflows-command'
   | 'work-idle-status'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
@@ -216,7 +228,9 @@ export type McE2eStartMastraCodeAppOptions = {
   onTuiCreated?: (tui: unknown) => Promise<void> | void;
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
-  tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;
+  tui?: Partial<
+    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+  >;
 };
 
 export type McE2eInProcessAppContext = McE2ePrepareContext & {

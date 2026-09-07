@@ -73,7 +73,7 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
   return { id: `linear:${assignee}`, name: assignee };
 }
 
-const CREATED_ACTION = 'factory.work_item.created';
+export const CREATED_ACTION = 'factory.work_item.created';
 const ASSIGNED_ACTION = 'factory.work_item.assigned';
 
 /**
@@ -88,14 +88,11 @@ function syntheticCreatedEvent(item: WorkItem, hasRealCreateEvent: boolean): Aud
   const creator = externalCreatorProfile(item);
   return {
     id: `synthetic-created:${item.id}`,
-    orgId: item.orgId,
     actorId: isHuman ? item.createdBy : (creator?.id ?? item.createdBy),
     actorType: 'human',
     action: CREATED_ACTION,
     targets: [{ type: 'work_item', id: item.id, name: item.title }],
     metadata: {},
-    githubProjectId: item.githubProjectId,
-    context: {},
     occurredAt: item.createdAt,
   };
 }
@@ -117,14 +114,11 @@ function syntheticAssignedEvent(
   if (auditEvents.some(event => event.action === ASSIGNED_ACTION)) return undefined;
   return {
     id: `synthetic-assigned:${item.id}`,
-    orgId: item.orgId,
     actorId: assignee.id,
     actorType: 'human',
     action: ASSIGNED_ACTION,
     targets: [{ type: 'work_item', id: item.id, name: item.title }],
     metadata: {},
-    githubProjectId: item.githubProjectId,
-    context: {},
     occurredAt: item.updatedAt,
   };
 }
@@ -197,4 +191,9 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   // the current assignee ("who owns this now") over the reporter/opener.
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
+}
+
+/** Comments render as themselves; the audit row each one also writes would show it twice. */
+export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
+  return activity.events.filter(event => !event.action.includes('.comment_'));
 }

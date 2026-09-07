@@ -149,6 +149,23 @@ describe('resolveTarget', () => {
     expect(mocks.fetchServerProjects).not.toHaveBeenCalled();
   });
 
+  it('does not start interactive login when only an observability env token is available', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+    mocks.getToken.mockRejectedValueOnce(new Error('not logged in'));
+
+    await expect(resolveTarget(options(), fetchMock as typeof fetch, '/observability/traces')).resolves.toEqual({
+      baseUrl: 'https://observability.mastra.ai',
+      headers: {
+        Authorization: 'Bearer env-token',
+        'X-Mastra-Project-Id': 'env-project',
+      },
+      timeoutMs: 30_000,
+    });
+
+    expect(mocks.getToken).toHaveBeenCalledWith(undefined, { allowLogin: false });
+  });
+
   it('uses CLI auth and project config when observability env credentials are unavailable', async () => {
     mocks.loadProjectConfig.mockResolvedValueOnce(linkedProject);
 
@@ -274,6 +291,70 @@ describe('resolveTarget', () => {
       },
       timeoutMs: 30_000,
     });
+  });
+
+  it.each(['https://observability.mastra.ai', 'https://observability.eu.mastra.ai'])(
+    'uses Platform credentials for the trusted observability URL %s',
+    async url => {
+      process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+      process.env.MASTRA_PROJECT_ID = 'env-project';
+
+      await expect(
+        resolveTarget(options({ url }), fetchMock as typeof fetch, '/observability/traces'),
+      ).resolves.toEqual({
+        baseUrl: url,
+        headers: {
+          Authorization: 'Bearer env-token',
+          'X-Mastra-Project-Id': 'env-project',
+        },
+        fallbackHeaders: {
+          Authorization: 'Bearer platform-token',
+          'X-Mastra-Project-Id': 'env-project',
+        },
+        timeoutMs: 30_000,
+      });
+    },
+  );
+
+  it('preserves explicit credentials for a trusted observability URL', async () => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(
+      resolveTarget(
+        options({
+          url: 'https://observability.eu.mastra.ai',
+          header: ['Authorization: Bearer custom', 'X-Mastra-Project-Id: custom-project'],
+        }),
+        fetchMock as typeof fetch,
+        '/observability/traces',
+      ),
+    ).resolves.toEqual({
+      baseUrl: 'https://observability.eu.mastra.ai',
+      headers: {
+        Authorization: 'Bearer custom',
+        'X-Mastra-Project-Id': 'custom-project',
+      },
+      timeoutMs: 30_000,
+    });
+  });
+
+  it.each([
+    'https://observability.mastra.ai.attacker.example',
+    'https://observability.eu.mastra.ai:444',
+    'http://observability.eu.mastra.ai',
+  ])('does not send Platform credentials to the untrusted observability URL %s', async url => {
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN = 'env-token';
+    process.env.MASTRA_PROJECT_ID = 'env-project';
+
+    await expect(resolveTarget(options({ url }), fetchMock as typeof fetch, '/observability/traces')).resolves.toEqual({
+      baseUrl: url,
+      headers: {},
+      timeoutMs: 30_000,
+    });
+
+    expect(mocks.loadProjectConfig).not.toHaveBeenCalled();
+    expect(mocks.getToken).not.toHaveBeenCalled();
   });
 
   it('carries --server-api-prefix for observability paths when --url is set', async () => {

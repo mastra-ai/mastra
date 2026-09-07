@@ -28,7 +28,7 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function useComposerImages(onUserDraft: boolean) {
+export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: boolean; disabled: boolean }) {
   const { pushNotice } = useChatTranscript();
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,18 +72,20 @@ export function useComposerImages(onUserDraft: boolean) {
     const files = Array.from(event.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'));
     if (files.length === 0) return;
     event.preventDefault();
+    if (disabled) return;
     void addImageFiles(files);
   };
 
   const onDrop = (event: DragEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (disabled) return;
     const files = Array.from(event.dataTransfer?.files ?? []).filter(file => file.type.startsWith('image/'));
     if (files.length === 0) return;
     void addImageFiles(files);
   };
 
   const onFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    void addImageFiles(event.target.files ?? []);
+    if (!disabled) void addImageFiles(event.target.files ?? []);
     event.target.value = '';
   };
 

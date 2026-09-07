@@ -2,7 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
-import { RequestContext } from '../request-context';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -25,6 +25,49 @@ function createTextStreamModel(responseText: string) {
           usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         },
       ]),
+    }),
+  });
+}
+
+function createGatedAgent(prompts: unknown[], releases: Array<() => void>) {
+  let callCount = 0;
+  return new Agent({
+    id: 'gated-agent',
+    name: 'gated-agent',
+    instructions: 'You are a test agent.',
+    model: new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        callCount += 1;
+        const callIndex = callCount;
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: `id-${callIndex}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `response ${callIndex}` });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              if (callIndex === 1) {
+                await new Promise<void>(resolve => releases.push(resolve));
+              }
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
     }),
   });
 }
@@ -145,6 +188,39 @@ describe('AgentController signal messages', () => {
     await storage.stores.memory!.saveMessages({ messages: [persisted] });
 
     await expect(session.thread.listActiveMessages()).resolves.toEqual([persisted]);
+  });
+
+  it('finds the first user message when the session persisted it as a user signal', async () => {
+    const storage = new InMemoryStore();
+    const { session } = await createController(storage);
+    const thread = await session.thread.create();
+
+    const messages = [
+      createSignal({
+        id: 'signal-reminder',
+        type: 'system-reminder',
+        contents: 'Remember the repo instructions',
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      createSignal({
+        id: 'signal-user-first',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Rewrite the log parser',
+        createdAt: new Date('2026-05-04T00:00:01.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+      createSignal({
+        id: 'signal-user-second',
+        type: 'user',
+        tagName: 'user',
+        contents: 'Also add tests',
+        createdAt: new Date('2026-05-04T00:00:02.000Z'),
+      }).toDBMessage({ threadId: thread.id, resourceId: thread.resourceId }),
+    ];
+    await storage.stores.memory!.saveMessages({ messages });
+
+    const first = await session.thread.firstUserMessage({ threadId: thread.id });
+    expect(first?.id).toBe('signal-user-first');
   });
 
   it('returns persisted system-reminder signals as DB-native signal messages', async () => {
@@ -550,13 +626,13 @@ describe('AgentController signal messages', () => {
     await session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
-      'queued follow-up',
+      { contents: 'queued follow-up' },
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
-            memory: { thread: thread.id, resource: thread.resourceId },
+            memory: expect.objectContaining({ thread: thread.id, resource: thread.resourceId }),
             maxSteps: 1000,
             savePerStep: false,
             requireToolApproval: true,
@@ -958,6 +1034,85 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
   });
 
+  it('tags a message sent into a live run as a while-active interjection', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({ content: 'also do this' });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">also do this</user>');
+  });
+
+  it('leaves a message that opens a new turn unmarked', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+    const followUp = session.sendSignal({ content: 'a new turn' });
+    await followUp.accepted;
+    await waitFor(() => prompts.length === 2);
+
+    const idleTurn = JSON.stringify(prompts[1]);
+    expect(idleTurn).toContain('a new turn');
+    expect(idleTurn).not.toContain('delivery');
+  });
+
+  it('leaves a delivery chosen by the caller alone', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const interjection = session.sendSignal({
+      type: 'user',
+      tagName: 'user',
+      contents: 'queued for later',
+      attributes: { delivery: 'message' },
+    });
+    await interjection.accepted;
+    releases.shift()?.();
+    await waitFor(() => session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"message\\">queued for later</user>');
+    expect(JSON.stringify(prompts)).not.toContain('while-active');
+  });
+
+  // A steer aborts before it sends, so by the time the runtime resolves a delivery
+  // route it sees an idle session — the interjection has to be stamped at submit time.
+  it('tags a steer as a while-active interjection even though its abort left the session idle', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+    await session.thread.create();
+
+    const first = session.sendSignal({ content: 'start the run' });
+    await first.accepted;
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+    const steered = session.steer({ content: 'do this instead' });
+    releases.shift()?.();
+    await steered;
+    await waitFor(() => prompts.length === 2);
+
+    expect(JSON.stringify(prompts)).toContain('<user delivery=\\"while-active\\">do this instead</user>');
+  });
+
   it('emits echoed file user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
@@ -1141,6 +1296,136 @@ describe('AgentController signal messages', () => {
     expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
   });
 
+  it('folds a text-delta whose id was never seeded by a text-start', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'orphan-1', text: 'Hello' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'orphan-1', text: ' world' } },
+      requestContext,
+    );
+
+    expect(events.filter(event => event.type === 'message_start')).toHaveLength(1);
+    const lastUpdate = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(lastUpdate.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'Hello world' }]);
+  });
+
+  it('keeps text deltas that continue after a step-start rotation cleared the seeded id', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'step-start', payload: { messageId: 'msg-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'part one' } },
+      requestContext,
+    );
+    // A second step rotates the display message and clears textContentById.
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'step-start', payload: { messageId: 'msg-2' } },
+      requestContext,
+    );
+    // Deltas continue on the old id — they must land in the new message, not vanish.
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'part two' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'part two' }]);
+    expect(updates.at(-1)?.message.id).toBe('msg-2');
+  });
+
+  it('ignores a duplicate text-start for an id already seeded by an orphan delta', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'early' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: ' late' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([{ type: 'text', text: 'early late' }]);
+  });
+
+  it('folds a reasoning-delta whose id was never seeded by a reasoning-start', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'reasoning-delta', payload: { id: 'think-1', text: 'thinking' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'reasoning-delta', payload: { id: 'think-1', text: ' more' } },
+      requestContext,
+    );
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([
+      { type: 'reasoning', reasoning: 'thinking more', details: [{ type: 'text', text: 'thinking more' }] },
+    ]);
+  });
+
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);
@@ -1318,5 +1603,74 @@ describe('AgentController signal messages', () => {
         }),
       }),
     });
+  });
+});
+
+describe('AgentController message author', () => {
+  const author = { id: 'user-1', name: 'Ada', avatarUrl: 'https://avatars.example/ada.png' };
+
+  async function sentUserMessage(requestContext: RequestContext) {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    await session.thread.create();
+    await session.sendMessage({ content: 'hello', requestContext });
+    await waitFor(() => events.some(event => event.type === 'agent_end'));
+    for (const event of events) {
+      if (event.type !== 'message_end') continue;
+      const part = event.message.content.parts.find(part => part.type === 'data-user-message');
+      if (part) return part.data;
+    }
+    throw new Error('no user message was emitted');
+  }
+
+  it('stamps the request author on the sent user message', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+
+    const sent = await sentUserMessage(requestContext);
+
+    expect(sent?.providerOptions).toEqual({ mastra: { author } });
+  });
+
+  it('leaves the sent user message unattributed when the request names no author', async () => {
+    const sent = await sentUserMessage(new RequestContext());
+
+    expect(sent?.contents).toBe('hello');
+    expect(sent?.providerOptions).toBeUndefined();
+  });
+
+  it('carries the author through a follow-up queued behind a running turn', async () => {
+    const agent = new Agent({
+      id: 'authored-follow-up-agent',
+      name: 'authored-follow-up-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
+    });
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, author);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    await session.followUp({ content: 'queued follow-up', requestContext });
+    await session.drainFollowUpQueue();
+
+    expect(queueMessage).toHaveBeenCalledWith(
+      { contents: 'queued follow-up', providerOptions: { mastra: { author } } },
+      expect.anything(),
+    );
   });
 });

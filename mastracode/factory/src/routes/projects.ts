@@ -2,6 +2,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type {
   CreateFactoryProjectInput,
   FactoryProjectsStorage,
@@ -9,17 +10,19 @@ import type {
 } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
+  SourceControlRepository,
   SourceControlStorage,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2_000;
-const MAX_SETUP_COMMAND_LENGTH = 2_000;
+const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
 const MAX_SANDBOX_PROVIDER_LENGTH = 100;
 const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
@@ -75,6 +78,14 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
     if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
     patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
   }
+  if (input.autoRunEnabled !== undefined) {
+    if (typeof input.autoRunEnabled !== 'boolean') return null;
+    patch.autoRunEnabled = input.autoRunEnabled;
+  }
+  if (input.autoApprovePlans !== undefined) {
+    if (typeof input.autoApprovePlans !== 'boolean') return null;
+    patch.autoApprovePlans = input.autoApprovePlans;
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
@@ -100,32 +111,55 @@ function parseOptionalString(
 }
 
 function parseRepositoryLinkInput(value: unknown): {
-  repositoryId: string;
+  repositoryId?: string;
+  repository?: { externalId: string; slug: string };
   branch: string | null;
   sandboxProvider: string;
   sandboxWorkdir: string;
   setupCommand: string | null;
+  teardownCommand: string | null;
 } | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
-  if (typeof input.repositoryId !== 'string' || !UUID_RE.test(input.repositoryId)) return null;
+  const repositoryId =
+    typeof input.repositoryId === 'string' && UUID_RE.test(input.repositoryId) ? input.repositoryId : undefined;
+  const repositoryInput = input.repository;
+  let repository: { externalId: string; slug: string } | undefined;
+  if (repositoryInput && typeof repositoryInput === 'object') {
+    const candidate = repositoryInput as Record<string, unknown>;
+    const externalId = parseOptionalString(candidate.externalId, { maxLength: MAX_NAME_LENGTH });
+    const slug = parseOptionalString(candidate.slug, { maxLength: MAX_NAME_LENGTH });
+    if (typeof externalId !== 'string' || typeof slug !== 'string') return null;
+    repository = { externalId, slug };
+  }
+  if (!repositoryId && !repository) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
   const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
   const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
-  const setupCommand = parseOptionalString(input.setupCommand, { maxLength: MAX_SETUP_COMMAND_LENGTH, nullable: true });
+  const setupCommand = parseOptionalString(input.setupCommand, {
+    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
+    nullable: true,
+  });
+  const teardownCommand = parseOptionalString(input.teardownCommand, {
+    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
+    nullable: true,
+  });
   if (
     branch === false ||
     typeof sandboxProvider !== 'string' ||
     typeof sandboxWorkdir !== 'string' ||
-    setupCommand === false
+    setupCommand === false ||
+    teardownCommand === false
   )
     return null;
   return {
-    repositoryId: input.repositoryId,
+    ...(repositoryId ? { repositoryId } : {}),
+    ...(repository ? { repository } : {}),
     branch: branch ?? null,
     sandboxProvider,
     sandboxWorkdir,
     setupCommand: setupCommand ?? null,
+    teardownCommand: teardownCommand ?? null,
   };
 }
 
@@ -136,20 +170,29 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
   const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
   const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
-  const setupCommand = parseOptionalString(input.setupCommand, { maxLength: MAX_SETUP_COMMAND_LENGTH, nullable: true });
+  const setupCommand = parseOptionalString(input.setupCommand, {
+    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
+    nullable: true,
+  });
+  const teardownCommand = parseOptionalString(input.teardownCommand, {
+    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
+    nullable: true,
+  });
   if (
     branch === false ||
     sandboxProvider === false ||
     sandboxProvider === null ||
     sandboxWorkdir === false ||
     sandboxWorkdir === null ||
-    setupCommand === false
+    setupCommand === false ||
+    teardownCommand === false
   )
     return null;
   if (branch !== undefined) patch.branch = branch;
   if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
   if (sandboxWorkdir !== undefined) patch.sandboxWorkdir = sandboxWorkdir;
   if (setupCommand !== undefined) patch.setupCommand = setupCommand;
+  if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
@@ -160,6 +203,23 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   sourceControl: SourceControlStorage;
   /** Integration ids allowed as source-control connection targets. */
   versionControlIntegrationIds?: string[];
+  /** Validate and persist a repository selected from a provider-backed listing. */
+  resolveRepository?: (input: {
+    integrationId: string;
+    orgId: string;
+    installationId: string;
+    externalId: string;
+    slug: string;
+  }) => Promise<SourceControlRepository | null>;
+  /**
+   * Fire-and-forget hook invoked after a repository is linked to a project —
+   * kicks the initial base-checkpoint build. Must never throw.
+   */
+  onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
+  /** Shared lifecycle for retiring sessions before their owning records are deleted. */
+  sessionRetirement?: SessionRetirementCoordinator;
+  /** Work-items domain — retired sessions drop the refs work items hold on them. */
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -210,6 +270,23 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
     const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
     return { ...projectRepository, repository };
+  }
+
+  async #retireProjectRepositorySessions(
+    handle: SourceControlStorageHandle,
+    orgId: string,
+    projectRepositoryId: string,
+  ): Promise<boolean> {
+    const sessions = await handle.sessions.listByProjectRepository({ projectRepositoryId });
+    if (sessions.length === 0) return true;
+    if (!this.deps.sessionRetirement) return false;
+    await this.deps.sessionRetirement.retireProjectRepositorySessions({
+      sourceControl: handle,
+      ...(this.deps.workItems ? { workItems: this.deps.workItems } : {}),
+      orgId,
+      projectRepositoryId,
+    });
+    return true;
   }
 
   async #resolveTenant(context: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
@@ -292,6 +369,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!(await this.#project(tenant.orgId, id))) return context.json({ error: 'Project not found' }, 404);
           for (const handle of await this.#handles()) {
             for (const connection of await handle.connections.list({ orgId: tenant.orgId, factoryProjectId: id })) {
+              for (const projectRepository of await handle.projectRepositories.list({
+                orgId: tenant.orgId,
+                connectionId: connection.id,
+              })) {
+                if (!(await this.#retireProjectRepositorySessions(handle, tenant.orgId, projectRepository.id))) {
+                  return context.json({ error: 'session_retirement_unavailable' }, 409);
+                }
+              }
               await handle.connections.delete({ orgId: tenant.orgId, id: connection.id });
             }
           }
@@ -377,6 +462,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'Source-control connection not found' }, 404);
           const found = await this.#findConnection({ orgId: tenant.orgId, projectId, id: connectionId });
           if (!found) return context.json({ error: 'Source-control connection not found' }, 404);
+          for (const projectRepository of await found.handle.projectRepositories.list({
+            orgId: tenant.orgId,
+            connectionId,
+          })) {
+            if (!(await this.#retireProjectRepositorySessions(found.handle, tenant.orgId, projectRepository.id))) {
+              return context.json({ error: 'session_retirement_unavailable' }, 409);
+            }
+          }
           await found.handle.connections.delete({ orgId: tenant.orgId, id: connectionId });
           return context.body(null, 204);
         },
@@ -396,15 +489,31 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!found) return context.json({ error: 'Source-control connection not found' }, 404);
           const input = parseRepositoryLinkInput(await readJson(context));
           if (!input) return context.json({ error: 'invalid_project_repository' }, 400);
-          const repository = await found.handle.repositories.get({ orgId: tenant.orgId, id: input.repositoryId });
+          const repository = input.repositoryId
+            ? await found.handle.repositories.get({ orgId: tenant.orgId, id: input.repositoryId })
+            : input.repository && this.deps.resolveRepository
+              ? await this.deps.resolveRepository({
+                  integrationId: found.connection.integrationId,
+                  orgId: tenant.orgId,
+                  installationId: found.connection.installationId,
+                  ...input.repository,
+                })
+              : null;
           if (!repository || repository.installationId !== found.connection.installationId)
             return context.json({ error: 'Source-control repository not found' }, 404);
+          const { repositoryId: _repositoryId, repository: _repository, ...linkInput } = input;
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
             connectionId,
             createdByUserId: tenant.userId,
-            ...input,
+            repositoryId: repository.id,
+            ...linkInput,
           });
+          try {
+            this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
+          } catch (error) {
+            console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
+          }
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -449,6 +558,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'Project repository not found' }, 404);
           const found = await this.#findProjectRepository({ orgId: tenant.orgId, projectId, id: projectRepositoryId });
           if (!found) return context.json({ error: 'Project repository not found' }, 404);
+          if (!(await this.#retireProjectRepositorySessions(found.handle, tenant.orgId, projectRepositoryId))) {
+            return context.json({ error: 'session_retirement_unavailable' }, 409);
+          }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
           return context.body(null, 204);
         },

@@ -27,7 +27,7 @@ test.describe('Agents list page', () => {
       const el = page.locator('a:has-text("Weather Agent")');
       await el.click();
 
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat.*/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/overview/);
     });
   });
 });

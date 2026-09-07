@@ -30,6 +30,7 @@ interface StreamStepOptions<OUTPUT = undefined> {
     snapshot: any;
   };
   agentId: string;
+  agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
   methodType: AgentMethodType;
@@ -60,6 +61,7 @@ export function createStreamStep<OUTPUT = undefined>({
   toolCallConcurrency,
   resumeContext,
   agentId,
+  agentVersionId,
   agentName,
   toolCallId,
   methodType,
@@ -124,6 +126,7 @@ export function createStreamStep<OUTPUT = undefined>({
           initialSignalEchoes: loopOptions.initialSignalEchoes,
         },
         agentId,
+        agentVersionId,
         agentName,
         toolCallId,
         methodType: modelMethodType,

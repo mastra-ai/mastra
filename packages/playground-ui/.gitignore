@@ -1,2 +1,6 @@
 # LanceDB storage leaked by integration tests booting a Mastra runtime at the package root.
 /test/
+
+# Stryker mutation testing output (`pnpm test:mutate`).
+/.stryker-tmp/
+/reports/

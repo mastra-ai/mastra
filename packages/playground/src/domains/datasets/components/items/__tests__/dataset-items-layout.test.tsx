@@ -10,9 +10,10 @@ describe('DatasetItemsLayout', () => {
     expect(screen.getByTestId('list')).toBeDefined();
   });
 
-  it('renders the detail panel when provided', () => {
+  it('renders the detail panel with vertical spacing when provided', () => {
     render(<DatasetItemsLayout listSlot={<div data-testid="list" />} detailPanelSlot={<div data-testid="detail" />} />);
-    expect(screen.queryByTestId('detail')).not.toBeNull();
+
+    expect(screen.getByTestId('detail').parentElement?.classList.contains('py-3')).toBe(true);
   });
 
   it('shows the detail panel and suppresses the versions panel when both are present', () => {

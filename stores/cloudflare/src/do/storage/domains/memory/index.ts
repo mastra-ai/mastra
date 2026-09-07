@@ -80,6 +80,7 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryStorageDO extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   #db: DODB;
 
   constructor(config: DODomainConfig) {

@@ -9,7 +9,9 @@ export default [
     ignores: ['src/**/explorations/**'],
   },
   {
-    files: ['integration-tests/**/*'],
+    // Both live outside the package tsconfig's `include`, so type-aware linting has no
+    // project for them. `scripts` is type-checked by tsconfig.scripts.json.
+    files: ['integration-tests/**/*', 'scripts/**/*'],
     ...(await import('typescript-eslint')).configs.disableTypeChecked,
   },
 ];

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
@@ -54,6 +55,8 @@ function isNonRetryableStepFailure(error: unknown): boolean {
   return false;
 }
 
+const retryCountStorage = new AsyncLocalStorage<number>();
+
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
@@ -67,6 +70,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
+  }
+
+  override getOrGenerateRetryCount(_stepId: string): number {
+    return retryCountStorage.getStore() ?? 0;
   }
 
   // =============================================================================
@@ -131,7 +138,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       }
       try {
         //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
-        const result = await this.wrapDurableOperation(stepId, runStep);
+        const result = await retryCountStorage.run(i, () => this.wrapDurableOperation(stepId, runStep));
         return { ok: true, result };
       } catch (e) {
         const isNonRetryable = isNonRetryableStepFailure(e);
@@ -550,17 +557,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           function: step.getFunction(),
           data: {
             inputData,
-            initialState: executionContext.state ?? snapshot?.value ?? {},
             requestContext: forwardedRequestContext,
             runId: runId,
             resume: {
               runId: runId,
               steps: nestedResumeSteps,
-              stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
               resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },
-            outputOptions: { includeState: true },
+            outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
@@ -592,7 +597,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
             runId: executionContext.runId,
-            outputOptions: { includeState: true },
+            outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
@@ -615,7 +620,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             requestContext: forwardedRequestContext,
             runId: nestedRunId,
-            outputOptions: { includeState: true },
+            outputOptions: { includeState: true, includeResumeLabels: true },
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
@@ -674,6 +679,29 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
 
+            // Re-register the nested run's resume labels on the parent so the outer snapshot is
+            // self-describing about every parked leaf (e.g. `resumeLabels[toolCallId]`). Without
+            // this a caller can only target the outer step, and concurrent suspensions inside the
+            // nested workflow become impossible to disambiguate. Mirrors `Workflow.execute()` in
+            // packages/core/src/workflows/workflow.ts.
+            for (const label of Object.keys((result as any)?.resumeLabels ?? {})) {
+              executionContext.resumeLabels[label] = { stepId: step.id };
+            }
+
+            // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
+            // propagating a suspension to the parent — only runId and path change as we move up.
+            // Per-iteration `__streamState` blobs are stripped from the propagated copies: they can
+            // be large and resume reads them from the nested run's own snapshot, so the parent only
+            // needs the identifying fields.
+            const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
+            const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
+              ? nestedMeta.foreachOutput.map((entry: any) => {
+                  if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
+                  const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
+                  return { ...entry, suspendPayload };
+                })
+              : undefined;
+
             await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
               type: 'watch',
               runId: executionContext.runId,
@@ -694,7 +722,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 payload: stepResult.payload,
                 suspendPayload: {
                   ...(stepResult as any)?.suspendPayload,
-                  __workflow_meta: { runId: runId, path: suspendPath },
+                  __workflow_meta: {
+                    ...nestedMeta,
+                    ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+                    runId: runId,
+                    path: suspendPath,
+                  },
                 },
               },
             };

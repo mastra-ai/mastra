@@ -5,7 +5,8 @@ import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MastraServer } from './index';
+import { HTTPException } from '../http-exception';
+import { MastraServer, getCustomHTTPExceptionResponse } from './index';
 
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -996,5 +997,182 @@ describe('validateCustomRoutePaths', () => {
     expect(() =>
       adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
+  });
+});
+
+describe('validateAuthResourceScoping', () => {
+  function createAdapterWithAuth({ serverAuth, studioAuth }: { serverAuth?: unknown; studioAuth?: unknown }) {
+    const warn = vi.fn();
+    const adapter = new TestMastraServer({
+      app: {},
+      mastra: {
+        getServer: () => (serverAuth === undefined ? undefined : { auth: serverAuth }),
+        getStudio: () => (studioAuth === undefined ? undefined : { auth: studioAuth }),
+        getLogger: () => ({ warn }),
+        setMastraServer: vi.fn(),
+      } as unknown as Mastra,
+    });
+    return { adapter, warn };
+  }
+
+  it('warns when server.auth has authenticateToken but no mapUserToResourceId', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      serverAuth: { authenticateToken: async () => ({ id: 'user-1' }) },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('mapUserToResourceId');
+  });
+
+  it('does not warn when mapUserToResourceId is configured on a plain auth config', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      serverAuth: {
+        authenticateToken: async () => ({ id: 'user-1' }),
+        mapUserToResourceId: (user: { id: string }) => user.id,
+      },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when an auth provider instance implements mapUserToResourceId', () => {
+    class Provider {
+      authenticateToken = async () => ({ id: 'user-1' });
+      authorizeUser = async () => true;
+      mapUserToResourceId(user: { id: string }) {
+        return user.id;
+      }
+    }
+    const { adapter, warn } = createAdapterWithAuth({ serverAuth: new Provider() });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when no server auth is configured', () => {
+    const { adapter, warn } = createAdapterWithAuth({});
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn for studio.auth without mapUserToResourceId', () => {
+    const { adapter, warn } = createAdapterWithAuth({
+      studioAuth: { authenticateToken: async () => ({ id: 'user-1' }) },
+    });
+
+    adapter.validateAuthResourceScoping();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('registerUserMiddleware default implementation', () => {
+  function createAdapterWithMiddleware({
+    configMiddleware,
+    instanceMiddleware,
+  }: {
+    configMiddleware?: unknown;
+    instanceMiddleware?: Array<{ path: string; handler: () => void }>;
+  }) {
+    const warn = vi.fn();
+    const adapter = new TestMastraServer({
+      app: {},
+      mastra: {
+        getServer: () => (configMiddleware === undefined ? undefined : { middleware: configMiddleware }),
+        getServerMiddleware: () => instanceMiddleware ?? [],
+        getLogger: () => ({ warn }),
+        setMastraServer: vi.fn(),
+      } as unknown as Mastra,
+    });
+    return { adapter, warn };
+  }
+
+  it('warns when `server.middleware` is configured but the adapter cannot run it', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({ configMiddleware: [async () => {}] });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('server.middleware');
+  });
+
+  it('warns when middleware was added via `setServerMiddleware()`', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({
+      instanceMiddleware: [{ path: '/api/*', handler: () => {} }],
+    });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays silent when no user middleware is configured', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({});
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('stays silent for an empty middleware array', () => {
+    const { adapter, warn } = createAdapterWithMiddleware({ configMiddleware: [] });
+
+    adapter.registerUserMiddleware();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('getCustomHTTPExceptionResponse', () => {
+  it('returns an attached JSON response with normalized status and headers', async () => {
+    const error = new HTTPException(409, {
+      res: Response.json(
+        { code: 'TRACE_QUERY_CURSOR_CONFLICT', message: 'The cursor does not match the query' },
+        { status: 400, headers: { 'X-Trace-Error': 'cursor' } },
+      ),
+    });
+
+    const response = getCustomHTTPExceptionResponse(error);
+
+    expect(response?.status).toBe(409);
+    expect(response?.headers.get('content-type')).toContain('application/json');
+    expect(response?.headers.get('x-trace-error')).toBe('cursor');
+    await expect(response?.json()).resolves.toEqual({
+      code: 'TRACE_QUERY_CURSOR_CONFLICT',
+      message: 'The cursor does not match the query',
+    });
+  });
+
+  it('returns an attached text response without consuming it', async () => {
+    const error = new HTTPException(418, {
+      res: new Response('custom text', {
+        headers: { 'Content-Type': 'text/custom', 'X-Custom-Error': 'true' },
+      }),
+    });
+
+    const response = getCustomHTTPExceptionResponse(error);
+
+    expect(response?.status).toBe(418);
+    expect(response?.headers.get('content-type')).toBe('text/custom');
+    expect(response?.headers.get('x-custom-error')).toBe('true');
+    await expect(response?.text()).resolves.toBe('custom text');
+  });
+
+  it('ignores message-only HTTP exceptions', () => {
+    expect(getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found' }))).toBeUndefined();
+  });
+
+  it.each([
+    { status: 409, res: Response.json({ code: 'NOT_TRUSTED' }) },
+    { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
+  ])('ignores non-HTTPException values', error => {
+    expect(getCustomHTTPExceptionResponse(error)).toBeUndefined();
   });
 });

@@ -1,0 +1,646 @@
+/**
+ * Per-kind attention providers. Each kind owns its counts, its bounded page
+ * scan, and its wire item shape; the route layer k-way merges provider pages
+ * on `occurredAt desc` with one resumable cursor per kind.
+ */
+
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import type {
+  WorkItemCommentRow,
+  WorkItemCommentsStorage,
+  WorkItemMentionRow,
+} from '../storage/domains/comments/base.js';
+import type {
+  FactoryAttentionIdentity,
+  FactoryAttentionKind,
+  FactoryAttentionReceiptRecord,
+  FactoryDeferredDecisionRecord,
+  FactoryDispatchStatus,
+  FactorySupervisorFindingRecord,
+  WorkItemRow,
+  WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
+import {
+  factoryAttentionKey,
+  factoryDecisionAttentionIdentity,
+  factoryMentionAttentionIdentity,
+  factorySupervisorFindingAttentionIdentity,
+} from '../storage/domains/work-items/base.js';
+import type { FactoryHealthFinding } from '../supervisor/health.js';
+
+export type FactoryAttentionView = 'open' | 'unread' | 'archived';
+
+export interface AttentionScope {
+  orgId: string;
+  userId: string;
+  factoryProjectId: string;
+}
+
+export interface AttentionStreamPosition {
+  occurredAt: Date;
+  id: string;
+}
+
+export interface AttentionEntry {
+  occurredAt: Date;
+  /** Position resuming the provider's stream right after this entry. */
+  resumeCursor: AttentionStreamPosition;
+  item: Record<string, unknown>;
+}
+
+export interface AttentionPageArgs {
+  view: FactoryAttentionView;
+  search?: string;
+  before?: AttentionStreamPosition;
+  limit: number;
+}
+
+export interface AttentionPageResult {
+  entries: AttentionEntry[];
+  /** More rows behind the scan once every returned entry is consumed. */
+  hasMore: boolean;
+  /** Resume point for a scan-budget stop past the last returned entry. */
+  continuation?: AttentionStreamPosition;
+}
+
+export interface AttentionCounts {
+  open: number;
+  unread: number;
+}
+
+export interface AttentionLatest {
+  key: string;
+  at: Date;
+  unread: boolean;
+}
+
+export interface AttentionProvider {
+  kind: FactoryAttentionKind;
+  counts(scope: AttentionScope): Promise<AttentionCounts>;
+  latest(scope: AttentionScope): Promise<AttentionLatest | null>;
+  page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult>;
+  markAllRead(
+    scope: AttentionScope,
+    args: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }>;
+}
+
+export const SCAN_PAGE_SIZE = 50;
+// Receipt filtering is bounded per request; the response cursor resumes after the last scan.
+const MAX_RECEIPT_SCAN_PAGES = 4;
+
+interface ScanBatch<T> {
+  rows: T[];
+  /** Set only when the page budget stopped a scan that still had rows behind it. */
+  continuation?: AttentionStreamPosition;
+}
+
+/**
+ * One bounded keyset scan, shared by every provider read. Walks newest-first
+ * from `before` until the stream runs dry or the page budget is spent; the
+ * final batch of a budget stop carries the position to resume from.
+ */
+export async function* scanBatches<T>(
+  fetchBatch: (before?: AttentionStreamPosition) => Promise<{ rows: T[]; hasMore: boolean }>,
+  positionOf: (row: T) => AttentionStreamPosition,
+  before?: AttentionStreamPosition,
+): AsyncGenerator<ScanBatch<T>> {
+  let cursor = before;
+  for (let scanned = 1; scanned <= MAX_RECEIPT_SCAN_PAGES; scanned += 1) {
+    const { rows, hasMore } = await fetchBatch(cursor);
+    const last = rows.at(-1);
+    if (!last) return;
+    const position = positionOf(last);
+    yield { rows, ...(hasMore && scanned === MAX_RECEIPT_SCAN_PAGES ? { continuation: position } : {}) };
+    if (!hasMore) return;
+    cursor = position;
+  }
+}
+
+/** Fills a page from the scan, stopping at `limit` entries or at the scan budget. */
+export async function collectPage<T>(
+  batches: AsyncGenerator<ScanBatch<T>>,
+  limit: number,
+  toEntries: (rows: T[]) => Promise<AttentionEntry[]>,
+): Promise<AttentionPageResult> {
+  const entries: AttentionEntry[] = [];
+  for await (const batch of batches) {
+    for (const entry of await toEntries(batch.rows)) {
+      if (entries.length === limit) return { entries, hasMore: true };
+      entries.push(entry);
+    }
+    if (batch.continuation) return { entries, hasMore: true, continuation: batch.continuation };
+  }
+  return { entries, hasMore: false };
+}
+
+/** Marks every scanned batch read, reporting where a budget stop left off. */
+export async function markScanRead<T>(
+  batches: AsyncGenerator<ScanBatch<T>>,
+  markBatch: (rows: T[]) => Promise<void>,
+): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+  for await (const batch of batches) {
+    await markBatch(batch.rows);
+    if (batch.continuation) return { hasMore: true, continuation: batch.continuation };
+  }
+  return { hasMore: false };
+}
+
+export function factoryDecisionType(decision: FactoryDeferredDecisionRecord): string {
+  return typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
+}
+
+export function matchesView(view: FactoryAttentionView, receipt: FactoryAttentionReceiptRecord | undefined): boolean {
+  if (view === 'archived') return receipt?.state === 'archived';
+  if (view === 'unread') return receipt === undefined;
+  return receipt?.state !== 'archived';
+}
+
+function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined) {
+  if (!item) return { kind: 'rules' as const };
+  const role = typeof decision.decision.role === 'string' ? decision.decision.role : undefined;
+  const session = role ? item.sessions[role] : undefined;
+  if (session) {
+    return {
+      kind: 'thread' as const,
+      sessionId: session.sessionId,
+      threadId: session.threadId,
+    };
+  }
+  return {
+    kind: 'work-item' as const,
+    workItemId: item.id,
+    board: workItemBoard(item),
+  };
+}
+
+export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
+  const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
+  return review ? 'review' : 'work';
+}
+
+/** One deferred-decision status seen as attention: failures and parked runs differ only by this. */
+export interface DecisionAttentionSpec {
+  kind: FactoryAttentionKind;
+  status: FactoryDispatchStatus;
+  identity(decision: FactoryDeferredDecisionRecord): FactoryAttentionIdentity;
+  occurredAt(decision: FactoryDeferredDecisionRecord): Date;
+  title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
+  extra?(decision: FactoryDeferredDecisionRecord): Record<string, unknown>;
+  matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
+}
+
+export class DecisionAttentionProvider implements AttentionProvider {
+  readonly kind: FactoryAttentionKind;
+  readonly #workItems: WorkItemsStorage;
+  readonly #spec: DecisionAttentionSpec;
+
+  constructor({ workItems }: { workItems: WorkItemsStorage }, spec: DecisionAttentionSpec) {
+    this.#workItems = workItems;
+    this.#spec = spec;
+    this.kind = spec.kind;
+  }
+
+  async counts(scope: AttentionScope): Promise<AttentionCounts> {
+    const [total, receiptCount, archivedCount] = await Promise.all([
+      this.#workItems.countDeferredDecisionsByStatuses({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        statuses: [this.#spec.status],
+      }),
+      this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind }),
+      this.#workItems.countAttentionReceipts({ ...receiptScope(scope), kind: this.kind, state: 'archived' }),
+    ]);
+    return {
+      open: Math.max(0, total - archivedCount),
+      unread: Math.max(0, total - receiptCount),
+    };
+  }
+
+  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
+    const page = await this.#workItems.listDecisionPageByStatus({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      status: this.#spec.status,
+      limit: 1,
+    });
+    const newest = page.decisions[0];
+    if (!newest) return null;
+    const identity = this.#spec.identity(newest);
+    const receipts = await this.#workItems.listAttentionReceipts({
+      ...receiptScope(scope),
+      identities: [identity],
+    });
+    return {
+      key: factoryAttentionKey(scope.factoryProjectId, identity),
+      at: this.#spec.occurredAt(newest),
+      unread: receipts.length === 0,
+    };
+  }
+
+  #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
+    return scanBatches<FactoryDeferredDecisionRecord>(
+      async cursor => {
+        const page = await this.#workItems.listDecisionPageByStatus({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          status: this.#spec.status,
+          before: cursor,
+          limit: SCAN_PAGE_SIZE,
+        });
+        return { rows: page.decisions, hasMore: page.hasMore };
+      },
+      decision => ({ occurredAt: this.#spec.occurredAt(decision), id: decision.id }),
+      before,
+    );
+  }
+
+  async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
+    return collectPage(this.#scan(scope, before), limit, async decisions => {
+      const [receiptByKey, itemById] = await Promise.all([
+        this.#receiptsFor(scope, decisions),
+        this.#linkedItems(scope, decisions),
+      ]);
+      const entries: AttentionEntry[] = [];
+      for (const decision of decisions) {
+        const identity = this.#spec.identity(decision);
+        const receipt = receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity));
+        if (!matchesView(view, receipt)) continue;
+        const item = decision.workItemId ? itemById.get(decision.workItemId) : undefined;
+        if (search && !this.#spec.matches(decision, item, search)) continue;
+        const occurredAt = this.#spec.occurredAt(decision);
+        entries.push({
+          occurredAt,
+          resumeCursor: { occurredAt, id: decision.id },
+          item: {
+            key: factoryAttentionKey(scope.factoryProjectId, identity),
+            kind: this.kind,
+            decisionId: decision.id,
+            occurrence: identity.occurrence,
+            workItemId: decision.workItemId,
+            title: this.#spec.title(decision, item),
+            detail: this.#spec.detail(decision, item),
+            decisionType: factoryDecisionType(decision),
+            ...this.#spec.extra?.(decision),
+            occurredAt: occurredAt.toISOString(),
+            read: receipt !== undefined,
+            archived: receipt?.state === 'archived',
+            target: attentionTarget(decision, item),
+          },
+        });
+      }
+      return entries;
+    });
+  }
+
+  async #receiptsFor(
+    scope: AttentionScope,
+    decisions: FactoryDeferredDecisionRecord[],
+  ): Promise<Map<string, FactoryAttentionReceiptRecord>> {
+    const receipts = await this.#workItems.listAttentionReceipts({
+      ...receiptScope(scope),
+      identities: decisions.map(decision => this.#spec.identity(decision)),
+    });
+    return new Map(receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]));
+  }
+
+  async #linkedItems(
+    scope: AttentionScope,
+    decisions: FactoryDeferredDecisionRecord[],
+  ): Promise<Map<string, WorkItemRow>> {
+    const items = await this.#workItems.listByIds({
+      orgId: scope.orgId,
+      factoryProjectId: scope.factoryProjectId,
+      ids: decisions.flatMap(decision => (decision.workItemId ? [decision.workItemId] : [])),
+    });
+    return new Map(items.map(item => [item.id, item]));
+  }
+
+  async markAllRead(
+    scope: AttentionScope,
+    { before, now }: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+    return markScanRead(this.#scan(scope, before), async decisions => {
+      await this.#workItems.markAttentionReceiptsRead({
+        ...receiptScope(scope),
+        identities: decisions.map(decision => this.#spec.identity(decision)),
+        now,
+      });
+    });
+  }
+}
+
+export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
+  kind: 'automation-failed',
+  status: 'failed',
+  identity: decision => factoryDecisionAttentionIdentity(decision.id, decision.failureOccurrence),
+  occurredAt: decision => decision.completedAt ?? decision.updatedAt,
+  title: (decision, item) => item?.title ?? factoryDispatchFailureMetadata(decision.failureCode).label,
+  detail: decision => decision.lastError?.slice(0, 512) ?? factoryDispatchFailureMetadata(decision.failureCode).label,
+  extra: decision => ({
+    failureCode: decision.failureCode,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+  }),
+  matches: (decision, item, search) =>
+    item?.title.toLowerCase().includes(search) === true ||
+    decision.lastError?.toLowerCase().includes(search) === true ||
+    factoryDecisionType(decision).toLowerCase().includes(search),
+};
+
+interface ResolvedMention {
+  mention: WorkItemMentionRow;
+  comment: WorkItemCommentRow;
+  item: WorkItemRow;
+  identity: FactoryAttentionIdentity;
+  receipt: FactoryAttentionReceiptRecord | undefined;
+}
+
+function supervisorFindingPayload(row: FactorySupervisorFindingRecord): FactoryHealthFinding {
+  return row.finding as unknown as FactoryHealthFinding;
+}
+
+export class SupervisorFindingAttentionProvider implements AttentionProvider {
+  readonly kind = 'supervisor-finding' as const;
+  readonly #workItems: WorkItemsStorage;
+
+  constructor({ workItems }: { workItems: WorkItemsStorage }) {
+    this.#workItems = workItems;
+  }
+
+  async counts(scope: AttentionScope): Promise<AttentionCounts> {
+    let open = 0;
+    let unread = 0;
+    const batches = scanBatches<FactorySupervisorFindingRecord>(
+      before =>
+        this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+      row => ({ occurredAt: row.updatedAt, id: row.id }),
+    );
+    for await (const page of batches) {
+      const identities = page.rows.map(row =>
+        factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
+      );
+      const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+      const byIdentity = new Map(
+        receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+      );
+      for (const row of page.rows) {
+        const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+        if (receipt?.state === 'archived') continue;
+        open += 1;
+        if (!receipt) unread += 1;
+      }
+    }
+    return { open, unread };
+  }
+
+  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
+    const page = await this.#workItems.listSupervisorFindingPage({ ...scope, limit: 1 });
+    const newest = page.rows[0];
+    if (!newest) return null;
+    const identity = factorySupervisorFindingAttentionIdentity(newest.findingKey, newest.occurrence);
+    const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities: [identity] });
+    return {
+      key: factoryAttentionKey(scope.factoryProjectId, identity),
+      at: newest.updatedAt,
+      unread: receipts.length === 0,
+    };
+  }
+
+  page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult> {
+    return collectPage(
+      scanBatches<FactorySupervisorFindingRecord>(
+        before =>
+          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        args.before,
+      ),
+      args.limit,
+      async rows => {
+        const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
+        const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
+        const byIdentity = new Map(
+          receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
+        );
+        return rows.flatMap(row => {
+          const finding = supervisorFindingPayload(row);
+          const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
+          if (!matchesView(args.view, receipt)) return [];
+          const text = `${finding.title} ${finding.evidence}`.toLowerCase();
+          if (args.search && !text.includes(args.search)) return [];
+          const identity = factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence);
+          return [
+            {
+              key: factoryAttentionKey(scope.factoryProjectId, identity),
+              occurredAt: row.updatedAt,
+              resumeCursor: { occurredAt: row.updatedAt, id: row.id },
+              receipt,
+              item: {
+                key: factoryAttentionKey(scope.factoryProjectId, identity),
+                kind: this.kind,
+                findingKey: row.findingKey,
+                occurrence: row.occurrence,
+                findingTitle: finding.title,
+                evidence: finding.evidence,
+                title: finding.title,
+                detail: finding.evidence,
+                ageMs: finding.ageMs,
+                suggestedRepair: finding.suggestedRepair,
+                workItemId: finding.workItemId,
+                occurredAt: row.updatedAt.toISOString(),
+                read: Boolean(receipt),
+                archived: receipt?.state === 'archived',
+                target: finding.workItemId
+                  ? { kind: 'work-item', workItemId: finding.workItemId, board: 'work' }
+                  : { kind: 'rules' },
+              },
+            },
+          ];
+        });
+      },
+    );
+  }
+
+  markAllRead(
+    scope: AttentionScope,
+    args: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+    return markScanRead(
+      scanBatches<FactorySupervisorFindingRecord>(
+        before =>
+          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
+        row => ({ occurredAt: row.updatedAt, id: row.id }),
+        args.before,
+      ),
+      rows =>
+        this.#workItems.markAttentionReceiptsRead({
+          ...scope,
+          identities: rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence)),
+          now: args.now,
+        }),
+    );
+  }
+}
+
+export class MentionAttentionProvider implements AttentionProvider {
+  readonly kind = 'mention' as const;
+  readonly #workItems: WorkItemsStorage;
+  readonly #comments: WorkItemCommentsStorage;
+
+  constructor({ workItems, comments }: { workItems: WorkItemsStorage; comments: WorkItemCommentsStorage }) {
+    this.#workItems = workItems;
+    this.#comments = comments;
+  }
+
+  #scan(scope: AttentionScope, before?: AttentionStreamPosition) {
+    return scanBatches<WorkItemMentionRow>(
+      async cursor => {
+        const rows = await this.#comments.listMentionsForUser({
+          ...receiptScope(scope),
+          ...(cursor ? { before: cursor } : {}),
+          limit: SCAN_PAGE_SIZE + 1,
+        });
+        return { rows: rows.slice(0, SCAN_PAGE_SIZE), hasMore: rows.length > SCAN_PAGE_SIZE };
+      },
+      mention => ({ occurredAt: mention.occurredAt, id: mention.id }),
+      before,
+    );
+  }
+
+  /**
+   * Mention rows joined to what the inbox needs to show one — dropping the
+   * ones it cannot: a deleted comment, or a work item gone from the project.
+   */
+  async #resolve(scope: AttentionScope, mentions: WorkItemMentionRow[]): Promise<ResolvedMention[]> {
+    const [receipts, comments, items] = await Promise.all([
+      this.#workItems.listAttentionReceipts({
+        ...receiptScope(scope),
+        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
+      }),
+      this.#comments.listByIds({
+        orgId: scope.orgId,
+        ids: [...new Set(mentions.map(mention => mention.commentId))],
+      }),
+      this.#workItems.listByIds({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        ids: [...new Set(mentions.map(mention => mention.workItemId))],
+      }),
+    ]);
+    const receiptByKey = new Map(
+      receipts.map(receipt => [factoryAttentionKey(scope.factoryProjectId, receipt), receipt]),
+    );
+    const commentById = new Map(comments.map(comment => [comment.id, comment]));
+    const itemById = new Map(items.map(item => [item.id, item]));
+
+    const resolved: ResolvedMention[] = [];
+    for (const mention of mentions) {
+      const comment = commentById.get(mention.commentId);
+      const item = itemById.get(mention.workItemId);
+      if (!comment || comment.deletedAt || !item) continue;
+      const identity = factoryMentionAttentionIdentity(mention.commentId);
+      resolved.push({
+        mention,
+        comment,
+        item,
+        identity,
+        receipt: receiptByKey.get(factoryAttentionKey(scope.factoryProjectId, identity)),
+      });
+    }
+    return resolved;
+  }
+
+  /**
+   * Derived from the same bounded scan as `page`, never from raw aggregates:
+   * the badge must count exactly what the views can show, down to stopping at
+   * the same scan budget. Aggregates would count orphan mention rows the list
+   * can never display or clear.
+   */
+  async counts(scope: AttentionScope): Promise<AttentionCounts> {
+    let open = 0;
+    let unread = 0;
+    for await (const batch of this.#scan(scope)) {
+      for (const { receipt } of await this.#resolve(scope, batch.rows)) {
+        if (receipt?.state !== 'archived') open += 1;
+        if (receipt === undefined) unread += 1;
+      }
+    }
+    return { open, unread };
+  }
+
+  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
+    const mentions = await this.#comments.listMentionsForUser({ ...receiptScope(scope), limit: 10 });
+    const newest = (await this.#resolve(scope, mentions))[0];
+    if (!newest) return null;
+    return {
+      key: factoryAttentionKey(scope.factoryProjectId, newest.identity),
+      at: newest.mention.occurredAt,
+      unread: newest.receipt === undefined,
+    };
+  }
+
+  async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
+    return collectPage(this.#scan(scope, before), limit, async mentions => {
+      const entries: AttentionEntry[] = [];
+      for (const resolved of await this.#resolve(scope, mentions)) {
+        if (!matchesView(view, resolved.receipt)) continue;
+        if (search && !matchesMentionSearch(resolved, search)) continue;
+        entries.push({
+          occurredAt: resolved.mention.occurredAt,
+          resumeCursor: { occurredAt: resolved.mention.occurredAt, id: resolved.mention.id },
+          item: toMentionItem(scope, resolved),
+        });
+      }
+      return entries;
+    });
+  }
+
+  async markAllRead(
+    scope: AttentionScope,
+    { before, now }: { before?: AttentionStreamPosition; now: Date },
+  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
+    return markScanRead(this.#scan(scope, before), async mentions => {
+      await this.#workItems.markAttentionReceiptsRead({
+        ...receiptScope(scope),
+        identities: mentions.map(mention => factoryMentionAttentionIdentity(mention.commentId)),
+        now,
+      });
+    });
+  }
+}
+
+function matchesMentionSearch({ item, comment }: ResolvedMention, search: string): boolean {
+  return (
+    item.title.toLowerCase().includes(search) ||
+    comment.body.toLowerCase().includes(search) ||
+    comment.author.displayName?.toLowerCase().includes(search) === true
+  );
+}
+
+function toMentionItem(scope: AttentionScope, { mention, comment, item, identity, receipt }: ResolvedMention) {
+  const authorName = comment.author.displayName;
+  return {
+    key: factoryAttentionKey(scope.factoryProjectId, identity),
+    kind: 'mention' as const,
+    commentId: mention.commentId,
+    occurrence: 0,
+    workItemId: mention.workItemId,
+    title: item.title,
+    detail: comment.body.slice(0, 512),
+    authorId: comment.author.id,
+    ...(authorName ? { authorName } : {}),
+    occurredAt: mention.occurredAt.toISOString(),
+    read: receipt !== undefined,
+    archived: receipt?.state === 'archived',
+    target: {
+      kind: 'work-item' as const,
+      workItemId: mention.workItemId,
+      board: workItemBoard(item),
+      commentId: mention.commentId,
+    },
+  };
+}
+
+export function receiptScope(scope: AttentionScope): { orgId: string; factoryProjectId: string; userId: string } {
+  return { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, userId: scope.userId };
+}

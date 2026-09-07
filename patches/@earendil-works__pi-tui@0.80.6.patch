@@ -1,15 +1,137 @@
 diff --git a/dist/utils.js b/dist/utils.js
-index bc550a400f3ac921263a8f2fa1753335b4fded8c..eb17cdc3a91466b812a6eca53a97473abcecfa0c 100644
+index bc550a400f3..0fb82d9614b 100644
 --- a/dist/utils.js
 +++ b/dist/utils.js
-@@ -212,6 +212,10 @@ export function visibleWidth(str) {
-         }
-         clean = stripped;
+@@ -47,6 +47,71 @@ function isPrintableAscii(str) {
      }
+     return true;
+ }
++function skipAnsiCode(str, pos) {
++    if (pos >= str.length || str.charCodeAt(pos) !== 0x1b)
++        return null;
++    const next = str.charCodeAt(pos + 1);
++    if (next === 0x5b) {
++        let j = pos + 2;
++        while (j < str.length) {
++            const code = str.charCodeAt(j);
++            if (code === 0x6d || code === 0x47 || code === 0x4b || code === 0x48 || code === 0x4a)
++                return j + 1;
++            j++;
++        }
++        return null;
++    }
++    if (next === 0x5d || next === 0x5f) {
++        let j = pos + 2;
++        while (j < str.length) {
++            if (str.charCodeAt(j) === 0x07)
++                return j + 1;
++            if (str.charCodeAt(j) === 0x1b && str.charCodeAt(j + 1) === 0x5c)
++                return j + 2;
++            j++;
++        }
++    }
++    return null;
++}
++function visibleWidthOfSimpleAnsiText(str) {
++    let width = 0;
++    let i = 0;
++    while (i < str.length) {
++        const code = str.charCodeAt(i);
++        if (code === 0x1b) {
++            const ansiEnd = skipAnsiCode(str, i);
++            if (ansiEnd === null) {
++                return null;
++            }
++            i = ansiEnd;
++            continue;
++        }
++        if (code === 0x09) {
++            width += 3;
++            i++;
++            continue;
++        }
++        if (code < 0x20 || code === 0x7f) {
++            i++;
++            continue;
++        }
++        if (code <= 0x7e) {
++            width++;
++            i++;
++            continue;
++        }
++        // TUI borders and truncation markers are independent single-cell
++        // graphemes. Keeping them on this path avoids segmenting every styled
++        // box line while all other Unicode still uses the general fallback.
++        if ((code >= 0x2500 && code <= 0x257f) || code === 0x2022 || code === 0x2026 || code === 0x22ef) {
++            width++;
++            i++;
++            continue;
++        }
++        return null;
++    }
++    return width;
++}
+ function truncateFragmentToWidth(text, maxWidth) {
+     if (maxWidth <= 0 || text.length === 0) {
+         return { text: "", width: 0 };
+@@ -190,27 +255,50 @@ export function visibleWidth(str) {
+     if (cached !== undefined) {
+         return cached;
+     }
++    // ANSI-styled text composed of independent single-code-point graphemes can
++    // be measured in one pass without allocating a stripped copy or invoking
++    // the grapheme segmenter. Complex Unicode falls through unchanged.
++    const simpleAnsiWidth = visibleWidthOfSimpleAnsiText(str);
++    if (simpleAnsiWidth !== null) {
++        return simpleAnsiWidth;
++    }
+     // Normalize: tabs to 3 spaces, strip ANSI escape codes
+     let clean = str;
+     if (str.includes("\t")) {
+         clean = clean.replace(/\t/g, "   ");
+     }
+     if (clean.includes("\x1b")) {
+-        // Strip supported ANSI/OSC/APC escape sequences in one pass.
+-        // This covers CSI styling/cursor codes, OSC hyperlinks and prompt markers,
+-        // and APC sequences like CURSOR_MARKER.
+-        let stripped = "";
++        // Strip supported ANSI/OSC/APC escape sequences without probing every
++        // printable character or repeatedly growing a stripped copy.
++        const spans = [];
++        let spanStart = 0;
+         let i = 0;
+         while (i < clean.length) {
+-            const ansi = extractAnsiCode(clean, i);
+-            if (ansi) {
+-                i += ansi.length;
++            if (clean.charCodeAt(i) !== 0x1b) {
++                i++;
+                 continue;
+             }
+-            stripped += clean[i];
+-            i++;
++            const ansiEnd = skipAnsiCode(clean, i);
++            if (ansiEnd === null) {
++                i++;
++                continue;
++            }
++            if (spanStart < i) {
++                spans.push(clean.slice(spanStart, i));
++            }
++            i = ansiEnd;
++            spanStart = i;
+         }
+-        clean = stripped;
++        if (spanStart > 0) {
++            if (spanStart < clean.length) {
++                spans.push(clean.slice(spanStart));
++            }
++            clean = spans.join("");
++        }
++    }
 +    // ANSI-styled printable ASCII remains single-column text after normalization.
 +    if (isPrintableAscii(clean)) {
 +        return clean.length;
-+    }
+     }
      // Calculate width
      let width = 0;
-     for (const { segment } of graphemeSegmenter.segment(clean)) {

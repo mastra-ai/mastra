@@ -26,31 +26,27 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
-export {
-  DATASET_TARGET_OPTIONS,
-  DATASET_EXPERIMENT_OPTIONS,
-  getDatasetTagOptions,
-} from './components/datasets-list/helpers';
+export { DATASET_EXPERIMENT_OPTIONS, getDatasetTagOptions } from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetHealthCard } from './components/dataset-health-card';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
-export { CreateDatasetDialog } from './components/create-dataset-dialog';
+export { CreateDatasetForm } from './components/create-dataset-form';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
-export { EditDatasetDialog } from './components/edit-dataset-dialog';
+export { EditDatasetForm } from './components/edit-dataset-form';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
+export { DatasetVersions } from './components/dataset-versions';
+export type { DatasetVersionsProps } from './components/dataset-versions';
 
 // Dataset detail components
 export { DatasetHeader } from './components/dataset-detail/dataset-header';
 export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
-export { DatasetPageTabs } from './components/dataset-detail/dataset-page-tabs';
-export type { TabValue as DatasetTabValue } from './components/dataset-detail/dataset-page-tabs';
+export { DatasetItemsView } from './components/dataset-detail/dataset-items-view';
 export { DatasetItemsList } from './components/items/dataset-items-list';
-export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 
@@ -76,7 +72,10 @@ export { TargetSelector, type TargetType } from './components/experiment-trigger
 export { ScorerSelector } from './components/experiment-trigger/scorer-selector';
 
 // Experiment components
-export { ExperimentPageTabs, type ExperimentPageTabsProps } from '../experiments/components/experiment-page-tabs';
+export {
+  ExperimentResultsSection,
+  type ExperimentResultsSectionProps,
+} from '../experiments/components/experiment-results-section';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
   ExperimentResultTracePanel,
@@ -86,10 +85,6 @@ export {
   ExperimentResultSpanPane,
   type ExperimentResultSpanPaneProps,
 } from '../experiments/components/experiment-result-span-pane';
-
-// Comparison components
-export { DatasetExperimentsComparison } from './components/experiments/dataset-experiments-comparison';
-export { ScoreDelta } from './components/experiments/score-delta';
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';

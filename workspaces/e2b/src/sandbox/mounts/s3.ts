@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix, validateRegion } from './types';
+import { LOG_PREFIX, validateEndpoint, validatePrefix, validateRegion, validateS3BucketName } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -42,7 +42,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateS3BucketName(config.bucket);
   validateRegion(config.region);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);

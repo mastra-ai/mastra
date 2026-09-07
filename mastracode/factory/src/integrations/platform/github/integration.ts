@@ -44,10 +44,18 @@ import type {
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
-import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import { GithubAppIdentity } from '../../github/app-identity.js';
+import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
+import { resolveGithubRules } from '../../github/default-rules.js';
+import type {
+  GithubIntegration,
+  GithubRepositoryPermission,
+  GithubTriageCommentUpsertInput,
+  GithubTriageCommentUpsertResult,
+  RepoSummary,
+} from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
-import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
-import { runGithubIssueTriage } from '../../github/issue-triage.js';
+import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
@@ -56,7 +64,9 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
+import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
+import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import {
   logPlatformInfo,
   logPlatformWarn,
@@ -146,6 +156,13 @@ type GithubReviewComment = GithubComment & {
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
 /**
+ * Slug of the GitHub App this integration posts as. Platform credentials do not
+ * carry their own identity, so Factory cannot otherwise recognise its own
+ * writes — and failing to recognise them makes Factory wake itself. Override
+ * with `MASTRA_PLATFORM_GITHUB_APP_SLUG` when pointing at a non-production App.
+ */
+const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
+/**
  * How long an installation's repository listing may be reused. The repos
  * route and token minting both call it — often several times within one UI
  * interaction — and each call is a full Platform round trip.
@@ -157,6 +174,16 @@ const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
  * margin while collapsing the per-session-materialization mint round trip.
  */
 const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
+/**
+ * How long a collaborator permission lookup may be reused. The reconcile
+ * sweep re-stamps every open card's author and the event tail gates every
+ * human-authored event on it, so one login can cost dozens of identical
+ * requests per cycle against the installation's REST budget. Revoked access
+ * reads as trusted for at most this long.
+ */
+const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
+/** Bound on the shared upstream lookup; callers race their own signal against it. */
+const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
 /**
  * Upper bound for both TTL caches. Entries expire lazily on re-access, so
  * without a hard cap keys that stop being queried would accumulate for the
@@ -190,19 +217,44 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 
 export class PlatformGithubIntegration implements FactoryIntegration {
   readonly id = 'github';
+  readonly #rules: GithubEventRules;
+
+  get rules(): GithubEventRules {
+    return this.#rules;
+  }
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
+  /**
+   * Factory's own GitHub identity. Platform credentials do not carry the login
+   * they post as, so this starts from the configured slug (usually absent on a
+   * Platform deployment) and is corrected the first time Factory writes.
+   */
+  readonly identity: GithubAppIdentity;
+  /**
+   * Extra reviewer bot logins this deployment trusts for author-gated
+   * notifications, merged over the built-in defaults.
+   */
+  readonly authorizedBots: readonly string[];
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
-  readonly #reconcileEnabled: boolean;
+  readonly #pullRequestReconcileEnabled: boolean;
+  readonly #issueReconcileEnabled: boolean;
+  readonly #pullRequestReconcileIntervalMs: number | undefined;
+  readonly #issueReconcileIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
-  readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+  /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
+  readonly #collaboratorPermissionCache = new Map<
+    string,
+    { permission: GithubRepositoryPermission; expiresAt: number }
+  >();
+  /** Same key → lookup already in flight, so overlapping callers share one request. */
+  readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -450,24 +502,53 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   constructor(
     options: {
-      runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+      /** Replace an event handler, or disable it with null; omitted events keep defaults. */
+      rules?: GithubRuleOverrides;
       /** GitHub App slug used to recognize Factory's own webhook writes. */
       slug?: string;
     } = {},
   ) {
+    this.#rules = resolveGithubRules(options.rules);
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#slug = options.slug;
+    // Identity is deliberately NOT taken from `options.slug`. That slug names
+    // the deployment's own self-hosted GitHub App, which is a different App
+    // than the one this integration posts as — and on a Platform deployment it
+    // is legitimately unset. Borrowing it is what left every self-loop guard
+    // comparing against `undefined[bot]`. This integration *is* the Platform
+    // App, so it names itself, with an override for non-production Apps.
+    this.identity = new GithubAppIdentity(
+      process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
+    );
+    this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
-    this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
-    this.#runIssueTriage = options.runIssueTriage;
+    const legacyReconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED;
+    this.#pullRequestReconcileEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_ENABLED,
+      legacyReconcileEnabled,
+    );
+    this.#issueReconcileEnabled = reconciliationEnabled(
+      process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_ENABLED,
+      legacyReconcileEnabled,
+    );
+    const legacyReconcileIntervalMs = reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_RECONCILE_INTERVAL_MS);
+    this.#pullRequestReconcileIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyReconcileIntervalMs;
+    this.#issueReconcileIntervalMs =
+      reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
+      legacyReconcileIntervalMs;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
   get slug(): string | undefined {
     return this.#slug;
+  }
+
+  isFactoryCommentAuthor(login: string | null | undefined): boolean {
+    return typeof login === 'string' && this.identity.matches(login);
   }
 
   get storage(): SourceControlStorageHandle {
@@ -513,7 +594,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
-      reconcileEnabled: this.#reconcileEnabled,
+      pullRequestReconcileEnabled: this.#pullRequestReconcileEnabled,
+      issueReconcileEnabled: this.#issueReconcileEnabled,
     });
   }
 
@@ -525,18 +607,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       this.#connectUserRoute(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
-        fleet: ctx.fleet,
+        sandbox: ctx.sandbox,
         storage: ctx.factoryStorage,
         github: this as unknown as GithubIntegration,
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         controller: ctx.controller,
+        memorySettings: ctx.storage.memorySettings,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
-        runIssueTriage:
-          this.#runIssueTriage ??
-          (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
+        ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -557,7 +638,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!tenant.orgId) {
           return c.json({
             enabled: true,
-            sandboxEnabled: ctx.fleet.enabled,
+            sandboxEnabled: !!ctx.sandbox,
             organizationRequired: true,
             connected: false,
             installations: [],
@@ -574,7 +655,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ]);
         return c.json({
           enabled: true,
-          sandboxEnabled: ctx.fleet.enabled,
+          sandboxEnabled: !!ctx.sandbox,
           connected: installations.length > 0,
           installations: installations.map(installation => ({
             installationId: Number(installation.externalId),
@@ -696,7 +777,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!this.#pollingEnabled && !this.#reconcileEnabled) return [];
+    if (!this.#pollingEnabled && !this.#pullRequestReconcileEnabled && !this.#issueReconcileEnabled) return [];
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
@@ -707,14 +788,28 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
-        reconcileFactoryState: this.#reconcileEnabled
+        reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
-        reconcileIssuesFactoryState: this.#reconcileEnabled
+        reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
+        pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
+        issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        // Resolved lazily: workers are constructed before versionControl
+        // storage is initialized, and the worker only reads these slices once
+        // it is running.
+        sourceControl: {
+          projectRepositories: {
+            listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
+            listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
+          },
+          repositories: {
+            findByExternalId: args => this.storage.repositories.findByExternalId(args),
+          },
+        },
       }),
     ];
   }
@@ -817,7 +912,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         state: result.state === 'closed' ? 'closed' : 'open',
         ...(result.state_reason ? { stateReason: result.state_reason } : {}),
         assignees: (result.assignees ?? []).flatMap(assignee => (assignee.login ? [assignee.login] : [])),
-        labels: (result.labels ?? []).map(label => (typeof label === 'string' ? label : label.name)).filter((name): name is string => Boolean(name)),
+        labels: (result.labels ?? [])
+          .map(label => (typeof label === 'string' ? label : label.name))
+          .filter((name): name is string => Boolean(name)),
         ...(result.user?.login ? { author: result.user.login } : {}),
         ...(result.created_at ? { createdAt: result.created_at } : {}),
         ...(result.updated_at ? { updatedAt: result.updated_at } : {}),
@@ -825,6 +922,41 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
+    const comments: GithubComment[] = [];
+    for (let page = 1; ; page += 1) {
+      const query = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ comments: GithubComment[] }>(
+        'GET',
+        `${repositoryPath(input.repository, `issues/${input.issueNumber}/comments`)}?${query}`,
+      );
+      comments.push(...result.comments);
+      if (result.comments.length < PAGE_SIZE) break;
+    }
+    const existing = comments
+      .filter(
+        comment =>
+          comment.body.includes('<!-- mastra-factory-triage -->') && this.isFactoryCommentAuthor(comment.user?.login),
+      )
+      .sort((left, right) => left.id - right.id)[0];
+    if (existing) {
+      const comment = await this.#client.request<GithubComment>(
+        'PATCH',
+        repositoryPath(input.repository, `issues/comments/${existing.id}`),
+        { body: input.body },
+      );
+      this.#observeSelfAuthor(comment, undefined);
+      return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
+    }
+    const comment = await this.#client.request<GithubComment>(
+      'POST',
+      repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
+      { body: input.body },
+    );
+    this.#observeSelfAuthor(comment, undefined);
+    return { action: 'created', commentId: String(comment.id), url: comment.htmlUrl };
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
@@ -853,7 +985,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         enabled: this.#pollingEnabled,
         ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
       },
-      reconcile: { enabled: this.#reconcileEnabled },
+      reconcile: {
+        pullRequests: {
+          enabled: this.#pullRequestReconcileEnabled,
+          ...(this.#pullRequestReconcileIntervalMs === undefined
+            ? {}
+            : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+        },
+        issues: {
+          enabled: this.#issueReconcileEnabled,
+          ...(this.#issueReconcileIntervalMs === undefined ? {} : { intervalMs: this.#issueReconcileIntervalMs }),
+        },
+      },
     };
   }
 
@@ -869,17 +1012,35 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
-    try {
-      const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
-        'GET',
-        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
-        undefined,
-        { signal },
-      );
-      return result.permission;
-    } catch {
-      return undefined;
-    }
+    const cacheKey = `${repository.owner}/${repository.repo}:${username.toLowerCase()}`;
+    const cached = this.#collaboratorPermissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    this.#collaboratorPermissionCache.delete(cacheKey);
+    const inFlight = this.#collaboratorPermissionInFlight.get(cacheKey);
+    if (inFlight) return settleOrAbort(inFlight, signal, undefined);
+    const lookup = (async () => {
+      try {
+        const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
+          'GET',
+          `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
+          undefined,
+          { signal: AbortSignal.timeout(COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS) },
+        );
+        // Failures are not cached: a rate-limited or aborted lookup must retry
+        // on the next call rather than pin the login as unknown.
+        setBounded(this.#collaboratorPermissionCache, cacheKey, {
+          permission: result.permission,
+          expiresAt: Date.now() + COLLABORATOR_PERMISSION_CACHE_TTL_MS,
+        });
+        return result.permission;
+      } catch {
+        return undefined;
+      } finally {
+        this.#collaboratorPermissionInFlight.delete(cacheKey);
+      }
+    })();
+    this.#collaboratorPermissionInFlight.set(cacheKey, lookup);
+    return settleOrAbort(lookup, signal, undefined);
   }
 
   async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
@@ -1021,6 +1182,16 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
+  /**
+   * Learn Factory's own login from a write it just made. Skipped when the write
+   * was made on behalf of a user — that comment is authored by the human, and
+   * recording it would teach Factory to mistake a person for itself.
+   */
+  #observeSelfAuthor(comment: GithubComment, actingUserId: string | undefined): void {
+    if (actingUserId) return;
+    this.identity.observeSelfAuthor(comment.user?.login);
+  }
+
   async #createIssueComment(input: CreateIntakeCommentInput) {
     requireGithubConnection(input.connection);
     const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
@@ -1032,6 +1203,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         { body: input.body },
         { actingUserId: input.actingUserId },
       );
+      this.#observeSelfAuthor(comment, input.actingUserId);
       return { id: String(comment.id), url: comment.htmlUrl };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -1130,6 +1302,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { body: input.body },
       { actingUserId: input.actingUserId },
     );
+    this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
   }
 

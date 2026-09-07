@@ -1,9 +1,5 @@
+import type { BoardRegistry } from '../boards/index.js';
 import type {
-  FactoryGithubEventName,
-  FactoryGithubRuleLeaf,
-  FactoryLinearEventName,
-  FactoryLinearRuleLeaf,
-  FactoryRuleBoard,
   FactoryRuleHandler,
   FactoryRuleSource,
   FactoryRuleStage,
@@ -19,19 +15,25 @@ export interface ResolvedFactoryStageRule {
 }
 
 export function resolveFactoryStageRules(
-  rules: FactoryRules,
+  boardRegistry: BoardRegistry,
   input: {
-    board: FactoryRuleBoard;
+    board: string;
     source: FactoryRuleSource;
     fromStage: FactoryRuleStage;
     toStage: FactoryRuleStage;
     initialEntry?: boolean;
+    reenter?: boolean;
   },
 ): ResolvedFactoryStageRule[] {
-  if (input.fromStage === input.toStage && !input.initialEntry) return [];
-  const boardRules = rules[input.board];
+  if (input.fromStage === input.toStage && !input.initialEntry && !input.reenter) return [];
+  const boardRules = boardRegistry.get(input.board)?.rules;
+  if (!boardRules) return [];
   const resolved: ResolvedFactoryStageRule[] = [];
-  const onExit = input.initialEntry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;
+  // Same-stage reentry re-runs the stage's entry work; the item never left the
+  // stage, so its exit rules must not fire.
+  const sameStageReentry = input.fromStage === input.toStage && input.reenter === true;
+  const onExit =
+    input.initialEntry || sameStageReentry ? undefined : boardRules[input.fromStage]?.[input.source]?.onExit;
   if (onExit) resolved.push({ phase: 'exit', handler: onExit });
   const onEnter = boardRules[input.toStage]?.[input.source]?.onEnter;
   if (onEnter) resolved.push({ phase: 'enter', handler: onEnter });
@@ -40,20 +42,6 @@ export function resolveFactoryStageRules(
 
 export function resolveFactoryToolRule(rules: FactoryRules, toolName: string): FactoryToolRuleLeaf['onResult'] {
   return rules.tools[toolName]?.onResult;
-}
-
-export function resolveFactoryGithubRule(
-  rules: FactoryRules,
-  event: FactoryGithubEventName,
-): FactoryGithubRuleLeaf['onEvent'] {
-  return rules.github[event]?.onEvent;
-}
-
-export function resolveFactoryLinearRule(
-  rules: FactoryRules,
-  event: FactoryLinearEventName,
-): FactoryLinearRuleLeaf['onEvent'] {
-  return rules.linear[event]?.onEvent;
 }
 
 export type ResolvedFactoryToolRule = FactoryRuleHandler<FactoryToolResultRuleContext>;

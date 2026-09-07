@@ -1,0 +1,111 @@
+---
+title: "TanStack Start | Frameworks"
+description: "Build a tool-calling Mastra agent in TanStack Start and use the server adapter to expose Mastra's HTTP API from a catch-all route."
+packages:
+  - '@mastra/core'
+  - '@mastra/tanstack-start'
+---
+
+# TanStack Start
+
+Build a tool-calling Mastra agent in TanStack Start, then mount the Mastra server on a catch-all API route. The [Server Adapters](/docs/server/server-adapters) overview explains the shared concepts, and the [TanStack Start adapter](/reference/server/tanstack-start-adapter) reference documents the package API.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new TanStack Start app (optional)
+
+You need a running TanStack Start app with a `src/routes` directory. If you don't already have one, follow the [TanStack Start quick start](https://tanstack.com/start/latest/docs/framework/react/getting-started) to create and run an app before continuing.
+
+## Initialize Mastra
+
+From your TanStack Start project directory, run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider, such as OpenAI, and enter your API key:
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+This creates a `src/mastra` directory with an example weather agent and the following files:
+
+- `index.ts`: Mastra configuration, including memory
+- `tools/weather-tool.ts`: A tool that fetches weather for a location
+- `agents/weather-agent.ts`: A weather agent with instructions to use the tool
+
+You'll pass the Mastra instance exported from `src/mastra/index.ts` to the server adapter.
+
+## Configure Vite and Nitro
+
+Update `vite.config.ts` so Vite and Nitro leave DuckDB's native dependencies out of their processing pipelines:
+
+```diff title="vite.config.ts"
+ const config = defineConfig({
+   resolve: { tsconfigPaths: true },
++  optimizeDeps: {
++    exclude: ['@mastra/duckdb'],
++  },
+   plugins: [
+     devtools(),
+-    nitro({ rollupConfig: { external: [/^@sentry\//] } }),
++    nitro({
++      rollupConfig: {
++        external: [/^@sentry\//, /^@duckdb\//],
++      },
++    }),
+```
+
+The `optimizeDeps.exclude` setting prevents Vite's development optimizer from opening DuckDB's native `.node` binary as JavaScript. Adding `/^@duckdb\//` to Nitro's `rollupConfig.external` keeps DuckDB's native Node packages out of the production bundle so Node.js can load them at runtime.
+
+These changes apply only to `vite.config.ts`; you don't need to change your application or Mastra source files.
+
+## Add the server adapter
+
+Install the TanStack Start server adapter and its Hono peer dependency:
+
+```bash npm2yarn
+npm install @mastra/tanstack-start@latest hono
+```
+
+Create a splat route that passes all supported HTTP methods to the adapter:
+
+```typescript title="src/routes/api/$.ts"
+import { createStartRouteHandler } from '@mastra/tanstack-start'
+import { createFileRoute } from '@tanstack/react-router'
+import { mastra } from '../../mastra'
+
+export const Route = createFileRoute('/api/$')({
+  server: {
+    handlers: createStartRouteHandler({ mastra }),
+  },
+})
+```
+
+The `prefix` option defaults to `/api` and must match the splat route's mount path. For example, when mounting the adapter at `src/routes/api/mastra/$.ts`, use `createStartRouteHandler({ mastra, prefix: '/api/mastra' })`.
+
+The adapter exposes Mastra's REST and streaming endpoints, custom API routes, MCP endpoints, and A2A endpoints. A2A tasks use an in-memory task store.
+
+## Test your agent
+
+Start your TanStack Start app:
+
+```bash npm2yarn
+npm run dev
+```
+
+In a separate terminal window, use `curl` to ask the weather agent:
+
+```bash
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+The endpoint returns a complete JSON response from the agent.
+
+## Next steps
+
+Extend the project with your own agents and application logic:
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/tools)
+- Add human-like [memory](/docs/memory/overview) to your agent
+- Learn more about [Server Adapters](/docs/server/server-adapters)

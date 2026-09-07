@@ -173,6 +173,7 @@ program
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-s, --studio', 'Bundle the studio UI with the build')
+  .option('-f, --force', 'Build even if a `mastra dev` server is running in this directory')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 

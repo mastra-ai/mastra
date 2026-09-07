@@ -6,6 +6,7 @@ import * as React from 'react';
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -193,7 +194,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
       sideOffset = 4,
       alignItemWithTrigger = false,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       alignOffset,
       collisionBoundary,
       collisionPadding,

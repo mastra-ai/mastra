@@ -1,5 +1,5 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
@@ -139,23 +139,23 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       </div>
 
       {!platform.isConfigured ? (
-        <StatusBadge variant="warning" size="sm" withDot>
+        <Badge variant="yellow" size="sm" indicator="dot">
           Not configured
-        </StatusBadge>
+        </Badge>
       ) : installation ? (
-        <StatusBadge variant="success" size="sm" withDot>
+        <Badge variant="green" size="sm" indicator="dot">
           Connected
-        </StatusBadge>
+        </Badge>
       ) : (
-        <StatusBadge variant="neutral" size="sm" withDot>
+        <Badge size="sm" indicator="dot">
           Not connected
-        </StatusBadge>
+        </Badge>
       )}
 
       {showLibraryBadge ? (
-        <StatusBadge variant="warning" size="sm" withDot>
+        <Badge variant="yellow" size="sm" indicator="dot">
           Add to library to connect
-        </StatusBadge>
+        </Badge>
       ) : null}
     </button>
   );

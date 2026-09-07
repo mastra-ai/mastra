@@ -510,6 +510,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -710,7 +711,38 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     DefaultStepResult {
-                      "content": [],
+                      "content": [
+                        {
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
+                          },
+                          "text": "thinking",
+                          "type": "reasoning",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "providerExecuted": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-call",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "output": {
+                            "type": "text",
+                            "value": "result1",
+                          },
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-result",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -774,16 +806,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     DefaultStepResult {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
                           },
-                          "output": {
-                            "type": "text",
-                            "value": "result1",
-                          },
-                          "toolCallId": "call-1",
-                          "toolName": "tool1",
-                          "type": "tool-result",
+                          "text": "Hello, world!",
+                          "type": "text",
                         },
                       ],
                       "finishReason": undefined,
@@ -912,6 +941,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -1121,7 +1151,38 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     DefaultStepResult {
-                      "content": [],
+                      "content": [
+                        {
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
+                          },
+                          "text": "thinking",
+                          "type": "reasoning",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "providerExecuted": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-call",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "output": {
+                            "type": "text",
+                            "value": "result1",
+                          },
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-result",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -1185,16 +1246,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     DefaultStepResult {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
                           },
-                          "output": {
-                            "type": "text",
-                            "value": "result1",
-                          },
-                          "toolCallId": "call-1",
-                          "toolName": "tool1",
-                          "type": "tool-result",
+                          "text": "Hello, world!",
+                          "type": "text",
                         },
                       ],
                       "finishReason": undefined,
@@ -1476,7 +1534,38 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     DefaultStepResult {
-                      "content": [],
+                      "content": [
+                        {
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
+                          },
+                          "text": "thinking",
+                          "type": "reasoning",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "providerExecuted": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-call",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "output": {
+                            "type": "text",
+                            "value": "result1",
+                          },
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-result",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -1540,16 +1629,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     DefaultStepResult {
                       "content": [
                         {
-                          "input": {
-                            "value": "value",
+                          "providerOptions": {
+                            "mastra": {
+                              "createdAt": 1704067200000,
+                            },
                           },
-                          "output": {
-                            "type": "text",
-                            "value": "result1",
-                          },
-                          "toolCallId": "call-1",
-                          "toolName": "tool1",
-                          "type": "tool-result",
+                          "text": "Hello, world!",
+                          "type": "text",
                         },
                       ],
                       "finishReason": undefined,
@@ -2108,6 +2194,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
               "cacheCreationInputTokens": undefined,
+              "cacheCreationInputTokens1h": undefined,
+              "cacheCreationInputTokens5m": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
@@ -2128,6 +2216,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           expect(await result.totalUsage).toMatchInlineSnapshot(`
             {
               "cacheCreationInputTokens": undefined,
+              "cacheCreationInputTokens1h": undefined,
+              "cacheCreationInputTokens5m": undefined,
               "cachedInputTokens": 3,
               "inputTokens": 6,
               "outputTokens": 20,
@@ -2713,7 +2803,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "stepNumber": 0,
               "steps": [
                 DefaultStepResult {
-                  "content": [],
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "result1",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -2869,7 +2981,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "stepNumber": 1,
               "steps": [
                 DefaultStepResult {
-                  "content": [],
+                  "content": [
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "providerExecuted": undefined,
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-call",
+                    },
+                    {
+                      "input": {
+                        "value": "value",
+                      },
+                      "output": {
+                        "type": "text",
+                        "value": "result1",
+                      },
+                      "toolCallId": "call-1",
+                      "toolName": "tool1",
+                      "type": "tool-result",
+                    },
+                  ],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -4936,7 +5070,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           runId: 'test-run-id',
           from: 'AGENT',
           type: 'step-start',
-          payload: { request: {}, warnings: [], messageId: 'id-0' },
+          payload: { request: {}, warnings: [], messageId: 'id-0', startedAt: Date.now() },
         },
         {
           type: 'error',
@@ -7646,7 +7780,24 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     {
-                      "content": [],
+                      "content": [
+                        {
+                          "text": "Thinking...I'm thinking...",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, world!",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is a test.",
+                          "type": "text",
+                        },
+                        {
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -7813,7 +7964,24 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     {
-                      "content": [],
+                      "content": [
+                        {
+                          "text": "Thinking...I'm thinking...",
+                          "type": "reasoning",
+                        },
+                        {
+                          "text": "Hello, world!",
+                          "type": "text",
+                        },
+                        {
+                          "text": "This is a test.",
+                          "type": "text",
+                        },
+                        {
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -8006,7 +8174,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     describe('basic abort', () => {
       let result: any;
       let onErrorCalls: Array<{ error: unknown }> = [];
-      let onAbortCalls: Array<{ steps: any[] }> = [];
+      let onAbortCalls: Array<{ steps: any[]; text?: string }> = [];
 
       beforeEach(async () => {
         const messageList = createMessageListWithUserMessage();
@@ -8087,6 +8255,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           [
             {
               "steps": [],
+              "text": "Hello",
             },
           ]
         `);
@@ -8109,6 +8278,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "id-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8220,7 +8390,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     describe('abort in 2nd step', () => {
       let result: any;
       let onErrorCalls: Array<{ error: unknown }> = [];
-      let onAbortCalls: Array<{ steps: any[] }> = [];
+      let onAbortCalls: Array<{ steps: any[]; text?: string }> = [];
 
       beforeEach(async () => {
         onErrorCalls = [];
@@ -8330,9 +8500,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
       });
 
-      it.skip('should call onAbort when the abort signal is triggered', async () => {
+      it('should call onAbort when the abort signal is triggered', async () => {
         await result.consumeStream();
-        console.log('onAbortCalls', JSON.stringify(onAbortCalls, null, 2));
         expect(onAbortCalls).toMatchInlineSnapshot(`
           [
             {
@@ -8344,7 +8513,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "value": "value",
                       },
                       "providerExecuted": undefined,
-                      "providerMetadata": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -8353,15 +8521,16 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "input": {
                         "value": "value",
                       },
-                      "output": "result1",
-                      "providerExecuted": undefined,
-                      "providerMetadata": undefined,
+                      "output": {
+                        "type": "text",
+                        "value": "result1",
+                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-result",
                     },
                   ],
-                  "finishReason": "tool-calls",
+                  "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
                   "response": {
@@ -8375,7 +8544,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               "value": "value",
                             },
                             "providerExecuted": undefined,
-                            "providerOptions": undefined,
+                            "providerOptions": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "toolCallId": "call-1",
                             "toolName": "tool1",
                             "type": "tool-call",
@@ -8384,33 +8557,32 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "role": "assistant",
                       },
                       {
-                        "content": [
-                          {
-                            "output": {
-                              "type": "text",
-                              "value": "result1",
-                            },
-                            "toolCallId": "call-1",
-                            "toolName": "tool1",
-                            "type": "tool-result",
-                          },
-                        ],
+                        "content": [],
                         "role": "tool",
                       },
                     ],
                     "modelId": "mock-model-id",
+                    "modelProvider": "mock-provider",
+                    "modelVersion": "v2",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
+                  "tripwire": undefined,
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
                 },
               ],
+              "text": "Hello",
             },
           ]
         `);
@@ -8433,6 +8605,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",
@@ -8587,7 +8760,29 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "output": {
                   "steps": [
                     DefaultStepResult {
-                      "content": [],
+                      "content": [
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "providerExecuted": undefined,
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-call",
+                        },
+                        {
+                          "input": {
+                            "value": "value",
+                          },
+                          "output": {
+                            "type": "text",
+                            "value": "result1",
+                          },
+                          "toolCallId": "call-1",
+                          "toolName": "tool1",
+                          "type": "tool-result",
+                        },
+                      ],
                       "finishReason": undefined,
                       "providerMetadata": undefined,
                       "request": {},
@@ -8681,6 +8876,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "payload": {
                 "messageId": "msg-0",
                 "request": {},
+                "startedAt": 1704067200000,
                 "warnings": [],
               },
               "runId": "test-run-id",

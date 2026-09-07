@@ -1,76 +1,40 @@
 # @mastra/auth-supabase
 
-A Supabase authentication integration for Mastra, providing seamless authentication and authorization capabilities using Supabase's authentication system.
-
-## Requirements
-
-- Node.js 22.13.0 or later
-- Supabase project with authentication enabled
-- Supabase URL and anonymous key
+`@mastra/auth-supabase` verifies Supabase access tokens and exposes Supabase users to Mastra's authorization layer. Use it when Supabase Auth already manages your application users and you want the same sessions to protect Mastra endpoints.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-supabase
-# or
-yarn add @mastra/auth-supabase
-# or
-pnpm add @mastra/auth-supabase
 ```
 
 ## Usage
+
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` before starting Mastra.
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
-// Initialize with environment variables
-const supabaseAuth = new MastraAuthSupabase();
-
-// Or initialize with explicit configuration
-const supabaseAuth = new MastraAuthSupabase({
-  url: 'your-supabase-url',
-  anonKey: 'your-supabase-anon-key',
-});
-
-// Enable auth in Mastra
-const mastra = new Mastra({
-  ...
+export const mastra = new Mastra({
   server: {
-    auth: supabaseAuth,
+    auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-The package can be configured in two ways:
+- [Supabase integration guide](https://mastra.ai/integrations/auth/supabase)
+- [Supabase provider reference](https://mastra.ai/reference/auth/supabase)
 
-1. **Environment Variables**:
-   - `SUPABASE_URL`: Your Supabase project URL
-   - `SUPABASE_ANON_KEY`: Your Supabase anonymous key
+## Changelog
 
-2. **Constructor Options**:
-   ```typescript
-   interface MastraAuthSupabaseOptions {
-     url?: string;
-     anonKey?: string;
-   }
-   ```
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/supabase/CHANGELOG.md) for version history and release notes.
 
-## Features
+## Support
 
-- **Authentication**: Verifies user tokens and retrieves user information from Supabase
-- **Authorization**: Checks user permissions based on their role in Supabase
-- **Type Safety**: Full TypeScript support with proper type definitions
-- **Environment Variable Support**: Easy configuration through environment variables
-
-## API
-
-### `authenticateToken(token: string)`
-
-Authenticates a user token and returns the user information if valid.
-
-### `authorizeUser(user: User)`
-
-Checks if a user has the required permissions (currently checks for admin status).
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

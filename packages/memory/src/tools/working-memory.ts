@@ -14,9 +14,11 @@ const SET_WORKING_MEMORY_TOOL_NAME = 'setWorkingMemory';
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
  * - Object properties are recursively merged
- * - null values in the update will delete the corresponding property
+ * - null values in the update will delete the corresponding property, even when the property
+ *   or its parent object does not exist yet (so padded nulls never get stored literally)
  * - Arrays are replaced entirely (not merged element-by-element)
  * - Primitive values are overwritten
+ * - The returned object is always newly constructed and never aliases `update`
  */
 export function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
@@ -27,11 +29,8 @@ export function deepMergeWorkingMemory(
     return existing && typeof existing === 'object' ? { ...existing } : {};
   }
 
-  if (!existing || typeof existing !== 'object') {
-    return update;
-  }
-
-  const result: Record<string, unknown> = { ...existing };
+  const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+  const result: Record<string, unknown> = { ...base };
 
   for (const key of Object.keys(update)) {
     const updateValue = update[key];
@@ -50,18 +49,15 @@ export function deepMergeWorkingMemory(
     else if (Array.isArray(updateValue)) {
       result[key] = updateValue;
     }
-    // Recursively merge nested objects
-    else if (
-      typeof updateValue === 'object' &&
-      updateValue !== null &&
-      typeof existingValue === 'object' &&
-      existingValue !== null &&
-      !Array.isArray(existingValue)
-    ) {
-      result[key] = deepMergeWorkingMemory(
-        existingValue as Record<string, unknown>,
-        updateValue as Record<string, unknown>,
-      );
+    // Recursively merge nested objects. Brand-new branches recurse too, so nulls inside
+    // them are dropped instead of being stored literally.
+    else if (typeof updateValue === 'object') {
+      const existingBranch =
+        existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)
+          ? (existingValue as Record<string, unknown>)
+          : undefined;
+
+      result[key] = deepMergeWorkingMemory(existingBranch, updateValue as Record<string, unknown>);
     }
     // Primitive values or new properties: just set them
     else {

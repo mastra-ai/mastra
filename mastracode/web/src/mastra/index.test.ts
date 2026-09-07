@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import type * as factoryModule from '@mastra/factory';
-import { resolveFactoryGithubRule } from '@mastra/factory/rules/resolve';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
 vi.mock('@mastra/factory', async importOriginal => {
@@ -42,10 +41,26 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'WORKOS_COOKIE_PASSWORD',
       'MASTRA_SHARED_API_URL',
       'MASTRA_PLATFORM_SECRET_KEY',
+      'MASTRA_PLATFORM_ACCESS_TOKEN',
+      'MASTRA_CLOUD_ACCESS_TOKEN',
+      'MASTRA_ENVIRONMENT_ID',
+      'DATABASE_URL',
+      'APP_DATABASE_URL',
+      'REDIS_URL',
+      'GITHUB_APP_ID',
+      'GITHUB_APP_PRIVATE_KEY',
+      'GITHUB_APP_CLIENT_ID',
+      'GITHUB_APP_CLIENT_SECRET',
+      'GITHUB_APP_SLUG',
+      'GITHUB_APP_WEBHOOK_SECRET',
+      'LINEAR_CLIENT_ID',
+      'LINEAR_CLIENT_SECRET',
+      'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
     ]) {
       vi.stubEnv(name, '');
     }
+    vi.stubEnv('MASTRA_PROJECT_ID', 'test-project');
     factoryConfigs.length = 0;
     vi.resetModules();
   });
@@ -73,6 +88,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
+    const { factoryRules } = await import('./index.js');
+    expect(factoryRules.version).toBe('mastracode-web-v1');
+    expect(Object.keys(factoryRules).sort()).toEqual(['tools', 'version']);
+    expect(factoryConfigs[0]?.rules).toBe(factoryRules);
+    expect(factoryConfigs[0]?.boards).toBeUndefined();
+    expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
+  });
+
   it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
     await import('./index.js');
@@ -81,8 +105,20 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(factoryConfigs[0]?.dispatcher).toEqual({ maxInFlight: 7 });
   });
 
-  it('uses the production Factory rules to retriage linked issue updates without moving their stage', async () => {
+  it('uses the installed GitHub rules to retriage linked issue updates without moving their stage', async () => {
+    vi.stubEnv('GITHUB_APP_ID', '123');
+    vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+    vi.stubEnv('GITHUB_APP_CLIENT_ID', 'client-id');
+    vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
+    vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
     const { factoryRules } = await import('./index.js');
+    const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
+    const github = factoryConfigs[0]?.integrations?.find(
+      (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
+    );
+    expect(github).toBeDefined();
+    if (!github) throw new Error('Expected the configured GitHub integration');
     const item = {
       id: 'issue-42',
       source: 'github-issue' as const,
@@ -104,8 +140,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       itemRevision: 3,
     };
 
-    const issueEdited = resolveFactoryGithubRule(factoryRules, 'issueEdited');
-    const issueCommentCreated = resolveFactoryGithubRule(factoryRules, 'issueCommentCreated');
+    const { issueEdited, issueCommentCreated } = github.rules;
 
     expect(
       issueEdited?.({

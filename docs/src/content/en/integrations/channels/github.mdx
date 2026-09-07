@@ -1,0 +1,138 @@
+---
+title: "GitHub | Channels"
+description: "Subscribe Mastra agents to GitHub pull requests with @mastra/github-signals, polling modes, notification signals, and subscription management tools."
+packages:
+  - "@mastra/core"
+  - "@mastra/github-signals"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# GitHub
+
+The `@mastra/github-signals` provider lets an agent follow pull requests (PRs). It polls subscribed PRs and sends [notification signals](/docs/harness/signals#notification-signals) to the agent thread when relevant activity occurs.
+
+## Installation
+
+Install GitHub Signals and the memory packages used in this example:
+
+```bash npm2yarn
+npm install @mastra/github-signals @mastra/libsql @mastra/memory
+```
+
+## Prerequisites
+
+GitHub Signals requires:
+
+- A Mastra storage adapter with memory and notification support. The provider stores each subscription in the thread's metadata, so the thread must already exist.
+- The `gitcrawl` command on `PATH`, configured to access the repositories you want to monitor. The provider runs `gitcrawl sync` and reads its SQLite database.
+- The `sqlite3` command on `PATH`.
+- The [GitHub CLI](https://cli.github.com/) installed and authenticated. The provider uses `gh api` to check whether comment authors have access to the repository before notifying the agent.
+
+By default, comments from users with `admin`, `maintain`, or `write` access can trigger notifications. CodeRabbit and Devin bot comments are also allowed. Configure `authorizedPermissions`, `authorizedBots`, or `ignoredBots` when you need different rules.
+
+## Agent and subscription
+
+Create one `GithubSignals` instance and register it on the agent. Register the agent and a storage adapter on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+import { Memory } from '@mastra/memory'
+import { GithubSignals } from '@mastra/github-signals'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const githubSignals = new GithubSignals()
+
+export const devAgent = new Agent({
+  id: 'dev-agent',
+  name: 'Development Agent',
+  instructions: 'Triage pull request activity and help resolve issues.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory(),
+  signals: [githubSignals],
+})
+
+export const mastra = new Mastra({
+  agents: { devAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+After the agent has created a memory thread, subscribe that thread to a PR. Choose `review` mode when the thread only needs code revisions, authorized latest PR comments, and observable review-thread-state updates:
+
+```typescript
+await githubSignals.subscribeThreadToPR({
+  threadId: 'thread-123',
+  resourceId: 'user-123',
+  pr: {
+    owner: 'acme',
+    repo: 'web-app',
+    number: 42,
+  },
+  mode: 'review',
+})
+```
+
+The provider syncs the PR immediately, stores the subscription, and starts polling every five minutes. Set `pollIntervalMs` in the `GithubSignals` constructor to change the interval. If the process restarts, call `startPollingForThread()` for each persisted thread subscription to resume polling.
+
+A thread has one current GitHub Signals subscription. Subscribing it to another PR replaces the existing subscription.
+
+## Subscription modes
+
+GitHub Signals supports two subscription modes:
+
+- `review`: Follows new head revisions, authorized latest PR comments, and observable review-thread-state changes, including when all review threads become resolved.
+- `working`: Follows all actionable PR activity detected by the provider. Comment-bearing notifications remain subject to existing authorization gates. This is the default when `mode` is omitted and for stored subscriptions without a valid mode.
+
+The following table shows the observable behavior of each mode:
+
+| Pull request activity | `working` | `review` |
+| - | - | - |
+| First observation | Sends a baseline notification | Saves all cursors without notifying unless the PR is closed or merged; then notifies and removes the subscription |
+| New commit or force-push | Notifies when the latest comment author is authorized | Notifies without requiring a comment author |
+| New authorized latest PR comment | Notifies | Notifies |
+| Observable review-thread-state change | Notifies while unresolved threads remain | Notifies, including when all review threads become resolved |
+| Continuous integration checks start, fail, or recover | Notifies | Saves the new state without notifying |
+| Merge conflicts appear or resolve | Notifies | Saves the new state without notifying |
+| Other actionable aggregate PR activity | Notifies when applicable authorization checks pass | Saves the new state without notifying |
+| PR closes without merging | Notifies and keeps the subscription | Notifies and removes the subscription |
+| PR reopens | Notifies | Doesn't notify because the earlier close removed the subscription |
+| PR merges | Notifies and removes the subscription | Notifies and removes the subscription |
+
+Review mode uses the latest generic PR comment exposed by `gitcrawl`. The snapshot doesn't distinguish general PR conversation from inline review comments. Comment notifications require an authorized author because they include comment content. Review-state notifications contain only provider-generated state summaries and aren't author-gated.
+
+The review-state cursor includes the unresolved thread count and the latest unresolved thread timestamp. It reports when the count reaches zero, but it can't report replies on threads that are already resolved.
+
+During subscription, a PR already known to be closed or merged isn't stored and doesn't send an activity notification. Otherwise, review mode silently saves its first available non-terminal snapshot, including when the subscribe-time snapshot fails and a later poll supplies the first observation. If the first available poll snapshot or a later snapshot is closed or merged, the provider sends a terminal notification and removes the subscription. It doesn't follow a later reopen unless you subscribe again.
+
+## Subscription tools
+
+The provider adds `github_subscribe_pr` and `github_unsubscribe_pr` tools to the agent. Pass `mode` when subscribing:
+
+```json
+{
+  "owner": "acme",
+  "repo": "web-app",
+  "number": 42,
+  "mode": "review"
+}
+```
+
+Omitting `mode` selects `working`. Don't subscribe for a one-off PR inspection.
+
+## MastraCode commands
+
+In MastraCode, use the spaced `--mode` flag with a PR number, `owner/repo#number`, or full GitHub PR URL:
+
+```text
+/github subscribe 42 --mode review
+/github acme/web-app#42 --mode working
+/github unsubscribe 42
+/github debug
+```
+
+MastraCode rejects `--mode=review`, missing or repeated mode values, unknown modes, and mode flags on unsubscribe. `/github debug` shows the stored mode and displays absent or invalid legacy values as `working`.

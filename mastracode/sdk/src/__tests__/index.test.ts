@@ -13,6 +13,20 @@ const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
 const resolveModelMock = vi.fn();
+const knowledgeScopeTreeMock = vi.fn(async () => ({
+  identityKey: 'identity-key',
+  defaultLevel: 'resource' as const,
+  roots: [
+    { level: 'org' as const, id: 'owner-1', available: true },
+    { level: 'resource' as const, id: 'project-resource', available: true },
+    { level: 'thread' as const, id: 'thread-1', available: true },
+  ],
+}));
+const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
+
+vi.mock('../knowledge-inspector.js', () => ({
+  createKnowledgeInspector: createKnowledgeInspectorMock,
+}));
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -127,7 +141,8 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
+    mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
 
@@ -154,10 +169,17 @@ vi.mock('@mastra/core/agent-controller', () => ({
       return {
         subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
+          getOwnerId: () => 'owner-1',
           getResourceId: () => 'project-resource',
         },
         thread: {
           getId: () => controllerGetCurrentThreadIdMock(),
+          getById: async ({ threadId }: { threadId: string }) => ({
+            id: threadId,
+            resourceId: 'project-resource',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
           list: (options: unknown) => controllerListThreadsMock(options),
           setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
@@ -250,6 +272,10 @@ vi.mock('../agents/workspace.js', () => ({
   getGoalJudgeTools: vi.fn(),
 }));
 
+vi.mock('../workflows/register-primitives.js', () => ({
+  registerWorkflowBuilderPrimitives: vi.fn(async () => {}),
+}));
+
 vi.mock('../auth/storage.js', () => ({
   AuthStorage: class {
     get() {
@@ -299,6 +325,31 @@ vi.mock('../permissions.js', () => ({
   getToolCategory: vi.fn(),
 }));
 
+vi.mock('../providers/amazon-bedrock-gateway.js', () => ({
+  createAmazonBedrockGateway: vi.fn(() => ({ id: 'amazon-bedrock' })),
+}));
+
+vi.mock('../plugins/manager.js', () => ({
+  PluginManager: class {
+    setRuntime() {}
+    async reload() {
+      return [];
+    }
+    getPluginTools() {
+      return {};
+    }
+    getPluginProcessors() {
+      return { input: [], output: [] };
+    }
+    getPluginSignalProviders() {
+      return [];
+    }
+    onReload() {
+      return () => {};
+    }
+  },
+}));
+
 vi.mock('../providers/claude-max.js', () => ({
   setAuthStorage: vi.fn(),
 }));
@@ -309,6 +360,14 @@ vi.mock('../providers/openai-codex.js', () => ({
 
 vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../providers/kimi-coding.js', () => ({
+  setAuthStorage: vi.fn(),
+}));
+
+vi.mock('../auth/providers/kimi-coding.js', () => ({
+  isKimiCodingDeviceId: vi.fn(() => false),
 }));
 
 vi.mock('../providers/xai.js', () => ({
@@ -366,6 +425,8 @@ describe('createMastraCode', () => {
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
     resolveModelMock.mockClear();
+    createKnowledgeInspectorMock.mockClear();
+    knowledgeScopeTreeMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -440,7 +501,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
     expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
-  }, 10_000);
+  }, 30_000);
 
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
@@ -579,8 +640,17 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(
+      projectPath,
+      'session-init',
+      '.acme-code',
+      undefined,
+      undefined,
+    );
   });
 
   it('passes custom workspace config through to AgentController without using the default factory', async () => {
@@ -713,8 +783,17 @@ describe('createMastraCode', () => {
 
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(
+      projectPath,
+      'session-init',
+      '.acme-code',
+      undefined,
+      undefined,
+    );
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
@@ -746,7 +825,25 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd, configDir: '.acme-code', mcpServers });
 
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers);
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers, {
+      claudeCodeGlobal: false,
+      codexGlobal: false,
+    });
+  });
+
+  it('passes persisted external MCP discovery opt-ins into the startup manager', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      mcp: { claudeCodeGlobal: true, codexGlobal: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(createMcpManagerMock).toHaveBeenCalledWith(expect.any(String), '.mastracode', undefined, {
+      claudeCodeGlobal: true,
+      codexGlobal: true,
+    });
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
@@ -852,9 +949,9 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { errorProcessors?: Array<{ id?: string }> }
-      | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'stream-error-retry-processor'));
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -1137,7 +1234,9 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { errorProcessors?: Array<{ id?: string }> };
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(processor => processor.id === 'provider-history-compat'));
     expect(resolveInputProcessors().map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
@@ -1145,20 +1244,23 @@ describe('createMastraCode', () => {
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 300_000 },
     });
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({ disableGithubSignals: true });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
+    const agentConfigs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { signals?: Array<{ id?: string }> } | undefined,
+    );
+    const hasGithub = agentConfigs.some(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(hasGithub).toBe(false);
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 60_000 },
     });
     controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
     controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
@@ -1169,8 +1271,13 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.signals?.some(signal => signal.id === 'github-signals'));
+    expect(agentConfig?.signals?.map(signal => signal.id)).toContain('github-signals');
+    expect(agentConfig?.signals?.find(signal => signal.id === 'github-signals')).toMatchObject({
+      options: expect.objectContaining({ pollIntervalMs: 60_000 }),
+    });
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },

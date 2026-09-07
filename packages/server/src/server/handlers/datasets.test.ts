@@ -1,3 +1,4 @@
+import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -17,7 +18,12 @@ import {
   LIST_EXPERIMENTS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
+  RUN_EXPERIMENT_ITEM_ROUTE,
+  SUBMIT_EXPERIMENT_RESULT_ROUTE,
+  FINALIZE_EXPERIMENT_ROUTE,
+  LIST_EXPERIMENT_RESULTS_ROUTE,
   UPDATE_DATASET_ROUTE,
+  UPDATE_EXPERIMENT_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
@@ -33,6 +39,64 @@ describe('Datasets Handlers', () => {
     mastra = new Mastra({
       logger: false,
       storage: mockStorage,
+    });
+  });
+
+  describe('PATCH /datasets/:datasetId/experiments/:experimentId', () => {
+    async function createNamedExperiment() {
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+      await dataset.addItem({ input: { prompt: 'hello' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        name: 'before',
+        description: 'before desc',
+      } as any)) as any;
+      return { dataset, experimentId: created.experimentId as string };
+    }
+
+    it('should update the experiment name and return the updated record', async () => {
+      // Given an experiment with an initial name
+      const { dataset, experimentId } = await createNamedExperiment();
+
+      // When the name is patched
+      const updated = (await UPDATE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+        name: 'after',
+      } as any)) as any;
+
+      // Then the record reflects the new name and keeps the description
+      expect(updated.name).toBe('after');
+      expect(updated.description).toBe('before desc');
+      const reloaded = (await GET_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+      } as any)) as any;
+      expect(reloaded.name).toBe('after');
+    });
+
+    it('should return 404 when the experiment does not exist', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+
+      await expect(
+        UPDATE_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: 'missing',
+          name: 'after',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('should reject an invalid body before the handler', () => {
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ name: 42 }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ metadata: [] }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ status: 'completed' }).success).toBe(false);
+      expect(UPDATE_EXPERIMENT_ROUTE.bodySchema.safeParse({ name: 'ok', description: 'd' }).success).toBe(true);
     });
   });
 
@@ -255,6 +319,265 @@ describe('Datasets Handlers', () => {
           grouping: { trialIndex },
         }).success,
       ).toBe(false);
+    });
+  });
+
+  describe('Caller-driven experiment routes', () => {
+    async function setupDatasetWithItems() {
+      const dataset = await mastra.datasets.create({ name: 'Caller-driven DS' });
+      const item1 = await dataset.addItem({ input: { q: 'q1' }, groundTruth: 'a1' });
+      const item2 = await dataset.addItem({ input: { q: 'q2' }, groundTruth: 'a2' });
+      return { dataset, item1, item2 };
+    }
+
+    it('runs the full ingestion lifecycle: create, submit, finalize', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        name: 'temporal-run',
+      } as any)) as any;
+
+      expect(created.status).toBe('running');
+      expect(created.totalItems).toBe(2);
+
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any);
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item2.id,
+        error: { message: 'boom' },
+      } as any);
+
+      const finalized = (await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+      } as any)) as any;
+
+      expect(finalized.status).toBe('completed');
+      expect(finalized.succeededCount).toBe(1);
+      expect(finalized.failedCount).toBe(1);
+      expect(finalized.skippedCount).toBe(0);
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results).toHaveLength(2);
+    });
+
+    it('create is idempotent on a caller-supplied id', async () => {
+      const { dataset } = await setupDatasetWithItems();
+
+      const first = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        id: 'wf-run-1',
+      } as any)) as any;
+      const second = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        id: 'wf-run-1',
+      } as any)) as any;
+
+      expect(second.experimentId).toBe(first.experimentId);
+    });
+
+    it('retried submissions converge on a single row', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const first = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: 'v1',
+      } as any)) as any;
+      const second = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: 'v2',
+      } as any)) as any;
+
+      expect(second.id).toBe(first.id);
+      expect(second.output).toBe('v2');
+    });
+
+    it('rejects submissions to an experiment that has a target with 400', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const experimentsStore = await mockStorage.getStore('experiments');
+      const native = await experimentsStore!.createExperiment({
+        datasetId: dataset.id,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 2,
+      });
+
+      await expect(
+        SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: native.id,
+          itemId: item1.id,
+          output: 'x',
+        } as any),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('rejects submissions after finalization with 409', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: 'x',
+      } as any);
+      await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+      } as any);
+
+      await expect(
+        SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          itemId: item2.id,
+          output: 'y',
+        } as any),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('runs one item server-side via the run-item route and upserts the row', async () => {
+      const agent = new Agent({ id: 'run-agent', name: 'run-agent', instructions: 'test', model: {} as any });
+      vi.spyOn(agent, 'getModel').mockResolvedValue({ specificationVersion: 'v2' } as any);
+      vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'agent answer' } as any);
+      mastra = new Mastra({ logger: false, storage: mockStorage, agents: { 'run-agent': agent } });
+
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+        targetType: 'agent',
+        targetId: 'run-agent',
+      } as any)) as any;
+
+      const first = (await RUN_EXPERIMENT_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+      } as any)) as any;
+      expect(first.result.output?.text).toBe('agent answer');
+      expect(first.result.error).toBeNull();
+
+      // A retried call converges on the same row.
+      const second = (await RUN_EXPERIMENT_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+      } as any)) as any;
+      expect(second.result.id).toBe(first.result.id);
+
+      const finalized = (await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+      } as any)) as any;
+      expect(finalized.succeededCount).toBe(1);
+      expect(finalized.skippedCount).toBe(1);
+    });
+
+    it('rejects run-item on a target-less experiment with 400', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      await expect(
+        RUN_EXPERIMENT_ITEM_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          itemId: item1.id,
+        } as any),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('rejects create-only experiments with an unknown target with 404', async () => {
+      const { dataset } = await setupDatasetWithItems();
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          start: false,
+          targetType: 'agent',
+          targetId: 'missing-agent',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('rejects start without a target with 400', async () => {
+      const { dataset } = await setupDatasetWithItems();
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+        } as any),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it('rejects unknown item ids with 404', async () => {
+      const { dataset } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      await expect(
+        SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          itemId: 'missing-item',
+          output: 'x',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
     });
   });
 
@@ -697,6 +1020,27 @@ describe('Datasets Handlers', () => {
       expect(error).toBeInstanceOf(HTTPException);
       expect((error as HTTPException).status).toBe(400);
       expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
+    });
+  });
+
+  describe('GET_ITEM_VERSION_ROUTE', () => {
+    it('returns an unchanged item visible in a later dataset snapshot', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Versioned Item DS' });
+      const itemA = await dataset.addItem({ input: { value: 'first' } });
+      const itemB = await dataset.addItem({ input: { value: 'second' } });
+
+      const fetched = (await GET_ITEM_VERSION_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: itemA.id,
+        datasetVersion: itemB.datasetVersion,
+      } as any)) as any;
+
+      expect(fetched).toMatchObject({
+        id: itemA.id,
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'first' },
+      });
     });
   });
 

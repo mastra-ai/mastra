@@ -22,13 +22,15 @@ export function DatasetItemsLayout({ listSlot, detailPanelSlot, versionsPanelSlo
 
   return (
     <div
-      className={cn('grid max-h-full min-h-0 gap-4 items-start', {
-        'grid-cols-[1fr_1fr]': showDetail,
+      className={cn('grid h-full max-h-full min-h-0', {
+        'grid-cols-[1fr_1fr] gap-4': showDetail,
         'grid-cols-[1fr_auto]': showVersions,
       })}
     >
-      <div className="grid max-w-full content-start gap-8 overflow-y-auto">{listSlot}</div>
-      {showDetail && detailPanelSlot}
+      <div className={cn('grid max-w-full content-start gap-4 overflow-y-auto pt-3 pl-6', !showDetail && 'pr-6')}>
+        {listSlot}
+      </div>
+      {showDetail && <div className="h-full min-h-0 py-3 pr-6">{detailPanelSlot}</div>}
       {showVersions && versionsPanelSlot}
     </div>
   );

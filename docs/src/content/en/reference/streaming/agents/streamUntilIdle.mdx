@@ -1,6 +1,6 @@
 ---
 title: "Reference: Agent.streamUntilIdle() | Streaming"
-description: "API reference for Agent.streamUntilIdle(), which keeps an agent stream open until all dispatched background tasks have completed."
+description: "streamUntilIdle() streams an agent's response and keeps the stream open until every background task dispatched during the run completes."
 packages:
   - "@mastra/core"
 ---
@@ -159,7 +159,7 @@ for await (const chunk of stream.fullStream) {
 
 ## Related
 
-- [Background tasks](/docs/long-running-agents/background-tasks)
+- [Background tasks](/docs/harness/background-tasks)
 - [`Agent.stream()` reference](./stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Stream chunk types](/reference/streaming/ChunkType)

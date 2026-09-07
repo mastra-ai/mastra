@@ -116,6 +116,47 @@ describe('resolveAgentSkills', () => {
     expect(refContent).toBe('# Style Guide\nUse consistent naming.');
   });
 
+  it('uses ranked BM25 search for agent skills', async () => {
+    const ws = resolveAgentSkills([
+      createSkill({
+        name: 'deploy-checklist',
+        description: 'General deployment checklist.',
+        instructions: 'Review the deployment checklist before making changes.',
+      }),
+      createSkill({
+        name: 'production-deploy',
+        description: 'Production deployment guide.',
+        instructions: 'Deploy services safely to production. Validate the production deployment before release.',
+      }),
+    ]);
+
+    const results = await ws.search('deployment production', { topK: 1 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.skillName).toBe('production-deploy');
+    expect(results[0]?.score).toBeGreaterThan(0);
+    expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+  });
+
+  it('indexes agent skill references for BM25 search', async () => {
+    const ws = resolveAgentSkills([
+      createSkill({
+        name: 'incident-response',
+        description: 'Respond to incidents.',
+        instructions: 'Follow the operational runbook.',
+        references: {
+          'runbook.md': 'Incident response steps and escalation procedures for the on-call engineer.',
+        },
+      }),
+    ]);
+
+    const results = await ws.search('incident escalation');
+
+    expect(results[0]?.skillName).toBe('incident-response');
+    expect(results[0]?.source).toBe('references/runbook.md');
+    expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+  });
+
   it('handles empty skills array', async () => {
     const ws = resolveAgentSkills([]);
     const list = await ws.list();

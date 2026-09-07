@@ -173,7 +173,7 @@ describeForAllEngines(
       expect(catsMsg).toBeUndefined();
     });
 
-    it('maintains resource isolation across different resource IDs', async () => {
+    it('rejects a thread owned by a different resource before calling the model', async () => {
       const sharedMemory = new MockMemory();
       const shared = await createSharedAgent(getMock(), {
         memory: sharedMemory,
@@ -203,41 +203,36 @@ describeForAllEngines(
       getMock().clearRequests();
       getMock().resetMatchCounts();
 
-      // Resource B: ask about JavaScript (same thread ID, different resource)
-      const { requests: resourceBRequests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        sharedAgent: shared,
-        prompt: 'Explain JavaScript programming',
-        memory: sharedMemory,
-        threadId,
-        resourceId: 'resource-b',
-        fixtures: llm => {
-          llm.onMessage(/javascript/i, {
-            content: 'JavaScript is the language of the web.',
-          });
-        },
-        collectChunks: false,
-      });
+      // Resource B: same thread ID, different resource. The thread is owned by
+      // resource-a, so the run must fail closed instead of silently proceeding.
+      await expect(
+        runLoopScenario({
+          engine,
+          llm: getMock(),
+          sharedAgent: shared,
+          prompt: 'Explain JavaScript programming',
+          memory: sharedMemory,
+          threadId,
+          resourceId: 'resource-b',
+          fixtures: llm => {
+            llm.onMessage(/javascript/i, {
+              content: 'JavaScript is the language of the web.',
+            });
+          },
+          collectChunks: false,
+        }),
+      ).rejects.toThrow(/belongs to resource "resource-a" but resource "resource-b" was provided/);
 
-      // Resource B should NOT see Resource A's messages
-      expect(resourceBRequests.length).toBeGreaterThan(0);
-      const lastRequest = resourceBRequests[resourceBRequests.length - 1];
-      const messages = lastRequest.body?.messages || [];
+      // The model must never be reached for the rejected call.
+      expect(getMock().getRequests()).toHaveLength(0);
 
-      const userMessages = messages.filter((m: any) => m.role === 'user');
+      // The thread keeps its original owner and resource-a's history.
+      const thread = await sharedMemory.getThreadById({ threadId });
+      expect(thread?.resourceId).toBe('resource-a');
 
-      // Should only have the current message (no history from resource-a)
-      expect(userMessages.length).toBe(1);
-      const firstUserContent = getContent(userMessages[0]).toLowerCase();
-      expect(firstUserContent).toContain('javascript');
-
-      // Should NOT contain python message
-      const pythonMsg = userMessages.find((m: any) => {
-        const content = getContent(m);
-        return content.toLowerCase().includes('python');
-      });
-      expect(pythonMsg).toBeUndefined();
+      const { messages: threadMessages } = await sharedMemory.recall({ threadId, resourceId: 'resource-a' });
+      const leaked = threadMessages.find(m => JSON.stringify(m.content).toLowerCase().includes('javascript'));
+      expect(leaked).toBeUndefined();
     });
   },
   { skip: ['fs'] },

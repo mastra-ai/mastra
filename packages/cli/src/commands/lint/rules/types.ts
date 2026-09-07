@@ -22,6 +22,7 @@ export type LintIssueCode =
   | 'INVALID_TSCONFIG'
   | 'NEXT_MISSING_SERVER_EXTERNAL_PACKAGES'
   | 'MISSING_ENV_VAR'
+  | 'LOCALHOST_ENV_VAR'
   | 'LOCAL_STORAGE_PATH';
 
 export interface LintIssue {

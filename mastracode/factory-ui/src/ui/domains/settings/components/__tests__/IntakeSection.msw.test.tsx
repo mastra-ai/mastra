@@ -91,24 +91,18 @@ function renderIntakeSection() {
 
 describe('IntakeSection', () => {
   describe('given a config with both sources enabled', () => {
-    it('renders the GitHub repository and Linear project pickers behind collapsible sections', async () => {
+    it('lists the GitHub repositories and Linear projects without an extra expand step', async () => {
       seedGithubProject();
       useIntakeHandlers();
 
       renderIntakeSection();
 
-      expect(await screen.findByText(/feed issues into Intake/)).toBeInTheDocument();
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
-
-      await userEvent.click(await screen.findByRole('button', { name: 'ENG · Engineering' }));
       expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
-
-      await userEvent.click(screen.getByRole('button', { name: 'No team' }));
-      expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
     });
 
     it('groups Linear projects by team, listing shared projects under each team', async () => {
@@ -117,33 +111,21 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
-      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
-      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+      const projects = await screen.findByRole('group', { name: 'Linear projects' });
 
-      const design = screen.getByRole('group', { name: 'DES · Design' });
-      await userEvent.click(within(design).getByRole('button', { name: 'DES · Design' }));
-      expect(within(design).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+      expect(within(projects).getByText('Engineering')).toBeInTheDocument();
+      expect(within(projects).getByText('Design')).toBeInTheDocument();
+      expect(within(projects).getByText('No team')).toBeInTheDocument();
+      // Shared across Engineering and Design, so it is listed under both.
+      expect(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })).toHaveLength(2);
 
-      const noTeam = screen.getByRole('group', { name: 'No team' });
-      await userEvent.click(within(noTeam).getByRole('button', { name: 'No team' }));
-      expect(within(noTeam).getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
+      // Listed twice, selected once: the count follows ids, not rows.
+      const linearSection = screen.getByRole('region', { name: 'Linear issues' });
+      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]!);
+      await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
     });
 
-    it('starts every section collapsed, hiding the checkboxes until expanded', async () => {
-      seedGithubProject();
-      useIntakeHandlers();
-
-      renderIntakeSection();
-
-      expect(await screen.findByRole('button', { name: 'ENG · Engineering' })).toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: 'Repositories' })).toBeInTheDocument();
-      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('checkbox', { name: 'mastra' })).not.toBeInTheDocument();
-    });
-
-    it('shows a selected count on the collapsed trigger', async () => {
+    it('shows how many items are selected', async () => {
       seedGithubProject();
       useIntakeHandlers({
         config: {
@@ -154,58 +136,29 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      expect(within(eng).getByText('1 selected')).toBeInTheDocument();
-      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
-
-      const repos = screen.getByRole('group', { name: 'Repositories' });
-      expect(within(repos).getByText('1 selected')).toBeInTheDocument();
-
-      const design = screen.getByRole('group', { name: 'DES · Design' });
-      expect(within(design).queryByText(/selected/)).not.toBeInTheDocument();
+      // One count per source picker: the selected repository and the selected project.
+      await waitFor(() => expect(screen.getAllByText('1 selected')).toHaveLength(2));
     });
 
-    it('filters the section list from its search bar', async () => {
+    it('filters every team from one search bar', async () => {
       useIntakeHandlers();
 
       renderIntakeSection();
 
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
-      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+      const search = await screen.findByRole('textbox', { name: 'Search Linear projects' });
+      expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
 
-      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'road');
+      await userEvent.type(search, 'road');
 
       // ListSearch debounces before filtering.
-      await waitFor(() =>
-        expect(within(eng).queryByRole('checkbox', { name: 'Shared initiative' })).not.toBeInTheDocument(),
-      );
-      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'Design refresh' })).not.toBeInTheDocument());
+      expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      // The match lives in Engineering, so only that team heading survives.
+      expect(screen.queryByText('No team')).not.toBeInTheDocument();
 
-      await userEvent.clear(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }));
-      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'zzz');
-      expect(await within(eng).findByText('No matches')).toBeInTheDocument();
-    });
-
-    it('clears the search when the section is collapsed', async () => {
-      useIntakeHandlers();
-
-      renderIntakeSection();
-
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      const trigger = within(eng).getByRole('button', { name: 'ENG · Engineering' });
-      await userEvent.click(trigger);
-      await userEvent.type(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' }), 'road');
-      await waitFor(() =>
-        expect(within(eng).queryByRole('checkbox', { name: 'Shared initiative' })).not.toBeInTheDocument(),
-      );
-
-      await userEvent.click(trigger); // collapse
-      await userEvent.click(trigger); // reopen
-
-      expect(within(eng).getByRole('textbox', { name: 'Search ENG · Engineering' })).toHaveValue('');
-      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
-      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+      await userEvent.clear(search);
+      await userEvent.type(search, 'zzz');
+      expect(await screen.findByText('No matches')).toBeInTheDocument();
     });
   });
 
@@ -231,7 +184,6 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'ENG · Engineering' }));
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
@@ -253,39 +205,33 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
-      await userEvent.click(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' }));
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
-      expect(
-        await within(eng).findByRole('status', { name: 'Saving ENG · Engineering selection' }),
-      ).toBeInTheDocument();
+      expect(await screen.findByRole('status', { name: 'Saving Linear projects selection' })).toBeInTheDocument();
       // Base UI's checkbox root is a span, so disabled state is exposed via aria-disabled.
-      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).toHaveAttribute('aria-disabled', 'true');
 
       releaseSave();
 
       await waitFor(() =>
-        expect(
-          within(eng).queryByRole('status', { name: 'Saving ENG · Engineering selection' }),
-        ).not.toBeInTheDocument(),
+        expect(screen.queryByRole('status', { name: 'Saving Linear projects selection' })).not.toBeInTheDocument(),
       );
-      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).not.toHaveAttribute('aria-disabled');
+      expect(screen.getByRole('checkbox', { name: 'Q3 Roadmap' })).not.toHaveAttribute('aria-disabled');
     });
 
-    it('persists the selection when the row itself is clicked instead of the checkbox', async () => {
+    it('persists the selection when the row label is clicked instead of the checkbox', async () => {
       const saved = useIntakeHandlers();
 
       renderIntakeSection();
 
-      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
-      await userEvent.click(within(eng).getByRole('button', { name: 'ENG · Engineering' }));
-      await userEvent.click(within(eng).getByRole('button', { name: 'Q3 Roadmap' }));
-
+      await userEvent.click(await screen.findByText('Q3 Roadmap'));
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
-      // Row click and checkbox click share one toggle — no duplicate PUT.
-      expect(saved).toHaveLength(1);
+
+      // A second, different pick lands after any duplicate the first click could
+      // have fired, so a doubled label toggle shows up as a third request here.
+      await userEvent.click(await screen.findByText('Design refresh'));
+      await waitFor(() => expect(saved).toHaveLength(2));
     });
   });
 
@@ -296,7 +242,6 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
       await userEvent.click(await screen.findByRole('checkbox', { name: 'mastra' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
@@ -374,7 +319,6 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByText(/feed issues into Intake/)).toBeInTheDocument();
       // GitHub defaults to enabled; Linear stays off until it's connected here.
       expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
       expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();

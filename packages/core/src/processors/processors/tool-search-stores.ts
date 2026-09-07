@@ -36,11 +36,18 @@ export interface LoadedToolStore {
  * part and returns the tool names it activated.
  *
  * - `search_tools` (autoLoad) results carry `results: [{ name }]`.
- * - `load_tool` results carry `loaded: string[]`.
+ * - `load_tool` (toolNames array form) results carry `loaded: string[]`.
+ * - `load_tool` (single toolName form) results carry `{ success: true, toolName }`.
+ *   Failure shapes also carry `toolName`, so it only counts when `success` is true.
  */
 function extractActivatedNames(result: unknown): string[] {
   if (!result || typeof result !== 'object') return [];
   const names: string[] = [];
+
+  const maybeToolName = (result as { toolName?: unknown; success?: unknown }).toolName;
+  if (typeof maybeToolName === 'string' && (result as { success?: unknown }).success === true) {
+    names.push(maybeToolName);
+  }
 
   const maybeResults = (result as { results?: unknown }).results;
   if (Array.isArray(maybeResults)) {

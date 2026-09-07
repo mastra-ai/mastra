@@ -13,6 +13,8 @@ import {
   parseThreadSettings,
   parseViewportInput,
   resolveDefaultThinkingLevel,
+  resolveLspSetting,
+  resolveModelDefaults,
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
@@ -33,6 +35,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     models: {
       activeModelPackId: 'anthropic',
+      modePackOverrides: {},
       modeDefaults: {},
       modeThinkingDefaults: {},
       activeOmPackId: null,
@@ -73,7 +76,8 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
+    mcp: { claudeCodeGlobal: false, codexGlobal: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -199,6 +203,24 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('MCP discovery settings parsing', () => {
+  it('defaults external MCP discovery to disabled', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: false, codexGlobal: false });
+    });
+  });
+
+  it('loads valid opt-ins and defaults malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ mcp: { claudeCodeGlobal: true, codexGlobal: 'yes' } }), 'utf-8');
+
+      expect(loadSettings(filePath).mcp).toEqual({ claudeCodeGlobal: true, codexGlobal: false });
+    });
+  });
+});
 
 describe('voice settings parsing', () => {
   it('back-compat: old { enabled }-only file gets engine + provider defaults', () => {
@@ -401,6 +423,87 @@ describe('customProviders parsing/persistence', () => {
 
       expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
       expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
+  it('defaults missing GitHub poll interval for old settings files', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { experimentalGithubSignals: true },
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.signals.experimentalGithubSignals).toBe(true);
+      expect(settings.signals.githubPollIntervalMs).toBe(300_000);
+    });
+  });
+
+  it('falls back for malformed GitHub poll interval values', () => {
+    withTempSettingsFile(filePath => {
+      for (const value of [null, '300000', -1, 9999]) {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: {},
+            storage: {},
+            signals: { githubPollIntervalMs: value },
+          }),
+          'utf-8',
+        );
+        expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(300_000);
+      }
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          signals: { githubPollIntervalMs: 99_999_999_999 },
+        }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(2_147_483_647);
+    });
+  });
+
+  it('persists GitHub poll interval across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
+    });
+  });
+
+  it('does not clobber GitHub poll interval from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.githubPollIntervalMs = 60_000;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.githubPollIntervalMs).toBe(60_000);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.githubPollIntervalMs).toBe(60_000);
     });
   });
 
@@ -696,6 +799,60 @@ describe('resolveThreadActiveModelPackId', () => {
     });
 
     expect(resolved).toBeNull();
+  });
+});
+
+describe('resolveModelDefaults', () => {
+  it('layers stored mode overrides over the active built-in pack', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'openai',
+        modePackOverrides: { openai: { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual({
+      plan: 'openai/gpt-5.5',
+      build: 'openai/gpt-5.4',
+      fast: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('does not apply built-in overrides to custom packs', () => {
+    const settings = createSettings({
+      models: {
+        ...createSettings().models,
+        activeModelPackId: 'custom:My Pack',
+        modePackOverrides: { 'custom:My Pack': { build: 'openai/gpt-5.4' } },
+      },
+    });
+
+    expect(resolveModelDefaults(settings, builtinPacks)).toEqual(settings.customModelPacks[0]!.models);
+  });
+
+  it('loads valid pack overrides and drops malformed entries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-settings-'));
+    const path = join(dir, 'settings.json');
+    try {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          models: {
+            modePackOverrides: {
+              openai: { build: 'openai/gpt-5.4', plan: 42 },
+              anthropic: null,
+            },
+          },
+        }),
+      );
+
+      expect(loadSettings(path).models.modePackOverrides).toEqual({
+        openai: { build: 'openai/gpt-5.4' },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1015,5 +1172,63 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
+  });
+});
+
+describe('LSP settings parsing', () => {
+  it('leaves LSP unset when the file has no lsp key', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, '{}', 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('preserves an explicit opt-out', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: false }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('preserves an explicit opt-in', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: true }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toBe(true);
+    });
+  });
+
+  it('preserves a full config object', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: { maxOpenClients: 2 } }), 'utf-8');
+
+      expect(loadSettings(filePath).lsp).toEqual({ maxOpenClients: 2 });
+    });
+  });
+
+  it('ignores malformed values', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ lsp: 'yes' }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+
+      writeFileSync(filePath, JSON.stringify({ lsp: null }), 'utf-8');
+      expect(loadSettings(filePath).lsp).toBeUndefined();
+    });
+  });
+
+  it('defaults new installs to disabled', () => {
+    withTempSettingsFile(filePath => {
+      expect(loadSettings(filePath).lsp).toBe(false);
+    });
+  });
+
+  it('resolveLspSetting treats absent and false as disabled, true as defaults', () => {
+    expect(resolveLspSetting(undefined)).toBe(false);
+    expect(resolveLspSetting(false)).toBe(false);
+    expect(resolveLspSetting(true)).toEqual({});
+    const config = { maxOpenClients: 3 };
+    expect(resolveLspSetting(config)).toBe(config);
   });
 });

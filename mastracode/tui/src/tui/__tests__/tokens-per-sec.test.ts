@@ -168,6 +168,24 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.tokensPerSec).toBe(20);
   });
 
+  it('keeps the latest request prompt tokens separate from cumulative usage', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+
+    await dispatchEvent(
+      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 50_000, totalTokens: 50_010 } } as any,
+      ectx,
+      state,
+    );
+    await dispatchEvent(
+      { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 90_000, totalTokens: 90_020 } } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.latestRequestPromptTokens).toBe(90_000);
+  });
+
   it('records stream activity on assistant message updates', async () => {
     const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
     const ectx = createEctx();

@@ -101,6 +101,65 @@ describe('formatHierarchicalSpans', () => {
     });
   });
 
+  it('orders sibling spans by start time at every level of the tree', () => {
+    const result = formatHierarchicalSpans([
+      span('root', null, { startedAt: '2026-05-12T10:00:00.000Z' }),
+      span('late-child', 'root', { startedAt: '2026-05-12T10:00:03.000Z' }),
+      span('early-child', 'root', { startedAt: '2026-05-12T10:00:01.000Z' }),
+      span('late-grandchild', 'early-child', { startedAt: '2026-05-12T10:00:04.000Z' }),
+      span('early-grandchild', 'early-child', { startedAt: '2026-05-12T10:00:02.000Z' }),
+    ]);
+
+    const children = getChildren(getAt(result, 0));
+    expect(children.map(child => child.id)).toEqual(['early-child', 'late-child']);
+    expect(getChildren(getAt(children, 0)).map(grandchild => grandchild.id)).toEqual([
+      'early-grandchild',
+      'late-grandchild',
+    ]);
+  });
+
+  it('orders the displayed roots by start time', () => {
+    const result = formatHierarchicalSpans([
+      span('late-root', null, { startedAt: '2026-05-12T10:00:03.000Z' }),
+      span('early-root', null, { startedAt: '2026-05-12T10:00:01.000Z' }),
+      span('orphan', 'parent-not-in-list', { startedAt: '2026-05-12T10:00:02.000Z' }),
+    ]);
+
+    expect(result.map(root => root.id)).toEqual(['early-root', 'orphan', 'late-root']);
+  });
+
+  it('reports each span latency as the time it actually ran', () => {
+    const result = formatHierarchicalSpans([
+      span('root', null, { startedAt: '2026-05-12T10:00:00.000Z', endedAt: '2026-05-12T10:00:09.000Z' }),
+      span('child', 'root', { startedAt: '2026-05-12T10:00:02.000Z', endedAt: '2026-05-12T10:00:05.500Z' }),
+    ]);
+
+    expect(getAt(result, 0).latency).toBe(9000);
+    expect(getAt(getChildren(getAt(result, 0)), 0).latency).toBe(3500);
+  });
+
+  it('keeps the latest endedAt when later spans end earlier or are still running', () => {
+    const result = formatHierarchicalSpans([
+      span('root', null, { endedAt: '2026-05-12T10:00:01.000Z' }),
+      span('latest-child', 'root', { endedAt: '2026-05-12T10:00:05.000Z' }),
+      span('earlier-child', 'root', { endedAt: '2026-05-12T10:00:02.000Z' }),
+      span('running-child', 'root', { endedAt: null }),
+    ]);
+
+    expect(getAt(result, 0).endTime).toBe('2026-05-12T10:00:05.000Z');
+  });
+
+  it('leaves a still-running root without an end time', () => {
+    const result = formatHierarchicalSpans([
+      span('root', null, { endedAt: null }),
+      span('child', 'root', { endedAt: '2026-05-12T10:00:05.000Z' }),
+    ]);
+
+    // The root bar must stay open-ended rather than borrow the child's end.
+    expect(getAt(result, 0).endTime).toBeUndefined();
+    expect(getAt(result, 0).latency).toBe(0);
+  });
+
   it('extends the displayed root endTime to the overall latest endedAt across the spans', () => {
     // When the anchor recorded ending before a descendant, the timeline is widened so the
     // root bar covers the whole subtree.

@@ -22,7 +22,6 @@ import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
-import '@fontsource-variable/mona-sans/standard.css';
 
 const STEP_META: Record<Step, { title: string; description?: string }> = {
   initial: {
@@ -133,7 +132,7 @@ export function EmptyFactoryState() {
   const stepIndex = steps.indexOf(step);
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme bg-surface1 text-neutral6 min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">

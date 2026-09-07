@@ -34,6 +34,12 @@ function formatUnknown(value: unknown): string {
   }
 }
 
+function getScoreBadgeVariant(score: number) {
+  if (score >= 0.7) return 'green';
+  if (score >= 0.4) return 'yellow';
+  return 'red';
+}
+
 export function ReviewItemCard({
   item,
   isExpanded,
@@ -144,9 +150,7 @@ export function ReviewItemCard({
             {isCompleted ? (
               <div className="flex flex-wrap gap-1">
                 {item.tags.map(tag => (
-                  <Badge key={tag} variant="default">
-                    {tag}
-                  </Badge>
+                  <Badge key={tag}>{tag}</Badge>
                 ))}
               </div>
             ) : (
@@ -164,13 +168,11 @@ export function ReviewItemCard({
                 {Object.entries(item.scores)
                   .slice(0, 2)
                   .map(([name, score]) => (
-                    <Badge key={name} variant={score >= 0.7 ? 'success' : score >= 0.4 ? 'warning' : 'error'}>
+                    <Badge key={name} variant={getScoreBadgeVariant(score)}>
                       {name}: {typeof score === 'number' ? score.toFixed(2) : score}
                     </Badge>
                   ))}
-                {Object.keys(item.scores).length > 2 && (
-                  <Badge variant="default">+{Object.keys(item.scores).length - 2}</Badge>
-                )}
+                {Object.keys(item.scores).length > 2 && <Badge>+{Object.keys(item.scores).length - 2}</Badge>}
               </div>
             </div>
           )}

@@ -4,7 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column } from '@mastra/playground-ui/components/Columns';
-import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import { getItemListVersionStatusLabel, ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GitCompareIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
@@ -19,9 +19,6 @@ export interface DatasetItemVersionsPanelProps {
   activeVersion?: number | null;
 }
 
-/**
- * Panel showing dataset item version history.
- */
 export function DatasetItemVersionsPanel({
   datasetId,
   itemId,
@@ -144,6 +141,10 @@ export function DatasetItemVersionsPanel({
                       isFeatured={isVersionSelected(item)}
                       onClick={() => handleVersionClick(item)}
                       className="py-2"
+                      tooltip={getItemListVersionStatusLabel({
+                        isLatest: item.isLatest,
+                        isDeleted: item.isDeleted,
+                      })}
                     >
                       <ItemList.VersionCell
                         version={item.datasetVersion}

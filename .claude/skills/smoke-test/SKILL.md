@@ -326,7 +326,7 @@ After completing all tests, provide a summary:
 
 **Browser agent fails**
 
-- Ensure Playwright browsers are installed: `pnpm exec playwright install chromium`
+- Verify a local Chromium browser, such as Google Chrome, is installed and reachable
 - Check that no other browser instance is blocking
 
 ## Studio Routes

@@ -275,7 +275,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     }));
     items.push({
       value: '__skip',
-      label: `  ${theme.fg('dim', 'Skip (use API keys or configure later with /login)')}`,
+      label: `  ${theme.fg('dim', 'Skip (use API keys or configure later with /connect)')}`,
     });
 
     this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
@@ -323,7 +323,7 @@ export class OnboardingInlineComponent extends Box implements Focusable {
       );
       box.addChild(new Spacer(1));
       box.addChild(
-        new Text(theme.fg('dim', 'Set an API key and restart, or run /login to authenticate via OAuth.'), 0, 0),
+        new Text(theme.fg('dim', 'Run /connect to configure an API key or authenticate with an account.'), 0, 0),
       );
       box.addChild(new Spacer(1));
     }

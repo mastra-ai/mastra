@@ -57,7 +57,8 @@ describe('ChatHeader', () => {
 
     const mobileHeader = screen.getByRole('banner');
     expect(within(mobileHeader).getByRole('heading', { name: 'Preferences' })).toHaveFocus();
-    expect(within(mobileHeader).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
+    // The mobile settings header intentionally has no close button — navigation happens through the drawer.
+    expect(within(mobileHeader).queryByRole('button', { name: 'Close settings' })).not.toBeInTheDocument();
     expect(within(mobileHeader).getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });

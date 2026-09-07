@@ -1,0 +1,29 @@
+{
+  "attachment": [
+    "MiniMax-M3",
+    "deepseek-v4-flash-vision-exp",
+    "glm-5.3-flash",
+    "kimi-k3",
+    "qwen3.8-flash",
+    "qwen3.8-max"
+  ],
+  "temperature": [
+    "MiniMax-M3",
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "hy4-preview",
+    "qwen3.8-max"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-flash-vision-exp",
+    "deepseek-v4-pro",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "kimi-k3",
+    "qwen3.8-flash"
+  ]
+}

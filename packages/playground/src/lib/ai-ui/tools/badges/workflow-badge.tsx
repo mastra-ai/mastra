@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
@@ -8,6 +9,7 @@ import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-
 import { BadgeWrapper } from './badge-wrapper';
 import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
+import { SectionLabel } from './section-label';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import {
@@ -66,7 +68,9 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <ToolCallMono copyText={suspendPayload} className="text-icon3">
+        {suspendPayload}
+      </ToolCallMono>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -100,7 +104,7 @@ export const WorkflowBadge = ({
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="pb-2 font-medium">Workflow suspend payload</p>
+          <SectionLabel>Workflow suspend payload</SectionLabel>
           {suspendPayloadSlot}
         </div>
       )}

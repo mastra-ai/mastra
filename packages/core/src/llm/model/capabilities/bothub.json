@@ -1,0 +1,5 @@
+{
+  "attachment": ["gemma-4-31b-it:free"],
+  "temperature": ["gemma-4-31b-it:free", "nemotron-3-ultra-550b-a55b:free"],
+  "structuredOutput": ["gemma-4-31b-it:free"]
+}

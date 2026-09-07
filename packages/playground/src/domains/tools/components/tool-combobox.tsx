@@ -15,6 +15,7 @@ export interface ToolComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
 }
 
 export function ToolCombobox({
@@ -26,6 +27,7 @@ export function ToolCombobox({
   className,
   disabled = false,
   variant,
+  size,
 }: ToolComboboxProps) {
   const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
   const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();
@@ -89,6 +91,7 @@ export function ToolCombobox({
       className={className}
       disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
       variant={variant}
+      size={size}
     />
   );
 }

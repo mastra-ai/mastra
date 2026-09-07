@@ -96,6 +96,7 @@ export const sandboxCancellationScenario = resourceScenario('sandbox-cancellatio
 ]);
 
 export const persistenceIsolationScenario = resourceScenario('persistence-isolation', [
+  'config-initialization-isolated',
   'application-storage-written',
   'vector-adapter-executed',
   'experiment-records-absent',

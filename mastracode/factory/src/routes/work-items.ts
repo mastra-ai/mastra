@@ -11,16 +11,22 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import { roleForStage } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from '../rules/types.js';
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from '../rules/types.js';
+import type { FactoryRuleBoard, FactoryRuleStage, WorkItemSource } from '../rules/types.js';
+import { isFactoryRuleStage } from '../rules/types.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
@@ -36,10 +42,17 @@ import type {
   WorkItemStage,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemRelationError,
+  WorkItemUpdateConflictError,
+} from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
+import { buildSupervisorRoutes } from './supervisor.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -47,12 +60,41 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   /** Work-items domain backing the kanban board. */
   workItems: WorkItemsStorage;
+  /** Boards installed for this Factory instance. */
+  boardRegistry?: BoardRegistry;
+  /** Comments domain — backs the mention attention provider. */
+  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Materialized sessions, read to report which of the listed cards are being worked. */
+  liveSessions: Pick<LiveSessions, 'isRunning'>;
+}
+
+/** The card as clients see it, without the dispatcher's internal bookkeeping. */
+function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+  if (
+    !item.metadata ||
+    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
+      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata))
+  ) {
+    return item;
+  }
+  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
+}
+
+/** Session ids of the listed cards whose agent run is in flight. */
+function runningSessionIds(items: WorkItemRow[], liveSessions: Pick<LiveSessions, 'isRunning'>): string[] {
+  const running = new Set<string>();
+  for (const item of items) {
+    for (const { sessionId } of Object.values(item.sessions)) {
+      if (liveSessions.isRunning(sessionId)) running.add(sessionId);
+    }
+  }
+  return [...running];
 }
 
 function loose(c: unknown): Context {
@@ -91,6 +133,16 @@ function validMetadata(value: unknown): value is Record<string, unknown> | null 
   }
 }
 
+function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (value === null) return null;
+  const {
+    [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
+    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
+    ...metadata
+  } = value;
+  return metadata;
+}
+
 function parseExternalSource(value: unknown): ExternalWorkItemSource | null | undefined {
   if (value === undefined || value === null) return value;
   if (!isRecord(value)) return undefined;
@@ -125,8 +177,9 @@ function parseSessions(value: unknown): Record<string, WorkItemSessionInput> | u
 /** Validate an untrusted create body. Unknown keys are dropped. */
 export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { externalSource, title, stages, sessions, metadata } = body;
+  const { board, externalSource, title, stages, sessions, metadata } = body;
   if (typeof title !== 'string' || title.trim().length === 0 || title.length > 500) return null;
+  if (board !== undefined && (typeof board !== 'string' || board.length === 0 || board.length > 128)) return null;
 
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
@@ -136,31 +189,40 @@ export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
     title: title.trim(),
+    ...(board !== undefined ? { board } : {}),
     ...(parsedSource !== undefined ? { externalSource: parsedSource } : {}),
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
   };
 }
 
 /** Validate an untrusted patch body. Unknown keys are dropped. */
 export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (!isRecord(body)) return null;
-  const { title, stages, sessions, metadata } = body;
+  const { board, title, stages, sessions, metadata, plansPreapproved } = body;
   const hasParentWorkItemId = 'parentWorkItemId' in body;
   if (
+    board === undefined &&
     title === undefined &&
     stages === undefined &&
     sessions === undefined &&
     metadata === undefined &&
+    plansPreapproved === undefined &&
     !hasParentWorkItemId
   )
     return null;
+  if (board !== undefined && (typeof board !== 'string' || board.length === 0 || board.length > 128)) return null;
+  if (plansPreapproved !== undefined && plansPreapproved !== true) return null;
   const parentWorkItemId = hasParentWorkItemId ? parseParentWorkItemId(body.parentWorkItemId) : undefined;
   if (hasParentWorkItemId && parentWorkItemId === undefined) return null;
   if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0 || title.length > 500))
@@ -168,14 +230,20 @@ export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
   if (stages !== undefined && !validStages(stages)) return null;
   const parsedSessions = sessions === undefined ? undefined : parseSessions(sessions);
   if (sessions !== undefined && parsedSessions === undefined) return null;
-  if (metadata !== undefined && !validMetadata(metadata)) return null;
+  let parsedMetadata: Record<string, unknown> | null | undefined;
+  if (metadata !== undefined) {
+    if (!validMetadata(metadata)) return null;
+    parsedMetadata = publicWorkItemMetadata(metadata);
+  }
 
   return {
+    ...(board !== undefined ? { board } : {}),
     ...(hasParentWorkItemId ? { parentWorkItemId: parentWorkItemId ?? null } : {}),
     ...(title !== undefined ? { title: title.trim() } : {}),
     ...(stages !== undefined ? { stages } : {}),
     ...(parsedSessions !== undefined ? { sessions: parsedSessions } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
+    ...(parsedMetadata !== undefined ? { metadata: parsedMetadata } : {}),
+    ...(plansPreapproved === true ? { plansPreapproved: true } : {}),
   };
 }
 
@@ -202,12 +270,8 @@ function parseTransitionBody(
   body: unknown,
 ): Omit<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId' | 'actor'> | null {
   if (!isRecord(body)) return null;
-  const board = FACTORY_RULE_BOARDS.includes(body.board as FactoryRuleBoard)
-    ? (body.board as FactoryRuleBoard)
-    : undefined;
-  const stage = FACTORY_RULE_STAGES.includes(body.stage as FactoryRuleStage)
-    ? (body.stage as FactoryRuleStage)
-    : undefined;
+  const board = typeof body.board === 'string' && body.board.length > 0 ? (body.board as FactoryRuleBoard) : undefined;
+  const stage = typeof body.stage === 'string' && body.stage.length > 0 ? (body.stage as FactoryRuleStage) : undefined;
   const requestId = boundedText(body.requestId, 256);
   const cause = boundedText(body.cause, 256);
   if (
@@ -227,22 +291,8 @@ function parseTransitionBody(
     expectedRevision: Number(body.expectedRevision),
     ingress: { type: 'human', identity: requestId },
     cause,
+    ...(body.reenter === true ? { reenter: true } : {}),
   };
-}
-
-function parseInvocation(value: unknown): FactoryStartRequest['invocation'] | undefined | null {
-  if (value === undefined) return undefined;
-  if (!isRecord(value)) return null;
-  if (value.type === 'prompt') {
-    const prompt = boundedText(value.prompt, 16_384);
-    return prompt ? { type: 'prompt', prompt } : null;
-  }
-  if (value.type === 'skill') {
-    const skillName = boundedText(value.skillName, 64);
-    const args = typeof value.arguments === 'string' && value.arguments.length <= 16_384 ? value.arguments : undefined;
-    return skillName && args !== undefined ? { type: 'skill', skillName, arguments: args } : null;
-  }
-  return null;
 }
 
 function parseStartBody(
@@ -255,13 +305,8 @@ function parseStartBody(
   const sessionId = boundedText(body.sessionId, 256);
   const threadTitle = boundedText(body.threadTitle, 512);
   const kickoffKey = boundedText(body.kickoffKey, 256);
-  const invocation = parseInvocation(body.invocation);
-  const destinationStage = FACTORY_RULE_STAGES.includes(body.destinationStage as FactoryRuleStage)
-    ? (body.destinationStage as FactoryRuleStage)
-    : undefined;
   const role = boundedText(body.workItem.role, 32);
-  const id = body.workItem.id === undefined ? undefined : boundedText(body.workItem.id, 64);
-  if (body.workItem.id !== undefined && (!id || !UUID_RE.test(id))) return null;
+  const id = boundedText(body.workItem.id, 64);
   if (
     !input ||
     !sessionId ||
@@ -269,36 +314,25 @@ function parseStartBody(
     !threadTitle ||
     !kickoffKey ||
     !UUID_RE.test(kickoffKey) ||
-    invocation === null ||
-    !destinationStage ||
+    !id ||
+    !UUID_RE.test(id) ||
     !role
   ) {
     return null;
   }
-  const threadTags = isRecord(body.threadTags)
-    ? Object.fromEntries(
-        Object.entries(body.threadTags)
-          .filter(
-            (entry): entry is [string, string] =>
-              boundedText(entry[0], 64) !== undefined && boundedText(entry[1], 256) !== undefined,
-          )
-          .map(([key, value]) => [key, value.trim()]),
-      )
-    : undefined;
-  return {
-    ...tenant,
-    factoryProjectId,
-    sessionId,
-    threadTitle,
-    threadTags,
-    kickoffKey,
-    invocation,
-    destinationStage,
-    workItem: { id, role, input },
-  };
+  return { ...tenant, factoryProjectId, sessionId, threadTitle, kickoffKey, workItem: { id, role, input } };
 }
 
-const DECISION_STATUSES = new Set<FactoryDispatchStatus>(['pending', 'leased', 'retry', 'succeeded', 'failed']);
+const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
+  'pending',
+  'proposed',
+  'dismissed',
+  'superseded',
+  'leased',
+  'retry',
+  'succeeded',
+  'failed',
+]);
 const DEFAULT_DECISION_PAGE_SIZE = 25;
 const MAX_DECISION_PAGE_SIZE = 50;
 
@@ -340,15 +374,38 @@ function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: st
   }
 }
 
+/** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
+function summaryRole(decision: Record<string, unknown>): string | null {
+  if (typeof decision.role === 'string') return decision.role.slice(0, 32);
+  if (decision.type !== 'transition') return null;
+  const board = decision.board;
+  const stage = decision.stage;
+  if ((board !== 'work' && board !== 'review') || !isFactoryRuleStage(stage)) return null;
+  return roleForStage(board, stage);
+}
+
+/** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
+function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
+  if (decision.type !== 'upsertLinkedWorkItem') return null;
+  const source = decision.source;
+  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
+    ? source
+    : null;
+}
+
 function decisionSummary(decision: FactoryDeferredDecisionRecord) {
-  const type = typeof decision.decision.type === 'string' ? decision.decision.type.slice(0, 64) : 'unknown';
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
     workItemId: decision.workItemId,
-    type,
+    type: factoryDecisionType(decision),
+    role: summaryRole(decision.decision),
+    source: summarySource(decision.decision),
     status: decision.status,
     attempts: decision.attempts,
+    failureOccurrence: decision.failureOccurrence,
+    failureCode: decision.failureCode,
+    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -462,11 +519,58 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     }
   }
 
+  /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
+  #proposalRoute({
+    verb,
+    settle,
+  }: {
+    verb: 'approve' | 'dismiss';
+    settle: (
+      orgId: string,
+      factoryProjectId: string,
+      decisionId: string,
+      now: Date,
+      userId: string,
+    ) => Promise<FactoryDeferredDecisionRecord | null>;
+  }): ApiRoute {
+    const { audit, workItems } = this.deps;
+    return registerApiRoute(`/web/factory/projects/:id/decisions/:decisionId/${verb}`, {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const context = loose(c);
+        const resolved = await this.#resolveProject(context);
+        if ('response' in resolved) return resolved.response;
+        const decisionId = context.req.param('decisionId');
+        if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
+        await workItems.ensureReady();
+        const now = new Date();
+        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
+        if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
+        // Releasing a proposal is a person taking the item on. Approval arms the
+        // item's autonomy inside the same storage transaction (see
+        // approveDeferredDecision), so follow-up runs no longer wait for approval.
+        await audit.emit({
+          context,
+          input: {
+            action: verb === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
+            factoryProjectId: resolved.factoryProjectId,
+            targets: decision.workItemId
+              ? [{ type: 'work_item', id: decision.workItemId }]
+              : [{ type: 'rule_decision', id: decision.id }],
+            metadata: { decisionId: decision.id, effect: factoryDecisionType(decision) },
+          },
+        });
+        return c.json({ decision: decisionSummary(decision) });
+      },
+    });
+  }
+
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
-      // ── List the org's work items for a project ─────────────────────────────
+      // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute('/web/factory/projects/:id/work-items', {
         method: 'GET',
         requiresAuth: false,
@@ -478,7 +582,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ workItems: items });
+          return c.json({
+            workItems: items.map(toWireWorkItem),
+            runningSessionIds: runningSessionIds(items, liveSessions),
+          });
         },
       }),
 
@@ -548,6 +655,20 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      ...buildAttentionRoutes({
+        workItems,
+        comments: this.deps.comments,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
+      ...buildSupervisorRoutes({
+        workItems,
+        resolveProject: context => this.#resolveProject(loose(context)),
+      }),
+
+      this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
+      this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
+
       registerApiRoute('/web/factory/projects/:id/decisions/:decisionId/retry', {
         method: 'POST',
         requiresAuth: false,
@@ -558,6 +679,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const decisionId = context.req.param('decisionId');
           if (!decisionId || !UUID_RE.test(decisionId)) return c.json({ error: 'invalid_decision_id' }, 422);
           await workItems.ensureReady();
+          const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
+          if (
+            !current ||
+            current.status !== 'failed' ||
+            !factoryDispatchFailureMetadata(current.failureCode).canRetry
+          ) {
+            return c.json({ error: 'decision_not_retryable' }, 409);
+          }
           const decision = await workItems.retryDeferredDecision(
             resolved.orgId,
             resolved.factoryProjectId,
@@ -581,9 +710,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const input = parseCreateWorkItem(body);
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
-          if ((input.stages ?? ['intake']).length !== 1 || (input.stages ?? ['intake'])[0] !== 'intake') {
+          const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
+          const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(boardId);
+          if (!board) return c.json({ error: 'invalid_board', message: `Board '${boardId}' is not installed.` }, 422);
+          const initialStages = input.stages ?? [board.initialPhase];
+          if (initialStages.length !== 1 || initialStages[0] !== board.initialPhase) {
             return c.json(
-              { error: 'governed_transition_required', message: 'New work items must enter through Factory intake.' },
+              {
+                error: 'governed_transition_required',
+                message: `New work items must enter through the '${board.initialPhase}' phase of board '${boardId}'.`,
+              },
               409,
             );
           }
@@ -594,7 +730,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               orgId: resolved.orgId,
               userId: resolved.userId,
               factoryProjectId: resolved.factoryProjectId,
-              input,
+              input: { ...input, board: boardId, stages: initialStages },
               reuseMode: 'non-stage',
             });
             let item = result.item;
@@ -607,8 +743,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 orgId: resolved.orgId,
                 factoryProjectId: resolved.factoryProjectId,
                 workItemId: item.id,
-                board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
-                stage: 'intake',
+                board: boardId,
+                stage: board.initialPhase,
                 expectedRevision: item.revision,
                 actor: { type: 'human', id: resolved.userId },
                 ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
@@ -640,7 +776,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 patch: boundedPatch as unknown as Record<string, unknown>,
               });
             }
-            return c.json({ workItem: item });
+            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
@@ -714,16 +850,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
-          if (
-            !input.workItem.id &&
-            ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
-              (input.workItem.input.stages ?? ['intake'])[0] !== 'intake')
-          ) {
-            return c.json(
-              { error: 'governed_transition_required', message: 'Create the work item in Intake before starting it.' },
-              409,
-            );
-          }
           await workItems.ensureReady();
           let prepared: FactoryStartPreparedResult;
           try {
@@ -768,16 +894,37 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const patch = parseUpdateWorkItem(body);
           if (!patch) return c.json({ error: 'invalid_work_item_patch' }, 400);
-          if (patch.stages !== undefined) {
+
+          await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: tenant.orgId, id });
+          if (!existing) return c.json({ error: 'Work item not found' }, 404);
+          if (patch.board !== undefined) {
+            const board = (this.deps.boardRegistry ?? createBoardRegistry()).get(patch.board);
+            const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
+            if (existing.board !== null) {
+              return c.json({ error: 'board_already_assigned' }, 409);
+            }
+            if (!board) {
+              return c.json({ error: 'board_not_installed' }, 400);
+            }
+            if (!stage || !Object.prototype.hasOwnProperty.call(board.phases, stage)) {
+              return c.json({ error: 'invalid_board_migration_phase' }, 400);
+            }
+          } else if (patch.stages !== undefined) {
             return c.json(
               { error: 'governed_transition_required', message: 'Use the Factory transition endpoint to move stages.' },
               409,
             );
           }
 
-          await workItems.ensureReady();
           try {
-            const updated = await workItems.update({ orgId: tenant.orgId, id, userId: tenant.userId, patch });
+            const updated = await workItems.update({
+              orgId: tenant.orgId,
+              id,
+              userId: tenant.userId,
+              patch,
+              ...(patch.board !== undefined ? { expectedRevision: existing.revision, expectedBoard: null } : {}),
+            });
             if (!updated) return c.json({ error: 'Work item not found' }, 404);
             await this.#auditWorkItemPatch({
               context: loose(c),
@@ -785,10 +932,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               previous: updated.previous,
               patch: patch as Record<string, unknown>,
             });
-            return c.json({ workItem: updated.item });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);
+            }
+            if (error instanceof WorkItemUpdateConflictError) {
+              return c.json({ error: error.reason === 'board' ? 'board_already_assigned' : error.code }, 409);
             }
             throw error;
           }

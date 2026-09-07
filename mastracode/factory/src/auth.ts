@@ -1,4 +1,6 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { MessageAuthor } from '@mastra/core/agent-controller';
+import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
   registerApiRoute,
   isAuthHttpHandler,
@@ -11,7 +13,10 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 
 import type { RouteAuth } from './routes/route.js';
+import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { timedAboveThreshold } from './timing.js';
+
+const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 
 /**
  * Provider-neutral factory auth gating for the MastraCode web server.
@@ -53,6 +58,8 @@ export interface FactoryAuthUser {
    * isolated building instances. Absent for personal (no-org) accounts.
    */
   organizationId?: string;
+  /** Organization ids proven by the provider's authenticated membership response. */
+  organizationMembershipIds?: string[];
 }
 
 /**
@@ -157,6 +164,17 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   return { orgId: getFactoryAuthOrgId(user), userId };
 }
 
+function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  const actor = actorFromAuthUser(userId, user);
+  return {
+    id: actor.id,
+    ...(actor.displayName ? { name: actor.displayName } : {}),
+    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+  };
+}
+
 /** True when both WorkOS credential env vars are present (legacy env gate). */
 function envWorkosConfigured(): boolean {
   return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
@@ -216,10 +234,23 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     name?: unknown;
     avatarUrl?: unknown;
     organizationId?: unknown;
+    memberships?: unknown;
+    memberOrgIds?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
   const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
   if (!id && !workosId) return null;
+  const membershipOrganizationIds = Array.isArray(flat.memberships)
+    ? flat.memberships.flatMap(membership => {
+        if (!membership || typeof membership !== 'object') return [];
+        const organizationId = (membership as { organizationId?: unknown }).organizationId;
+        return typeof organizationId === 'string' ? [organizationId] : [];
+      })
+    : [];
+  const memberOrgIds = Array.isArray(flat.memberOrgIds)
+    ? flat.memberOrgIds.filter((organizationId): organizationId is string => typeof organizationId === 'string')
+    : [];
+  const organizationMembershipIds = [...new Set([...membershipOrganizationIds, ...memberOrgIds])];
   return {
     id,
     workosId,
@@ -227,6 +258,7 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     name: typeof flat.name === 'string' ? flat.name : undefined,
     avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
+    organizationMembershipIds,
   };
 }
 
@@ -266,6 +298,13 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   } catch {
     // Best-effort: the user stays no-org until a later request succeeds.
   }
+}
+
+function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
+  if (user.organizationId === requestedOrganizationId) return true;
+  if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
+  user.organizationId = requestedOrganizationId;
+  return true;
 }
 
 /**
@@ -417,6 +456,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
       userId: getFactoryAuthUserId(user),
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
     },
     ...meta,
@@ -717,6 +757,15 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
+// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
+// so a future route under the same prefix does not inherit the pass.
+const SESSION_FAVICON_PATHS = new Set([
+  '/favicon-session-initializing.svg',
+  '/favicon-session-working.svg',
+  '/favicon-session-awaiting.svg',
+  '/favicon-session-error.svg',
+]);
+
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
@@ -766,7 +815,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg'
+      path === '/mastra.svg' ||
+      path === '/pwa-192.png' ||
+      path === '/pwa-512.png' ||
+      path === '/apple-touch-icon.png' ||
+      (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();
     }
@@ -779,11 +832,20 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     );
 
     if (user) {
-      // Bootstrap a personal org for no-org accounts so the org id resolves on
-      // this request (see ensureFactoryAuthUser for the rationale).
-      await ensureUserOrg(provider, user);
+      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+      if (requestedOrganizationId) {
+        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+          return c.json({ error: 'organization_forbidden' }, 403);
+        }
+      } else {
+        // Bootstrap a personal org for no-org accounts so the org id resolves on
+        // this request (see ensureFactoryAuthUser for the rationale).
+        await ensureUserOrg(provider, user);
+      }
       c.set(FACTORY_AUTH_USER_KEY, user);
-      c.get('requestContext')?.set('user', user);
+      const requestContext = c.get('requestContext');
+      requestContext?.set('user', user);
+      requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
       return next();
     }
 

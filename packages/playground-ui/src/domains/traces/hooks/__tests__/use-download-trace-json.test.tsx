@@ -21,10 +21,23 @@ function readBlobText(blob: Blob): Promise<string> {
   });
 }
 
+type ToastPromiseArgs = {
+  myPromise: Promise<unknown>;
+  loadingMessage: string;
+  successMessage: string;
+  errorMessage: string;
+};
+
 // Keep the toast side effect out of the test, but still consume the promise so its
-// rejection is handled and `isPending` can settle.
+// rejection is handled and `isPending` can settle — and record what the user is told.
+const toastCalls = vi.hoisted(() => [] as ToastPromiseArgs[]);
 vi.mock('@/lib/toast', () => ({
-  toast: { promise: ({ myPromise }: { myPromise: Promise<unknown> }) => myPromise.catch(() => {}) },
+  toast: {
+    promise: (args: ToastPromiseArgs) => {
+      toastCalls.push(args);
+      return args.myPromise.catch(() => {});
+    },
+  },
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -71,6 +84,7 @@ let clickedDownloadAttr: string | undefined;
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
+  toastCalls.length = 0;
   clickedDownloadAttr = undefined;
   createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -104,6 +118,35 @@ describe('useDownloadTraceJson', () => {
     const [blob] = firstCall as [Blob];
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(traceFixture, null, 2));
     expect(clickedDownloadAttr).toBe(`trace-${TRACE_ID}.json`);
+  });
+
+  it('gives the toast the words for every stage of the download', async () => {
+    server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceFixture)));
+
+    const { result } = renderHook(() => useDownloadTraceJson(), { wrapper: makeWrapper() });
+
+    act(() => result.current.download(TRACE_ID));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    expect(toastCalls).toHaveLength(1);
+    expect(toastCalls[0]?.loadingMessage).toBe('Preparing trace download…');
+    expect(toastCalls[0]?.successMessage).toBe('Trace downloaded');
+    expect(toastCalls[0]?.errorMessage).toBe('Failed to download trace');
+  });
+
+  it('ignores a second request while the first is still in flight', async () => {
+    server.use(http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceFixture)));
+
+    const { result } = renderHook(() => useDownloadTraceJson(), { wrapper: makeWrapper() });
+
+    act(() => result.current.download(TRACE_ID));
+    act(() => result.current.download(TRACE_ID));
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    // One file and one toast \u2014 an impatient second click changes nothing.
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(toastCalls).toHaveLength(1);
   });
 
   it('does not download when the trace fetch fails and resets the pending state', async () => {

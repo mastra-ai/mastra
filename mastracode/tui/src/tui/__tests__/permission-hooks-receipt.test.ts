@@ -316,11 +316,16 @@ describe('runId edge with a real HookManager (#20861, Risk R1)', () => {
     rmSync(tmpHome, { recursive: true, force: true });
   });
 
-  it('silently no-ops when a permission event arrives before setRunId', async () => {
+  it('silently no-ops when a permission event arrives with no preceding agent_start', async () => {
     // The runId bail lives in the real HookManager.runPermissionRequest — a
     // fake manager would never execute it. HookManager reads hook config from
     // the filesystem at construction, so config is injected via controlled
     // temp dirs (project + home) to keep the test hermetic.
+    //
+    // The receipt-time tap sets runId when agent_start arrives (see
+    // runPermissionHooksForEvent in display.ts). This test deliberately sends
+    // NO agent_start, so the runId remains unset and the hook bails — proving
+    // the guard still works when no run has been started.
     const marker = join(tmpProject, 'permission-hook-ran.marker');
     mkdirSync(join(tmpProject, '.mastracode'), { recursive: true });
     writeFileSync(
@@ -365,6 +370,61 @@ describe('runId edge with a real HookManager (#20861, Risk R1)', () => {
     const result = await spy.mock.results[0]!.value;
     expect(result.results).toEqual([]);
     expect(existsSync(marker)).toBe(false);
+
+    releaseBlocker.resolve();
+    await blocked;
+  });
+
+  it('sets runId at receipt time so a permission event after agent_start fires the hook', async () => {
+    // The receipt-time tap (runPermissionHooksForEvent in display.ts) sets the
+    // runId when agent_start arrives, BEFORE the queued handler processes it.
+    // This closes the race where a tool_suspended arriving in the same
+    // synchronous batch as agent_start would find runId unset and bail.
+    const marker = join(tmpProject, 'permission-hook-ran.marker');
+    mkdirSync(join(tmpProject, '.mastracode'), { recursive: true });
+    writeFileSync(
+      join(tmpProject, '.mastracode', 'hooks.json'),
+      JSON.stringify({
+        PermissionRequest: [
+          {
+            type: 'command',
+            command: `node -e "require('node:fs').appendFileSync('${marker}', 'x')"`,
+            timeout: 5000,
+          },
+        ],
+      }),
+    );
+
+    const manager = new HookManager(tmpProject, 'session-runid-test', '.mastracode', tmpHome);
+    expect(manager.getConfig().PermissionRequest).toHaveLength(1);
+    expect(manager.getRunId()).toBeUndefined();
+
+    const spy = vi.spyOn(manager, 'runPermissionRequest');
+    const { listener, releaseBlocker } = createHarness(manager);
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    // agent_start arrives at receipt time — the tap should set the runId.
+    void listener({ type: 'agent_start' });
+    expect(manager.getRunId()).toBeDefined();
+
+    // tool_suspended for request_access arrives in the same batch — the hook
+    // must fire now that runId is set.
+    void listener({
+      type: 'tool_suspended',
+      toolCallId: 'call-access',
+      toolName: 'request_access',
+      suspendPayload: { kind: 'sandbox_access_request', path: '/tmp/test' },
+    });
+    expect(spy).toHaveBeenCalledWith('sandbox_access', 'call-access', 'request_access', {
+      kind: 'sandbox_access_request',
+      path: '/tmp/test',
+    });
+
+    // The hook process should have run and written the marker.
+    const result = await spy.mock.results[0]!.value;
+    expect(result.results).toHaveLength(1);
+    expect(existsSync(marker)).toBe(true);
 
     releaseBlocker.resolve();
     await blocked;

@@ -6,9 +6,15 @@ export interface PlatformApiClientConfig {
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
-  const accessToken = process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
+  // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
+  // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
+  // written by project scaffolding. The platform API accepts both forms.
+  const accessToken =
+    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
-    throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_SECRET_KEY.');
+    throw new Error(
+      'Platform integration: missing required environment variable MASTRA_PLATFORM_ACCESS_TOKEN (or MASTRA_PLATFORM_SECRET_KEY).',
+    );
   }
   return { baseUrl: normalizeSharedApiUrl(sharedApiUrl), accessToken };
 }

@@ -1,9 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 
-import { CloseIcon } from '../../../ui/icons';
-import { useCloseSettings } from '../hooks/useCloseSettings';
+import { MobilePageTitle } from '../../chat/components/MobilePageTitle';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS } from '../settingsSections';
 
@@ -14,7 +12,6 @@ type SettingsHeaderProps = {
 
 export function SettingsHeader({ autoFocus = false, placement }: SettingsHeaderProps) {
   const section = useSettingsSection();
-  const closeSettings = useCloseSettings();
   const titleRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (autoFocus) titleRef.current?.focus();
@@ -26,13 +23,14 @@ export function SettingsHeader({ autoFocus = false, placement }: SettingsHeaderP
 
   return (
     <div className={className}>
-      <Txt as="h1" variant="header-sm" ref={titleRef} tabIndex={-1} className="text-icon6">
-        {SETTINGS_SECTION_LABELS[section]}
-      </Txt>
-      {placement === 'mobile' && (
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Close settings" onClick={closeSettings}>
-          <CloseIcon size={16} />
-        </Button>
+      {placement === 'mobile' ? (
+        <MobilePageTitle ref={titleRef} tabIndex={-1}>
+          {SETTINGS_SECTION_LABELS[section]}
+        </MobilePageTitle>
+      ) : (
+        <Txt as="h1" variant="header-sm" ref={titleRef} tabIndex={-1} className="text-icon6">
+          {SETTINGS_SECTION_LABELS[section]}
+        </Txt>
       )}
     </div>
   );

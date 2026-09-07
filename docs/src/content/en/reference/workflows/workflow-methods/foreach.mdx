@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow.foreach() | Workflows"
-description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
+description: "The .foreach() method creates a loop that executes a step for each item in an array. It always returns an array containing the output from each iteration, preserving the original order."
 packages:
   - "@mastra/core"
 ---
@@ -29,13 +29,31 @@ workflow.foreach(step1, { concurrency: 2 })
     name: 'opts',
     type: 'object',
     description:
-      'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)',
+      'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1). The identity and display fields are preserved through serialization and storage and have no effect on execution.',
     isOptional: true,
     properties: [
       {
         name: 'concurrency',
         type: 'number',
         description: 'The number of concurrent iterations allowed (default: 1)',
+        isOptional: true,
+      },
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Stable entry id that editors and tools can use to address this entry across edits',
+        isOptional: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Human-readable description of this control-flow operation',
+        isOptional: true,
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, unknown>',
+        description: 'JSON-serializable metadata, for example a display title for visual editors',
         isOptional: true,
       },
     ],
@@ -59,7 +77,7 @@ workflow.foreach(step1, { concurrency: 2 })
 
 ### Execution and waiting
 
-The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
+The `.foreach()` method processes every item before the next step executes, regardless of concurrency settings. The default `concurrency: 1` processes items sequentially. Higher values use parallel batches, but the next step still waits for every batch to finish.
 
 If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/workflows/control-flow#nested-workflows-inside-foreach) for examples.
 

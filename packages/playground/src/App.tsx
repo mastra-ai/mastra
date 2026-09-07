@@ -1,4 +1,3 @@
-import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
@@ -9,10 +8,19 @@ import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-bu
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
+import { ExperimentCrumb } from './domains/experiments/experiment-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage from './ee/signals';
 import { SignalsEntityCrumb } from './ee/signals/signals-entity-crumb';
+import { SignalsEntityDetailPage } from './ee/signals/signals-entity-detail-page';
 import { PostHogProvider } from './lib/analytics';
+import {
+  agentIndexLoader,
+  agentThreadsIndexLoader,
+  legacyAgentChatLoader,
+  legacyAgentSettingsLoader,
+  paths,
+} from './lib/app-routing';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
@@ -30,6 +38,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentThread from './pages/agents/agent/thread';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -51,15 +60,19 @@ import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
-import DatasetExperiment from './pages/datasets/dataset/experiment';
-import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
+import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import CreateDatasetPage from './pages/datasets/new';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
+import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
+import ExperimentItemPage from './pages/experiments/experiment/item';
+import ReviewQueuePage from './pages/experiments/review-queue';
+import InboxPage from './pages/inbox';
 import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
@@ -79,7 +92,6 @@ import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
-import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
@@ -102,10 +114,8 @@ import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
 import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
 import { ToolCrumb } from '@/domains/tools/tool-crumb';
-import { TraceCrumb } from '@/domains/traces/trace-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -136,56 +146,6 @@ declare global {
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
 }
-
-const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
-    messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
-  workflowsLink: () => `/workflows`,
-  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
-  schedulesLink: () => `/workflows/schedules`,
-  scheduleLink: (scheduleId: string) => `/workflows/schedules/${encodeURIComponent(scheduleId)}`,
-  networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
-  networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
-  networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  cmsScorersCreateLink: () => '/cms/scorers/create',
-  cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
-  promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
-  promptBlocksLink: () => '/prompts',
-  cmsPromptBlockCreateLink: () => '/cms/prompts/create',
-  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
-    workspaceId
-      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
-      : `/workspaces`,
-  workspacesLink: () => `/workspaces`,
-  processorsLink: () => `/processors`,
-  processorLink: (processorId: string) => `/processors/${processorId}`,
-  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
-  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
-  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
-};
 
 const RootLayout = () => {
   const navigate = useNavigate();
@@ -246,6 +206,11 @@ const decodeRouteParam = (value: string | undefined) => {
   } catch {
     return value;
   }
+};
+
+const truncateItemIdCrumb = (value: string | undefined) => {
+  const decoded = decodeRouteParam(value);
+  return decoded.length > 8 ? `${decoded.slice(0, 8)}...` : decoded;
 };
 
 // eslint-disable-next-line react-refresh/only-export-components -- route metadata is covered by regression tests.
@@ -344,6 +309,8 @@ export const routes: RouteObject[] = [
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
       { path: '/agents/:agentId/session/:threadId', element: <AgentSession /> },
+      { path: '/agents/:agentId/threads', loader: agentThreadsIndexLoader },
+      { path: '/agents/:agentId/threads/:threadId', element: <AgentThread /> },
     ],
   },
   {
@@ -383,15 +350,24 @@ export const routes: RouteObject[] = [
       {
         path: '/intelligence',
         element: <SignalsOverviewPage />,
+        handle: navHandle('/intelligence'),
+      },
+      {
+        path: '/intelligence/entities/:entityType/:entityId',
+        element: <SignalsEntityDetailPage />,
         handle: navHandleWithChildren('/intelligence', [
-          { id: 'signals-agent', Component: SignalsEntityCrumb, heading: 'Agent' },
+          { id: 'signals-entity', Component: SignalsEntityCrumb, heading: 'Entity' },
         ]),
       },
       { path: '/traces', element: <Traces />, handle: navHandle('/traces') },
+      { path: '/inbox', element: <InboxPage />, handle: navHandle('/inbox') },
       {
         path: '/traces/:traceId',
-        element: <TraceDetails />,
-        handle: navHandleWithChildren('/traces', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+        loader: ({ params, request }: LoaderFunctionArgs) => {
+          const search = new URL(request.url).searchParams;
+          search.set('traceId', params.traceId ?? '');
+          return redirect(`/traces?${search.toString()}`);
+        },
       },
       {
         path: '/observability',
@@ -453,11 +429,12 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
+            loader: agentIndexLoader,
           },
-          { path: 'chat', element: <Agent /> },
-          { path: 'chat/:threadId', element: <Agent /> },
-          { path: 'settings', element: <Agent view="settings" /> },
+          { path: 'chat', loader: legacyAgentChatLoader },
+          { path: 'chat/:threadId', loader: legacyAgentChatLoader },
+          { path: 'overview', element: <Agent /> },
+          { path: 'settings', loader: legacyAgentSettingsLoader },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -470,7 +447,7 @@ export const routes: RouteObject[] = [
             // Channels is configuration, not a tool tab: it now lives in the
             // agent settings view. Keep old links working.
             path: 'channels',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/overview?tab=channels`),
           },
         ],
       },
@@ -579,20 +556,49 @@ export const routes: RouteObject[] = [
         ? [
             { path: '/datasets', element: <Datasets />, handle: navHandle('/datasets') },
             {
-              path: '/datasets/:datasetId',
-              element: <DatasetPage />,
+              path: '/datasets/new',
+              element: <CreateDatasetPage />,
               handle: {
-                crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' }],
+                crumbs: () => [navCrumb('/datasets'), { id: 'dataset-new', label: 'Create new dataset' }],
               } satisfies RouteHeaderHandle,
             },
             {
-              path: '/datasets/:datasetId/items/:itemId',
-              element: <DatasetItemPage />,
+              path: '/datasets/:datasetId',
+              element: <DatasetPage />,
               handle: {
+                // The `to` link only renders when this isn't the current (last) crumb,
+                // i.e. on the nested items/:itemId route.
                 crumbs: ({ params }) => [
                   navCrumb('/datasets'),
+                  {
+                    id: 'dataset',
+                    Component: DatasetCrumb,
+                    heading: 'Dataset',
+                    to: params.datasetId ? `/datasets/${encodeURIComponent(params.datasetId)}` : undefined,
+                  },
+                ],
+              } satisfies RouteHeaderHandle,
+              children: [
+                {
+                  path: 'items/:itemId',
+                  element: <DatasetItemPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      { id: 'dataset-items', label: 'Items' },
+                      { id: 'dataset-item', label: truncateItemIdCrumb(params.itemId) },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
+              ],
+            },
+            {
+              path: '/datasets/:datasetId/edit',
+              element: <EditDatasetPage />,
+              handle: {
+                crumbs: () => [
+                  navCrumb('/datasets'),
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
+                  { id: 'dataset-edit', label: 'Edit dataset' },
                 ],
               } satisfies RouteHeaderHandle,
             },
@@ -605,7 +611,7 @@ export const routes: RouteObject[] = [
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   {
                     id: 'dataset-item',
-                    label: decodeRouteParam(params.itemId),
+                    label: truncateItemIdCrumb(params.itemId),
                     to:
                       params.datasetId && params.itemId
                         ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
@@ -615,49 +621,67 @@ export const routes: RouteObject[] = [
                 ],
               } satisfies RouteHeaderHandle,
             },
+            { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
-              path: '/datasets/:datasetId/experiments/:experimentId',
-              element: <DatasetExperiment />,
+              path: '/experiments/compare',
+              element: <CompareExperimentsPage />,
               handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiment', label: decodeRouteParam(params.experimentId) },
-                ],
+                crumbs: () => [navCrumb('/experiments'), { id: 'experiments-compare', label: 'Compare' }],
+              },
+            },
+            {
+              path: '/experiments/review-queue',
+              element: <ReviewQueuePage />,
+              handle: {
+                crumbs: () => [navCrumb('/experiments'), navCrumb('/experiments/review-queue')],
               } satisfies RouteHeaderHandle,
             },
-            { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
             {
               path: '/experiments/:experimentId',
               element: <ExperimentPage />,
               handle: {
+                // The `to` link only renders when this isn't the current (last) crumb,
+                // i.e. on the nested items/:itemId route.
                 crumbs: ({ params }) => [
                   navCrumb('/experiments'),
-                  { id: 'experiment', label: decodeRouteParam(params.experimentId) },
+                  {
+                    id: 'experiment',
+                    Component: ExperimentCrumb,
+                    heading: 'Experiment',
+                    to: params.experimentId ? `/experiments/${encodeURIComponent(params.experimentId)}` : undefined,
+                  },
                 ],
               } satisfies RouteHeaderHandle,
+              children: [
+                {
+                  path: 'items/:itemId',
+                  element: <ExperimentItemPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      { id: 'experiment-items', label: 'Items' },
+                      { id: 'experiment-item', label: truncateItemIdCrumb(params.itemId) },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
+              ],
             },
             {
-              path: '/datasets/:datasetId/experiments',
-              element: <CompareDatasetExperimentsPage />,
-              handle: {
-                crumbs: () => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-experiments', label: 'Experiments' },
-                ],
-              },
-            },
-            {
-              path: '/datasets/:datasetId/items',
+              path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
               element: <DatasetItemsComparePage />,
               handle: {
-                crumbs: () => [
+                crumbs: ({ params }) => [
                   navCrumb('/datasets'),
                   { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
                   { id: 'dataset-items', label: 'Items' },
+                  {
+                    id: 'dataset-item',
+                    label: truncateItemIdCrumb(params.itemId),
+                    to: `/datasets/${params.datasetId}/items/${params.itemId}`,
+                  },
+                  { id: 'dataset-item-compare', label: 'Compare' },
+                  { id: 'dataset-item-compare-second', label: truncateItemIdCrumb(params.secondItemId) },
                 ],
-              },
+              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/versions',

@@ -1,23 +1,70 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Plus } from 'lucide-react';
 import { Button } from '../Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
+import { Switch } from '../Switch';
 import { Section } from './section';
+import type { SectionVariant } from './section';
 
-const meta: Meta<typeof Section> = {
+type SectionPlaygroundProps = {
+  variant: SectionVariant;
+  inset: boolean;
+};
+
+function SectionPlayground({ variant, inset }: SectionPlaygroundProps) {
+  return (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
+        <Section.HeaderText>
+          <Section.Heading>General</Section.Heading>
+          <Section.Description>Choose how this section aligns with its content.</Section.Description>
+        </Section.HeaderText>
+      </Section.Header>
+      <Section.Content>
+        <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">
+          <Switch aria-label="Auto-approve tools" />
+        </Section.Row>
+        <Section.Divider />
+        <Section.Row label="Smart editing" description="Use AST-aware edits when available.">
+          <Switch aria-label="Smart editing" defaultChecked />
+        </Section.Row>
+      </Section.Content>
+    </Section>
+  );
+}
+
+const meta = {
   title: 'Layout/Section',
-  component: Section,
+  component: SectionPlayground,
   parameters: {
     layout: 'centered',
   },
-};
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: ['default', 'flat', 'factory'],
+    },
+    inset: { control: 'boolean' },
+  },
+} satisfies Meta<typeof SectionPlayground>;
 
 export default meta;
-type Story = StoryObj<typeof Section>;
+type Story = StoryObj<typeof meta>;
+
+export const Playground: Story = {};
 
 export const Default: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
       <div className="border-border1 bg-surface2 rounded-md border p-4">
@@ -28,9 +75,13 @@ export const Default: Story = {
 };
 
 export const WithAction: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
           <Plus className="size-4" />
@@ -45,9 +96,13 @@ export const WithAction: Story = {
 };
 
 export const ConfigurationSection: Story = {
-  render: () => (
-    <Section className="w-125">
-      <Section.Header>
+  args: {
+    variant: 'default',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-125">
+      <Section.Header inset={inset}>
         <Section.Heading>Configuration</Section.Heading>
         <Button variant="outline" size="md">
           Edit
@@ -71,24 +126,197 @@ export const ConfigurationSection: Story = {
   ),
 };
 
+export const Flat: Story = {
+  args: {
+    variant: 'flat',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
+        <Section.HeaderText>
+          <Section.Heading>Security</Section.Heading>
+          <Section.Description>Manage sign-in requirements for your account.</Section.Description>
+        </Section.HeaderText>
+      </Section.Header>
+      <Section.Content>
+        <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
+          <Switch aria-label="Two-factor authentication" />
+        </Section.Row>
+        <Section.Row label="Session timeout" description="Sign out after a period of inactivity." htmlFor="timeout">
+          <Select defaultValue="30">
+            <SelectTrigger id="timeout" className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="15">15 minutes</SelectItem>
+              <SelectItem value="30">30 minutes</SelectItem>
+              <SelectItem value="60">1 hour</SelectItem>
+            </SelectContent>
+          </Select>
+        </Section.Row>
+        <Section.Divider />
+        <Section.Row label="Active sessions" description="Review devices currently signed in to your account.">
+          <Button size="sm" variant="ghost">
+            Review
+          </Button>
+        </Section.Row>
+      </Section.Content>
+    </Section>
+  ),
+};
+
+export const Factory: Story = {
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
+        <Section.HeaderText>
+          <Section.Heading>Behavior</Section.Heading>
+          <Section.Description>Choose how agents handle tools and completion alerts.</Section.Description>
+        </Section.HeaderText>
+      </Section.Header>
+      <Section.Content>
+        <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">
+          <Switch aria-label="Auto-approve tools" />
+        </Section.Row>
+        <Section.Divider />
+        <Section.Row label="Smart editing" description="Use AST-aware edits when available.">
+          <Switch aria-label="Smart editing" />
+        </Section.Row>
+        <Section.Divider />
+        <Section.Row
+          label="Notifications"
+          description="Choose how completion alerts are delivered."
+          htmlFor="notifications"
+        >
+          <Select defaultValue="off">
+            <SelectTrigger id="notifications" className="w-full sm:w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="off">Off</SelectItem>
+              <SelectItem value="bell">Bell</SelectItem>
+              <SelectItem value="system">System</SelectItem>
+              <SelectItem value="both">Both</SelectItem>
+            </SelectContent>
+          </Select>
+        </Section.Row>
+      </Section.Content>
+    </Section>
+  ),
+};
+
+export const PermissionAndDestructiveRows: Story = {
+  args: {
+    variant: 'factory',
+    inset: false,
+  },
+  render: ({ variant, inset }) => (
+    <Section variant={variant} className="w-full max-w-150">
+      <Section.Header inset={inset}>
+        <Section.HeaderText>
+          <Section.Heading>Organization access</Section.Heading>
+          <Section.Description>Review inherited permissions and organization actions.</Section.Description>
+        </Section.HeaderText>
+      </Section.Header>
+      <Section.Content>
+        <Section.ViewOnlyRow
+          label="Project access"
+          description="This permission is inherited from your organization role."
+        >
+          Viewer
+        </Section.ViewOnlyRow>
+        <Section.Divider />
+        <Section.DestructiveRow
+          label="Leave organization"
+          description="Remove your access to this organization and its projects."
+        >
+          <Button variant="destructive-ghost">Leave</Button>
+        </Section.DestructiveRow>
+      </Section.Content>
+    </Section>
+  ),
+};
+
 export const MultipleSections: Story = {
-  render: () => (
-    <div className="w-125 space-y-8">
-      <Section>
-        <Section.Header>
-          <Section.Heading>General</Section.Heading>
+  argTypes: {
+    variant: { table: { disable: true } },
+  },
+  render: ({ inset }) => (
+    <div className="w-[calc(100vw-2rem)] max-w-150 space-y-8">
+      <Section variant="factory">
+        <Section.Header inset={inset}>
+          <Section.HeaderText>
+            <Section.Heading>Behavior</Section.Heading>
+            <Section.Description>Choose how agents handle tools and completion alerts.</Section.Description>
+          </Section.HeaderText>
         </Section.Header>
-        <div className="border-border1 bg-surface2 rounded-md border p-4">
-          <p className="text-neutral5 text-sm">General settings content</p>
-        </div>
+        <Section.Content>
+          <Section.Row label="Auto-approve tools" description="Run tool calls without asking.">
+            <Switch aria-label="Auto-approve tools" />
+          </Section.Row>
+          <Section.Divider />
+          <Section.Row label="Smart editing" description="Use AST-aware edits when available.">
+            <Switch aria-label="Smart editing" defaultChecked />
+          </Section.Row>
+          <Section.Divider />
+          <Section.Row
+            label="Notifications"
+            description="Choose how completion alerts are delivered."
+            htmlFor="multiple-notifications"
+          >
+            <Select defaultValue="off">
+              <SelectTrigger id="multiple-notifications" className="w-full sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="off">Off</SelectItem>
+                <SelectItem value="bell">Bell</SelectItem>
+                <SelectItem value="system">System</SelectItem>
+              </SelectContent>
+            </Select>
+          </Section.Row>
+        </Section.Content>
       </Section>
-      <Section>
-        <Section.Header>
-          <Section.Heading>Advanced</Section.Heading>
+
+      <Section variant="flat">
+        <Section.Header inset={inset}>
+          <Section.HeaderText>
+            <Section.Heading>Security</Section.Heading>
+            <Section.Description>Manage sign-in requirements for your account.</Section.Description>
+          </Section.HeaderText>
         </Section.Header>
-        <div className="border-border1 bg-surface2 rounded-md border p-4">
-          <p className="text-neutral5 text-sm">Advanced settings content</p>
-        </div>
+        <Section.Content>
+          <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
+            <Switch aria-label="Two-factor authentication" />
+          </Section.Row>
+          <Section.Row
+            label="Session timeout"
+            description="Sign out after a period of inactivity."
+            htmlFor="multiple-timeout"
+          >
+            <Select defaultValue="30">
+              <SelectTrigger id="multiple-timeout" className="w-full sm:w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">15 minutes</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+                <SelectItem value="60">1 hour</SelectItem>
+              </SelectContent>
+            </Select>
+          </Section.Row>
+          <Section.Divider />
+          <Section.Row label="Active sessions" description="Review devices currently signed in to your account.">
+            <Button size="sm" variant="ghost">
+              Review
+            </Button>
+          </Section.Row>
+        </Section.Content>
       </Section>
     </div>
   ),

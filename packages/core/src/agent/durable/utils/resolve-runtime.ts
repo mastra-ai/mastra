@@ -10,11 +10,11 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
-import { RequestContext } from '../../../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
-import { MessageList } from '../../message-list';
+import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { globalRunRegistry } from '../run-registry';
 import type {
@@ -27,6 +27,7 @@ import type {
   DurableAgenticWorkflowInput,
   RegistryModelListEntry,
 } from '../types';
+import { createRunMessageList } from './run-message-list';
 
 /**
  * Runtime dependencies that need to be resolved at step execution time.
@@ -103,9 +104,23 @@ export interface ResolveRuntimeOptions {
  * resolution (tenant/user, workspace, dynamic model/memory) working for tools
  * rebuilt on a cross-process worker, including a delegated subagent's.
  */
-function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
+export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
   if (entries) {
-    return new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>);
+    // Drop any persisted token from legacy snapshots written before the token
+    // was excluded from persistence — a stale bearer token must never be restored.
+    const restored: RequestContext = new RequestContext<unknown>(
+      Object.entries(entries).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
+    );
+    // The framework-managed bearer token is deliberately never persisted into
+    // `requestContextEntries` (see preparation.ts), so carry the *live* token
+    // over from the run-level context when one exists. Without this, tools
+    // that forward auth (e.g. same-auth MCP servers) would lose the token on
+    // any path where the snapshot takes precedence during an authenticated run.
+    const liveToken = runLevel?.getRaw?.(MASTRA_AUTH_TOKEN_KEY);
+    if (liveToken !== undefined) {
+      restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
+    }
+    return restored;
   }
   return runLevel ?? new RequestContext();
 }
@@ -150,7 +165,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   const existingEntry = globalRunRegistry.get(runId);
   const messageList = existingEntry?.messageList
     ? existingEntry.messageList.deserialize(input.messageListState)
-    : new MessageList({
+    : createRunMessageList({
+        mastra,
         threadId: input.state.threadId,
         resourceId: input.state.resourceId,
       }).deserialize(input.messageListState);
@@ -505,7 +521,8 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
  *    `(toolName, args, ...)`. Throwing defaults to "require approval" (safe).
  *  - Boolean global / tool-level `requireApproval` seed the decision.
  *  - A per-tool `needsApprovalFn` (e.g. skill tools) is authoritative when
- *    present and overrides the seed.
+ *    present and overrides the seed. It receives `{ requestContext, workspace }`
+ *    as its second argument, exactly like the non-durable loop.
  *
  * In durable execution the function form lives on the run registry, not on
  * the serialized workflow input — pass the resolved value from the caller.
@@ -539,7 +556,10 @@ export async function toolRequiresApproval(
   const needsApprovalFn = getNeedsApprovalFn(tool);
   if (needsApprovalFn) {
     try {
-      requires = !!(await needsApprovalFn(args ?? {}));
+      requires = !!(await needsApprovalFn(args ?? {}, {
+        requestContext: approvalContext?.requestContext,
+        workspace: approvalContext?.workspace,
+      }));
     } catch {
       // On error, default to requiring approval (safe default)
       requires = true;

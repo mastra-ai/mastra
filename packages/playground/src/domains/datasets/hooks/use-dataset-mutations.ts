@@ -4,6 +4,7 @@ import type {
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
   UpdateExperimentResultParams,
   BatchInsertDatasetItemsParams,
   BatchDeleteDatasetItemsParams,
@@ -47,6 +48,7 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
@@ -68,6 +70,7 @@ export const useDatasetMutations = () => {
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
@@ -114,6 +117,17 @@ export const useDatasetMutations = () => {
     },
   });
 
+  const updateExperiment = useMutation({
+    mutationFn: (params: UpdateDatasetExperimentParams) => client.updateDatasetExperiment(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-experiment', variables.datasetId, variables.experimentId],
+      });
+    },
+  });
+
   const updateExperimentResult = useMutation({
     mutationFn: (params: UpdateExperimentResultParams) => client.updateDatasetExperimentResult(params),
     onSuccess: (_, variables) => {
@@ -138,6 +152,7 @@ export const useDatasetMutations = () => {
     batchDeleteItems,
     generateItems,
     triggerExperiment,
+    updateExperiment,
     updateExperimentResult,
   };
 };

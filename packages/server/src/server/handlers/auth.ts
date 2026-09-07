@@ -20,7 +20,12 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
-import { MASTRA_USER_PERMISSIONS_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
+import {
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_PUBLIC_HOST_HEADER,
+  isStudioClientTypeHeader,
+} from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -118,15 +123,26 @@ function isStudioRequest(request: Request): boolean {
  * and must be validated upstream.
  *
  * Priority:
- * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
+ * 1. X-Mastra-Public-Host (proxy chain that rewrites X-Forwarded-Host) → always
+ *    HTTPS. Some platform gateways — Railway's among them — overwrite
+ *    X-Forwarded-Host with their own internal domain, which would otherwise
+ *    leave the app resolving an internal hostname it must never hand to an
+ *    OAuth provider. An edge that knows the browser-facing host sets this
+ *    header so it survives that rewrite.
+ * 2. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
  *    queue-proxy overwrites X-Forwarded-Proto based on the internal HTTP
  *    connection, so X-Forwarded-Proto is ignored here.
- * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
- * 3. Host header alone → use the scheme from request.url (covers both direct
+ * 3. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
+ * 4. Host header alone → use the scheme from request.url (covers both direct
  *    HTTP access and proxies that preserve Host but don't set a proto header).
- * 4. No Host header → fall back to request.url.origin (local dev / direct access).
+ * 5. No Host header → fall back to request.url.origin (local dev / direct access).
  */
 export function getPublicOrigin(request: Request): string {
+  const publicHost = request.headers.get(MASTRA_PUBLIC_HOST_HEADER)?.split(',')[0]?.trim();
+  if (publicHost) {
+    return `https://${publicHost}`;
+  }
+
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;

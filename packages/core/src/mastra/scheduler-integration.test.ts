@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID } from '../notifications/workflow';
 import { MockStore } from '../storage/mock';
 import { createWorkflow as createDefaultWorkflow } from '../workflows';
 import { createStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
+import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import { Mastra } from './index';
 
 async function waitUntil(
@@ -92,22 +94,29 @@ describe('Mastra — workflow scheduler integration', () => {
     expect(scheduler!.isRunning).toBe(false);
   });
 
-  it('does not instantiate the scheduler when no schedules are configured', async () => {
+  it('does not instantiate the scheduler or poll storage when no schedules are configured', async () => {
     const storage = new MockStore();
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const calls = recordStoreCalls(schedulesStore);
 
     const mastra = new Mastra({
       logger: false,
       ...withoutNotificationDispatch,
       storage,
+      scheduler: { tickIntervalMs: 20 },
     });
 
     await mastra.startWorkers();
-    await flushAsyncInit();
+    // Several tick intervals: if a scheduler were running it would have
+    // polled `listDueSchedules` many times by now.
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-    // The schedules store may be touched on boot to check for existing
-    // agent-schedule rows (cold-boot rehydration via #detectExistingAgentSchedules).
-    // What matters is that the scheduler itself never spins up.
+    // An idle app with storage must not keep the database awake — a
+    // permanent poll loop breaks scale-to-zero on serverless hosts. The
+    // only permitted read is the one-shot boot probe for persisted rows.
     expect(mastra.scheduler).toBeUndefined();
+    expect(calls.filter(m => m === 'listDueSchedules')).toHaveLength(0);
+    expect(calls.filter(m => m === 'listSchedules').length).toBeLessThanOrEqual(1);
 
     await mastra.shutdown();
   });
@@ -139,8 +148,8 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.startWorkers();
     await flushAsyncInit();
 
-    // As above, boot-time cold rehydration may probe the schedules store;
-    // the invariant under test is that no scheduler worker is created.
+    // Boot-time cold rehydration may probe the schedules store; the
+    // invariant under test is that no scheduler worker is created.
     expect(mastra.scheduler).toBeUndefined();
 
     await mastra.shutdown();
@@ -307,6 +316,157 @@ describe('Mastra — workflow scheduler integration', () => {
       expect(after?.updatedAt).toBe(initial?.updatedAt);
       await second.shutdown();
     });
+
+    it('stamps the step-graph definition hash on create and rewrites it when the graph changes (#19169)', async () => {
+      const storage = new MockStore();
+
+      const buildWithSteps = (stepIds: string[]) => {
+        const wf = createEventedWorkflow({
+          id: 'rolling-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          schedule: { cron: '*/5 * * * *' } as any,
+        });
+        for (const id of stepIds) {
+          wf.then(
+            createStep({
+              id,
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async () => ({}),
+            }) as any,
+          );
+        }
+        wf.commit();
+        return wf;
+      };
+
+      const firstWf = buildWithSteps(['step-a']);
+      const first = await boot(storage, firstWf);
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const initial = await schedulesStore.getSchedule('wf_rolling-wf');
+      const initialHash = (initial!.target as any).definitionHash;
+      expect(initialHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(initialHash).toBe(computeScheduleDefinitionHash(firstWf.serializedStepGraph));
+      await first.shutdown();
+
+      // Same schedule config, different step graph (a gate step added in
+      // front) — reconcile must rewrite the stored hash on redeploy.
+      const second = await boot(storage, buildWithSteps(['gate', 'step-a']));
+      const updated = await schedulesStore.getSchedule('wf_rolling-wf');
+      const updatedHash = (updated!.target as any).definitionHash;
+      expect(updatedHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(updatedHash).not.toBe(initialHash);
+      await second.shutdown();
+    });
+
+    it('refuses to claim a due fire when the row hash does not match the local build (#19169)', async () => {
+      const storage = new MockStore();
+      const mastra = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const row = (await schedulesStore.getSchedule('wf_rolling-wf'))!;
+      const localHash = (row.target as any).definitionHash as string;
+      expect(localHash).toMatch(/^[0-9a-f]{16}$/);
+
+      // Simulate a *newer* deploy having rewritten the row hash while this
+      // (now stale) instance keeps ticking: the row carries a hash that no
+      // longer matches this instance's local step graph.
+      const due = Date.now() - 5_000;
+      await schedulesStore.updateSchedule('wf_rolling-wf', {
+        target: { ...(row.target as any), definitionHash: 'ffffffffffffffff' },
+        nextFireAt: due,
+      });
+
+      await mastra.scheduler!.tick();
+
+      // Fire left unclaimed for an instance running the current build.
+      let after = (await schedulesStore.getSchedule('wf_rolling-wf'))!;
+      expect(after.nextFireAt).toBe(due);
+      expect(after.lastRunId).toBeUndefined();
+
+      // Restore the matching hash (what reconcile does on the current
+      // build) — the same instance now claims the fire.
+      await schedulesStore.updateSchedule('wf_rolling-wf', {
+        target: { ...(after.target as any), definitionHash: localHash },
+      });
+      await mastra.scheduler!.tick();
+
+      after = (await schedulesStore.getSchedule('wf_rolling-wf'))!;
+      expect(after.nextFireAt).toBeGreaterThan(due);
+      expect(after.lastRunId).toBe(`sched_wf_rolling-wf_${due}`);
+
+      await mastra.shutdown();
+    });
+
+    it('a stale consumer refuses a fire published by a scheduler running the current build (#19169)', async () => {
+      // End-to-end split topology, which is the shape the issue was reported
+      // in: the scheduler process cannot pin the fire locally, so it lands on
+      // the shared topic where a not-yet-cycled instance from the previous
+      // deploy can pick it up. This asserts the two halves actually agree —
+      // the hash reconcile writes is the hash the consumer compares against.
+      const buildWithSteps = (stepIds: string[]) => {
+        const wf = createEventedWorkflow({
+          id: 'rolling-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          schedule: { cron: '*/5 * * * *' } as any,
+        });
+        for (const id of stepIds) {
+          wf.then(
+            createStep({
+              id,
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async () => ({}),
+            }) as any,
+          );
+        }
+        wf.commit();
+        return wf;
+      };
+
+      const storage = new MockStore();
+      // Current build reconciles the row, stamping its graph hash.
+      const current = await boot(storage, buildWithSteps(['gate', 'side-effect']));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const rowHash = (await schedulesStore.getSchedule('wf_rolling-wf'))!.target as any;
+
+      // The straggler: same workflow id, older graph with no gate step.
+      const stale = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage: new MockStore(),
+        workflows: { wf: buildWithSteps(['side-effect']) } as any,
+      });
+
+      const runId = 'sched_wf_rolling-wf_1700000000000';
+      const started: unknown[] = [];
+      void stale.pubsub.subscribe(`workflow.events.v2.${runId}`, async event => {
+        if ((event.data as any)?.type === 'workflow-start') started.push(event);
+      });
+
+      await stale.handleWorkflowEvent({
+        type: 'workflow.start',
+        runId,
+        data: {
+          workflowId: 'rolling-wf',
+          runId,
+          executionPath: [0],
+          stepResults: {},
+          prevResult: { status: 'success', output: {} },
+          activeSteps: {},
+          requestContext: {},
+          scheduleDefinitionHash: rowHash.definitionHash,
+        },
+      } as any);
+
+      // The stale graph would have run `side-effect` without the gate the
+      // current build added — exactly the reported failure.
+      expect(started).toHaveLength(0);
+
+      await stale.shutdown();
+      await current.shutdown();
+    });
   });
 
   describe('multi-schedule (array form)', () => {
@@ -461,6 +621,91 @@ describe('Mastra — workflow scheduler integration', () => {
       expect(ids).not.toContain('wf_removed-wf__job');
       expect(ids).toEqual(['wf_multi-wf__a']);
       await second.shutdown();
+    });
+
+    it('keeps colliding legacy owners separate with injective row ids', async () => {
+      const storage = new MockStore();
+      const makeWorkflow = (id: string, schedule: unknown) => {
+        const workflow = createEventedWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          schedule: schedule as any,
+        });
+        workflow
+          .then(
+            createStep({
+              id: 'noop',
+              inputSchema: z.object({}),
+              outputSchema: z.object({}),
+              execute: async () => ({}),
+            }) as any,
+          )
+          .commit();
+        return workflow;
+      };
+      const single = makeWorkflow('foo__bar', { cron: '0 9 * * *' });
+      const array = makeWorkflow('foo', [{ id: 'bar', cron: '0 18 * * *' }]);
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { single, array } as any,
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const rows = await schedulesStore.listSchedules();
+      expect(rows.map(row => row.id).sort()).toEqual(['wf_foo%5F%5Fbar', 'wf_foo__bar']);
+      expect(rows.find(row => row.id === 'wf_foo%5F%5Fbar')?.target).toMatchObject({ workflowId: 'foo__bar' });
+      expect(rows.find(row => row.id === 'wf_foo__bar')?.target).toMatchObject({ workflowId: 'foo' });
+      await mastra.shutdown();
+    });
+
+    it('keeps a matching legacy row id and its paused status across redeploy', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const now = Date.now();
+      await schedulesStore.createSchedule({
+        id: 'wf_legacy_under',
+        target: { type: 'workflow', workflowId: 'legacy_under' },
+        cron: '0 9 * * *',
+        status: 'paused',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const workflow = createEventedWorkflow({
+        id: 'legacy_under',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        schedule: { cron: '0 9 * * *' },
+      });
+      workflow
+        .then(
+          createStep({
+            id: 'noop',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }) as any,
+        )
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { workflow } as any,
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+
+      expect((await schedulesStore.listSchedules()).map(row => row.id)).toEqual(['wf_legacy_under']);
+      expect((await schedulesStore.getSchedule('wf_legacy_under'))?.status).toBe('paused');
+      await mastra.shutdown();
     });
 
     it('does not delete user-created (non-`wf_`-prefixed) schedule rows', async () => {
@@ -793,7 +1038,7 @@ describe('Mastra — workflow scheduler integration', () => {
       const storage = new MockStore();
       const schedulesStore = (await storage.getStore('schedules'))!;
       const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
-      // Row persisted by a previous process — the whole point of the boot probe.
+      // Simulate a row persisted by another process before worker boot.
       const future = Date.now() + 3_600_000;
       await schedulesStore.createSchedule({
         id: 'cold-boot-agent-sched',
@@ -817,8 +1062,68 @@ describe('Mastra — workflow scheduler integration', () => {
       await mastra.startWorkers();
       await waitForScheduler(mastra);
 
-      expect(listSchedules).toHaveBeenCalledWith({ ownerType: 'agent' });
+      expect(listSchedules).toHaveBeenCalled();
       expect(mastra.scheduler).toBeDefined();
+
+      await mastra.shutdown();
+    });
+
+    it('detects an imperative workflow schedule persisted by a previous process', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      // `schedules.create({ workflowId })` rows carry no `ownerType`, so a probe
+      // filtered on `ownerType: 'agent'` would miss them and the schedule would
+      // never fire after a restart.
+      const future = Date.now() + 3_600_000;
+      // `schedule_` is the imperative id prefix; `wf_` is reserved for
+      // declarative rows, which init() would treat as an orphan and delete.
+      await schedulesStore.createSchedule({
+        id: 'schedule_cold-boot-workflow-sched',
+        target: { type: 'workflow', workflowId: 'some-wf' },
+        cron: '0 0 1 1 *',
+        status: 'active',
+        nextFireAt: future,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        scheduler: { tickIntervalMs: 600_000 },
+      });
+
+      await mastra.startWorkers();
+      await waitForScheduler(mastra);
+      expect(mastra.scheduler).toBeDefined();
+      expect(await schedulesStore.getSchedule('schedule_cold-boot-workflow-sched')).toBeTruthy();
+
+      await mastra.shutdown();
+    });
+
+    it('ignores a leftover dispatcher row when notification dispatch is disabled', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      await schedulesStore.createSchedule({
+        id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+        target: { type: 'workflow', workflowId: 'notification-dispatch' },
+        cron: '*/1 * * * *',
+        status: 'active',
+        nextFireAt: Date.now() + 60_000,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+      });
+
+      await mastra.startWorkers();
+      await flushAsyncInit();
+      expect(mastra.scheduler).toBeUndefined();
 
       await mastra.shutdown();
     });

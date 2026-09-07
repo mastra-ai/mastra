@@ -876,7 +876,7 @@ export class S3Filesystem extends MastraFilesystem {
       const client = await this.getReadyClient();
 
       try {
-        const response: { ContentLength?: number; LastModified?: Date } = await client.send(
+        const response: { ContentLength?: number; ContentType?: string; LastModified?: Date } = await client.send(
           new HeadObjectCommand({
             Bucket: this.bucket,
             Key: key,
@@ -888,6 +888,7 @@ export class S3Filesystem extends MastraFilesystem {
           path,
           type: 'file',
           size: response.ContentLength ?? 0,
+          mimeType: response.ContentType ?? getMimeType(path),
           createdAt: response.LastModified ?? new Date(),
           modifiedAt: response.LastModified ?? new Date(),
         };

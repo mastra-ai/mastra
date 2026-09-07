@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
   Cloud,
   CreditCard,
-  Github,
   Keyboard,
   LifeBuoy,
   LogOut,
@@ -15,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import { GithubIcon } from '../../icons/GithubIcon';
 import { Button } from '../Button';
 import { DropdownMenu } from './dropdown-menu';
 
@@ -277,7 +277,7 @@ export const WithDisabledItems: Story = {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <Github />
+          <GithubIcon />
           <span>GitHub</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled>

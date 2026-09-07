@@ -4,6 +4,7 @@ import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,7 @@ type ComboboxSharedProps = {
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
+  allowCustomValue?: boolean;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -76,8 +78,16 @@ export function Combobox(props: ComboboxProps) {
     onOpenChange,
     container,
     error,
+    allowCustomValue = false,
   } = props;
   const multiple = isMultipleCombobox(props);
+  const [inputValue, setInputValue] = React.useState('');
+  const customValue = inputValue.trim();
+  const customOption =
+    !multiple && allowCustomValue && customValue && !options.some(option => option.value === customValue)
+      ? { label: `Use “${customValue}”`, value: customValue }
+      : undefined;
+  const displayedOptions = customOption ? [customOption, ...options] : options;
   const selectedValues = multiple ? (props.value ?? EMPTY_VALUES) : EMPTY_VALUES;
   const selectedValueSet = React.useMemo(() => new Set(selectedValues), [selectedValues]);
   const selectedOption = multiple ? null : (options.find(option => option.value === props.value) ?? null);
@@ -111,7 +121,12 @@ export function Combobox(props: ComboboxProps) {
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal container={resolvedContainer}>
-        <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
+        <BaseCombobox.Positioner
+          align="start"
+          sideOffset={4}
+          positionMethod={FLOATING_POSITION_METHOD}
+          className={comboboxStyles.positioner}
+        >
           <BaseCombobox.Popup className={comboboxStyles.popup}>
             <div className={comboboxStyles.searchContainer}>
               <Search className={comboboxStyles.searchIcon} />
@@ -165,7 +180,7 @@ export function Combobox(props: ComboboxProps) {
         <BaseCombobox.Root
           multiple
           autoHighlight
-          items={options}
+          items={displayedOptions}
           value={selectedOptions}
           onValueChange={items => props.onValueChange?.((items ?? []).map(item => item.value))}
           disabled={disabled}
@@ -183,11 +198,14 @@ export function Combobox(props: ComboboxProps) {
     <div className={comboboxStyles.root}>
       <BaseCombobox.Root
         autoHighlight
-        items={options}
+        items={displayedOptions}
         value={selectedOption}
+        inputValue={inputValue}
+        onInputValueChange={setInputValue}
         onValueChange={item => {
           if (item) {
             props.onValueChange?.(item.value);
+            setInputValue('');
           }
         }}
         disabled={disabled}

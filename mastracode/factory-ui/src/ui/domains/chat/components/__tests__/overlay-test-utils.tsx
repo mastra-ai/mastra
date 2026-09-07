@@ -1,7 +1,7 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -88,13 +88,6 @@ export function useOverlayControllerHandlers() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/ensure`, () =>
-      HttpResponse.json({
-        resourceId: 'test-resource',
-        sandboxId: 'sandbox-overlay',
-        sandboxWorkdir: '/workspace/overlay',
-      }),
-    ),
     http.post(`${API}/sessions`, async ({ request }) => {
       const resourceId = resourceIdFromRequestBody(await request.json());
       return HttpResponse.json({ controllerId: 'code', resourceId, threadId: 'thread-test' });
@@ -129,10 +122,21 @@ export function useOverlayControllerHandlers() {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+  );
+}
+
+/** Renders where a command navigated and the location it carries back, so tests can assert both. */
+function NavigatedPath() {
+  const { pathname, state } = useLocation();
+  return (
+    <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
+      {pathname}
+    </span>
   );
 }
 
@@ -152,6 +156,7 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
             </MainSidebarProvider>
           }
         />
+        <Route path="*" element={<NavigatedPath />} />
       </Routes>
     </MemoryRouter>
   );

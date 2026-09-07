@@ -1,6 +1,6 @@
 ---
 title: "Running scorers in CI | Evals"
-description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
+description: "Run Mastra scorer experiments in CI with runEvals, define test cases for agents or workflows, inspect aggregate results, and track quality over time."
 packages:
   - "@mastra/core"
 ---
@@ -58,7 +58,7 @@ The `runEvals` function returns an object with:
 - `scores`: Average scores for each scorer across all test cases
 - `summary.totalItems`: Total number of test cases processed
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   scores: {
     'location-accuracy': 1.0,  // Average score across all items

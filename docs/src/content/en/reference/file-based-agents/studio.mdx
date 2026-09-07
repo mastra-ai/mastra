@@ -1,6 +1,6 @@
 ---
 title: "Studio | File-based Agents"
-description: Configure Mastra Studio by file convention with studio.ts.
+description: "Configure Mastra Studio by exporting Studio options from src/mastra/studio.ts in a file-based Mastra project."
 packages:
   - "@mastra/core"
   - "@mastra/auth-workos"
@@ -30,7 +30,7 @@ Studio opens without authentication in local development. Add `studio.ts` when y
 
 ## Add authentication
 
-Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/docs/server/auth/workos):
+Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/integrations/auth/workos):
 
 ```typescript title="src/mastra/studio.ts"
 import { MastraAuthWorkos } from '@mastra/auth-workos'
