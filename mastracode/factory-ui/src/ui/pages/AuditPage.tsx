@@ -170,7 +170,6 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
             events={visibleEvents}
             actorNames={actorNames}
             hasNextPage={eventsQuery.hasNextPage}
-            autoLoad={!selectedRange}
             isFetchingNextPage={eventsQuery.isFetchingNextPage}
             onLoadMore={() => void eventsQuery.fetchNextPage()}
           />
