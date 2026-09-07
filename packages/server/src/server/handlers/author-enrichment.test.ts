@@ -39,6 +39,21 @@ function makeUserProvider(users: Record<string, FakeUser | Error>, opts: { batch
 describe('prepareAuthorEnrichment', () => {
   const ctx = new RequestContext();
 
+  it('given no dedicated Studio auth, when resolving for Studio, then falls back to server auth', async () => {
+    const provider = makeUserProvider({ a: { id: 'a', name: 'Alice' } });
+    const map = await prepareAuthorEnrichment(makeMastra(provider), ctx, ['a'], true);
+    expect(map?.get('a')).toEqual({ id: 'a', name: 'Alice' });
+  });
+
+  it('given an unresolved Studio user, when resolving, then never probes the server directory', async () => {
+    const server = makeUserProvider({ a: { id: 'a', name: 'Server' } });
+    const studio = makeUserProvider({});
+    const mastra = Object.assign(makeMastra(server), { getStudio: () => ({ auth: studio }) });
+    expect(await prepareAuthorEnrichment(mastra, ctx, ['a'], true)).toEqual(new Map());
+    expect(server.getUser).not.toHaveBeenCalled();
+    expect((await prepareAuthorEnrichment(mastra, ctx, ['a']))?.get('a')).toEqual({ id: 'a', name: 'Server' });
+  });
+
   it('uses provider.getUsers once with deduped ids when available', async () => {
     const provider = makeUserProvider({ a: { id: 'a', name: 'Alice' }, b: { id: 'b', name: 'Bob' } }, { batch: true });
     const mastra = makeMastra(provider);
