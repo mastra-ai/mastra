@@ -5,3 +5,13 @@
 ---
 
 Support token-based conversation history with `lastMessages: { maxTokens, atMaxRemoveTokens?, maxMessages? }`. Memory uses the existing `TokenLimiterProcessor` in `memory-only` mode, sharing Observational Memory's token estimator and dropping older history in chunks without removing current input, responses, context, or system messages. Persisted thread boundaries keep trimmed history out of subsequent turns without deleting stored messages. Server configuration schemas and recall pagination accept the nested options.
+
+```ts
+import { Memory } from '@mastra/memory';
+
+const memory = new Memory({
+  options: {
+    lastMessages: { maxTokens: 8_000, atMaxRemoveTokens: 2_000 },
+  },
+});
+```
