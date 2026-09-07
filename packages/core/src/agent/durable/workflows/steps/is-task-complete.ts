@@ -53,7 +53,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean };
+        lastStepResult?: { isContinued?: boolean; reason?: string };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
@@ -78,6 +78,14 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       // guard via `inputData.stepResult?.isContinued`.
       const llmSignaledDone = state.lastStepResult?.isContinued === false;
       if (!llmSignaledDone) {
+        return state;
+      }
+
+      // Never grade an errored iteration — an error finish must terminate the
+      // loop (the goal step has the same guard). Without this, a failing
+      // scorer would flip isContinued back on and re-issue the failing
+      // request every iteration until maxSteps (#21897).
+      if (state.lastStepResult?.reason === 'error') {
         return state;
       }
 

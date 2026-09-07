@@ -82,6 +82,7 @@ import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
+import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { isMastraTimeoutError } from '../../timeout';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -107,24 +108,6 @@ import type { ToolCallForeachOptions } from './tool-call-concurrency';
  *   refusal, so the run would hang indefinitely.
  */
 const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
-
-/**
- * Chunk types that represent actual model output for a step. Used to detect a
- * "zero-output" step: a stream that finishes with reason `other` without ever
- * producing any of these must not re-enter the loop (issue #21897) — the
- * request would be re-issued unchanged and spin until maxSteps.
- */
-const STEP_CONTENT_CHUNK_TYPES = new Set([
-  'text-delta',
-  'reasoning-delta',
-  'tool-call',
-  'tool-call-delta',
-  'tool-result',
-  'object',
-  'object-result',
-  'file',
-  'source',
-]);
 
 function getRequestInputProcessors({
   inputProcessors,
