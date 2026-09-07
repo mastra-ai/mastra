@@ -1,6 +1,10 @@
 Scripts (root): `pnpm --filter ./packages/playground <script>` — `build`, `test`,
 `test:e2e`, `test:e2e:setup`, `typecheck`.
 
+NEVER add a changeset for this package (`@internal/playground`). It is private
+and bundled into `mastra`; changesets targeting it are invalid and must be
+removed.
+
 Required skills (NON-OPTIONAL):
 
 - `react-best-practices` before writing/modifying ANY React code.
