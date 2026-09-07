@@ -27,6 +27,10 @@ function itemToText(item: DatasetItem): string {
     {
       input: item.input ?? null,
       groundTruth: item.groundTruth ?? null,
+      expectedTrajectory: item.expectedTrajectory ?? null,
+      toolMocks: item.toolMocks ?? null,
+      scorerIds: item.scorerIds ?? null,
+      requestContext: item.requestContext ?? null,
       metadata: item.metadata ?? null,
     },
     null,

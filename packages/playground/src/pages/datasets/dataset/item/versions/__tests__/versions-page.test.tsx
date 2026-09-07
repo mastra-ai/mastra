@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DatasetItemVersionsComparePage from '../index';
 import { dataset, history } from './fixtures/versions-page';
+import { RouteHeaderActionsProvider, RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -26,6 +27,11 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.search}</div>;
+}
+
 const renderPage = (initialEntry: string) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -36,7 +42,16 @@ const renderPage = (initialEntry: string) => {
         <TestLinkProvider>
           <MemoryRouter initialEntries={[initialEntry]}>
             <Routes>
-              <Route path="/datasets/:datasetId/items/:itemId/versions" element={<DatasetItemVersionsComparePage />} />
+              <Route
+                path="/datasets/:datasetId/items/:itemId/versions"
+                element={
+                  <RouteHeaderActionsProvider>
+                    <RouteHeaderActionsSlot />
+                    <DatasetItemVersionsComparePage />
+                    <LocationProbe />
+                  </RouteHeaderActionsProvider>
+                }
+              />
             </Routes>
           </MemoryRouter>
         </TestLinkProvider>
@@ -80,5 +95,40 @@ describe('DatasetItemVersionsComparePage', () => {
     expect(await screen.findByText(/newer/)).toBeDefined();
     expect(await screen.findByText(/older/)).toBeDefined();
     expect(screen.queryByText('No version selected')).toBeNull();
+  });
+
+  describe('given ?view=diff with two versions selected', () => {
+    it('keeps the exact same two-card layout and only highlights changed lines in the editors', async () => {
+      const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
+
+      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      expect(container.querySelector('.cm-mergeView')).toBeNull();
+      expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
+      expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
+      expect(screen.getAllByText('Input')).toHaveLength(2);
+      expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
+      expect(screen.queryByText('No version selected')).toBeNull();
+    });
+  });
+
+  describe('given the Diff View button is clicked', () => {
+    it('stores ?view=diff in the URL and highlights the changes', async () => {
+      const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
+      expect(container.querySelector('.cm-diff-removed')).toBeNull();
+
+      fireEvent.click(await screen.findByRole('button', { name: /Diff View/ }));
+
+      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
+      expect(container.querySelector('.cm-diff-added')).not.toBeNull();
+      // The diff theme must be mounted with a selector that beats the app's `.cm-activeLine { background: transparent }`.
+      const mountedCss = Array.from(document.head.querySelectorAll('style'))
+        .map(s => s.textContent ?? '')
+        .join('\n');
+      expect(mountedCss).toContain('.cm-line.cm-diff-removed');
+      expect(mountedCss).toContain('.cm-line.cm-diff-added');
+      expect(screen.getByTestId('location').textContent).toContain('view=diff');
+    });
   });
 });

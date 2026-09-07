@@ -2,8 +2,6 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
-import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
-import { Columns } from '@mastra/playground-ui/components/Columns';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
@@ -13,27 +11,12 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { format } from 'date-fns';
 import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon, GitCompareIcon } from 'lucide-react';
-import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { RouteHeaderActions } from '@/lib/route-header';
-import { cn } from '@/lib/utils';
-
-function versionToText(version: DatasetItemVersion): string {
-  return JSON.stringify(
-    {
-      input: version.input ?? null,
-      groundTruth: version.groundTruth ?? null,
-      scorerIds: version.scorerIds ?? null,
-      metadata: version.metadata ?? null,
-    },
-    null,
-    2,
-  );
-}
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {
@@ -82,11 +65,12 @@ function parseVersionParam(value: string | null): number | null {
 function DatasetItemVersionsComparePage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
-  // ?version=3 — left column; ?compare=2 — optional right column
+  // Whole view lives in the URL so a link reproduces it:
+  // ?version=3 — left column; ?compare=2 — right column; ?view=diff
   const selectedVersion = parseVersionParam(searchParams.get('version'));
   const compareVersion = parseVersionParam(searchParams.get('compare'));
+  const isDiffView = searchParams.get('view') === 'diff';
 
   const { data: dataset, error } = useDataset(datasetId ?? '');
   const { data: allVersions, isLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
@@ -105,7 +89,7 @@ function DatasetItemVersionsComparePage() {
     dataset?.version,
   );
 
-  const setParam = (key: 'version' | 'compare', value: number | null) =>
+  const setParam = (key: 'version' | 'compare' | 'view', value: string | number | null) =>
     setSearchParams(
       prev => {
         const params = new URLSearchParams(prev);
@@ -157,7 +141,7 @@ function DatasetItemVersionsComparePage() {
     <MainContentLayout>
       <RouteHeaderActions owner="dataset-item-versions">
         {canDiff && (
-          <Button variant="outline" onClick={() => setIsDiffView(v => !v)}>
+          <Button variant="outline" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
                 <ColumnsIcon /> Default View
@@ -171,12 +155,9 @@ function DatasetItemVersionsComparePage() {
         )}
       </RouteHeaderActions>
 
-      <PageLayout
-        height="full"
-        className={cn(showDiff ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]')}
-      >
-        <Columns className="grid-cols-2 gap-6">
-          <VersionCard>
+      <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
+        <div className="grid min-h-0 grid-cols-2 gap-6">
+          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <CardHeader>
               <VersionSelect
                 name="version"
@@ -185,20 +166,21 @@ function DatasetItemVersionsComparePage() {
                 onValueChange={val => setParam('version', Number(val))}
               />
             </CardHeader>
-            {!showDiff && (
-              <CardContent className="grid content-start gap-8 overflow-y-auto">
-                {isLoading ? (
-                  <div className="text-neutral4 text-sm">Loading...</div>
-                ) : leftItem ? (
-                  <DatasetItemDetails item={leftItem} />
-                ) : (
-                  <div className="text-neutral4 text-sm">Item data not available</div>
-                )}
-              </CardContent>
-            )}
-          </VersionCard>
+            <CardContent className="grid content-start gap-8 overflow-y-auto">
+              {isLoading ? (
+                <div className="text-neutral4 text-sm">Loading...</div>
+              ) : leftItem ? (
+                <DatasetItemDetails
+                  item={leftItem}
+                  diff={showDiff && rightItem ? { against: rightItem, side: 'a' } : undefined}
+                />
+              ) : (
+                <div className="text-neutral4 text-sm">Item data not available</div>
+              )}
+            </CardContent>
+          </Card>
 
-          <VersionCard>
+          <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <CardHeader>
               <VersionSelect
                 name="compare"
@@ -208,39 +190,30 @@ function DatasetItemVersionsComparePage() {
                 onValueChange={val => setParam('compare', Number(val))}
               />
             </CardHeader>
-            {!showDiff && (
-              <CardContent className="grid content-start gap-8 overflow-y-auto">
-                {rightNumber == null ? (
-                  <EmptyState
-                    className="h-full"
-                    iconSlot={<GitCompareIcon className="text-neutral3 size-8" />}
-                    titleSlot="No version selected"
-                    descriptionSlot="Pick a version above to compare it with the one on the left."
-                  />
-                ) : isRightLoading ? (
-                  <div className="text-neutral4 text-sm">Loading...</div>
-                ) : rightItem ? (
-                  <DatasetItemDetails item={rightItem} />
-                ) : (
-                  <div className="text-neutral4 text-sm">Version {rightNumber} not found</div>
-                )}
-              </CardContent>
-            )}
-          </VersionCard>
-        </Columns>
-
-        {showDiff && leftVersion && rightVersion && (
-          <div className="min-h-0 overflow-y-auto">
-            <CodeDiff codeA={versionToText(leftVersion)} codeB={versionToText(rightVersion)} />
-          </div>
-        )}
+            <CardContent className="grid content-start gap-8 overflow-y-auto">
+              {rightNumber == null ? (
+                <EmptyState
+                  className="h-full"
+                  iconSlot={<GitCompareIcon className="text-neutral3 size-8" />}
+                  titleSlot="No version selected"
+                  descriptionSlot="Pick a version above to compare it with the one on the left."
+                />
+              ) : isRightLoading ? (
+                <div className="text-neutral4 text-sm">Loading...</div>
+              ) : rightItem ? (
+                <DatasetItemDetails
+                  item={rightItem}
+                  diff={showDiff && leftItem ? { against: leftItem, side: 'b' } : undefined}
+                />
+              ) : (
+                <div className="text-neutral4 text-sm">Version {rightNumber} not found</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </PageLayout>
     </MainContentLayout>
   );
-}
-
-function VersionCard({ children }: { children: React.ReactNode }) {
-  return <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">{children}</Card>;
 }
 
 function VersionSelect({
