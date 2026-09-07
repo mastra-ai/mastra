@@ -318,4 +318,66 @@ describe('json-schema standard-schema adapter', () => {
       expect(isStandardSchemaWithJSON({})).toBe(false);
     });
   });
+
+  describe('Cloudflare Workers codegen restriction (issue #14503)', () => {
+    const workflowToolSchema: JSONSchema7 = {
+      type: 'object',
+      properties: {
+        inputData: {
+          type: 'object',
+          properties: {
+            test: { type: 'string' },
+          },
+          required: ['test'],
+        },
+      },
+      required: ['inputData'],
+    };
+
+    function withBlockedCodegen<T>(fn: () => T): T {
+      const OriginalFunction = globalThis.Function;
+      const originalEval = globalThis.eval;
+      const blowUp = function BlockedFunction() {
+        throw new EvalError('Code generation from strings disallowed for this context');
+      };
+      globalThis.Function = blowUp as unknown as FunctionConstructor;
+      globalThis.eval = blowUp as unknown as typeof eval;
+      try {
+        return fn();
+      } finally {
+        globalThis.Function = OriginalFunction;
+        globalThis.eval = originalEval;
+      }
+    }
+
+    it('validates JSON Schema input when new Function/eval is blocked', async () => {
+      const standardSchema = toStandardSchema(workflowToolSchema);
+      const result = await withBlockedCodegen(() =>
+        standardSchema['~standard'].validate({
+          inputData: { test: '123' },
+        }),
+      );
+
+      expect('issues' in result && result.issues).toBeFalsy();
+      expect(result).toEqual({
+        value: { inputData: { test: '123' } },
+      });
+    });
+
+    it('returns schema issues, not a codegen error, when input is invalid and Function is blocked', async () => {
+      const standardSchema = toStandardSchema({
+        type: 'object',
+        properties: { name: { type: 'string' } },
+        required: ['name'],
+      });
+      const result = await withBlockedCodegen(() => standardSchema['~standard'].validate({}));
+
+      expect('issues' in result && result.issues).toBeTruthy();
+      if ('issues' in result && result.issues) {
+        expect(
+          result.issues.some(issue => /code generation from strings|Schema validation error:/i.test(issue.message)),
+        ).toBe(false);
+      }
+    });
+  });
 });

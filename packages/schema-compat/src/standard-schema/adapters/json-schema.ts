@@ -3,7 +3,26 @@ import Ajv from 'ajv';
 import Ajv2020 from 'ajv/dist/2020.js';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
+import { z } from 'zod';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
+
+function isDynamicCodegenAllowed(): boolean {
+  try {
+    const fn = new Function('return 1');
+    return fn() === 1;
+  } catch {
+    return false;
+  }
+}
+
+function isCodegenDisallowedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.name === 'EvalError' || /code generation from strings/i.test(error.message);
+}
 
 /**
  * Vendor name for JSON Schema wrapped schemas.
@@ -30,8 +49,9 @@ export interface JsonSchemaAdapterOptions {
  * A wrapper class that makes JSON Schema compatible with @standard-schema/spec.
  *
  * This class implements both `StandardSchemaV1` (validation) and `StandardJSONSchemaV1`
- * (JSON Schema conversion) interfaces. Validation is performed using Ajv (Another JSON
- * Schema Validator).
+ * (JSON Schema conversion) interfaces. Validation uses Ajv when `new Function` is
+ * allowed. On runtimes that block dynamic code generation (Cloudflare Workers), it
+ * falls back to converting the JSON Schema to Zod via `zod-from-json-schema`.
  *
  * @typeParam T - The TypeScript type that the JSON Schema represents
  *
@@ -62,6 +82,8 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
   readonly #options: JsonSchemaAdapterOptions;
   #ajvValidateCache: ReturnType<Ajv['compile']> | null = null;
   #ajvInstance: Ajv | null = null;
+  #useAjv: boolean | null = null;
+  #zodFromJsonSchema: z.ZodTypeAny | null = null;
 
   readonly '~standard': StandardSchemaWithJSONProps<Input, Output>;
 
@@ -82,13 +104,17 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
   }
 
   /**
-   * Validates a value against the JSON Schema using Ajv.
+   * Validates a value against the JSON Schema using Ajv, or Zod when Ajv cannot compile.
    *
    * @param value - The value to validate
    * @returns A result object with either the validated value or validation issues
    */
   #validate(value: unknown): StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>> {
     try {
+      if (!this.#shouldUseAjv()) {
+        return this.#validateWithZodFromJsonSchema(value);
+      }
+
       const validateFn = this.#getAjvValidator();
       const result = validateFn(value);
 
@@ -118,7 +144,50 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
 
       return { issues };
     } catch (error) {
+      if (isCodegenDisallowedError(error)) {
+        this.#useAjv = false;
+        return this.#validateWithZodFromJsonSchema(value);
+      }
       // If validation fails unexpectedly, return a validation error
+      const message = error instanceof Error ? error.message : 'Unknown validation error';
+      return {
+        issues: [{ message: `Schema validation error: ${message}` }],
+      };
+    }
+  }
+
+  #shouldUseAjv(): boolean {
+    if (this.#useAjv === null) {
+      this.#useAjv = isDynamicCodegenAllowed();
+    }
+    return this.#useAjv;
+  }
+
+  #getZodFromJsonSchema(): z.ZodTypeAny {
+    if (!this.#zodFromJsonSchema) {
+      if ('toJSONSchema' in z) {
+        // @ts-expect-error - type issue in convertJsonSchemaToZod
+        this.#zodFromJsonSchema = convertJsonSchemaToZod(this.#schema);
+      } else {
+        // @ts-expect-error - type issue in convertJsonSchemaToZodV3
+        this.#zodFromJsonSchema = convertJsonSchemaToZodV3(this.#schema);
+      }
+    }
+    return this.#zodFromJsonSchema;
+  }
+
+  #validateWithZodFromJsonSchema(value: unknown): StandardSchemaV1.Result<Output> {
+    try {
+      const result = this.#getZodFromJsonSchema().safeParse(value);
+      if (result.success) {
+        return { value: result.data as Output };
+      }
+      const issues: StandardSchemaV1.Issue[] = result.error.issues.map(issue => ({
+        message: issue.message,
+        path: issue.path,
+      }));
+      return { issues };
+    } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown validation error';
       return {
         issues: [{ message: `Schema validation error: ${message}` }],
@@ -241,8 +310,8 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
  * Wraps a JSON Schema to implement the full @standard-schema/spec interface.
  *
  * This function creates a wrapper that implements both `StandardSchemaV1` (validation)
- * and `StandardJSONSchemaV1` (JSON Schema conversion) interfaces. Validation is performed
- * using Ajv (Another JSON Schema Validator).
+ * and `StandardJSONSchemaV1` (JSON Schema conversion) interfaces. Validation uses Ajv
+ * when `new Function` is allowed, and `zod-from-json-schema` when it is not.
  *
  * @typeParam T - The TypeScript type that the JSON Schema represents
  * @param schema - The JSON Schema to wrap
