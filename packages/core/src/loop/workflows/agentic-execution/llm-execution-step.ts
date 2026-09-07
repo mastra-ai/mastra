@@ -2,13 +2,14 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -1343,7 +1344,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice?: ToolChoice<TOOLS> | undefined;
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
-          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          modelSettings?: MastraModelSettings | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
           workspace?: Workspace;
         } = {
@@ -1710,6 +1711,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             parameters: {
               ...currentStep.modelSettings,
               ...modelConfig.modelSettings,
+              timeout:
+                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                  : undefined,
             } as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
@@ -1739,6 +1744,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
+                  timeout:
+                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                      : undefined,
                   maxRetries: modelConfig.maxRetriesConfigured
                     ? modelConfig.maxRetries
                     : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
