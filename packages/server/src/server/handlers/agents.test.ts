@@ -889,6 +889,32 @@ describe('Agent Routes Authorization', () => {
       );
     });
 
+    it('logs a warning when listAgents rejects instead of silently dropping sub-agents', async () => {
+      const agent = createDynamicModelAgent();
+      const warn = vi.fn();
+      mastra = new Mastra({ agents: { 'dynamic-model-agent': agent }, logger: false });
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({
+        warn,
+        error: vi.fn(),
+        info: vi.fn(),
+        debug: vi.fn(),
+      } as any);
+      vi.spyOn(agent, 'listAgents').mockRejectedValue(new Error('boom'));
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'dynamic-model-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(result.name).toBe('dynamic-model-agent');
+      expect(result.agents).toEqual({});
+      expect(warn).toHaveBeenCalledWith(
+        'Error getting sub-agents for agent',
+        expect.objectContaining({ agentName: 'dynamic-model-agent' }),
+      );
+    });
+
     it('still returns 404 for an unknown agent', async () => {
       mastra = new Mastra({ agents: { 'dynamic-model-agent': createDynamicModelAgent() }, logger: false });
 
