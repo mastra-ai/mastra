@@ -1176,6 +1176,14 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    * running output processors on the error once recovery has been ruled out.
    */
   deferErrorChunks?: boolean;
+  /**
+   * When true, a `tripwire` chunk does not terminate the public stream. Durable
+   * agents run one MastraModelOutput for the whole run and always emit their
+   * final `finish` chunk afterwards (with the tripwire recorded on the
+   * stepResult), so keeping the stream open lets consumers reach finish instead
+   * of a stream that dies at the tripwire chunk.
+   */
+  isDurableStream?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;

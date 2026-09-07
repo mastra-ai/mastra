@@ -903,6 +903,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 processorId: chunk.payload?.processorId,
               };
               self.#finishReason = 'other';
+
+              // Durable agents emit their final finish chunk (with the tripwire
+              // recorded on the stepResult) after this chunk, so keep the stream
+              // open and let the finish chunk do the normal closing. Terminating
+              // here would kill the public stream before finish ever arrives.
+              if (self.#options?.isDurableStream) {
+                // Emit the tripwire chunk for listeners and pass it through
+                self.#emitChunk(chunk);
+                controller.enqueue(chunk);
+                return;
+              }
+
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
 
@@ -1123,8 +1135,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const hasToolStep = self.#bufferedSteps.some(
                     step => step.toolCalls.length > 0 || step.toolResults.length > 0,
                   );
+                  // A tripwired step (e.g. a processor-retry boundary in the durable
+                  // agent, where one MastraModelOutput spans every attempt) must not
+                  // contribute its text: mirror the FullOutput resolution below,
+                  // which joins step texts and lets tripped steps return ''.
+                  const hasTrippedStep = self.#bufferedSteps.some(step => step.tripwire);
                   this.resolvePromises({
-                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
+                    text:
+                      hasToolStep && !self.#wasSuspended && lastStep
+                        ? lastStep.text
+                        : hasTrippedStep
+                          ? self.#bufferedSteps.map(step => step.text || '').join('')
+                          : self.#bufferedText.join(''),
                     finishReason: self.#finishReason,
                   });
                 }

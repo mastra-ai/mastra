@@ -17,9 +17,10 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
-import type { MessageList } from '../../../message-list';
+import type { MastraDBMessage, MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -209,6 +210,120 @@ async function processChunkThroughOutputProcessors(
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
     runner.endStreamProcessorSpans(registryEntry.processorStates as Map<string, ProcessorState>);
+  }
+}
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId in result state. Used to read the post-processToolResult value back
+ * from the message list so we can sync any processor mutations into the
+ * downstream tool-result stream chunk. Mirrors the regular agent's
+ * readToolResultFromMessageList in llm-mapping-step.ts.
+ */
+function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
+  const messages: MastraDBMessage[] = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation?.state === 'result'
+      ) {
+        return part.toolInvocation.result;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Run the dedicated processToolResult hook on the run's output processors for a
+ * tool-result chunk, mirroring the regular agent's runToolResultProcessors in
+ * llm-mapping-step.ts. The durable pipeline previously routed tool results
+ * through processPart (the processOutputStream path) — once here and once again
+ * in the public MastraModelOutput — so the dedicated hook never fired and the
+ * stream hook fired twice. Processors mutate via messageList.updateToolInvocation;
+ * any post-mutation value is synced back into the chunk payload. Returns the
+ * (possibly mutated) chunk, or null when a processor blocked it with a tripwire
+ * (in which case a tripwire chunk is emitted instead).
+ */
+async function runToolResultProcessorsForChunk(
+  chunk: ChunkType & {
+    payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown; providerExecuted?: boolean };
+  },
+  registryEntry: RunRegistryEntry | undefined,
+  pubsub: PubSub | undefined,
+  runId: string,
+  agentName: string,
+  logger: any,
+  messageList?: MessageList,
+  observabilityContext?: ObservabilityContext,
+): Promise<ChunkType | null> {
+  if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
+    return chunk;
+  }
+
+  const runner = new ProcessorRunner({
+    inputProcessors: [],
+    outputProcessors: registryEntry.outputProcessors,
+    logger,
+    agentName,
+    processorStates: registryEntry.processorStates,
+  });
+
+  try {
+    await runner.runProcessToolResult({
+      steps: [],
+      messages: messageList ? messageList.get.all.db() : [],
+      messageList: messageList as MessageList,
+      stepNumber: 0,
+      toolName: chunk.payload.toolName,
+      toolCallId: chunk.payload.toolCallId,
+      toolArgs: chunk.payload.args,
+      result: chunk.payload.result,
+      providerExecuted: chunk.payload.providerExecuted,
+      ...observabilityContext,
+      requestContext: registryEntry.requestContext,
+      retryCount: 0,
+      writer: pubsub
+        ? {
+            custom: async (data: { type: string }) => {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            },
+          }
+        : undefined,
+    });
+
+    // Sync any processor mutation back into the chunk so streaming clients see
+    // the post-processor value, not the raw tool return.
+    if (messageList) {
+      const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
+      if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+        (chunk.payload as { result: unknown }).result = postProcessorResult;
+      }
+    }
+    return chunk;
+  } catch (error) {
+    if (error instanceof TripWire) {
+      logger?.warn?.(`[DurableAgent] Output processor tripwire on tool result: ${error.message}`);
+      if (pubsub) {
+        await emitChunkEvent(pubsub, runId, {
+          type: 'tripwire',
+          payload: {
+            reason: error.message,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+            processorId: error.processorId,
+          },
+        } as ChunkType);
+      }
+      return null;
+    }
+    logger?.warn?.(`[DurableAgent] Output processor error for tool result: ${error}`);
+    // Fall through: emit the original chunk if processor fails
+    return chunk;
   }
 }
 
@@ -1393,17 +1508,36 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            // Run through output processors (tripwire/blocking/redaction)
-            const processed = await processChunkThroughOutputProcessors(
-              resultChunk,
-              registryEntry,
-              pubsub,
-              runId,
-              initData.agentId,
-              logger,
-              messageList,
-              processorObservabilityContext,
-            );
+            // Run the dedicated processToolResult hook once, then let the public
+            // stream's processOutputStream pass see the chunk — mirrors the regular
+            // agent's runToolResultProcessors + processAndEnqueueChunk ordering in
+            // llm-mapping-step.ts. The workflow engine can re-execute this step
+            // across suspend and resume cycles for one tool call, so process and
+            // emit the chunk only for the first execution.
+            const alreadyProcessed = registryEntry?.processedToolResults?.has(toolCallId) ?? false;
+            let processed: ChunkType | null = null;
+            if (!alreadyProcessed) {
+              // Dedup bookkeeping stays on the registry entry — without it there
+              // is nothing to record against, but the chunk itself must still go
+              // through the hook and be emitted (a cross-process worker has no
+              // registry entry; dropping the chunk here loses the tool result).
+              if (registryEntry) {
+                registryEntry.processedToolResults ??= new Set<string>();
+                registryEntry.processedToolResults.add(toolCallId);
+              }
+              processed = await runToolResultProcessorsForChunk(
+                resultChunk as ChunkType & {
+                  payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown };
+                },
+                registryEntry,
+                pubsub,
+                runId,
+                initData.agentId,
+                logger,
+                messageList,
+                processorObservabilityContext,
+              );
+            }
             if (processed) {
               await emitChunkEvent(pubsub, runId, processed);
             }

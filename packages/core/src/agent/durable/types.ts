@@ -591,6 +591,13 @@ export interface RunRegistryEntry {
    * durable `llm-execution` step falls back to `inputProcessors`.
    */
   llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Tool call ids whose tool-result chunk was already processed and emitted for
+   * this run. The workflow engine can re-execute the tool call step across
+   * suspend and resume cycles for one tool call, so this guards the dedicated
+   * processToolResult pass and the tool-result chunk emission to run once.
+   */
+  processedToolResults?: Set<string>;
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */
