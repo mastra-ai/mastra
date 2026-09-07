@@ -2,6 +2,7 @@ import type { OutputResult, Processor, ProcessorSpanPhase } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { isTransientSignalMessage } from '../../agent/signals';
 import { parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/last-messages';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
@@ -13,7 +14,8 @@ import type { MemoryStorage } from '../../storage';
  */
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
-  lastMessages?: number;
+  lastMessages?: number | false;
+  tokenLimit?: { maxTokens: number; atMaxRemoveTokens: number };
 }
 
 /**
@@ -55,11 +57,13 @@ export class MessageHistory implements Processor {
     operationType: MEMORY_PHASE_OPERATION[phase] ?? 'recall',
   });
   private storage: MemoryStorage;
-  private lastMessages?: number;
+  private lastMessages?: number | false;
+  private tokenLimit?: MessageHistoryOptions['tokenLimit'];
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.tokenLimit = options.tokenLimit;
   }
 
   /**
@@ -125,13 +129,21 @@ export class MessageHistory implements Processor {
 
     try {
       // 1. Fetch historical messages from storage (as DB format)
-      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}`;
+      const storedBoundary = getMemoryTokenBoundary(parseMemoryRequestContext(requestContext)?.thread);
+      const boundary =
+        this.tokenLimit &&
+        storedBoundary?.maxTokens === this.tokenLimit.maxTokens &&
+        storedBoundary.atMaxRemoveTokens === this.tokenLimit.atMaxRemoveTokens
+          ? storedBoundary
+          : undefined;
+      const cacheKey = `history:${threadId}:${resourceId ?? ''}:${this.lastMessages ?? 'all'}:${JSON.stringify(boundary)}`;
       const loadMessages = async () => {
         const result = await this.storage.listMessages({
           threadId,
           resourceId,
           page: 0,
           perPage: this.lastMessages,
+          filter: boundary ? { dateRange: { start: new Date(boundary.createdAt) } } : undefined,
           orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         return result.messages;
@@ -140,7 +152,7 @@ export class MessageHistory implements Processor {
 
       // 2. Filter out system messages (they should never be stored in DB)
       const filteredMessages = messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
+        return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)

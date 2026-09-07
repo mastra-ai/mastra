@@ -1964,7 +1964,6 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       const result = await memory.recall({
         threadId: searchThreadId,
         resourceId: effectiveResourceId,
-        perPage: threadConfig.lastMessages,
         threadConfig: config,
         vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
       });

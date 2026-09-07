@@ -952,7 +952,7 @@ type BaseMemoryConfig = {
    * lastMessages: false // Disable conversation history
    * ```
    */
-  lastMessages?: number | false;
+  lastMessages?: import('./last-messages').LastMessages;
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1275,7 +1275,7 @@ export type SerializedMemoryConfig = {
     readOnly?: boolean;
 
     /** Number of recent messages to include, or false to disable */
-    lastMessages?: number | false;
+    lastMessages?: import('./last-messages').LastMessages;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

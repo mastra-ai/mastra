@@ -14,7 +14,7 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../processors';
-import { isProcessorWorkflow } from '../processors';
+import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
@@ -30,6 +30,7 @@ import type { ToolAction } from '../tools';
 import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+import { advanceMemoryTokenBoundary, getMemoryTokenBoundary, normalizeLastMessages } from './last-messages';
 
 import type {
   SharedMemoryConfig,
@@ -719,6 +720,10 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }>;
 
+  protected createMemoryTokenCounter(): { countMessage(message: MastraDBMessage): number } | undefined {
+    return undefined;
+  }
+
   /**
    * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
@@ -785,8 +790,8 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
+    const lastMessages = normalizeLastMessages(effectiveConfig.lastMessages);
+    if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
@@ -808,7 +813,14 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            lastMessages: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+            tokenLimit:
+              lastMessages.maxTokens === undefined
+                ? undefined
+                : {
+                    maxTokens: lastMessages.maxTokens,
+                    atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
+                  },
           }),
         );
       }
@@ -862,6 +874,46 @@ https://mastra.ai/en/docs/memory/overview`,
           }),
         );
       }
+    }
+
+    if (
+      lastMessages.enabled &&
+      lastMessages.maxTokens !== undefined &&
+      !isObservationalMemoryEnabled(effectiveConfig.observationalMemory) &&
+      !configuredProcessors.some(
+        p => !isProcessorWorkflow(p) && (p.id === 'token-limiter' || p.id === 'observational-memory'),
+      )
+    ) {
+      const maxTokens = lastMessages.maxTokens;
+      const atMaxRemoveTokens = lastMessages.atMaxRemoveTokens!;
+      processors.push(
+        new TokenLimiterProcessor({
+          limit: maxTokens,
+          trimMode: 'memory-only',
+          atMaxRemoveTokens,
+          tokenCounter: this.createMemoryTokenCounter(),
+          onMemoryTrim: async (removed, requestContext) => {
+            const memoryContext = (requestContext ?? context)?.get('MastraMemory') as MemoryRequestContext | undefined;
+            const thread = memoryContext?.thread;
+            if (!thread || effectiveConfig.readOnly) return;
+            const localMessages = removed.filter(message => message.threadId === thread.id);
+            if (!localMessages.length) return;
+            const latest = await memoryStore!.getThreadById({
+              threadId: thread.id,
+              resourceId: memoryContext.resourceId,
+            });
+            if (!latest) return;
+            const stored = getMemoryTokenBoundary(latest);
+            const previous =
+              stored?.maxTokens === maxTokens && stored.atMaxRemoveTokens === atMaxRemoveTokens ? stored : undefined;
+            const boundary = advanceMemoryTokenBoundary(previous, localMessages, maxTokens, atMaxRemoveTokens);
+            if (boundary === previous) return;
+            const metadata = { ...latest.metadata, memoryTokenLimiter: boundary };
+            await memoryStore!.patchThread({ id: thread.id, metadata });
+            thread.metadata = metadata;
+          },
+        }),
+      );
     }
 
     // Return only the auto-generated processors (not the configured ones)
@@ -944,8 +996,8 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
+    const lastMessages = normalizeLastMessages(effectiveConfig.lastMessages);
+    if (lastMessages.enabled) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
@@ -967,7 +1019,14 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            lastMessages: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
+            tokenLimit:
+              lastMessages.maxTokens === undefined
+                ? undefined
+                : {
+                    maxTokens: lastMessages.maxTokens,
+                    atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
+                  },
           }),
         );
       }

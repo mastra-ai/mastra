@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { lastMessagesSchema } from './last-messages';
 
 /**
  * Shared memory configuration schemas for agent storage
@@ -102,7 +103,7 @@ export const serializedMemoryConfigSchema = z
     options: z
       .object({
         readOnly: z.boolean().optional(),
-        lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+        lastMessages: lastMessagesSchema.optional(),
         semanticRecall: z.union([z.boolean(), semanticRecallSchema]).optional(),
         generateTitle: titleGenerationSchema.optional(),
       })

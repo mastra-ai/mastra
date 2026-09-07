@@ -7,7 +7,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
-import { MastraMemory } from '@mastra/core/memory';
+import { MastraMemory, normalizeLastMessages } from '@mastra/core/memory';
 import type {
   MemoryConfigInternal,
   SharedMemoryConfig,
@@ -295,6 +295,10 @@ const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
  * and message injection.
  */
 export class Memory extends MastraMemory {
+  protected override createMemoryTokenCounter() {
+    return new TokenCounter();
+  }
+
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
@@ -600,7 +604,10 @@ export class Memory extends MastraMemory {
       { threadId, resourceId, vectorSearchString },
       {
         semanticRecallEnabled,
-        lastMessages: config.lastMessages,
+        lastMessages:
+          typeof config.lastMessages === 'object'
+            ? normalizeLastMessages(config.lastMessages).maxMessages
+            : config.lastMessages,
       },
     );
 
@@ -608,13 +615,14 @@ export class Memory extends MastraMemory {
       if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
       // Use perPage from args if provided, otherwise use threadConfig.lastMessages
-      const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+      const history = normalizeLastMessages(config.lastMessages);
+      const perPage = perPageArg !== undefined ? perPageArg : history.enabled ? (history.maxMessages ?? false) : 0;
 
       // lastMessages: false means "disable conversation history entirely".
       // When the resolved perPage is false from config (not an explicit caller override),
       // return empty messages. This prevents recall() from treating false as "no limit"
       // and returning ALL messages when the user intended to disable history.
-      const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
+      const historyDisabledByConfig = !history.enabled && perPageArg === undefined;
 
       // When limiting messages (perPage !== false) without explicit orderBy, we need to:
       // 1. Query DESC to get the NEWEST messages (not oldest)
@@ -1837,15 +1845,15 @@ ${workingMemory}`;
       }
     } else {
       // No OM: load recent messages
-      const lastMessages = config.lastMessages;
-      if (lastMessages === false) {
+      const lastMessages = normalizeLastMessages(config.lastMessages);
+      if (!lastMessages.enabled) {
         messages = [];
       } else {
         const result = await memoryStore.listMessages({
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
-          perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+          perPage: lastMessages.maxMessages ?? (lastMessages.maxTokens !== undefined ? false : undefined),
         });
         messages = result.messages.reverse(); // DESC → chronological order
       }
