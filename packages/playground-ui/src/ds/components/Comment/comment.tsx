@@ -4,6 +4,8 @@ import { forwardRef } from 'react';
 
 import { CommentContext, useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
+import { Avatar } from '@/ds/components/Avatar';
+import type { AvatarProps } from '@/ds/components/Avatar';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
@@ -75,6 +77,16 @@ export const CommentItemHeader = forwardRef<HTMLDivElement, CommentItemHeaderPro
   <div ref={ref} data-slot="comment-item-header" className={cn('flex items-center gap-2', className)} {...props} />
 ));
 CommentItemHeader.displayName = 'CommentItemHeader';
+
+export type CommentItemAvatarProps = Pick<AvatarProps, 'src' | 'name'>;
+
+/** Author avatar for a comment item; sized `sm` to sit inline with the header text. */
+export const CommentItemAvatar = ({ src, name }: CommentItemAvatarProps) => (
+  <span data-slot="comment-item-avatar" className="flex shrink-0">
+    <Avatar src={src} name={name} size="sm" />
+  </span>
+);
+CommentItemAvatar.displayName = 'CommentItemAvatar';
 
 export type CommentItemAuthorProps = ComponentPropsWithoutRef<'span'>;
 

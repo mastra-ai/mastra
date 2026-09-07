@@ -3,6 +3,7 @@ export {
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -11,6 +12,7 @@ export {
 export type {
   CommentItemActionsProps,
   CommentItemAuthorProps,
+  CommentItemAvatarProps,
   CommentItemBodyProps,
   CommentItemHeaderProps,
   CommentItemProps,

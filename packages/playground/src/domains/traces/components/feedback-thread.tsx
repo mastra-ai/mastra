@@ -7,6 +7,8 @@ import {
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
+  CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -15,6 +17,8 @@ import {
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
 import { useState } from 'react';
+
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 type FeedbackThreadProps = {
   feedbackData?: ListFeedbackResponse | null;
@@ -68,9 +72,16 @@ export function FeedbackThread({
           <CommentList>
             {feedbackItems.map((fb, index) => {
               const ts = new Date(fb.timestamp);
+              const author = feedbackAuthorLabel(fb);
               return (
                 <CommentItem key={`${fb.traceId}-${index}`}>
                   <CommentItemHeader>
+                    {author && (
+                      <>
+                        <CommentItemAvatar name={author} src={fb.author?.avatarUrl} />
+                        <CommentItemAuthor>{author}</CommentItemAuthor>
+                      </>
+                    )}
                     <CommentItemTimestamp dateTime={ts.toISOString()}>
                       {format(ts, 'MMM d, h:mm:ss aaa')}
                     </CommentItemTimestamp>

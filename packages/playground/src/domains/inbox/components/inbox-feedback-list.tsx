@@ -1,4 +1,5 @@
 import type { FeedbackItem } from '@mastra/client-js';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
@@ -8,8 +9,9 @@ import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { format } from 'date-fns';
 import { useEffect, useState } from 'react';
 
-const COLUMNS = 'minmax(0, 2fr) auto minmax(0, 1fr) auto auto';
+const COLUMNS = 'minmax(0, 2fr) minmax(0, 1fr) auto minmax(0, 1fr) auto auto';
 import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-value';
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 export interface InboxFeedbackListProps {
   items: FeedbackItem[];
@@ -43,6 +45,7 @@ export function InboxFeedbackList({
     ? items.filter(
         feedback =>
           feedbackDisplayValue(feedback).toLowerCase().includes(term) ||
+          (feedbackAuthorLabel(feedback) ?? '').toLowerCase().includes(term) ||
           (feedback.traceId ?? '').toLowerCase().includes(term) ||
           (feedback.feedbackSource ?? '').toLowerCase().includes(term),
       )
@@ -72,7 +75,7 @@ export function InboxFeedbackList({
         <ListSearch
           onSearch={setSearch}
           label="Filter feedback"
-          placeholder="Filter loaded feedback by text, trace or source"
+          placeholder="Filter loaded feedback by text, author, trace or source"
         />
       </div>
 
@@ -80,6 +83,7 @@ export function InboxFeedbackList({
         <DataList columns={COLUMNS} fit="container" scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Feedback</DataList.TopCell>
+            <DataList.TopCell>Author</DataList.TopCell>
             <DataList.TopCell>Source</DataList.TopCell>
             <DataList.TopCell>Trace</DataList.TopCell>
             <DataList.TopCell>Date</DataList.TopCell>
@@ -91,6 +95,7 @@ export function InboxFeedbackList({
           ) : (
             filtered.map((feedback, index) => {
               const feedbackId = feedback.feedbackId;
+              const author = feedbackAuthorLabel(feedback);
 
               return (
                 <DataList.RowWrapper key={feedbackId ?? `${String(feedback.timestamp)}-${feedback.traceId}`}>
@@ -104,6 +109,14 @@ export function InboxFeedbackList({
                     <DataList.TextCell className="min-w-0">
                       <span className="block truncate">{feedbackDisplayValue(feedback)}</span>
                     </DataList.TextCell>
+                    <DataList.Cell className="flex gap-2">
+                      {author && (
+                        <>
+                          <Avatar name={author} src={feedback.author?.avatarUrl} size="sm" />
+                          <span className="truncate">{author}</span>
+                        </>
+                      )}
+                    </DataList.Cell>
                     <DataList.Cell>
                       <Badge size="sm">{feedback.feedbackSource}</Badge>
                     </DataList.Cell>

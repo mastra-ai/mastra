@@ -6,7 +6,12 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SPAN_ID, spanFeedbackResponse, TRACE_ID } from '../../hooks/__tests__/fixtures/trace-feedback';
+import {
+  authoredFeedbackResponse,
+  SPAN_ID,
+  spanFeedbackResponse,
+  TRACE_ID,
+} from '../../hooks/__tests__/fixtures/trace-feedback';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { server } from '@/test/msw-server';
@@ -74,5 +79,15 @@ describe('feedback tabs composer', () => {
     await waitFor(() => expect(onPost).toHaveBeenCalled());
     expect(onPost.mock.calls[0][0]).toMatchObject({ feedback: { traceId: TRACE_ID, value: 'trace note' } });
     expect((onPost.mock.calls[0][0] as { feedback: object }).feedback).not.toHaveProperty('spanId');
+  });
+
+  it('shows the resolved author avatar and name on trace feedback', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+
+    expect((await screen.findByText('Marvin Frachet')).getAttribute('data-slot')).toBe('comment-item-author');
+    expect((screen.getByAltText('Marvin Frachet') as HTMLImageElement).src).toBe('https://example.com/marvin.png');
+    expect(screen.getByText('Looks off to me')).toBeTruthy();
   });
 });

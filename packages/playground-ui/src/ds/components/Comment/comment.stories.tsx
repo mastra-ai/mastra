@@ -8,6 +8,7 @@ import {
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -31,13 +32,15 @@ const threadItems = [
   {
     id: '1',
     author: 'Marvin Frachet',
+    avatarUrl: 'https://avatars.githubusercontent.com/u/3874873?v=4',
     dateTime: '2026-08-26T09:00:00Z',
     time: 'Just now',
     body: 'Hello world, how are you?',
   },
   {
     id: '2',
-    author: 'Marvin Frachet',
+    author: 'Ada Lovelace',
+    avatarUrl: undefined,
     dateTime: '2026-08-26T09:01:00Z',
     time: 'Just now',
     body: 'Doing well, thanks!',
@@ -50,6 +53,7 @@ const Thread = ({ variant }: { variant: CommentVariant }) => (
       {threadItems.map(item => (
         <CommentItem key={item.id}>
           <CommentItemHeader>
+            <CommentItemAvatar name={item.author} src={item.avatarUrl} />
             <CommentItemAuthor>{item.author}</CommentItemAuthor>
             <CommentItemTimestamp dateTime={item.dateTime}>{item.time}</CommentItemTimestamp>
             <CommentItemActions>

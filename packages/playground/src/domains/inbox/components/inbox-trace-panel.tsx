@@ -1,4 +1,5 @@
 import type { FeedbackItem } from '@mastra/client-js';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -15,6 +16,7 @@ import { feedbackDisplayValue } from '@/domains/inbox/utils/feedback-display-val
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
 
 export interface InboxTracePanelProps {
   feedback: FeedbackItem;
@@ -45,6 +47,7 @@ export function InboxTracePanel({
 }: InboxTracePanelProps) {
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
   const { spans, isLoading } = useTraceOrBranchSpans({ traceId, anchorSpanId: null, listMode: 'traces' });
+  const author = feedbackAuthorLabel(feedback) ?? feedback.feedbackUserId;
 
   return (
     <RouteItemOverlay label={`Review feedback for trace ${traceId}`} wide={!!selectedSpanId}>
@@ -63,10 +66,22 @@ export function InboxTracePanel({
                   </Badge>
                 )}
               </div>
-              <Txt as="p" variant="ui-sm" className="text-neutral3">
-                {format(new Date(feedback.timestamp), 'MMM dd, yyyy HH:mm:ss')}
-                {feedback.feedbackUserId ? ` · ${feedback.feedbackUserId}` : null}
-              </Txt>
+              <div className="flex items-center gap-2">
+                {author && (
+                  <>
+                    <Avatar name={author} src={feedback.author?.avatarUrl} size="sm" />
+                    <Txt as="span" variant="ui-sm" className="text-neutral5 truncate">
+                      {author}
+                    </Txt>
+                    <Txt as="span" variant="ui-sm" className="text-neutral3">
+                      ·
+                    </Txt>
+                  </>
+                )}
+                <Txt as="span" variant="ui-sm" className="text-neutral3">
+                  {format(new Date(feedback.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                </Txt>
+              </div>
             </div>
             <ButtonsGroup className="ml-auto shrink-0">
               <Button variant="primary" size="sm" onClick={onMarkReviewed} disabled={isMarkingReviewed}>

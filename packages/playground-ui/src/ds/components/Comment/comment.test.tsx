@@ -9,6 +9,7 @@ import {
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
   CommentItemHeader,
   CommentItemTimestamp,
@@ -26,6 +27,7 @@ const Thread = ({ variant }: { variant?: CommentVariant }) => (
     <CommentList aria-label="Comments">
       <CommentItem>
         <CommentItemHeader>
+          <CommentItemAvatar name="Marvin Frachet" />
           <CommentItemAuthor>Marvin Frachet</CommentItemAuthor>
           <CommentItemTimestamp dateTime="2026-08-26T09:00:00Z">Just now</CommentItemTimestamp>
           <CommentItemActions aria-label="Comment actions">
@@ -46,6 +48,8 @@ describe('Comment', () => {
     expect(list.getAttribute('data-slot')).toBe('comment-list');
     expect(list.closest('[data-slot="comment"]')?.getAttribute('data-variant')).toBe('default');
     expect(screen.getByRole('listitem').getAttribute('data-slot')).toBe('comment-item');
+    const avatar = document.querySelector('[data-slot="comment-item-avatar"]');
+    expect(avatar?.textContent).toBe('M');
     expect(screen.getByText('Marvin Frachet').getAttribute('data-slot')).toBe('comment-item-author');
     expect(screen.getByText('Just now').getAttribute('data-slot')).toBe('comment-item-timestamp');
     expect(screen.getByText('Hello world').getAttribute('data-slot')).toBe('comment-item-body');
