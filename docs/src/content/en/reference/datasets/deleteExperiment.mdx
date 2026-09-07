@@ -1,6 +1,6 @@
 ---
 title: "Reference: deleteExperiment() | Datasets"
-description: "Use dataset.deleteExperiment() or DatasetsManager.deleteExperiment() to delete an experiment, its results, and its observability traces."
+description: "Use dataset.deleteExperiment() or DatasetsManager.deleteExperiment() to delete an experiment together with its results and observability traces."
 packages:
   - "@mastra/core"
 ---
@@ -84,7 +84,7 @@ Returns `Promise<void>`, which resolves when deletion completes or when a tenanc
 
 ## Trace deletion support
 
-Mastra collects trace IDs from the experiment results before deleting those result records. If the configured storage doesn't provide observability storage or trace deletion, Mastra logs a warning, skips the trace cascade, and still deletes the experiment and its result records.
+Before deleting the result records, Mastra collects their trace IDs for the cascade. Storage without observability or trace deletion support leaves those traces in place, logs a warning, and still deletes the experiment with its result records.
 
 ## Related
 
