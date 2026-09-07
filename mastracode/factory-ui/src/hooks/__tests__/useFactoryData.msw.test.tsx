@@ -10,7 +10,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { GithubIssue, GithubPullRequest } from '../../ui/domains/factory/services/factory';
 import {
   INTAKE_ERROR_POLL_MS,
@@ -143,17 +143,19 @@ describe('useProjectIssuesQuery', () => {
         }),
       );
 
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+      const { result, client } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
       await waitFor(() => expect(result.current.data).toHaveLength(1));
       await result.current.fetchNextPage();
-      await waitFor(() => expect(result.current.data).toHaveLength(2));
+      await waitForMutationsIdle(client);
+      expect(result.current.data).toHaveLength(2);
       expect(requestedPages).toEqual(['1', '2']);
 
       await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
       expect(requestedPages).toEqual(['1', '2']);
 
       await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS);
-      await waitFor(() => expect(requestedPages).toEqual(['1', '2', '1', '2']));
+      await waitForMutationsIdle(client);
+      expect(requestedPages).toEqual(['1', '2', '1', '2']);
     } finally {
       vi.useRealTimers();
     }
