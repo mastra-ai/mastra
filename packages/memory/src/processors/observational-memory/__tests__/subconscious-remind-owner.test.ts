@@ -1,5 +1,6 @@
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -59,7 +60,7 @@ function textStopStream(text: string) {
   return { stream: convertArrayToReadableStream(parts), rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [] };
 }
 
-function createHarness(options: { knowledgeResourceId?: string }) {
+function createHarness(options: { knowledgeResourceId?: string; completionGate?: Promise<void> }) {
   const storage = new InMemoryStore();
   const memory = new Memory({ storage });
   const requestContext = new RequestContext();
@@ -96,16 +97,18 @@ function createHarness(options: { knowledgeResourceId?: string }) {
           'reminder-call',
         );
       }
+      if (emitted.reply > 0) await options.completionGate;
       return textStopStream('Done.');
     },
   });
 
   const signals: Array<{ signal: any; options: any }> = [];
+  const pubsub = new EventEmitterPubSub();
   const mainAgent = {
     id: 'main-agent',
     getModel: vi.fn(async () => model),
     getMastraInstance: vi.fn(),
-    getPubSub: vi.fn(),
+    getPubSub: vi.fn(() => pubsub),
     sendSignal: vi.fn((signal: unknown, sendOptions: { ifActive: { behavior: string } }) => {
       signals.push({ signal, options: sendOptions });
       if (sendOptions.ifActive.behavior === 'persist') {
@@ -138,8 +141,8 @@ function createHarness(options: { knowledgeResourceId?: string }) {
   };
 }
 
-async function runScenario(knowledgeResourceId: string | undefined) {
-  const harness = createHarness({ knowledgeResourceId });
+async function runScenario(knowledgeResourceId: string | undefined, completionGate?: Promise<void>) {
+  const harness = createHarness({ knowledgeResourceId, completionGate });
   const scopeResource = knowledgeResourceId ?? SESSION;
   const scope = [`org:${ORG}`, `resource:${scopeResource}`];
 
@@ -231,5 +234,18 @@ describe('Subconscious remind thread ownership', () => {
 
   it('accepts ask_memory after a passive reminder with a knowledgeResourceId override', async () => {
     await runScenario(PROJECT);
+  });
+
+  it('isolates passive delivery from an unfinished sidekick in another store', async () => {
+    let release!: () => void;
+    const completionGate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    try {
+      await runScenario(undefined, completionGate);
+      await runScenario(PROJECT);
+    } finally {
+      release();
+    }
   });
 });
