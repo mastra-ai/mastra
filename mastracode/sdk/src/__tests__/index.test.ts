@@ -540,6 +540,20 @@ describe('createMastraCode', () => {
     expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
   });
 
+  it('filters disabled workspace tools from native subagent allowlists', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const { executeSubagent } = await import('../agents/subagents/execute.js');
+    await createMastraCode({ disabledTools: ['execute_command'] });
+    const registered = controllerConstructorMock.mock.calls[0]![0].subagents as {
+      id: string;
+      allowedWorkspaceTools?: string[];
+    }[];
+    const execute = registered.find(subagent => subagent.id === 'execute');
+    expect(execute?.allowedWorkspaceTools).toContain('view');
+    expect(execute?.allowedWorkspaceTools).not.toContain('execute_command');
+    expect(executeSubagent.allowedWorkspaceTools).toContain('execute_command');
+  });
+
   it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
     settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
