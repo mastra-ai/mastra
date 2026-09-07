@@ -3234,7 +3234,9 @@ export class Session<TState = unknown> {
       return;
     }
 
-    if (!localRunId && threadId && parkedRuns.size === 0)
+    // Durable owners already cancel the captured saved scope above. A second
+    // thread abort would bypass discovery failures and race its finalization.
+    if (!localRunId && threadId && parkedRuns.size === 0 && !isDurableAgentLike(this.machinery.getAgent()))
       this.machinery.getAgent().abortThreadStream({ threadId, resourceId: this.identity.getResourceId() });
     this.stream.abort();
     this.run.requestAbort();

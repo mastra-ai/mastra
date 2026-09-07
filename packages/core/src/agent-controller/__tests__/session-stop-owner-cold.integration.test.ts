@@ -51,7 +51,23 @@ function requireNativeAgent(agent: unknown) {
   return agent;
 }
 
-it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', 'single-agent-future'] as const)(
+function describeError(error: unknown): unknown {
+  if (!(error instanceof Error)) return String(error);
+  return {
+    message: error.message,
+    id: (error as Error & { id?: string }).id,
+    errors: error instanceof AggregateError ? error.errors.map(describeError) : undefined,
+  };
+}
+
+it.each([
+  'mode-plan',
+  'mode-build',
+  'single-agent',
+  'single-agent-navigation',
+  'single-agent-future',
+  'single-agent-duplicate',
+] as const)(
   'Cold reopened Session Stop keeps its captured target: %s',
   async scenario => {
     const switchFirst = scenario === 'mode-build';
@@ -75,6 +91,7 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
       directory,
       owners: [],
       events: [],
+      terminalOutputs: [],
       calls,
     };
 
@@ -89,6 +106,15 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
           model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: response(++calls.plan) }) }),
           memory: new Memory({ storage }),
           tools: { submit_plan: submitPlanTool },
+          outputProcessors: [
+            {
+              id: 'cold-stop-terminal-observer',
+              processOutputResult({ messageList, result }) {
+                receipt.terminalOutputs.push({ finishReason: result.finishReason, usage: result.usage });
+                return messageList;
+              },
+            },
+          ],
         }),
       });
       const buildAgent = createDurableAgent({
@@ -236,7 +262,8 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
       });
       expect(fresh).not.toBe(warm);
       unsubscribe = events(fresh, 'reopened');
-      await fresh.thread.switch({ threadId });
+      if (fresh.thread.getId() !== threadId) await fresh.thread.switch({ threadId });
+      expect(fresh.thread.getId()).toBe(threadId);
       receipt.reopened = {
         mode: fresh.mode.get(),
         runId: fresh.getCurrentRunId(),
@@ -294,6 +321,17 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
       }
       owners(host, 'before-stop');
       fresh.abortRun();
+      if (scenario === 'single-agent-duplicate') {
+        const duplicate = await host.controller.createSession({
+          id: 'duplicate-stop-session',
+          scope: 'duplicate-stop',
+          ownerId: 'owner',
+          resourceId: 'resource',
+          workspace: host.workspace,
+        });
+        if (duplicate.thread.getId() !== threadId) await duplicate.thread.switch({ threadId });
+        duplicate.abortRun();
+      }
       if (singleAgent) {
         await entered;
         expect(fresh.run.isAbortRequested()).toBe(true);
@@ -313,7 +351,7 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
             resourceId: 'resource',
             workspace: host.workspace,
           });
-          await later.thread.switch({ threadId });
+          if (later.thread.getId() !== threadId) await later.thread.switch({ threadId });
           await later.sendMessage({ content: 'Create another plan after Stop.' });
           await vi.waitFor(
             async () => {
@@ -330,11 +368,26 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
         }
         releaseRead();
       }
-      await host.mastra.shutdown();
+      const shutdown = host.mastra.shutdown();
+      if (scenario === 'single-agent-duplicate') {
+        // Recovery admits one owner. The competing Session gets an explicit
+        // conflict; it must not prepare a second stream or resurrect a row.
+        await expect(shutdown).rejects.toMatchObject({
+          errors: [
+            expect.objectContaining({
+              errors: [expect.objectContaining({ id: 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS' })],
+            }),
+          ],
+        });
+      } else {
+        await shutdown;
+      }
       const reader = new LibSQLStore({ id: 'readback', url });
       try {
         await reader.init();
         receipt.afterRows = await rows(reader);
+        const stoppedMessages = await new Memory({ storage: reader }).recall({ threadId, resourceId: 'resource' });
+        receipt.stoppedMessages = stoppedMessages.messages;
         if (singleAgent) {
           const memory = new Memory({ storage: reader });
           const empty = await memory.recall({ threadId: emptyThreadId!, resourceId: 'resource' });
@@ -344,17 +397,26 @@ it.each(['mode-plan', 'mode-build', 'single-agent', 'single-agent-navigation', '
         await reader.close();
       }
       const oldIds = new Set(receipt.beforeStopRows.map((row: any) => row.runId));
-      expect(receipt.afterRows.filter((row: any) => oldIds.has(row.runId)).map((row: any) => row.status)).toEqual([
-        'canceled',
-        'canceled',
+      expect(receipt.terminalOutputs).toEqual([
+        { finishReason: 'abort', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
       ]);
+      expect(receipt.events.filter((event: { type: string }) => event.type === 'error')).toEqual([]);
+      for (const message of receipt.stoppedMessages) {
+        expect(message.content.metadata?.suspendedTools?.['plan-call-1']).toBeUndefined();
+        expect(message.content.metadata?.pendingToolApprovals?.['plan-call-1']).toBeUndefined();
+      }
+      expect(receipt.afterRows.filter((row: any) => oldIds.has(row.runId))).toEqual([]);
       expect(receipt.afterRows.filter((row: any) => !oldIds.has(row.runId)).map((row: any) => row.status)).toEqual(
         startFutureRun ? ['suspended', 'suspended'] : [],
       );
       expect(calls).toEqual({ plan: startFutureRun ? 2 : 1, build: 0, network: 0 });
     } finally {
       releaseRead();
-      await host.mastra.shutdown();
+      try {
+        await host.mastra.shutdown();
+      } catch (error) {
+        receipt.shutdownError = describeError(error);
+      }
       unsubscribe();
       receipt.discovery = await Promise.all(
         discoveries.map(async ({ mode, kind, spy }) => ({
