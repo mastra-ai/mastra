@@ -17,10 +17,12 @@ interface LoadMoreSentinelProps {
  */
 export function LoadMoreSentinel({ hasNextPage, isFetchingNextPage, onLoadMore, label }: LoadMoreSentinelProps) {
   const { inView, setRef } = useInView();
-  const loadMore = useEffectEvent(onLoadMore);
+  const loadMoreUnlessFetching = useEffectEvent(() => {
+    if (!isFetchingNextPage) onLoadMore();
+  });
 
   useEffect(() => {
-    if (inView) loadMore();
+    if (inView) loadMoreUnlessFetching();
   }, [inView]);
 
   if (!hasNextPage) return null;
