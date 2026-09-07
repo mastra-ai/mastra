@@ -3,7 +3,7 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { isToday, format } from 'date-fns';
-import { CircleGaugeIcon } from 'lucide-react';
+import { CircleSlashIcon } from 'lucide-react';
 
 const COLUMNS = 'auto auto auto auto 1fr';
 
@@ -24,7 +24,7 @@ export function SpanScoresList({ scoresData, isLoadingScoresData, onPageChange, 
   if (!scoresData?.scores || scoresData.scores.length === 0) {
     return (
       <EmptyState
-        iconSlot={<CircleGaugeIcon />}
+        iconSlot={<CircleSlashIcon />}
         titleSlot="No scores yet"
         descriptionSlot="Score this trace to see results here."
       />

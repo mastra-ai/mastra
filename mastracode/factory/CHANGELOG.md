@@ -1,5 +1,190 @@
 # @mastra/factory
 
+## 0.13.0-alpha.12
+
+### Patch Changes
+
+- Fixed the board's Intake column pulling every open pull request or issue of the repository on its own, behind a spinner, whenever a filter, cards already on the board, or drafts left the loaded pages with little to show. ([#23220](https://github.com/mastra-ai/mastra/pull/23220))
+
+  Reaching the end of the column now loads one page. A page that adds nothing to scroll past leaves the end where it is, so the next page waits for a scroll or the Load more button instead of loading by itself. The Activity, Attention, and Rules lists follow the same rule.
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/code-sdk@1.7.0-alpha.9
+
+## 0.13.0-alpha.11
+
+### Patch Changes
+
+- Comment rows in the work item feed now share one look for quoted replies and inline editing. Row actions (quote, copy link, edit, delete) appear only when you hover that row, instead of lighting up on every row while the card is hovered. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+- Fixed Factory custom API routes to honor validated bearer organization selection. ([#23203](https://github.com/mastra-ai/mastra/pull/23203))
+
+## 0.13.0-alpha.10
+
+### Patch Changes
+
+- Fixed hosted Factory bearer requests to select only organizations proven by the authenticated user's memberships. ([#23196](https://github.com/mastra-ai/mastra/pull/23196))
+
+## 0.13.0-alpha.9
+
+### Patch Changes
+
+- Thread messages now show who sent them. In a shared session, a message written by someone else carries a small avatar beside it; hover or focus it to see their name. Messages that came in from Slack keep their "via Slack" badge. A teammate's message also appears in the thread the moment they send it, instead of after a reload. ([#23085](https://github.com/mastra-ai/mastra/pull/23085))
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+  - @mastra/code-sdk@1.7.0-alpha.8
+
+## 0.13.0-alpha.8
+
+### Minor Changes
+
+- Added board-owned transitionPolicy for custom transition restrictions. Work retains its classification, approval, and acceptance policy automatically. Custom boards no longer accidentally inherit Work policy through phase or role names; shared runtime safeguards remain enforced. ([#23153](https://github.com/mastra-ai/mastra/pull/23153))
+
+  ```typescript
+  const board = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'approval',
+    phases: {
+      approval: { title: 'Approval', next: 'shipped' },
+      shipped: { title: 'Shipped' },
+    },
+    transitionPolicy: context => {
+      if (context.toStage === 'shipped' && !context.isHumanTransition) {
+        return { type: 'reject', code: 'approval_required', reason: 'Human approval required.' };
+      }
+    },
+  });
+  ```
+
+  Import defineBoard from @mastra/factory/boards and install the board through MastraFactory boards. Phase execution semantics and built-in customization are unchanged.
+
+- Removed global Work and Review lifecycle configuration. Installed board definitions now exclusively supply phase entry and exit handlers; custom boards declare them through defineBoard(). Work and Review remain installed automatically, and built-in customization is deferred. Global rules retain shared audit version and tool-result handlers. ([#23148](https://github.com/mastra-ai/mastra/pull/23148))
+
+  Remove former rules.work and rules.review overrides. For a custom board, declare handlers on phases instead:
+
+  ```typescript
+  const releaseBoard = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { title: 'Queued', onEnter: { manual: () => undefined } },
+    },
+  });
+  new MastraFactory({ storage, boards: [releaseBoard] });
+  ```
+
+  The web deployment now uses guarded built-in intake: only eligible linked GitHub arrivals automatically invoke factory-triage. Manual and noncandidate arrivals no longer start solely from entering Intake. Explicit triage and existing approval safeguards remain unchanged.
+
+- Moved Linear event rules into `LinearIntegration` and `PlatformLinearIntegration`. Built-in handlers remain enabled without configuration. Constructor `rules` accept replacements or `null` to disable an event; omitted events retain defaults. ([#23139](https://github.com/mastra-ai/mastra/pull/23139))
+
+  Move former global `rules.linear[event].onEvent` values to the owning integration constructor:
+
+  ```typescript
+  // Before: global Factory overrides
+  const overrides = { linear: { issueClosed: { onEvent: null } } };
+
+  // After: integration constructor options
+  const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
+  ```
+
+  Both direct and platform integrations use their own handlers for fetched issues and reconciliation while preserving shared audit metadata.
+
+### Patch Changes
+
+- Fixed Work approval bypasses through intermediate phases. Classified non-bug items without recorded acceptance now require a human transition into Planning or Execute regardless of their previous phase, including historical items without an acceptance stamp. ([#23153](https://github.com/mastra-ai/mastra/pull/23153))
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`311f2b9`](https://github.com/mastra-ai/mastra/commit/311f2b994c411d64a821e317d838dc30ca3ab58b), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/code-sdk@1.7.0-alpha.7
+
+## 0.13.0-alpha.7
+
+### Minor Changes
+
+- Added per-event rules to GithubIntegration and PlatformGithubIntegration so each installation owns its GitHub behavior. Functions replace defaults, null disables an event handler, and omitted or undefined values retain defaults. Removed global GitHub rule configuration; migrate rules.github[event].onEvent to the integration constructor rules[event]. ([#23135](https://github.com/mastra-ai/mastra/pull/23135))
+
+  ```typescript
+  // Before: global Factory overrides
+  const overrides = { github: { issueCommentCreated: { onEvent: null } } };
+
+  // After: integration constructor
+  const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
+  ```
+
+- Added Factory instance board installation. Custom boards can now be installed alongside the built-in Work and Review boards, or the defaults can be disabled for custom-only configurations. ([#23084](https://github.com/mastra-ai/mastra/pull/23084))
+
+  ```ts
+  const factory = new MastraFactory({
+    storage,
+    boards: [releaseBoard],
+    includeDefaultBoards: false,
+  });
+  ```
+
+### Patch Changes
+
+- Added compact session filters to the Factory sidebar so sessions can be searched and narrowed by owner, status, or recent activity without permanently adding controls to the sidebar. ([#23104](https://github.com/mastra-ai/mastra/pull/23104))
+
+- Factory model selectors can now accept a custom model ID when the deployed model catalog has not caught up with a newly released model. The shared combobox exposes this as opt-in behavior, leaving existing selectors unchanged. ([#23105](https://github.com/mastra-ai/mastra/pull/23105))
+
+- Seed Factory ownership when creating repo-backed Slack sessions so plan artifacts use the Factory workspace path. ([#23101](https://github.com/mastra-ai/mastra/pull/23101))
+
+- Updated dependencies [[`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`3873a78`](https://github.com/mastra-ai/mastra/commit/3873a78ab652373f569e00487a6c8cfae4df33e1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11)]:
+  - @mastra/core@1.65.0-alpha.5
+  - @mastra/code-sdk@1.7.0-alpha.6
+
+## 0.13.0-alpha.6
+
+### Minor Changes
+
+- Added `workBoard` and `WorkBoardPhase` exports so developers can inspect the built-in Work board phases and validate lifecycle transitions. ([#23078](https://github.com/mastra-ai/mastra/pull/23078))
+
+  ```ts
+  import { workBoard } from '@mastra/factory';
+
+  workBoard.allowsTransition('planning', 'execute');
+  ```
+
+- Added a typed board definition API and migrated the built-in Review board to declare its phases, transitions, and phase behavior through it. This establishes the contract for future custom board installation and Mastra Workflow integration. ([#23029](https://github.com/mastra-ai/mastra/pull/23029))
+
+  ```ts
+  import { defineBoard } from '@mastra/factory';
+
+  const board = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'prepare',
+    phases: {
+      prepare: { title: 'Prepare', next: 'verify' },
+      verify: { title: 'Verify', outcomes: { approved: 'done', rejected: 'prepare' } },
+      done: { title: 'Done' },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Refreshed the live-session marker on board cards. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+  A card with a running session used to show one point of light crawling round its outline. It now shows pools of light resting on that outline.
+
+  - While the agent works, the pools drift along the rim.
+  - Once the session is waiting on you, they park and the whole rim comes up lit.
+
+- Tightened the board card's corner. The radius now lives in one token instead of being repeated on every card-shaped surface, and it is tied to the buttons inside the card: a card's corner is the pill's radius plus the padding around it, so the two stay concentric. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+- Fixed Linear tools being unavailable in Factory board runs. ([#23079](https://github.com/mastra-ai/mastra/pull/23079))
+
+- Fixed board card buttons breaking their labels across two lines. The actions on a card now keep their width and the worker's name gives way instead, so "Re-review" and "Open session" stay on one line in a narrow column. ([#23074](https://github.com/mastra-ai/mastra/pull/23074))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`aeaf231`](https://github.com/mastra-ai/mastra/commit/aeaf23135d39c92f3174969ddeb0330072f422f0)]:
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/code-sdk@1.7.0-alpha.5
+
 ## 0.13.0-alpha.5
 
 ### Patch Changes

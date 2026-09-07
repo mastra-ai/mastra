@@ -18,7 +18,7 @@ vi.mock('./event-worker.js', () => ({
 import { PlatformLinearIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 const workspace = {
@@ -78,7 +78,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
@@ -459,7 +459,7 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
     const requestContext = new RequestContext();
-    requestContext.set('controller', { resourceId: projectRecord.id });
+    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
 
     expect(integration.id).toBe('linear');
     expect(integration.intake).toBeDefined();
@@ -506,7 +506,9 @@ describe('PlatformLinearIntegration', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = createIntegration(fetchImpl);
+    vi.stubGlobal('fetch', fetchImpl);
+    const onEvent = vi.fn();
+    const integration = new PlatformLinearIntegration({ rules: { issueObserved: onEvent } });
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
@@ -517,7 +519,6 @@ describe('PlatformLinearIntegration', () => {
       userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       storage: {
@@ -529,7 +530,6 @@ describe('PlatformLinearIntegration', () => {
       rules: {
         config: defaultFactoryRules({
           version: 'test-rules',
-          overrides: { linear: { issueObserved: { onEvent } } },
         }),
         workItems: seed.workItems,
       },
@@ -558,11 +558,11 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
-  it('defaults the Platform base URL and requires a platform credential', () => {
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
+  it('defaults the integrations API URL and requires a platform credential', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.mastra.ai',
+      endpointHost: 'integrations.mastra.ai',
     });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
@@ -586,7 +586,9 @@ describe('PlatformLinearIntegration', () => {
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
     const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
+      workers(
+        ctx: unknown,
+      ): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
     expect(integration.workers(workerContext)).toEqual([

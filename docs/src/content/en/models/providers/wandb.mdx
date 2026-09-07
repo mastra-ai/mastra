@@ -7,7 +7,7 @@ description: "Browse Weights & Biases model IDs, capabilities, context windows, 
 
 # <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
 
-Access 26 Weights & Biases models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+Access 27 Weights & Biases models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
 
 Learn more in the [Weights & Biases documentation](https://docs.wandb.ai).
 
@@ -356,6 +356,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 0.76,
     "outputCost": 2.42
+  },
+  {
+    "model": "wandb/zai-org/GLM-5.3-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />
@@ -390,7 +402,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "wandb/zai-org/GLM-5.2"
+      ? "wandb/zai-org/GLM-5.3-Flash"
       : "wandb/JetBrains/Mellum2-12B-A2.5B-Instruct";
   }
 });
