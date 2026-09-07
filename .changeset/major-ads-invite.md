@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Added schema-backed Factory route contracts and deterministic CLI metadata generation for Factory API automation.
+Added Factory API support for automation clients to inspect and operate projects, work items, decisions, attention, health, metrics, and supervisor state.
 
 ```ts
 import { MastraFactory, type MastraFactoryConfig } from '@mastra/factory';
