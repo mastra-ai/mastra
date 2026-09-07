@@ -9,12 +9,16 @@ export async function getDynamicInstructions({
   requestContext,
   hostInstructions,
   hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
   hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<string> {
-  return joinPromptSections(await getDynamicInstructionSections({ requestContext, hostInstructions, hasSubconscious }));
+  return joinPromptSections(
+    await getDynamicInstructionSections({ requestContext, hostInstructions, hasSubconscious, hasSubagents }),
+  );
 }
 
 /**
@@ -26,6 +30,7 @@ export async function getDynamicInstructionSections({
   requestContext,
   hostInstructions,
   hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -35,6 +40,7 @@ export async function getDynamicInstructionSections({
    * the subconscious per request.
    */
   hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -61,6 +67,7 @@ export async function getDynamicInstructionSections({
     workingDir: projectPath,
     state,
     hostInstructions,
+    hasSubagents,
     hasSubconscious: typeof hasSubconscious === 'function' ? hasSubconscious(state) : hasSubconscious,
   };
 
