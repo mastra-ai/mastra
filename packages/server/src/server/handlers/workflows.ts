@@ -422,7 +422,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   responseSchema: workflowRunResultSchema,
   summary: 'Get workflow run by ID',
   description:
-    'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result,metadata)',
+    'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Metadata fields and status are always included.',
   tags: ['Workflows'],
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
