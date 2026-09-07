@@ -41,8 +41,8 @@ export class ThreadStatePG extends ThreadStateStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
   }
 

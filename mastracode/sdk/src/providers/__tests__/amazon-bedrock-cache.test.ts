@@ -11,6 +11,12 @@ describe('supportsBedrockPromptCaching', () => {
     'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
     'global.anthropic.claude-sonnet-5',
     'us.anthropic.claude-opus-4-8',
+    'anthropic.claude-opus-5',
+    'us.anthropic.claude-opus-5',
+    'eu.anthropic.claude-opus-5',
+    'au.anthropic.claude-opus-5',
+    'jp.anthropic.claude-opus-5',
+    'global.anthropic.claude-opus-5',
   ])('enables caching for %s', modelId => {
     expect(supportsBedrockPromptCaching(modelId)).toBe(true);
   });

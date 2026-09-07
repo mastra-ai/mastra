@@ -7,7 +7,7 @@ description: "Browse LLM Gateway model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/llmgateway-providers.svg" alt="LLM Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LLM Gateway
 
-Access 372 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 374 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [LLM Gateway documentation](https://llmgateway.io/docs).
 
@@ -1174,6 +1174,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 12
   },
   {
+    "model": "llmgateway-providers/azure/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "llmgateway-providers/azure/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -1566,8 +1578,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 524288,
     "maxOutput": 393216,
-    "inputCost": 0.08,
-    "outputCost": 0.16
+    "inputCost": 0.05,
+    "outputCost": 0.1
   },
   {
     "model": "llmgateway-providers/consensusprotocol/glm-5.3-flash",
@@ -2814,8 +2826,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.075,
-    "outputCost": 0.25
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "llmgateway-providers/novita/hy3",
@@ -3740,6 +3752,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 3.05
+  },
+  {
+    "model": "llmgateway-providers/runware/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
     "model": "llmgateway-providers/sakana/fugu-ultra",

@@ -24,7 +24,7 @@ import type {
 } from '@mastra/core/storage/domains/mcp-servers';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -51,8 +51,8 @@ export class MCPServersPG extends MCPServersStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (MCPServersPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -146,9 +146,17 @@ export class MCPServersPG extends MCPServersStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPServerType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageMCPServerType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_SERVERS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -249,7 +257,7 @@ export class MCPServersPG extends MCPServersStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_SERVERS, schemaName: getSchemaName(this.#schema) });
 
-      const existingServer = await this.getById(id);
+      const existingServer = await this.#getById(this.#db.client, id);
       if (!existingServer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_SERVER', 'NOT_FOUND'),
@@ -300,7 +308,7 @@ export class MCPServersPG extends MCPServersStorage {
       // Always update the record (at minimum updatedAt/updatedAtZ are set)
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
-      const updatedServer = await this.getById(id);
+      const updatedServer = await this.#getById(this.#db.client, id);
       if (!updatedServer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_MCP_SERVER', 'NOT_FOUND_AFTER_UPDATE'),
@@ -387,7 +395,7 @@ export class MCPServersPG extends MCPServersStorage {
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -404,7 +412,7 @@ export class MCPServersPG extends MCPServersStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...queryParams, limitValue, offset],
       );
@@ -506,7 +514,7 @@ export class MCPServersPG extends MCPServersStorage {
         indexName: TABLE_MCP_SERVER_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -533,7 +541,7 @@ export class MCPServersPG extends MCPServersStorage {
         indexName: TABLE_MCP_SERVER_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpServerId" = $1 AND "versionNumber" = $2`,
         [mcpServerId, versionNumber],
       );
@@ -563,7 +571,7 @@ export class MCPServersPG extends MCPServersStorage {
         indexName: TABLE_MCP_SERVER_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpServerId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [mcpServerId],
       );
@@ -612,7 +620,7 @@ export class MCPServersPG extends MCPServersStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpServerId" = $1`,
         [mcpServerId],
       );
@@ -629,7 +637,7 @@ export class MCPServersPG extends MCPServersStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "mcpServerId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [mcpServerId, limitValue, offset],
       );
@@ -712,9 +720,10 @@ export class MCPServersPG extends MCPServersStorage {
         indexName: TABLE_MCP_SERVER_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpServerId" = $1`, [
-        mcpServerId,
-      ]);
+      const result = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "mcpServerId" = $1`,
+        [mcpServerId],
+      );
       return parseInt(result.count, 10);
     } catch (error) {
       if (error instanceof MastraError) throw error;

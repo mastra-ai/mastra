@@ -6,6 +6,7 @@ import { FoldVertical, X } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ToolCall } from '../../services/transcript';
+import { ToolTime } from '../ToolTime';
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from '../TranscriptRow';
 import { ToolCard } from './ToolCard';
 import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
@@ -29,6 +30,7 @@ export function ToolGroup({ tools }: { tools: ToolCall[] }) {
     >
       <CollapsibleTrigger className={ROW_TRIGGER}>
         <TranscriptRow
+          leading={<ToolTime at={tools[0].createdAt} />}
           icon={<FoldVertical size={14} strokeWidth={1.75} aria-hidden className="text-icon2" />}
           label={`${tools.length} steps`}
           detail={liveDetail}

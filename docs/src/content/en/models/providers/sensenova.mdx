@@ -7,7 +7,7 @@ description: "Browse SenseNova (China) model IDs, capabilities, and context wind
 
 # <img src="https://models.dev/logos/sensenova.svg" alt="SenseNova (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SenseNova (China)
 
-Access 3 SenseNova (China) models through Mastra's model router. Authentication is handled automatically using the `SENSENOVA_API_KEY` environment variable.
+Access 5 SenseNova (China) models through Mastra's model router. Authentication is handled automatically using the `SENSENOVA_API_KEY` environment variable.
 
 Learn more in the [SenseNova (China) documentation](https://platform.sensenova.cn/docs).
 
@@ -58,6 +58,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "sensenova/deepseek-v4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "sensenova/glm-5.2",
     "imageInput": false,
     "audioInput": false,
@@ -66,6 +78,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "sensenova/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
   },

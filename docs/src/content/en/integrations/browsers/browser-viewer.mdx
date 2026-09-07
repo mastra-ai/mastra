@@ -1,8 +1,8 @@
 ---
-title: "BrowserViewer | Browser"
-description: "Run CLI browser tools through BrowserViewer with a Playwright-managed Chrome session, CDP access, live viewing, and Mastra workspace integration."
+title: 'BrowserViewer | Browser'
+description: 'Run CLI browser tools through BrowserViewer with a Playwright-managed Chrome session, CDP access, live viewing, and Mastra workspace integration.'
 packages:
-  - "@mastra/browser-viewer"
+  - '@mastra/browser-viewer'
 ---
 
 # BrowserViewer
@@ -78,7 +78,13 @@ export const mastra = new Mastra({
 })
 ```
 
-When the agent runs a CLI command like `browser-use open https://example.com`, Mastra automatically launches Chrome and injects the CDP connection, plus starts streaming the screencast to Studio.
+When the agent runs a browser CLI command, Mastra automatically launches Chrome, passes the CDP connection to the CLI, and starts streaming the screencast to Studio. For Browser Use, the agent can pass Python through stdin:
+
+```bash
+browser-use <<'PY'
+print("Connected to the managed browser")
+PY
+```
 
 ## How it works
 
@@ -116,7 +122,9 @@ pip install browser-use
 npx skills add browser-use/browser-use --skill browser-use
 ```
 
-CDP flag: `--cdp-url`
+For direct stdin invocations (`browser-use`, `browseruse`, `browser`, or `bu`, optionally followed by `<` redirection or a heredoc), Mastra sets `BU_CDP_WS` to the managed browser's CDP URL and `BU_NAME` to a stable daemon name. The name is unique to the thread and browser endpoint, so repeated calls reuse the same daemon while different threads or endpoints stay isolated. Mastra preserves the stdin script without adding CLI arguments.
+
+Legacy subcommands retain `--cdp-url` and `--session` injection for compatibility. These flags aren't added to stdin invocations.
 
 ### `browse`
 

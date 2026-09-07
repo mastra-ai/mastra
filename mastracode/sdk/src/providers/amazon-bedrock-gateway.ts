@@ -17,6 +17,7 @@ const CACHEABLE_BEDROCK_MODEL_IDS = [
   'anthropic.claude-fable-5',
   'anthropic.claude-haiku-4-5-',
   'anthropic.claude-opus-4-',
+  'anthropic.claude-opus-5',
   'anthropic.claude-sonnet-4-',
   'anthropic.claude-sonnet-5',
 ];

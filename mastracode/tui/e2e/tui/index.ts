@@ -8,6 +8,7 @@ import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
+import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserModelPickerScenario } from './browser-model-picker.js';
@@ -261,6 +262,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'mcp-skipped-validation': mcpSkippedValidationScenario,
+  'bedrock-model-discovery': bedrockModelDiscoveryScenario,
   'model-search': modelSearchScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
