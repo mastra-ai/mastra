@@ -1,4 +1,4 @@
-import type { WorkflowRunState } from '../../workflows/types';
+import type { SerializedSingleStepEntry, WorkflowRunState } from '../../workflows/types';
 
 /**
  * Snapshot pruning for the internal agent-loop workflows (issue #18647).
@@ -33,7 +33,10 @@ import type { WorkflowRunState } from '../../workflows/types';
  *    conversation copy): heavy fields are stripped.
  *  - on a **`running`** snapshot only, completed steps additionally give up
  *    `messageListState` / `accumulatedSteps` (issue #20747 — see
- *    `pruneRunningHistory`).
+ *    `pruneRunningHistory`), except what `restart()` reads back (issue
+ *    #22636): the newest completed `output` that still feeds a later step
+ *    (`getRestartReadableStepId`) and the `payload` of the step restart
+ *    re-executes (`getRestartTargetStepIds`).
  *  - engine routing state (`suspendedPaths`, `waitingPaths`, `activePaths`,
  *    `resumeLabels`, `serializedStepGraph`, `status`, `runId`, timestamps,
  *    request context) is never touched.
@@ -317,10 +320,14 @@ function stripRunningHistoryFields<T>(value: T): T {
  * curve behind 135 MB on disk for a 57-step run.
  *
  * Live execution never reads historical copies back. Recovery does need the
- * active step's payload, including after that step has reached a terminal state
- * but before the next step starts, because `restart()` uses it as `prevResult`.
- * Keep that one active-path copy and remove conversation state from every older
- * terminal step, bounding duplication independently of run length.
+ * payload of the step `restart()` re-executes — the active step, or, once that
+ * step has completed but before the next one starts, the step at
+ * `activePaths[0]` (`getRestartTargetStepIds`) — because the loop handler
+ * re-reads it as the loop input; it also needs the newest completed `output`
+ * before that step, which is what the engine and the durable loop feed it
+ * (`getRestartReadableStepId`). Keep those two copies and remove conversation
+ * state from every older terminal step, bounding duplication independently of
+ * run length.
  *
  * Suspended/paused snapshots are untouched — they are the resume path and keep
  * exactly the bytes they keep today.
@@ -337,14 +344,114 @@ function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
   );
 }
 
-function pruneRunningHistory(context: WorkflowRunState['context'], activeStepIds: ReadonlySet<string>): void {
+function getSerializedEntryId(entry: SerializedSingleStepEntry): string {
+  return entry.type === 'step' ? entry.step.id : entry.id;
+}
+
+/**
+ * The step(s) `restart()` re-executes first. The engine picks up at
+ * `activePaths[0]` — the top-level graph index it was at when the snapshot was
+ * written — and re-runs that entry from scratch, so whichever step lives there
+ * is the restart target whether or not the snapshot still lists it as active.
+ * A `start` write does; but the default engine drops a step from
+ * `activeStepsPath` before its `entry-end` write, and that write is what
+ * storage holds until the next step's start write lands — the whole
+ * between-iterations stretch of the durable loop, where `onIterationComplete`
+ * hooks run, included.
+ */
+function getRestartTargetStepIds(snapshot: WorkflowRunState): Set<string> {
+  const index = snapshot.activePaths?.[0];
+  const entry = typeof index === 'number' ? snapshot.serializedStepGraph?.[index] : undefined;
+  if (!entry) return new Set();
+  switch (entry.type) {
+    case 'loop':
+    case 'foreach':
+      return new Set([getSerializedEntryId(entry.step)]);
+    case 'parallel':
+    case 'conditional':
+      return new Set(entry.steps.map(getSerializedEntryId));
+    case 'sleep':
+    case 'sleepUntil':
+      return new Set([entry.id]);
+    default:
+      return new Set([getSerializedEntryId(entry)]);
+  }
+}
+
+function hasRunningHistoryFields(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  if (RUNNING_HISTORY_FIELDS.some(key => key in value)) return true;
+  return isPlainObject(value.llmOutput) && RUNNING_HISTORY_FIELDS.some(key => key in value.llmOutput);
+}
+
+/** When a step finished, falling back to its start when no end time was written. */
+function stepCompletedAt(value: Record<string, any>): number {
+  if (typeof value.endedAt === 'number') return value.endedAt;
+  return typeof value.startedAt === 'number' ? value.startedAt : 0;
+}
+
+/**
+ * The completed step whose `output` is still a live input after a restart
+ * (issue #22636).
+ *
+ * A `running` snapshot is re-driven by `restart()`, and the engine reads
+ * *outputs*, not payloads, on the way back in:
+ *  - `executeEntry` derives the restarted step's input from its predecessor's
+ *    `output` (`engine.getStepOutput`), and that predecessor is terminal by
+ *    then — the crash the issue reports, at `durable-llm-execution`;
+ *  - the durable loop's `collect-tool-results` map re-reads
+ *    `getStepResult('durable-llm-execution')` after the tool-call foreach, so a
+ *    restart that lands inside the foreach reaches a *completed* step's output
+ *    one step later and dies in `durable-llm-mapping` instead.
+ *
+ * Both reads want the newest conversation-carrying output *before* the step
+ * restart re-executes (`excludedStepIds`: the active steps and the restart
+ * target — a completed target's output is rebuilt, never read), so keeping
+ * exactly that one output is what restart needs. That is one extra copy in a
+ * snapshot that already holds two (`context.input` and the restart target's
+ * payload), so duplication stays O(1) in run length and the O(N^2) curve
+ * #22127 removed does not come back.
+ */
+function getRestartReadableStepId(
+  context: WorkflowRunState['context'],
+  excludedStepIds: ReadonlySet<string>,
+): string | undefined {
+  let latestId: string | undefined;
+  let latestAt = -Infinity;
+  for (const [key, value] of Object.entries(context ?? {})) {
+    if (key === 'input' || excludedStepIds.has(key) || !isPlainObject(value)) continue;
+    if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
+    if (!hasRunningHistoryFields((value as any).output)) continue;
+
+    // `>=` so a missing or tied timestamp resolves to the later-written step —
+    // `context` keys arrive in step-completion order.
+    const completedAt = stepCompletedAt(value as Record<string, any>);
+    if (completedAt >= latestAt) {
+      latestAt = completedAt;
+      latestId = key;
+    }
+  }
+  return latestId;
+}
+
+function pruneRunningHistory(
+  context: WorkflowRunState['context'],
+  activeStepIds: ReadonlySet<string>,
+  restartTargetIds: ReadonlySet<string>,
+): void {
+  const restartReadableStepId = getRestartReadableStepId(context, new Set([...activeStepIds, ...restartTargetIds]));
+
   for (const [key, value] of Object.entries(context ?? {})) {
     if (key === 'input' || activeStepIds.has(key) || !isPlainObject(value)) continue;
     if (!TERMINAL_STEP_STATUSES.has((value as any).status)) continue;
 
     const pruned: Record<string, any> = { ...value };
-    pruned.payload = stripRunningHistoryFields(pruned.payload);
-    if ('output' in pruned) pruned.output = stripRunningHistoryFields(pruned.output);
+    // A completed restart target is re-executed from its payload (the loop
+    // handler reads it back as the loop input), while its output is rebuilt.
+    if (!restartTargetIds.has(key)) pruned.payload = stripRunningHistoryFields(pruned.payload);
+    if ('output' in pruned && key !== restartReadableStepId) {
+      pruned.output = stripRunningHistoryFields(pruned.output);
+    }
     if ('prevOutput' in pruned) pruned.prevOutput = stripRunningHistoryFields(pruned.prevOutput);
     context[key] = pruned as any;
   }
@@ -365,6 +472,7 @@ export function pruneAgentLoopSnapshot({
 }): WorkflowRunState {
   const isRunning = (workflowStatus ?? snapshot.status) === 'running';
   const activeStepIds = isRunning ? getActiveStepIds(snapshot) : new Set<string>();
+  const restartTargetIds = isRunning ? getRestartTargetStepIds(snapshot) : new Set<string>();
   const context: WorkflowRunState['context'] = {} as WorkflowRunState['context'];
   for (const [key, value] of Object.entries(snapshot.context ?? {})) {
     if (key === 'input') {
@@ -382,14 +490,14 @@ export function pruneAgentLoopSnapshot({
       context.input = strippedInput;
     } else {
       context[key] = pruneStepResult(value as Record<string, any>, {
-        preserveTerminalPayloadState: activeStepIds.has(key),
+        preserveTerminalPayloadState: activeStepIds.has(key) || restartTargetIds.has(key),
       }) as any;
     }
   }
 
   // `context` is freshly built above, so this is still copy-on-write with
   // respect to the caller's snapshot.
-  if (isRunning) pruneRunningHistory(context, activeStepIds);
+  if (isRunning) pruneRunningHistory(context, activeStepIds, restartTargetIds);
 
   const result =
     isPlainObject(snapshot.result) && typeof snapshot.result.status === 'string'

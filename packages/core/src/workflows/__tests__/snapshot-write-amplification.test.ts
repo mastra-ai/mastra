@@ -191,9 +191,19 @@ describe('durable snapshot write amplification (issue #20747)', () => {
     // copy on the payload side, the output side, and again nested under
     // `llmOutput`. Measured 30 before this fix, 12 after.
     //
+    // 14 since issue #22636: restart reads two copies back, and both stay —
+    // the newest completed `output` before the step restart re-executes (the
+    // engine feeds a restarted step its predecessor's output, and
+    // `collect-tool-results` re-reads the LLM step's output after the
+    // tool-call foreach) and that step's own `payload` (the loop handler
+    // re-reads it as the loop input). Each carries `messageListState` +
+    // `accumulatedSteps`, hence two marker copies, not one. Pruning them made
+    // every crash recovery throw on `MessageList.deserialize(undefined)`.
+    // Measured 14 at both 4 and 8 steps.
+    //
     // It must not grow with run length, and it must not creep back up.
     expect(large.maxDuplicatesPerWrite).toBeLessThanOrEqual(small.maxDuplicatesPerWrite);
-    expect(large.maxDuplicatesPerWrite).toBeLessThanOrEqual(12);
+    expect(large.maxDuplicatesPerWrite).toBeLessThanOrEqual(14);
 
     // Size of a single running write. Before: 301 kB at 4 steps, 561 kB at 8
     // (1.86x). After: 78 kB and 118 kB (1.51x). This still grows, because a

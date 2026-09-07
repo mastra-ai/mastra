@@ -76,6 +76,213 @@ describe('pruneAgentLoopSnapshot running history', () => {
   });
 });
 
+/**
+ * Issue #22636: a `running` snapshot is re-driven by `restart()`, which reads
+ * *outputs* back — the restarted step is fed its predecessor's output, and the
+ * durable loop re-reads the LLM step's output after the tool-call foreach.
+ * Pruning every completed output made both reads hand `MessageList.deserialize`
+ * an `undefined`.
+ */
+describe('pruneAgentLoopSnapshot restart-readable output', () => {
+  const conversation = { messages: [{ role: 'user', content: 'earlier turn' }] };
+
+  /** The durable execution workflow, killed with `active` as the live step. */
+  function durableSnapshot(active: 'durable-llm-execution' | 'durable-tool-call'): WorkflowRunState {
+    const activePaths = active === 'durable-llm-execution' ? [1] : [3];
+    return {
+      status: 'running',
+      activePaths,
+      activeStepsPath: { [active]: activePaths },
+      context: {
+        input: { messageListState: conversation },
+        'map-to-llm-input': {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          payload: { messageListState: conversation },
+          output: { messageListState: conversation, accumulatedSteps: ['a'] },
+        },
+        'durable-llm-execution': {
+          status: active === 'durable-llm-execution' ? 'running' : 'success',
+          startedAt: 3,
+          ...(active === 'durable-llm-execution' ? {} : { endedAt: 4 }),
+          payload: { messageListState: conversation },
+          output: { messageListState: conversation, accumulatedSteps: ['a', 'b'] },
+        },
+        ...(active === 'durable-tool-call'
+          ? {
+              'extract-tool-calls': {
+                status: 'success',
+                startedAt: 5,
+                endedAt: 6,
+                payload: {},
+                output: [{ toolCallId: 'call-1' }],
+              },
+              'durable-tool-call': { status: 'running', startedAt: 7, payload: { toolCallId: 'call-1' } },
+            }
+          : {}),
+      },
+    } as unknown as WorkflowRunState;
+  }
+
+  it('keeps the predecessor output a step restarted mid-LLM-call is fed', () => {
+    const context = pruneAgentLoopSnapshot({ snapshot: durableSnapshot('durable-llm-execution') }).context as Record<
+      string,
+      any
+    >;
+
+    expect(context['map-to-llm-input'].output.messageListState).toEqual(conversation);
+    expect(context['map-to-llm-input'].output.accumulatedSteps).toEqual(['a']);
+  });
+
+  it('keeps the completed LLM output that collect-tool-results reads back after the foreach', () => {
+    const context = pruneAgentLoopSnapshot({ snapshot: durableSnapshot('durable-tool-call') }).context as Record<
+      string,
+      any
+    >;
+
+    expect(context['durable-llm-execution'].output.messageListState).toEqual(conversation);
+    // Only the newest one: the older copy is still dropped, so duplication
+    // stays O(1) in run length.
+    expect(context['map-to-llm-input'].output).not.toHaveProperty('messageListState');
+    // Nothing reads a terminal payload back, so it is pruned either way.
+    expect(context['durable-llm-execution'].payload).not.toHaveProperty('messageListState');
+  });
+
+  it('follows the conversation forward as later steps complete', () => {
+    const snapshot = {
+      status: 'running',
+      activePaths: [2],
+      activeStepsPath: { third: [2] },
+      context: {
+        input: {},
+        first: { status: 'success', startedAt: 1, endedAt: 2, output: { messageListState: conversation } },
+        second: {
+          status: 'success',
+          startedAt: 3,
+          endedAt: 4,
+          output: { llmOutput: { messageListState: conversation } },
+        },
+        third: { status: 'running', startedAt: 5, payload: { messageListState: conversation } },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+    // The nested `llmOutput` copy the mapping steps carry counts as the newest.
+    expect(context.second.output.llmOutput.messageListState).toEqual(conversation);
+    expect(context.first.output).not.toHaveProperty('messageListState');
+  });
+
+  /**
+   * The default engine drops a step from `activeStepsPath` before its
+   * `entry-end` write, and storage holds that write until the next step's start
+   * write lands. Restart re-executes the step at `activePaths[0]`, so the graph
+   * — not `activeStepsPath` — says whose predecessor output must survive.
+   */
+  it('keeps the predecessor output across the gap between a step completing and the next one starting', () => {
+    const snapshot = {
+      status: 'running',
+      activePaths: [1],
+      activeStepsPath: {},
+      serializedStepGraph: [
+        { type: 'mapping', id: 'map-to-llm-input', mapConfig: '' },
+        { type: 'step', step: { id: 'durable-llm-execution' } },
+        { type: 'mapping', id: 'extract-tool-calls', mapConfig: '' },
+      ],
+      context: {
+        input: { messageListState: conversation },
+        'map-to-llm-input': {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          payload: { messageListState: conversation },
+          output: { messageListState: conversation, accumulatedSteps: ['a'] },
+        },
+        'durable-llm-execution': {
+          status: 'success',
+          startedAt: 3,
+          endedAt: 4,
+          payload: { messageListState: conversation, accumulatedSteps: ['a'] },
+          output: { messageListState: conversation, accumulatedSteps: ['a', 'b'] },
+        },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+    // Restart re-runs `durable-llm-execution` fed `map-to-llm-input.output`...
+    expect(context['map-to-llm-input'].output.messageListState).toEqual(conversation);
+    expect(context['map-to-llm-input'].output.accumulatedSteps).toEqual(['a']);
+    // ...from its own payload, while the output it will rebuild is dropped.
+    expect(context['durable-llm-execution'].payload.messageListState).toEqual(conversation);
+    expect(context['durable-llm-execution'].output).not.toHaveProperty('messageListState');
+    expect(context['durable-llm-execution'].output).not.toHaveProperty('accumulatedSteps');
+  });
+
+  it('resolves the restart target through a loop entry', () => {
+    // The outer durable loop: the whole between-iterations stretch (where user
+    // `onIterationComplete` hooks run) sits after the nested run's last
+    // entry-end write, and the outer loop restarts from the nested step's
+    // payload.
+    const snapshot = {
+      status: 'running',
+      activePaths: [1],
+      activeStepsPath: {},
+      serializedStepGraph: [
+        { type: 'mapping', id: 'init-iteration-state', mapConfig: '' },
+        {
+          type: 'loop',
+          loopType: 'dowhile',
+          serializedCondition: { id: 'c', fn: '' },
+          step: { type: 'step', step: { id: 'durable-agentic-execution' } },
+        },
+      ],
+      context: {
+        input: { messageListState: conversation },
+        'init-iteration-state': {
+          status: 'success',
+          startedAt: 1,
+          endedAt: 2,
+          payload: {},
+          output: { messageListState: conversation, accumulatedSteps: [] },
+        },
+        'durable-agentic-execution': {
+          status: 'success',
+          startedAt: 3,
+          endedAt: 4,
+          payload: { messageListState: conversation, accumulatedSteps: [] },
+          output: { messageListState: conversation, accumulatedSteps: ['a'] },
+        },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+    expect(context['init-iteration-state'].output.messageListState).toEqual(conversation);
+    expect(context['durable-agentic-execution'].payload.messageListState).toEqual(conversation);
+    expect(context['durable-agentic-execution'].output).not.toHaveProperty('messageListState');
+  });
+
+  it('leaves a suspended snapshot alone', () => {
+    const snapshot = {
+      status: 'suspended',
+      activePaths: [],
+      activeStepsPath: {},
+      context: {
+        input: {},
+        first: { status: 'success', startedAt: 1, endedAt: 2, output: { messageListState: conversation } },
+        second: { status: 'success', startedAt: 3, endedAt: 4, output: { messageListState: conversation } },
+      },
+    } as unknown as WorkflowRunState;
+
+    const context = pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>;
+
+    expect(context.first.output.messageListState).toEqual(conversation);
+    expect(context.second.output.messageListState).toEqual(conversation);
+  });
+});
+
 describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
   it('strips the request echo from a terminal step on both payload and output', () => {
     const pruned = pruneAgentLoopSnapshot({
