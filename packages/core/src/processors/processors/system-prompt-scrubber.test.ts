@@ -259,6 +259,30 @@ describe('SystemPromptScrubber', () => {
   });
 
   describe('processOutputStream', () => {
+    it('should buffer partial text without calling the detection model per chunk', async () => {
+      processor = new SystemPromptScrubber({ model: mockModel, bufferSize: 200 });
+      const generateSpy = vi.spyOn(mockModel, 'doGenerate');
+      const state = {};
+      const firstPart: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'You are', id: 'test-id' },
+        runId: 'test-run-id',
+        from: ChunkFrom.AGENT,
+      };
+      const secondPart: ChunkType = {
+        ...firstPart,
+        payload: { text: ' an AI', id: 'test-id' },
+      };
+
+      expect(
+        await processor.processOutputStream({ part: firstPart, streamParts: [], state, abort: vi.fn() as any }),
+      ).toBeNull();
+      expect(
+        await processor.processOutputStream({ part: secondPart, streamParts: [firstPart], state, abort: vi.fn() as any }),
+      ).toBeNull();
+      expect(generateSpy).not.toHaveBeenCalled();
+    });
+
     it('should return non-text chunks unchanged', async () => {
       processor = new SystemPromptScrubber({ model: mockModel });
 
