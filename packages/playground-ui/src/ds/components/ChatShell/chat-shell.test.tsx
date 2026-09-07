@@ -104,6 +104,8 @@ describe('ChatShell', () => {
     // A sticky direct child of the scroller is clamped to the scroller's own box.
     expect(screen.getByTestId('dock').parentElement).toBe(track);
     expect(track?.className).toContain('min-h-full');
+    // An overlay pinned to the scroller itself spans one screen, not the transcript.
+    expect(track?.className).toContain('relative');
   });
 
   it('ramps the veil in over its own band of air, never past full strength', () => {

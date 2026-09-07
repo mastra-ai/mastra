@@ -160,7 +160,7 @@ function AgentThread() {
                                 threadId={actualThreadId}
                                 isLoading={isThreadsLoading}
                               />
-                              <div key={actualThreadId} className="relative min-h-0">
+                              <div key={actualThreadId} className="relative h-full min-h-0">
                                 <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
                                   <Header>
                                     <HeaderTitle>Thread</HeaderTitle>

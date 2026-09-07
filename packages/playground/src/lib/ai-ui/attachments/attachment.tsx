@@ -120,14 +120,10 @@ export const ComposerAttachments = () => {
   if (attachments.length === 0) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-full px-2" data-attachments-row>
-      <div className="mx-auto w-full max-w-3xl overflow-x-auto">
-        <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
-          {attachments.map(att => (
-            <AttachmentThumbnail key={att.id} attachment={att} />
-          ))}
-        </div>
-      </div>
+    <div className="flex flex-row items-center gap-4 overflow-x-auto px-3 pt-3 pb-1" data-testid="composer-attachments">
+      {attachments.map(att => (
+        <AttachmentThumbnail key={att.id} attachment={att} />
+      ))}
     </div>
   );
 };

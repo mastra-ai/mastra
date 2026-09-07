@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
 
 import {
   MessageScroller,
@@ -76,7 +76,7 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
     >
       {/* Sticky against the scroller itself is clamped to its box, not the
           scrolled height, and strands the dock mid-transcript. */}
-      <div data-slot="chat-shell-track" className="flex min-h-full min-w-0 flex-col">
+      <div data-slot="chat-shell-track" className="relative flex min-h-full min-w-0 flex-col">
         {children}
       </div>
     </MessageScrollerViewport>
@@ -89,7 +89,7 @@ export function ChatShellContent({ className, ...props }: MessageScrollerContent
 }
 
 /** The shared reading column. Every chat region must go through it. */
-export function ChatShellColumn({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-slot="chat-shell-column"
