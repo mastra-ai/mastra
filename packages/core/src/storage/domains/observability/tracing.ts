@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
-import type { SpanInputMap, SpanOutputMap, SpanTypeMap } from '../../../observability/types';
+import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
   deltaLimitSchema,
   deltaInfoSchema,
@@ -145,21 +145,30 @@ export const spanRecordSchema = z
 type StoredSpanRecord = z.infer<typeof spanRecordSchema>;
 
 /**
+ * Stored span record narrowed to one span type: `attributes`, `input` and
+ * `output` carry the shapes core records for that type.
+ */
+export type TypedSpanRecord<TType extends SpanType> = Omit<
+  StoredSpanRecord,
+  'spanType' | 'attributes' | 'input' | 'output'
+> & {
+  spanType: TType;
+  attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
+  input?: SpanInput<TType> | null;
+  output?: SpanOutput<TType> | null;
+};
+
+/**
  * Complete span record as stored in the database.
  *
- * Narrow `TType` to read `attributes`, `input` and `output` with the shapes
- * core records for that span type. The schema itself stays permissive, so
- * this is a read-side view only; narrow with `isSpanRecordOfType` from
+ * Without a type argument this is the stored record as-is. Narrow `TType` to
+ * get a `TypedSpanRecord`. The schema itself stays permissive, so this is a
+ * read-side view only; narrow with `isSpanRecordOfType` from
  * `@mastra/core/observability`.
  */
 export type SpanRecord<TType extends SpanType = SpanType> = SpanType extends TType
   ? StoredSpanRecord
-  : Omit<StoredSpanRecord, 'spanType' | 'attributes' | 'input' | 'output'> & {
-      spanType: TType;
-      attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
-      input?: SpanInputMap[TType] | null;
-      output?: SpanOutputMap[TType] | null;
-    };
+  : TypedSpanRecord<TType>;
 
 // ============================================================================
 // Trace Span Schema (SpanRecord + computed status for list responses)

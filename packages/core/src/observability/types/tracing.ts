@@ -1025,87 +1025,31 @@ export interface AgentRunResult {
 export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
 
 /**
- * Input payload recorded on each span type.
- *
- * Mastra fixes the shape only where it owns the producer. Types that carry
- * caller-defined data (tool arguments, workflow step input, ...) stay
- * `unknown`, as does `MODEL_CHUNK`, which multiplexes text, tool-call, object
- * and approval chunks on one span type. `GENERIC` stays `any`: it is the escape
- * hatch for custom spans, and it keeps `AnySpan` reads permissive for exporters
- * and span formatters.
+ * Span types whose `input` Mastra writes itself with a fixed shape. Every
+ * other span type keeps `any`, as before: tool arguments, workflow data and
+ * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
+ * on one span type, and `GENERIC` is the escape hatch for custom spans.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
-  [SpanType.SCORER_RUN]: unknown;
-  [SpanType.SCORER_STEP]: unknown;
-  [SpanType.WORKFLOW_RUN]: unknown;
   [SpanType.MODEL_GENERATION]: ModelGenerationInput;
   [SpanType.MODEL_STEP]: ModelStepInput;
   [SpanType.MODEL_INFERENCE]: ModelStepInput;
-  [SpanType.MODEL_CHUNK]: unknown;
-  [SpanType.TOOL_CALL]: unknown;
-  [SpanType.CLIENT_TOOL_CALL]: unknown;
-  [SpanType.PROVIDER_TOOL_CALL]: unknown;
-  [SpanType.MCP_TOOL_CALL]: unknown;
-  [SpanType.PROCESSOR_RUN]: unknown;
-  [SpanType.WORKFLOW_STEP]: unknown;
-  [SpanType.WORKFLOW_CONDITIONAL]: unknown;
-  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: unknown;
-  [SpanType.WORKFLOW_PARALLEL]: unknown;
-  [SpanType.WORKFLOW_LOOP]: unknown;
-  [SpanType.WORKFLOW_SLEEP]: unknown;
-  [SpanType.WORKFLOW_WAIT_EVENT]: unknown;
-  [SpanType.WORKSPACE_ACTION]: unknown;
-  [SpanType.GENERIC]: any;
-  [SpanType.MEMORY_OPERATION]: unknown;
-  [SpanType.RAG_INGESTION]: unknown;
-  [SpanType.RAG_EMBEDDING]: unknown;
-  [SpanType.RAG_VECTOR_OPERATION]: unknown;
-  [SpanType.RAG_ACTION]: unknown;
-  [SpanType.GRAPH_ACTION]: unknown;
-  [SpanType.MAPPING]: unknown;
-  [SpanType.SKILL_RESOLUTION]: unknown;
-  [SpanType.SKILL_ACTION]: unknown;
-  [SpanType.AGENT_SIGNAL]: unknown;
 }
 
-/**
- * Output payload recorded on each span type. Same rules as `SpanInputMap`.
- */
+/** Span types whose `output` Mastra writes itself with a fixed shape. Same rules as `SpanInputMap`. */
 export interface SpanOutputMap {
   [SpanType.AGENT_RUN]: AgentRunOutput;
-  [SpanType.SCORER_RUN]: unknown;
-  [SpanType.SCORER_STEP]: unknown;
-  [SpanType.WORKFLOW_RUN]: unknown;
   [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
   [SpanType.MODEL_STEP]: ModelStepOutput;
   [SpanType.MODEL_INFERENCE]: ModelStepOutput;
-  [SpanType.MODEL_CHUNK]: unknown;
-  [SpanType.TOOL_CALL]: unknown;
-  [SpanType.CLIENT_TOOL_CALL]: unknown;
-  [SpanType.PROVIDER_TOOL_CALL]: unknown;
-  [SpanType.MCP_TOOL_CALL]: unknown;
-  [SpanType.PROCESSOR_RUN]: unknown;
-  [SpanType.WORKFLOW_STEP]: unknown;
-  [SpanType.WORKFLOW_CONDITIONAL]: unknown;
-  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: unknown;
-  [SpanType.WORKFLOW_PARALLEL]: unknown;
-  [SpanType.WORKFLOW_LOOP]: unknown;
-  [SpanType.WORKFLOW_SLEEP]: unknown;
-  [SpanType.WORKFLOW_WAIT_EVENT]: unknown;
-  [SpanType.WORKSPACE_ACTION]: unknown;
-  [SpanType.GENERIC]: any;
-  [SpanType.MEMORY_OPERATION]: unknown;
-  [SpanType.RAG_INGESTION]: unknown;
-  [SpanType.RAG_EMBEDDING]: unknown;
-  [SpanType.RAG_VECTOR_OPERATION]: unknown;
-  [SpanType.RAG_ACTION]: unknown;
-  [SpanType.GRAPH_ACTION]: unknown;
-  [SpanType.MAPPING]: unknown;
-  [SpanType.SKILL_RESOLUTION]: unknown;
-  [SpanType.SKILL_ACTION]: unknown;
-  [SpanType.AGENT_SIGNAL]: unknown;
 }
+
+/** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */
+export type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap ? SpanInputMap[TType] : any;
+
+/** `output` payload of a span: the mapped shape when `SpanOutputMap` lists the type, otherwise `any`. */
+export type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap ? SpanOutputMap[TType] : any;
 
 /**
  * Span types a processor may declare via `Processor.spanType`.
@@ -1180,9 +1124,9 @@ interface BaseSpan<TType extends SpanType> {
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Input passed at the start of the span */
-  input?: SpanInputMap[TType];
+  input?: SpanInput<TType>;
   /** Output generated at the end of the span */
-  output?: SpanOutputMap[TType];
+  output?: SpanOutput<TType>;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
@@ -1589,9 +1533,9 @@ interface CreateBaseOptions<TType extends SpanType> {
  */
 export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: SpanInputMap[TType];
+  input?: SpanInput<TType>;
   /** Output data (for event spans) */
-  output?: SpanOutputMap[TType];
+  output?: SpanOutput<TType>;
   /** Labels used to categorize and filter traces. Only valid on root spans. */
   tags?: string[];
   /** Parent span */
@@ -1649,7 +1593,7 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
  */
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
-  input?: SpanInputMap[TType];
+  input?: SpanInput<TType>;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -1664,7 +1608,7 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
-  output?: SpanOutputMap[TType];
+  output?: SpanOutput<TType>;
 }
 
 interface UpdateBaseOptions<TType extends SpanType> {
@@ -1677,7 +1621,7 @@ interface UpdateBaseOptions<TType extends SpanType> {
 /** Options for ending a span, with optional final attributes and output. */
 export interface EndSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
   /** Output data */
-  output?: SpanOutputMap[TType];
+  output?: SpanOutput<TType>;
   /**
    * Also close any descendant spans still open, without applying these
    * options to them. Use at terminal points (error, abort, suspension) where
@@ -1692,9 +1636,9 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
   /** Span name override */
   name?: string;
   /** Input data */
-  input?: SpanInputMap[TType];
+  input?: SpanInput<TType>;
   /** Output data */
-  output?: SpanOutputMap[TType];
+  output?: SpanOutput<TType>;
 }
 
 /** Options for recording an error on a span. */
@@ -1718,7 +1662,7 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
-  input?: SpanInputMap[TType];
+  input?: SpanInput<TType>;
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
   tracingPolicy?: TracingPolicy;

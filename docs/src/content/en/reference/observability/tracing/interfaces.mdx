@@ -92,7 +92,7 @@ This mapping defines which attribute interface is used for each span type when c
 
 ### `SpanInputMap` and `SpanOutputMap`
 
-Mapping of span types to the `input` and `output` payload they record. Mastra fixes the shape only for the span types it produces itself; types that carry caller-defined data stay `unknown`, as does `MODEL_CHUNK`, which carries several chunk shapes on one span type. `GENERIC` stays `any` so custom spans accept any value.
+Mapping of the span types whose `input` and `output` Mastra writes itself with a fixed shape. Every other span type keeps `any`: tool arguments and workflow data are caller-defined, `MODEL_CHUNK` carries several chunk shapes on one span type, and `GENERIC` is the escape hatch for custom spans.
 
 ```typescript
 interface SpanInputMap {
@@ -100,8 +100,6 @@ interface SpanInputMap {
   MODEL_GENERATION: ModelGenerationInput
   MODEL_STEP: ModelStepInput
   MODEL_INFERENCE: ModelStepInput
-  GENERIC: any
-  // every other span type: unknown
 }
 
 interface SpanOutputMap {
@@ -109,9 +107,15 @@ interface SpanOutputMap {
   MODEL_GENERATION: ModelGenerationOutput
   MODEL_STEP: ModelStepOutput
   MODEL_INFERENCE: ModelStepOutput
-  GENERIC: any
-  // every other span type: unknown
 }
+
+/** The mapped shape when the map lists the type, otherwise `any` */
+type SpanInput<TType extends SpanType> = TType extends keyof SpanInputMap
+  ? SpanInputMap[TType]
+  : any
+type SpanOutput<TType extends SpanType> = TType extends keyof SpanOutputMap
+  ? SpanOutputMap[TType]
+  : any
 ```
 
 Narrow a span by its type to read the typed payload. On a stored `SpanRecord`, use `isSpanRecordOfType`:
@@ -147,8 +151,8 @@ interface Span<TType extends SpanType> {
 
   attributes?: SpanTypeMap[TType]
   metadata?: Record<string, any>
-  input?: SpanInputMap[TType]
-  output?: SpanOutputMap[TType]
+  input?: SpanInput<TType>
+  output?: SpanOutput<TType>
   errorInfo?: any
 
   /** Tags for categorizing traces (only present on root spans) */
@@ -937,7 +941,7 @@ interface StartSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: SpanInputMap[TType]
+  input?: SpanInput<TType>
 
   /** Parent span */
   parent?: AnySpan
@@ -963,10 +967,10 @@ interface UpdateSpanOptions<TType extends SpanType> {
   metadata?: Record<string, any>
 
   /** Input data */
-  input?: SpanInputMap[TType]
+  input?: SpanInput<TType>
 
   /** Output data */
-  output?: SpanOutputMap[TType]
+  output?: SpanOutput<TType>
 }
 ```
 
@@ -977,7 +981,7 @@ Options for ending spans.
 ```typescript
 interface EndSpanOptions<TType extends SpanType> {
   /** Output data */
-  output?: SpanOutputMap[TType]
+  output?: SpanOutput<TType>
 
   /** Span metadata */
   metadata?: Record<string, any>

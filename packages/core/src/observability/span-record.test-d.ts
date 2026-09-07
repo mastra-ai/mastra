@@ -27,6 +27,13 @@ describe('isSpanRecordOfType types', () => {
       expectTypeOf(span.output).toEqualTypeOf<ModelStepOutput | null | undefined>();
     }
 
+    if (isSpanRecordOfType(span, SpanType.TOOL_CALL)) {
+      // Span types without a mapped payload keep `any`, exactly as before.
+      expectTypeOf(span.input).toBeAny();
+      expectTypeOf(span.output).toBeAny();
+      expectTypeOf(span.attributes?.success).toEqualTypeOf<boolean | undefined>();
+    }
+
     if (isSpanRecordOfType(span, [SpanType.MODEL_GENERATION, SpanType.MODEL_STEP] as const)) {
       expectTypeOf(span.attributes?.finishReason).toEqualTypeOf<string | undefined>();
     }
