@@ -80,7 +80,7 @@ Gate failures don't stop the review — they become findings for the verdict.
 
 ## Phase 4: History & Architecture
 
-For each significantly changed file: its pre-PR history, the changed regions' pre-PR state, and linked PRs/issues from commit messages. The checkout is shallow (the PR's own commits over a depth-1 base), so `git log` and `git blame` stop at the PR: read pre-PR history with `gh api "repos/{owner}/{repo}/commits?path=<file>&sha=<baseRefName>&per_page=20" --jq '.[] | "\(.sha[0:8]) \(.commit.message | split("\n")[0])"'`, and run `git fetch --deepen=50 origin refs/pull/<number>/head` first when blame on a region matters. Understand why the current code exists before judging the change to it.
+For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. The history is complete but past file contents load on demand: keep `git log -p` and `git log -S` scoped to a path, an unscoped one downloads every past version of every file. Understand why the current code exists before judging the change to it.
 
 Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
 

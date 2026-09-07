@@ -363,15 +363,26 @@ export interface SessionBranchOptions {
   pullRequestNumber?: number;
 }
 
-type StartPointDepth = 'pr-commits' | 'head-only';
+/**
+ * Past file contents of a blob-less history load on demand; git asks gh, which
+ * answers from the session's `GH_TOKEN`, so no credential is ever written.
+ */
+const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 
-function startPointFetchArgs(
+/**
+ * A pull-request session first fetches the base's whole commit history without
+ * file contents, so `git log` and `git blame` work in the review, then the PR
+ * head. Every other session starts from the shallow base tip as it is.
+ */
+function startPointFetchCommands(
+  workdir: string,
   { baseBranch, pullRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber'>,
-  depth: StartPointDepth,
+  shallowClone: boolean,
 ): string {
-  if (pullRequestNumber === undefined) return shellQuote(baseBranch);
-  const head = `refs/pull/${pullRequestNumber}/head`;
-  return depth === 'head-only' ? `--depth=1 ${head}` : `--shallow-exclude=${shellQuote(baseBranch)} ${head}`;
+  const git = `git -C ${shellQuote(workdir)}`;
+  if (pullRequestNumber === undefined) return `${git} fetch origin ${shellQuote(baseBranch)}`;
+  const unshallow = shallowClone ? '--unshallow ' : '';
+  return `${git} fetch ${unshallow}--filter=blob:none origin ${shellQuote(baseBranch)} && ${git} fetch origin refs/pull/${pullRequestNumber}/head`;
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
@@ -391,6 +402,11 @@ async function checkoutSessionBranchImpl(
   const { branch, baseBranch, token, repoFullName, pullRequestNumber } = options;
   if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
+  }
+
+  const pullRequestSession = pullRequestNumber !== undefined;
+  if (pullRequestSession) {
+    await sh(sandbox, `git -C ${shellQuote(workdir)} config credential.helper ${shellQuote(GH_CREDENTIAL_HELPER)}`);
   }
 
   const current = await sh(sandbox, `git -C ${shellQuote(workdir)} branch --show-current`);
@@ -415,24 +431,20 @@ async function checkoutSessionBranchImpl(
     return;
   }
 
+  const shallowClone =
+    pullRequestSession &&
+    (await sh(sandbox, `git -C ${shellQuote(workdir)} rev-parse --is-shallow-repository`)).stdout.trim() === 'true';
   const authUrl = tokenUrl(repoFullName, token);
   try {
     const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`, {
       phase: 'branch checkout remote',
     });
     if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
-    const createBranchFrom = (fetchArgs: string) =>
-      sh(
-        sandbox,
-        `git -C ${shellQuote(workdir)} fetch origin ${fetchArgs} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
-        { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
-      );
-    let fetch = await createBranchFrom(startPointFetchArgs(options, 'pr-commits'));
-    // git refuses `--shallow-exclude` when the PR head is already reachable from
-    // the base (merged by rebase or merge commit); the tip alone still checks out.
-    const shallowExcludeRefused =
-      fetch.exitCode !== 0 && pullRequestNumber !== undefined && !isBranchCollision(fetch) && !isBlockedByLocalWork(fetch);
-    if (shallowExcludeRefused) fetch = await createBranchFrom(startPointFetchArgs(options, 'head-only'));
+    const fetch = await sh(
+      sandbox,
+      `${startPointFetchCommands(workdir, options, shallowClone)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
+    );
     if (fetch.exitCode !== 0) {
       // Same rule as above: uncommitted work in the tree blocks the switch
       // to the new branch. Leave the checkout on its current branch.

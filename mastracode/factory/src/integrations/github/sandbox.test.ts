@@ -465,10 +465,11 @@ describe('checkoutSessionBranch', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
-  it('starts a pull request session on the PR head, fetched shallow against its base', async () => {
+  it('starts a pull request session on the PR head over a blob-less full history', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
       if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('--is-shallow-repository')) return { exitCode: 0, stdout: 'true\n', stderr: '' };
       return OK;
     });
 
@@ -477,28 +478,24 @@ describe('checkoutSessionBranch', () => {
     ).resolves.toBeUndefined();
 
     expect(sandbox.calls).toContain(
-      "git -C '/workspace/repo' fetch origin --shallow-exclude='main' refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
+      "git -C '/workspace/repo' fetch --unshallow --filter=blob:none origin 'main' && git -C '/workspace/repo' fetch origin refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
     );
-    expect(sandbox.calls.join('\n')).not.toContain('--depth=1');
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
   });
 
-  it('falls back to the PR head alone when the base already contains it', async () => {
+  it('keeps the history fetch plain when the clone is not shallow', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
       if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('--shallow-exclude')) {
-        return { exitCode: 128, stdout: '', stderr: 'fatal: error processing shallow info: 4\n' };
-      }
+      if (script.includes('--is-shallow-repository')) return { exitCode: 0, stdout: 'false\n', stderr: '' };
       return OK;
     });
 
-    await expect(
-      checkoutSessionBranch(sandbox, '/workspace/repo', { ...opts, branch: 'factory/pr-42', pullRequestNumber: 42 }),
-    ).resolves.toBeUndefined();
+    await checkoutSessionBranch(sandbox, '/workspace/repo', { ...opts, branch: 'factory/pr-42', pullRequestNumber: 42 });
 
-    expect(sandbox.calls).toContain(
-      "git -C '/workspace/repo' fetch origin --depth=1 refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
-    );
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain("fetch --filter=blob:none origin 'main'");
+    expect(joined).not.toContain('--unshallow');
   });
 
   it('surfaces the collision when the wedged ref cannot be dropped', async () => {
