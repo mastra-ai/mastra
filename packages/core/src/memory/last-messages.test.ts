@@ -48,6 +48,15 @@ describe('token-based memory history', () => {
     }
   });
 
+  it.each([-1, 1.5, NaN, Infinity])('rejects invalid scalar message limit %s', value => {
+    expect(() => normalizeLastMessages(value)).toThrow('finite non-negative integer');
+  });
+
+  it('preserves disabled and unspecified scalar limits', () => {
+    expect(normalizeLastMessages(0)).toEqual({ enabled: false, maxMessages: 0 });
+    expect(normalizeLastMessages(undefined)).toEqual({ enabled: false, maxMessages: undefined });
+  });
+
   it('drops a chunk of oldest history and protects every current-turn source', async () => {
     const list = new MessageList();
     list.add([message('old', 0), message('recent', 1)], 'memory');

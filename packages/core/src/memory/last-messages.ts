@@ -15,6 +15,9 @@ export type LastMessages =
 
 export function normalizeLastMessages(value: LastMessages | undefined) {
   if (typeof value !== 'object') {
+    if (typeof value === 'number' && (!Number.isFinite(value) || value < 0 || !Number.isInteger(value))) {
+      throw new Error('lastMessages must be a finite non-negative integer');
+    }
     return { enabled: value !== undefined && value !== false && value !== 0, maxMessages: value === false ? 0 : value };
   }
   const { maxMessages, maxTokens, atMaxRemoveTokens } = value;
