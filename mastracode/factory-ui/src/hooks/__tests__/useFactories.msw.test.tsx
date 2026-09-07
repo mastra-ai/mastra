@@ -7,15 +7,14 @@
  * Drives the real services + React Query cache; only the network is mocked
  * (MSW) on the ApiConfig base URL the test providers inject.
  */
-import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import type { GithubRepo } from '../../ui/domains/workspaces/services/github';
-import { useLinkRepositoryMutation } from '../useFactories';
+import { useFactoriesQuery, useLinkRepositoryMutation } from '../useFactories';
 import { useIntakeConfigQuery } from '../useIntakeConfig';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
@@ -74,15 +73,16 @@ describe('useLinkRepositoryMutation', () => {
       linear: { enabled: false, sourceIds: null },
     });
 
-    const { result } = renderHookWithProviders(() => ({
+    const { client, result } = renderHookWithProviders(() => ({
       link: useLinkRepositoryMutation(),
       intake: useIntakeConfigQuery(),
     }));
-    await waitFor(() => expect(result.current.intake.data).toBeDefined());
+    await waitForMutationsIdle(client);
 
     result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
 
-    await waitFor(() => expect(result.current.link.isSuccess).toBe(true));
+    await waitForMutationsIdle(client);
+    expect(result.current.link.isSuccess).toBe(true);
     expect(saved).toEqual([
       { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
     ]);
@@ -96,11 +96,12 @@ describe('useLinkRepositoryMutation', () => {
       linear: { enabled: false, sourceIds: null },
     });
 
-    const { result } = renderHookWithProviders(() => useLinkRepositoryMutation());
+    const { client, result } = renderHookWithProviders(() => useLinkRepositoryMutation());
 
     result.current.mutate({ factoryProjectId: 'fp-1', repo });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitForMutationsIdle(client);
+    expect(result.current.isSuccess).toBe(true);
     expect(saved).toEqual([
       {
         github: { enabled: true, sourceIds: ['octo/other', 'octo/hello'] },
@@ -116,26 +117,38 @@ describe('useLinkRepositoryMutation', () => {
       linear: { enabled: false, sourceIds: null },
     });
 
-    const { result } = renderHookWithProviders(() => useLinkRepositoryMutation());
+    const { client, result } = renderHookWithProviders(() => useLinkRepositoryMutation());
 
     result.current.mutate({ factoryProjectId: 'fp-1', repo });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitForMutationsIdle(client);
+    expect(result.current.isSuccess).toBe(true);
     expect(saved).toEqual([]);
   });
 
-  it('given the intake write fails, when a repository is linked, then the link surfaces that error', async () => {
+  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory list still refreshes', async () => {
     stubRepositoryLink();
+    let factoryListReads = 0;
     server.use(
-      http.get(CONFIG_URL, () => HttpResponse.json({ config: { github: { enabled: true, sourceIds: null } } })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        factoryListReads += 1;
+        return HttpResponse.json({ projects: [] });
+      }),
+      http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
       http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
     );
 
-    const { result } = renderHookWithProviders(() => useLinkRepositoryMutation());
+    const { client, result } = renderHookWithProviders(() => ({
+      link: useLinkRepositoryMutation(),
+      factories: useFactoriesQuery(),
+    }));
+    await waitForMutationsIdle(client);
+    expect(factoryListReads).toBe(1);
 
-    result.current.mutate({ factoryProjectId: 'fp-1', repo });
+    result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error?.message).toBe('invalid_config');
+    await waitForMutationsIdle(client);
+    expect(result.current.link.error?.message).toBe('invalid_config');
+    expect(factoryListReads).toBe(2);
   });
 });

@@ -59,7 +59,10 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
-/** Also feeds the caller's issue intake; the server link is idempotent, so a failed intake write is safe to retry. */
+/**
+ * Also feeds the caller's issue intake. The link lands first, so the Factory list
+ * refreshes even when the intake write fails; the server link is idempotent, so retrying is safe.
+ */
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -68,12 +71,16 @@ export function useLinkRepositoryMutation() {
     mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: GithubRepo }) => {
       const connectionId = await connectInstallation(baseUrl, factoryProjectId, repo.installationStorageId);
       const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, repo);
-      const config = await fetchIntakeConfig(baseUrl);
-      const githubSelection = selectIntakeSource(config.github, repo.fullName);
-      if (githubSelection !== config.github) await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+      try {
+        const config = await fetchIntakeConfig(baseUrl);
+        const githubSelection = selectIntakeSource(config.github, repo.fullName);
+        if (githubSelection !== config.github)
+          await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+      } finally {
+        invalidateFactories(queryClient);
+      }
       return linked;
     },
-    onSuccess: () => invalidateFactories(queryClient),
   });
 }
 
