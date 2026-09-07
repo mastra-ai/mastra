@@ -5,7 +5,10 @@
  */
 import { writeFileSync } from 'node:fs';
 
-const SOURCE_URL = 'https://raw.githubusercontent.com/iamcal/emoji-data/master/emoji.json';
+// Pinned, not `master`: refreshing the table is a deliberate bump of this sha,
+// reviewed as a diff, rather than whatever upstream happens to hold that day.
+const SOURCE_COMMIT = '097705020bcf82331c9ef10df3425aad15f5043c';
+const SOURCE_URL = `https://raw.githubusercontent.com/iamcal/emoji-data/${SOURCE_COMMIT}/emoji.json`;
 const OUTPUT_PATH = new URL('../src/integrations/slack/emoji-shortcodes.generated.ts', import.meta.url);
 
 const charFromUnified = unified =>
@@ -14,7 +17,10 @@ const charFromUnified = unified =>
     .map(hex => String.fromCodePoint(Number.parseInt(hex, 16)))
     .join('');
 
-const quoteKey = name => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : `'${name}'`);
+// JSON.stringify rather than wrapping in quotes: the source is remote data, and
+// a name or character carrying a quote would otherwise emit broken TypeScript.
+const literal = value => JSON.stringify(value);
+const key = name => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : literal(name));
 
 const response = await fetch(SOURCE_URL);
 if (!response.ok) throw new Error(`${SOURCE_URL} responded ${response.status}`);
@@ -22,7 +28,7 @@ if (!response.ok) throw new Error(`${SOURCE_URL} responded ${response.status}`);
 const entries = [];
 for (const emoji of await response.json()) {
   for (const shortcode of emoji.short_names) {
-    entries.push(`  ${quoteKey(shortcode)}: '${charFromUnified(emoji.unified)}',`);
+    entries.push(`  ${key(shortcode)}: ${literal(charFromUnified(emoji.unified))},`);
   }
 }
 

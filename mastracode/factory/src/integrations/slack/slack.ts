@@ -48,6 +48,19 @@ type HandlerMessage = Parameters<ChannelHandler>[1];
 
 const SLACK_REQUEST_TIMEOUT_MS = 15_000;
 const MAX_WORK_ITEM_TITLE_CHARS = 80;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * A card is titled with what the sender wrote. Cutting counts graphemes, not
+ * code points: `👍🏼` is a base plus a skin-tone modifier, and a cut between
+ * them leaves the wrong emoji.
+ */
+function workItemTitleFrom(messageText: string): string {
+  const resolved = resolveEmojiShortcodes(messageText);
+  const characters = [...graphemes.segment(resolved)].map(({ segment }) => segment);
+  if (characters.length <= MAX_WORK_ITEM_TITLE_CHARS) return resolved;
+  return `${characters.slice(0, MAX_WORK_ITEM_TITLE_CHARS - 1).join('')}…`;
+}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
@@ -596,12 +609,7 @@ export async function upsertThreadWorkItem({
   url?: string;
 }): Promise<void> {
   try {
-    const resolvedText = resolveEmojiShortcodes(message.text);
-    const characters = [...resolvedText];
-    const title =
-      characters.length > MAX_WORK_ITEM_TITLE_CHARS
-        ? `${characters.slice(0, MAX_WORK_ITEM_TITLE_CHARS - 1).join('')}…`
-        : resolvedText;
+    const title = workItemTitleFrom(message.text);
 
     await workItems.upsert({
       orgId: link.orgId ?? '',

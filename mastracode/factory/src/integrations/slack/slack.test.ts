@@ -771,6 +771,18 @@ describe('Slack thread work-item creation', () => {
     expect(title.endsWith('😀…')).toBe(true);
   });
 
+  it('never splits a skin-tone emoji from its base at the cut', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: '👍🏼'.repeat(100) };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    const title = deps.upsert.mock.calls[0][0].input.title;
+    expect(title).toBe(`${'👍🏼'.repeat(79)}…`);
+  });
+
   it('a routed @-mention also creates an execute-stage work item (no per-origin split)', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeWorkItemDeps();
