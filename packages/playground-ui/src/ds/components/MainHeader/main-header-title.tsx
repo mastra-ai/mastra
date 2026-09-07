@@ -14,7 +14,7 @@ export function MainHeaderTitle({ children, isLoading, size = 'default' }: MainH
         '[&>svg]:size-[1.25em] [&>svg]:opacity-50',
         {
           'bg-surface4 w-60 max-w-[50%] rounded-md animate-pulse': isLoading,
-          'text-md': size === 'smaller',
+          'text-ui-lg': size === 'smaller',
         },
       )}
     >

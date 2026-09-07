@@ -189,7 +189,7 @@ export function DatasetCompareVersionsList({
                 {status === 'changed' ? (
                   <ItemList.LinkCell
                     LinkComponent={Link}
-                    href={`/datasets/${datasetId}/items/${id}/versions?ids=${itemA?.datasetVersion},${itemB?.datasetVersion}`}
+                    href={`/datasets/${datasetId}/items/${id}/versions?version=${itemA?.datasetVersion}&compare=${itemB?.datasetVersion}`}
                   >
                     Compare
                   </ItemList.LinkCell>

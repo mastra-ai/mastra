@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -46,18 +46,39 @@ const renderPage = (initialEntry: string) => {
 };
 
 describe('DatasetItemVersionsComparePage', () => {
-  it('shows the version history when no ?ids are provided', async () => {
+  it('shows an empty compare column when no ?compare is provided', async () => {
     renderPage('/datasets/ds-1/items/item-a/versions');
 
-    expect(await screen.findByRole('heading', { name: 'Item Version History' })).toBeDefined();
-    // Both history rows are listed.
-    expect(await screen.findByText('v. 2')).toBeDefined();
-    expect(await screen.findByText('v. 1')).toBeDefined();
+    expect(await screen.findByRole('combobox', { name: 'Version' })).toBeDefined();
+    const compare = await screen.findByRole('combobox', { name: 'Compare version' });
+    expect(compare.textContent).toContain('Select a version to compare');
+    expect(await screen.findByText('No version selected')).toBeDefined();
+    expect(screen.queryByText(/older/)).toBeNull();
   });
 
-  it('shows the compare view when two ?ids are provided', async () => {
-    renderPage('/datasets/ds-1/items/item-a/versions?ids=1,2');
+  it('pre-selects the version from ?version in the history combobox', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions?version=1');
 
-    expect(await screen.findByText('Compare Dataset Item Versions')).toBeDefined();
+    const combobox = await screen.findByRole('combobox', { name: 'Version' });
+    await waitFor(() => expect(combobox.textContent).toContain('v. 1'));
+    expect(await screen.findByText(/older/)).toBeDefined();
+  });
+
+  it('defaults the history combobox to the latest version without ?version', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions');
+
+    const combobox = await screen.findByRole('combobox', { name: 'Version' });
+    await waitFor(() => expect(combobox.textContent).toContain('v. 2'));
+    expect(await screen.findByText(/newer/)).toBeDefined();
+  });
+
+  it('shows both versions side by side when ?version and ?compare are provided', async () => {
+    renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
+
+    const compare = await screen.findByRole('combobox', { name: 'Compare version' });
+    await waitFor(() => expect(compare.textContent).toContain('v. 1'));
+    expect(await screen.findByText(/newer/)).toBeDefined();
+    expect(await screen.findByText(/older/)).toBeDefined();
+    expect(screen.queryByText('No version selected')).toBeNull();
   });
 });

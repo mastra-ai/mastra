@@ -80,7 +80,7 @@ function DatasetCompareVersionsPage() {
 
   const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
     void navigate(
-      `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
+      `/datasets/${datasetId}/items/${itemId}/versions?version=${itemA?.datasetVersion ?? ''}&compare=${itemB?.datasetVersion ?? ''}`,
     );
   };
 
