@@ -65,14 +65,55 @@ Handlers return one typed decision or `undefined`. Supported sources are `issue`
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. The web deployment now uses the guarded Work default rather than its former unconditional intake handler, so noncandidate or manual arrivals no longer start merely from entering Intake.
 
-Global rules now contain only the shared audit `version` and tool-result handlers:
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
+
+### Board tool-result rules
+
+A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:
 
 ```typescript
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import { defineBoard } from '@mastra/factory/boards';
+import type { BoardToolResultRuleHandler } from '@mastra/factory/boards';
 
-const rules = defaultFactoryRules({ version: 'deployment-v2' });
-// Pass rules to MastraFactory. Optional tool overrides remain under overrides.tools.
+const shipIt: BoardToolResultRuleHandler = context => {
+  if (context.result.status !== 'success' || context.item.stages[0] !== 'queued') return;
+  return { type: 'notify', idempotencyKey: `${context.ingress.id}:shipped`, title: 'Release shipped' };
+};
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+  tools: { ship_it: { onResult: shipIt } },
+});
 ```
+
+The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
+
+Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+
+### Config version
+
+`configVersion` is an operator-maintained deployment label stamped onto transition audit rows, deferred decisions, reconciler audit, and the session kickoff header (`Config: …`). Nothing branches on it; it exists so an audit row can be traced back to the deployment that produced it. It defaults to `factory-config-v1` and must be a non-empty bounded string. The storage column keeps its shipped name, `rule_set_version`.
+
+```typescript
+new MastraFactory({ storage, configVersion: 'deployment-v2' });
+```
+
+**Migration:** The `rules` option, `FactoryRules`, `defaultFactoryRules`, and the `@mastra/factory/rules/defaults` subpath are gone. Passing `rules` throws at construction with a pointer to the replacements.
+
+```typescript
+// before
+new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrides: { tools: { my_tool: { onResult } } } }) });
+// after
+new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
+```
+
+Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
 
 ### Board transition policy
 

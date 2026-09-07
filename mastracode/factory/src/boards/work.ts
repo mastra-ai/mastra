@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
 function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
@@ -122,6 +123,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   title: 'Work',
   initialPhase: 'intake',
   transitionPolicy: workTransitionPolicy,
+  tools: { submit_plan: { onResult: advanceApprovedPlan } },
   phases: {
     intake: {
       title: 'Intake',

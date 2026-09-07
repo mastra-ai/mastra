@@ -251,3 +251,41 @@ describe('defineBoard', () => {
     expect(allowsBuiltInBoardTransition('work', 'intake', 'constructor')).toBe(false);
   });
 });
+
+describe('defineBoard tool-result rules', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  } as const;
+
+  it('freezes declared tool rules and defaults to none', () => {
+    const onResult = () => undefined;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases,
+      tools: { ship_it: { onResult } },
+    });
+    expect(board.tools.ship_it?.onResult).toBe(onResult);
+    expect(Object.isFrozen(board.tools)).toBe(true);
+    expect(Object.isFrozen(board.tools.ship_it)).toBe(true);
+    expect(defineBoard({ id: 'bare', title: 'Bare', initialPhase: 'queued', phases }).tools).toEqual({});
+  });
+
+  it('rejects malformed tool rules at definition time', () => {
+    const define = (tools: unknown) =>
+      defineBoard({ id: 'release', title: 'Release', initialPhase: 'queued', phases, tools: tools as never });
+    expect(() => define(new Map())).toThrow(BoardDefinitionError);
+    expect(() => define({ 'bad name!': { onResult: () => undefined } })).toThrow(/invalid tool name/);
+    expect(() => define({ ['x'.repeat(200)]: { onResult: () => undefined } })).toThrow(/invalid tool name/);
+    expect(() => define({ ship_it: { onResult: 'nope' } })).toThrow(/onResult function/);
+    expect(() => define({ ship_it: { onResult: () => undefined, extra: true } })).toThrow(/only onResult/);
+    expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
+  });
+
+  it('declares Work’s submit_plan rule and nothing on Review', () => {
+    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
+    expect(Object.keys(reviewBoard.tools)).toEqual([]);
+  });
+});
