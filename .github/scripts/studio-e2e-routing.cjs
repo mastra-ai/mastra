@@ -1,7 +1,4 @@
-const studioSourcePaths = [
-  'packages/playground/src/',
-  'packages/playground-ui/src/',
-];
+const studioSourcePaths = ['packages/playground/src/', 'packages/playground-ui/src/'];
 
 function studioE2eChanged(changedFiles) {
   return changedFiles.some(file => studioSourcePaths.some(prefix => file.startsWith(prefix)));
