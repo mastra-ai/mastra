@@ -111,6 +111,19 @@ describe('DatasetItemVersionsComparePage', () => {
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
+
+    it('colours by chronology: the newer version shows additions (green), the older one removals (red)', async () => {
+      // Left = v2 (newer), right = v1 (older)
+      const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
+      await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
+
+      const grid = container.querySelector('.grid-cols-2')!;
+      const [leftCard, rightCard] = Array.from(grid.children);
+      expect(leftCard.querySelector('.cm-diff-added')).not.toBeNull();
+      expect(leftCard.querySelector('.cm-diff-removed')).toBeNull();
+      expect(rightCard.querySelector('.cm-diff-removed')).not.toBeNull();
+      expect(rightCard.querySelector('.cm-diff-added')).toBeNull();
+    });
   });
 
   describe('given the Diff View button is clicked', () => {

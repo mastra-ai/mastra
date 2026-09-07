@@ -136,6 +136,8 @@ function DatasetItemVersionsComparePage() {
   const showDiff = isDiffView && canDiff;
   const leftItem = leftVersion ? toDatasetItem(leftVersion, datasetId) : null;
   const rightItem = rightVersion ? toDatasetItem(rightVersion, datasetId) : null;
+  // Red/green follows chronology, not column position: the older version shows removals, the newer one additions.
+  const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (
     <MainContentLayout>
@@ -172,7 +174,7 @@ function DatasetItemVersionsComparePage() {
               ) : leftItem ? (
                 <DatasetItemDetails
                   item={leftItem}
-                  diff={showDiff && rightItem ? { against: rightItem, side: 'a' } : undefined}
+                  diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
                 />
               ) : (
                 <div className="text-neutral4 text-sm">Item data not available</div>
@@ -203,7 +205,7 @@ function DatasetItemVersionsComparePage() {
               ) : rightItem ? (
                 <DatasetItemDetails
                   item={rightItem}
-                  diff={showDiff && leftItem ? { against: leftItem, side: 'b' } : undefined}
+                  diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
                 />
               ) : (
                 <div className="text-neutral4 text-sm">Version {rightNumber} not found</div>
