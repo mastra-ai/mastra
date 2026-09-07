@@ -238,7 +238,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
 
-  const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
+  useTraceFilterPersistence(searchParams, setSearchParams, {
     storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
   });
 
@@ -367,8 +367,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onFilterTokensChange={url.handleFilterTokensChange}
         onClear={handleClear}
         onRemoveAll={url.handleRemoveAll}
-        onSave={persistence.handleSave}
-        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}

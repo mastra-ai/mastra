@@ -112,10 +112,10 @@ export function TraceSpanPanel({
   const entityHref = getEntityHref(rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
 
-  // Link to the advanced thread view (?variant=advanced) — needs the agent id and thread id.
+  // Link to the advanced thread view (?variant=advanced), anchored on this trace's row.
   const fullThreadHref =
     rootSpan?.entityId && threadId
-      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${encodeURIComponent(threadId)}?variant=advanced`
+      ? `/agents/${encodeURIComponent(rootSpan.entityId)}/threads/${encodeURIComponent(threadId)}?variant=advanced&traceId=${encodeURIComponent(traceId)}`
       : undefined;
 
   return (
