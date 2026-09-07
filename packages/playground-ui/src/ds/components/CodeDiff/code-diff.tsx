@@ -5,38 +5,54 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { MergeView } from '@codemirror/merge';
 import type { Extension } from '@codemirror/state';
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, lineNumbers } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/ds/components/ThemeProvider';
 
+const removed = 'var(--accent2)';
+const added = 'var(--accent1)';
+const tint = (color: string, pct: number) => `color-mix(in oklch, ${color} ${pct}%, transparent)`;
+
+// GitHub-like split diff: red bands for removed lines (left), green bands for
+// added lines (right), with a stronger tint on the exact changed text.
 const diffOverrides = EditorView.theme({
-  '&.cm-editor .cm-changedLine': {
-    backgroundColor: 'transparent',
+  '&.cm-editor .cm-line': { lineHeight: '1.5' },
+  '&.cm-editor .cm-gutters': { border: 'none', backgroundColor: 'transparent' },
+  '&.cm-editor .cm-lineNumbers .cm-gutterElement': { color: 'var(--neutral2)', minWidth: '2.5rem' },
+  '&.cm-editor .cm-changeGutter': { width: '3px', paddingLeft: '0' },
+
+  '&.cm-merge-a .cm-changedLine': {
+    backgroundColor: tint(removed, 14),
     backgroundImage: 'none',
-    borderLeft: 'none',
   },
-  '&.cm-editor .cm-changedText': {
+  '&.cm-merge-b .cm-changedLine': {
+    backgroundColor: tint(added, 14),
     backgroundImage: 'none',
-    backgroundColor: '#880000',
-    padding: '1px 5px',
-    display: 'inline-block',
-    borderRadius: '4px',
   },
-  '&.cm-editor .cm-changedText, &.cm-editor .cm-changedText *': {
-    color: 'white',
+  '&.cm-merge-a .cm-changedText': {
+    backgroundColor: tint(removed, 35),
+    backgroundImage: 'none',
+    borderRadius: '2px',
   },
-  '&.cm-editor .cm-line': {
-    lineHeight: '1.5',
-    opacity: '0.5',
+  '&.cm-merge-b .cm-changedText': {
+    backgroundColor: tint(added, 35),
+    backgroundImage: 'none',
+    borderRadius: '2px',
   },
-  '&.cm-editor .cm-line.cm-changedLine': {
-    opacity: '1',
+  '&.cm-merge-a .cm-changedLineGutter': { background: removed },
+  '&.cm-merge-b .cm-changedLineGutter': { background: added },
+
+  '&.cm-editor .cm-collapsedLines': {
+    backgroundColor: 'var(--surface4)',
+    backgroundImage: 'none',
+    color: 'var(--neutral3)',
+    fontSize: '0.75rem',
+    padding: '4px 12px',
+    cursor: 'pointer',
   },
-  '&.cm-editor .cm-gutters': {
-    display: 'none',
-  },
+  '&.cm-editor .cm-collapsedLines:hover': { backgroundColor: 'var(--surface5)' },
 });
 
 export interface CodeDiffProps {
@@ -101,41 +117,35 @@ function buildDiffLightTheme(): Extension {
   return [editorTheme, syntaxHighlighting(highlightStyle)];
 }
 
+const collapseUnchanged = { margin: 3, minSize: 4 };
+
 export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<MergeView | null>(null);
   const isDark = useTheme().resolvedTheme === 'dark';
   const theme = useMemo(() => (isDark ? buildDiffDarkTheme() : buildDiffLightTheme()), [isDark]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const parent = containerRef.current;
+    if (!parent) return;
 
-    // Clean up previous instance
-    if (viewRef.current) {
-      viewRef.current.destroy();
-    }
-
-    const extensions = [json(), theme, diffOverrides, EditorView.lineWrapping, EditorState.readOnly.of(true)];
+    const extensions = [
+      json(),
+      theme,
+      diffOverrides,
+      lineNumbers(),
+      EditorView.lineWrapping,
+      EditorState.readOnly.of(true),
+    ];
 
     const mergeView = new MergeView({
-      parent: containerRef.current,
-      a: {
-        doc: codeA,
-        extensions,
-      },
-      b: {
-        doc: codeB,
-        extensions,
-      },
-      collapseUnchanged: { margin: 3, minSize: 4 },
+      parent,
+      a: { doc: codeA, extensions },
+      b: { doc: codeB, extensions },
+      gutter: true,
+      highlightChanges: true,
+      collapseUnchanged,
     });
-
-    viewRef.current = mergeView;
-
-    return () => {
-      mergeView.destroy();
-      viewRef.current = null;
-    };
+    return () => mergeView.destroy();
   }, [codeA, codeB, theme]);
 
   return (
@@ -143,7 +153,7 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
       <div className="bg-border1 absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
       <div
         ref={containerRef}
-        className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"
+        className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:py-3 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"
       />
     </div>
   );

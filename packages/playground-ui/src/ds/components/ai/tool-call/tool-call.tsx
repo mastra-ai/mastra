@@ -1,7 +1,7 @@
 import { ChevronRight, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useArriving } from '@/ds/components/Arrival';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -165,6 +165,8 @@ export const ToolCallDisclosure = ({ className, children, ...props }: ComponentP
 };
 
 export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof ToolCallHeader>, 'children'> {
+  /** Rendered ahead of the icon, e.g. a timestamp. */
+  leading?: ReactNode;
   icon: LucideIcon;
   label: string;
   detail?: string;
@@ -173,6 +175,7 @@ export interface ToolCallPresentedHeaderProps extends Omit<ComponentProps<typeof
 
 /** The canonical header of a presented tool call: icon, label, detail, failure mark, chevron. */
 export const ToolCallPresentedHeader = ({
+  leading,
   icon: Icon,
   label,
   detail,
@@ -183,6 +186,7 @@ export const ToolCallPresentedHeader = ({
 
   return (
     <ToolCallHeader {...props}>
+      {leading}
       <ToolCallIcon>
         <Icon
           size={14}

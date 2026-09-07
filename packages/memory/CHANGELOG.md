@@ -1,5 +1,28 @@
 # @mastra/memory
 
+## 1.28.3-alpha.3
+
+### Patch Changes
+
+- Fixed observation indexing retries so temporary connection errors recover without duplicating stored observations. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Fixed Observational Memory to forward only images and PDFs to the observer by default. ([#22153](https://github.com/mastra-ai/mastra/pull/22153))
+
+  **Before:** Omitting `observeAttachments` forwarded every attachment type.
+
+  **After:** Omitting `observeAttachments` forwards images and PDFs. To retain the previous behavior and forward every attachment type, explicitly set `observeAttachments: true`:
+
+  ```ts
+  new ObservationalMemory({
+    observation: {
+      observeAttachments: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
 ## 1.28.3-alpha.2
 
 ### Patch Changes

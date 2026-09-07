@@ -89,7 +89,6 @@
     "canopywave/kimi-k2.6",
     "canopywave/kimi-k3",
     "cerebras/gemma-4-31b-it",
-    "deepinfra/kimi-k2.5",
     "deepinfra/mimo-v2.5",
     "deepinfra/nemotron-3-ultra-550b",
     "deepinfra/qwen3-vl-235b-a22b-instruct",

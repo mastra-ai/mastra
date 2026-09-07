@@ -993,6 +993,21 @@ describe('Observability Methods', () => {
   // ==========================================================================
 
   describe('listFeedback()', () => {
+    it('given optional authors, when listing feedback, then returns typed profiles with one network request', async () => {
+      const body = {
+        feedback: [
+          { feedbackId: '1', feedbackUserId: 'alice', author: { id: 'alice', name: 'Alice' } },
+          { feedbackId: '2' },
+        ],
+      };
+      vi.mocked(global.fetch).mockResolvedValueOnce(Response.json(body));
+      const result = await client.listFeedback();
+      const name: string | undefined = result.feedback[0]?.author?.name;
+      expect(name).toBe('Alice');
+      expect(result).toEqual(body);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should fetch feedback without any parameters', async () => {
       mockSuccessfulResponse();
 

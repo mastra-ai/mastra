@@ -53,6 +53,10 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets: [dataset] })),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items`, () => HttpResponse.json(itemsResponse)),
+    http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/:itemId`, ({ params }) => {
+      const item = items.find(item => item.id === params.itemId);
+      return item ? HttpResponse.json(item) : HttpResponse.json({ error: 'Item not found' }, { status: 404 });
+    }),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/versions`, () =>
       HttpResponse.json({ versions: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
     ),
