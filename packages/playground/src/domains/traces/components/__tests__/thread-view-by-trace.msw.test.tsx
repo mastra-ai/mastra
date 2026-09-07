@@ -61,6 +61,27 @@ const mockHeights = (heights: Record<string, number>) => {
   });
 };
 
+// jsdom has no IntersectionObserver. Several observers are created (infinite scroll sentinel, visible
+// rows, in-view hooks); `intersect` notifies whichever ones watch the given element.
+const stubIntersectionObserver = () => {
+  type Callback = (entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>>) => void;
+  const observers: Array<{ cb: Callback; targets: Element[] }> = [];
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      targets: Element[] = [];
+      constructor(cb: Callback) {
+        observers.push({ cb, targets: this.targets });
+      }
+      observe = (el: Element) => this.targets.push(el);
+      disconnect = vi.fn();
+    },
+  );
+  const intersect = (target: Element) =>
+    observers.filter(o => o.targets.includes(target)).forEach(o => o.cb([{ target, isIntersecting: true }]));
+  return { intersect };
+};
+
 const renderView = ({ search = '' }: { search?: string } = {}) =>
   renderWithProviders(
     <TestLinkProvider>
@@ -153,6 +174,36 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent follow-up');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('does not scroll to the row when it only arrives on a later page', async () => {
+      const { intersect } = stubIntersectionObserver();
+      // Page 0 has trace-b only; scrolling to the sentinel loads page 1 with trace-a.
+      const pages = [
+        { spans: [newestFirstList.spans[0]], pagination: { total: 2, page: 0, perPage: 1, hasMore: true } },
+        { spans: [newestFirstList.spans[1]], pagination: { total: 2, page: 1, perPage: 1, hasMore: false } },
+      ];
+      installHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/light`, ({ request }) =>
+          HttpResponse.json(pages[Number(new URL(request.url).searchParams.get('page') ?? 0)]),
+        ),
+      );
+      const { queryClient } = renderView({ search: '?traceId=trace-a' });
+
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByText('Chef agent run')).toBeNull();
+
+      const list = screen.getByTestId('thread-view-by-trace');
+      const sentinel = list.querySelector('[data-trace-id]')!.previousElementSibling!;
+      act(() => intersect(sentinel));
+
+      expect(await screen.findByText('Chef agent run')).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: 'Show less' })).toBeNull();
+      vi.unstubAllGlobals();
     });
   });
 
@@ -262,22 +313,7 @@ describe('ThreadViewByTrace', () => {
   });
 
   it('emphasises the first row in view while the others stay dimmed', async () => {
-    type Callback = (entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>>) => void;
-    // Other observers (infinite scroll, in-view hooks) are created too; keep the one watching the rows.
-    const observers: Array<{ cb: Callback; targets: Element[] }> = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        targets: Element[] = [];
-        constructor(cb: Callback) {
-          observers.push({ cb, targets: this.targets });
-        }
-        observe = (el: Element) => this.targets.push(el);
-        disconnect = vi.fn();
-      },
-    );
-    const intersect = (target: Element) =>
-      observers.filter(o => o.targets.includes(target)).forEach(o => o.cb([{ target, isIntersecting: true }]));
+    const { intersect } = stubIntersectionObserver();
     installHandlers();
     const { queryClient } = renderView();
 

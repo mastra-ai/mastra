@@ -1,3 +1,4 @@
+import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -44,6 +45,44 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   // The list comes back newest-first; a conversation reads oldest-first.
   const traces = useMemo(() => [...(tracesData?.spans ?? [])].reverse(), [tracesData]);
 
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-3 p-4" aria-hidden="true">
+        {['80%', '60%', '90%', '70%', '65%'].map((width, idx) => (
+          <div key={idx} className="bg-surface6 h-4 animate-pulse rounded-lg" style={{ width }} />
+        ))}
+      </div>
+    );
+  }
+
+  if (traces.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <Txt variant="ui-md" className="text-neutral3">
+          No traces found for this thread.
+        </Txt>
+      </div>
+    );
+  }
+
+  return <LoadedThreadViewByTrace traces={traces} setEndOfListElement={setEndOfListElement} />;
+}
+
+interface LoadedThreadViewByTraceProps {
+  traces: LightSpanRecord[];
+  setEndOfListElement: (node: HTMLDivElement | null) => void;
+}
+
+/** Mounts once the first page is in, so state seeded from `traces` at mount only sees that page. */
+function LoadedThreadViewByTrace({ traces, setEndOfListElement }: LoadedThreadViewByTraceProps) {
   const traceIds = useMemo(() => traces.map(trace => trace.traceId), [traces]);
   const railTurns = useThreadRailTurns(traceIds);
   const listRef = useRef<HTMLDivElement>(null);
@@ -63,9 +102,13 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
   const [highlight, setHighlight] = useState<{ traceId: string; spanIds: string[] } | null>(null);
   // "View full thread" on the traces page lands here with the originating trace: that row starts
-  // expanded and scrolls into view when it mounts (see `scrollIntoViewOnMount`).
+  // expanded and scrolls into view when it mounts (see `scrollIntoViewOnMount`). Best effort on the
+  // first page only: resolved once at mount, so a row that arrives on a later page is left alone.
   const [searchParams] = useSearchParams();
-  const anchorTraceId = searchParams.get('traceId');
+  const [anchorTraceId] = useState(() => {
+    const requested = searchParams.get('traceId');
+    return requested && traces.some(trace => trace.traceId === requested) ? requested : null;
+  });
   // Rows whose timeline is shown in full rather than clamped to the messages column. Selecting a
   // span expands its row and it stays expanded until the reader collapses it with "Show less".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(
@@ -100,34 +143,6 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     // last is the deepest step behind the message. The timeline scrolls the selected row into view.
     selectSpan(traceId, lastSpanId);
   };
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center p-4">
-        <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex flex-col gap-3 p-4" aria-hidden="true">
-        {['80%', '60%', '90%', '70%', '65%'].map((width, idx) => (
-          <div key={idx} className="bg-surface6 h-4 animate-pulse rounded-lg" style={{ width }} />
-        ))}
-      </div>
-    );
-  }
-
-  if (traces.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center p-4">
-        <Txt variant="ui-md" className="text-neutral3">
-          No traces found for this thread.
-        </Txt>
-      </div>
-    );
-  }
 
   return (
     <div
