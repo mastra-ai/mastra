@@ -273,59 +273,6 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('given a run mid-step, when the connection initializes, then the streamed message is replayed once', async () => {
-    const encoder = new TextEncoder();
-    const onEvent = vi.fn();
-    let emit: (event: AgentControllerEvent) => void = () => {};
-    const currentMessage = {
-      id: 'live-1',
-      role: 'assistant',
-      createdAt: '2026-09-08T10:00:00.000Z',
-      content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
-    };
-
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
-        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
-      ),
-      http.get(sessionUrl, () =>
-        HttpResponse.json({
-          controllerId,
-          resourceId,
-          modeId: 'build',
-          modelId: 'openai/gpt-4o-mini',
-          threadId: 'state-thread',
-          running: true,
-          currentMessage,
-          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-        }),
-      ),
-      http.get(`${sessionUrl}/stream`, () => {
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-            },
-            cancel() {},
-          }),
-          { headers: { 'content-type': 'text/event-stream' } },
-        );
-      }),
-    );
-
-    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
-    await waitFor(() => expect(result.current.status).toBe('ready'));
-
-    const replayed = onEvent.mock.calls.filter(([event]) => event.type === 'message_update');
-    expect(replayed).toHaveLength(1);
-    expect(replayed[0][0].message).toMatchObject({ id: 'live-1', createdAt: new Date(currentMessage.createdAt) });
-
-    emit({ type: 'task_updated', tasks: [] });
-    await waitFor(() => expect(result.current.state?.tasks).toEqual([]));
-
-    expect(onEvent.mock.calls.filter(([event]) => event.type === 'message_update')).toHaveLength(1);
-  });
-
   it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
     const encoder = new TextEncoder();
     const onEvent = vi.fn();

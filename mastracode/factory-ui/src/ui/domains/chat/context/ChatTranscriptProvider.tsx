@@ -1,12 +1,13 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
+import { useContext, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState } from '../services/runtime';
+import { withInFlightMessage } from '../services/transcript';
 import type { TranscriptState } from '../services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
@@ -113,9 +114,12 @@ function ChatTranscriptValueProvider({
   const { transcript, initialHistoryReady, reset, localUser, failLocalUser, resolvePrompt, clearPending, pushNotice } =
     transcriptApi;
   const effectiveThreadId = transcript.threadId ?? threadId ?? connection.createdThreadId;
+  const inFlightMessage = connection.state?.running ? connection.state.currentMessage : undefined;
+  const entries = useMemo(() => withInFlightMessage(transcript, inFlightMessage), [transcript, inFlightMessage]);
 
   const effectiveTranscript: TranscriptState = {
     ...transcript,
+    entries,
     threadId: effectiveThreadId,
     tasks: connection.state?.tasks ?? transcript.tasks,
     omProgress: transcript.omProgress ?? connection.state?.omProgress,

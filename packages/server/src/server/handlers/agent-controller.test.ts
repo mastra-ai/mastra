@@ -688,7 +688,7 @@ describe('agent-controller routes', () => {
 
       const running = await readState();
       expect(running.currentMessage).toMatchObject({ id: 'live-1', createdAt: '2026-09-08T10:00:00.000Z' });
-      expect(running.currentMessage?.content.parts).toHaveLength(2);
+      expect(running.currentMessage?.content.parts).toEqual(message.content.parts);
 
       const otherThreadState = await readState(otherThread.id);
       expect(otherThreadState.currentMessage).toBeUndefined();

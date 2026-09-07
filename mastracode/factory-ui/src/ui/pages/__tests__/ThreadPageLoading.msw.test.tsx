@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
@@ -153,6 +153,17 @@ function stubThreadRoute({
   return { sessionGate, messagesGate, onSwitchThread };
 }
 
+function observeEmptyPrompt() {
+  let drawn = false;
+  const observer = new MutationObserver(records => {
+    drawn ||= records.some(record =>
+      Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
+    );
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  return { wasDrawn: () => drawn, disconnect: () => observer.disconnect() };
+}
+
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
@@ -206,19 +217,13 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
     await screen.findByRole('status', { name: 'Preparing session' });
 
-    let renderedEmptyState = false;
-    const observer = new MutationObserver(records => {
-      renderedEmptyState ||= records.some(record =>
-        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
-      );
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const emptyPrompt = observeEmptyPrompt();
 
     messagesGate.resolve();
     await screen.findByText('There are no user turns in this thread.');
-    observer.disconnect();
+    emptyPrompt.disconnect();
 
-    expect(renderedEmptyState).toBe(false);
+    expect(emptyPrompt.wasDrawn()).toBe(false);
   });
 
   it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
@@ -242,35 +247,33 @@ describe('ThreadPage loading shell', () => {
         },
       },
     });
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
+    const emptyPrompt = observeEmptyPrompt();
     sessionGate.resolve();
     messagesGate.resolve();
 
     // The transcript reveals the step part by part: the text lands first, the tool card follows.
     expect(await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 4000 })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    emptyPrompt.disconnect();
+
     expect(document.body).toHaveTextContent('Checking out the pull request.');
-    expect(screen.queryByText('What can I help you build?')).not.toBeInTheDocument();
+    expect(emptyPrompt.wasDrawn()).toBe(false);
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
   });
 
   it('shows the run thinking, never the empty prompt, while a joined run has streamed nothing yet', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ sessionState: { running: true } });
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
+    const emptyPrompt = observeEmptyPrompt();
     sessionGate.resolve();
-
-    let renderedEmptyState = false;
-    const observer = new MutationObserver(records => {
-      renderedEmptyState ||= records.some(record =>
-        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
-      );
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
     messagesGate.resolve();
-    expect(await screen.findByText('Thinking')).toBeInTheDocument();
-    observer.disconnect();
 
-    expect(renderedEmptyState).toBe(false);
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    emptyPrompt.disconnect();
+
+    expect(emptyPrompt.wasDrawn()).toBe(false);
   });
 
   it('reveals the complete loaded transcript when preparation finishes', async () => {

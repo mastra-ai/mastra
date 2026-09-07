@@ -986,6 +986,18 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
+function indexOfMessage(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const index = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
+  return index === -1 && message.role === 'assistant' ? indexOfSameTurn(entries, message) : index;
+}
+
+export function withInFlightMessage(state: TranscriptState, message: MastraDBMessage | undefined): TimelineEntry[] {
+  if (!message || indexOfMessage(state.entries, message) !== -1) return state.entries;
+  return upsertMessage(state, message, true).entries;
+}
+
 function upsertMessage(
   state: TranscriptState,
   message: MastraDBMessage,
@@ -994,10 +1006,7 @@ function upsertMessage(
 ): TranscriptState {
   if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = entries.findIndex(
-    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
-  );
-  if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
+  let idx = indexOfMessage(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
   }
