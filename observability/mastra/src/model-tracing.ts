@@ -16,10 +16,11 @@ import { TransformStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import { SpanType } from '@mastra/core/observability';
 import type {
-  Span,
   EndGenerationOptions,
   ErrorSpanOptions,
   ModelInferenceContext,
+  ModelStepInput,
+  Span,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
@@ -40,7 +41,7 @@ function supportsModelInference(): boolean {
 
 import { extractUsageMetrics } from './usage';
 
-type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
+type StepInputPreview = ModelStepInput | undefined;
 
 function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetadata']): number | undefined {
   const rawCost = providerMetadata?.gateway?.cost;

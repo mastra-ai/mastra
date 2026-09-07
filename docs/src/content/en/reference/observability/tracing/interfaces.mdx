@@ -92,12 +92,14 @@ This mapping defines which attribute interface is used for each span type when c
 
 ### `SpanInputMap` and `SpanOutputMap`
 
-Mapping of span types to the `input` and `output` payload they record. Mastra fixes the shape only for the span types it produces itself; types that carry caller-defined data stay `unknown`, and `GENERIC` stays `any` so custom spans accept any value.
+Mapping of span types to the `input` and `output` payload they record. Mastra fixes the shape only for the span types it produces itself; types that carry caller-defined data stay `unknown`, as does `MODEL_CHUNK`, which carries several chunk shapes on one span type. `GENERIC` stays `any` so custom spans accept any value.
 
 ```typescript
 interface SpanInputMap {
   AGENT_RUN: AgentRunInput
   MODEL_GENERATION: ModelGenerationInput
+  MODEL_STEP: ModelStepInput
+  MODEL_INFERENCE: ModelStepInput
   GENERIC: any
   // every other span type: unknown
 }
@@ -105,6 +107,8 @@ interface SpanInputMap {
 interface SpanOutputMap {
   AGENT_RUN: AgentRunOutput
   MODEL_GENERATION: ModelGenerationOutput
+  MODEL_STEP: ModelStepOutput
+  MODEL_INFERENCE: ModelStepOutput
   GENERIC: any
   // every other span type: unknown
 }
@@ -863,6 +867,36 @@ interface ModelGenerationResult {
   sources?: unknown[]
   toolCalls?: unknown[]
   warnings?: unknown[]
+}
+```
+
+### `ModelStepInput`
+
+Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow preview of what the step sent to the model.
+
+```typescript
+type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string
+
+interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string
+  /** Message text, with non-text parts summarized */
+  content: string
+}
+```
+
+### `ModelStepOutput`
+
+Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step finishes: the step result without `usage`, which lives on the attributes.
+
+```typescript
+type ModelStepOutput = ModelStepResult | InterruptedSpanOutput
+
+interface ModelStepResult {
+  text?: string
+  toolCalls?: unknown[]
+  steps?: unknown[]
+  object?: unknown
 }
 ```
 

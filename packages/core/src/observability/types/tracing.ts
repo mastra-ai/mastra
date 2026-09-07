@@ -955,6 +955,40 @@ export interface InterruptedSpanOutput {
 /** Output recorded on `MODEL_GENERATION` spans. */
 export type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput;
 
+/** One message in the shallow conversation preview a model step records. */
+export interface ModelStepMessage {
+  /** Message role (e.g., 'system', 'user', 'assistant', 'tool') */
+  role: string;
+  /** Message text, with non-text parts summarized */
+  content: string;
+}
+
+/**
+ * Input recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans: a shallow
+ * preview of what the step sent to the model. A normalized message list when
+ * the step carries messages; otherwise a summary of the request body, or the
+ * raw request when it cannot be summarized.
+ */
+export type ModelStepInput = ModelStepMessage[] | Record<string, unknown> | string;
+
+/**
+ * Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step
+ * finishes: the step result without `usage`, which lives on the attributes.
+ */
+export interface ModelStepResult {
+  /** Text generated in this step */
+  text?: string;
+  /** Tool calls the model requested in this step */
+  toolCalls?: unknown[];
+  /** Accumulated step results, when the loop reports them */
+  steps?: unknown[];
+  /** Structured output generated in this step */
+  object?: unknown;
+}
+
+/** Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans. */
+export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
+
 /**
  * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
  * passed, plus the suspended tool's identity when it is known.
@@ -995,8 +1029,10 @@ export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
  *
  * Mastra fixes the shape only where it owns the producer. Types that carry
  * caller-defined data (tool arguments, workflow step input, ...) stay
- * `unknown`. `GENERIC` stays `any`: it is the escape hatch for custom spans,
- * and it keeps `AnySpan` reads permissive for exporters and span formatters.
+ * `unknown`, as does `MODEL_CHUNK`, which multiplexes text, tool-call, object
+ * and approval chunks on one span type. `GENERIC` stays `any`: it is the escape
+ * hatch for custom spans, and it keeps `AnySpan` reads permissive for exporters
+ * and span formatters.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
@@ -1004,8 +1040,8 @@ export interface SpanInputMap {
   [SpanType.SCORER_STEP]: unknown;
   [SpanType.WORKFLOW_RUN]: unknown;
   [SpanType.MODEL_GENERATION]: ModelGenerationInput;
-  [SpanType.MODEL_STEP]: unknown;
-  [SpanType.MODEL_INFERENCE]: unknown;
+  [SpanType.MODEL_STEP]: ModelStepInput;
+  [SpanType.MODEL_INFERENCE]: ModelStepInput;
   [SpanType.MODEL_CHUNK]: unknown;
   [SpanType.TOOL_CALL]: unknown;
   [SpanType.CLIENT_TOOL_CALL]: unknown;
@@ -1042,8 +1078,8 @@ export interface SpanOutputMap {
   [SpanType.SCORER_STEP]: unknown;
   [SpanType.WORKFLOW_RUN]: unknown;
   [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
-  [SpanType.MODEL_STEP]: unknown;
-  [SpanType.MODEL_INFERENCE]: unknown;
+  [SpanType.MODEL_STEP]: ModelStepOutput;
+  [SpanType.MODEL_INFERENCE]: ModelStepOutput;
   [SpanType.MODEL_CHUNK]: unknown;
   [SpanType.TOOL_CALL]: unknown;
   [SpanType.CLIENT_TOOL_CALL]: unknown;

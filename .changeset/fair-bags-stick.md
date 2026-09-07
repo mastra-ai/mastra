@@ -4,7 +4,7 @@
 
 Added typed `input` and `output` payloads for spans.
 
-Every span carried `input?: any` and `output?: any`, so consumers had to guess what a span recorded. Two new maps, `SpanInputMap` and `SpanOutputMap`, now sit beside `SpanTypeMap` and describe the payload each span type records. `AGENT_RUN` and `MODEL_GENERATION` get concrete shapes (`AgentRunInput`, `AgentRunOutput`, `ModelGenerationInput`, `ModelGenerationOutput`, `InterruptedSpanOutput`); span types that carry caller-defined data stay `unknown`, and `GENERIC` stays `any` so custom spans and span formatters keep compiling.
+Every span carried `input?: any` and `output?: any`, so consumers had to guess what a span recorded. Two new maps, `SpanInputMap` and `SpanOutputMap`, now sit beside `SpanTypeMap` and describe the payload each span type records. `AGENT_RUN`, `MODEL_GENERATION`, `MODEL_STEP` and `MODEL_INFERENCE` get concrete shapes (`AgentRunInput`, `AgentRunOutput`, `ModelGenerationInput`, `ModelGenerationOutput`, `ModelStepInput`, `ModelStepOutput`, `InterruptedSpanOutput`); span types that carry caller-defined data stay `unknown`, and `GENERIC` stays `any` so custom spans and span formatters keep compiling.
 
 Stored spans can be narrowed the same way. `SpanRecord` accepts a span type, and `isSpanRecordOfType` narrows a record to it, typing `attributes`, `input` and `output`:
 
