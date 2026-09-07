@@ -117,7 +117,7 @@ describe('DatasetItemVersionsComparePage', () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1&view=diff');
       await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
 
-      const grid = container.querySelector('.grid-cols-2')!;
+      const grid = container.querySelector('.md\\:grid-cols-2')!;
       const [leftCard, rightCard] = Array.from(grid.children);
       expect(leftCard.querySelector('.cm-diff-added')).not.toBeNull();
       expect(leftCard.querySelector('.cm-diff-removed')).toBeNull();
@@ -135,12 +135,6 @@ describe('DatasetItemVersionsComparePage', () => {
 
       await waitFor(() => expect(container.querySelector('.cm-diff-removed')).not.toBeNull());
       expect(container.querySelector('.cm-diff-added')).not.toBeNull();
-      // The diff theme must be mounted with a selector that beats the app's `.cm-activeLine { background: transparent }`.
-      const mountedCss = Array.from(document.head.querySelectorAll('style'))
-        .map(s => s.textContent ?? '')
-        .join('\n');
-      expect(mountedCss).toContain('.cm-line.cm-diff-removed');
-      expect(mountedCss).toContain('.cm-line.cm-diff-added');
       expect(screen.getByTestId('location').textContent).toContain('view=diff');
     });
   });

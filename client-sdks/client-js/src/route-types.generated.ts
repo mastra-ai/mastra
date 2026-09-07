@@ -18327,6 +18327,11 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
+    requestContext?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;

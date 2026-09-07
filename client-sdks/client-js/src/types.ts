@@ -3073,6 +3073,7 @@ export interface DatasetItemVersionResponse {
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
   scorerIds?: string[];
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

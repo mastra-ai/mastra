@@ -40,14 +40,16 @@ export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
       <div className="mt-3 grid gap-3">
         {datasetItemSections.map(section => {
           const codeStr = section.value(item);
-          if (codeStr === undefined) return null;
+          const againstStr = diff ? section.value(diff.against) : undefined;
+          // In diff mode keep a section that only exists on the other side so the addition/removal stays visible.
+          if (codeStr === undefined && againstStr === undefined) return null;
           return (
             <DataPanel.CodeSection
               key={section.key}
               title={section.title}
               icon={section.icon}
-              codeStr={codeStr}
-              diff={diff ? { against: section.value(diff.against) ?? '', side: diff.side } : undefined}
+              codeStr={codeStr ?? ''}
+              diff={diff ? { against: againstStr ?? '', side: diff.side } : undefined}
             />
           );
         })}

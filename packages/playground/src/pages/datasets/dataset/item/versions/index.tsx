@@ -158,7 +158,7 @@ function DatasetItemVersionsComparePage() {
       </RouteHeaderActions>
 
       <PageLayout height="full" className="grid-rows-[minmax(0,1fr)]">
-        <div className="grid min-h-0 grid-cols-2 gap-6">
+        <div className="grid min-h-0 grid-cols-1 gap-6 md:grid-cols-2">
           <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
             <CardHeader>
               <VersionSelect

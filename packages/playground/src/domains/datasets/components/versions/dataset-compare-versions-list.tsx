@@ -13,7 +13,6 @@ export interface DatasetCompareVersionsListProps {
   allItems: Array<{ id: string; createdAt: Date }>;
   itemsAMap: Map<string, DatasetItem>;
   itemsBMap: Map<string, DatasetItem>;
-  onItemClick?: (itemId: string, itemA?: DatasetItem, itemB?: DatasetItem) => void;
 }
 
 const columns = [

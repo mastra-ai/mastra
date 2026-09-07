@@ -20,6 +20,15 @@ describe('DataCodeSection diff highlight', () => {
     expect(b.container.querySelectorAll('.cm-diff-added')).toHaveLength(1);
   });
 
+  it('mounts the diff theme with a selector that beats the app `.cm-activeLine { background: transparent }` rule', () => {
+    render(<DataCodeSection title="Input" codeStr={before} diff={{ against: after, side: 'a' }} />);
+    const mountedCss = Array.from(document.head.querySelectorAll('style'))
+      .map(s => s.textContent ?? '')
+      .join('\n');
+    expect(mountedCss).toContain('.cm-line.cm-diff-removed');
+    expect(mountedCss).toContain('.cm-line.cm-diff-added');
+  });
+
   it('renders no highlight without a diff', () => {
     const { container } = render(<DataCodeSection title="Input" codeStr={before} />);
     expect(container.querySelector('.cm-diff-removed, .cm-diff-added')).toBeNull();
