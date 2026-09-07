@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { InMemoryServerCache } from '../../cache/inmemory';
+import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -3597,10 +3599,58 @@ describe('Agent signals', () => {
     const secondRun = await readNextRunWithParts(iterator);
     expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
+    expect(
+      agent.cancelQueuedMessages({
+        resourceId: 'queue-message-user',
+        threadId: 'queue-message-thread',
+        signalIds: [result.signal.id],
+      }),
+    ).toEqual({ cancelledSignalIds: [] });
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
 
     subscription.unsubscribe();
+  });
+
+  it('cancels a queueMessage after dequeue but before the lease handoff starts execution', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const handoff = Promise.withResolvers<void>();
+    const stream = vi.fn().mockResolvedValue({ runId: 'should-not-start' });
+    const agent = { id: 'cancel-prestart-agent', stream } as unknown as Agent<any, any, any, any>;
+    const resourceId = 'cancel-prestart-resource';
+    const threadId = 'cancel-prestart-thread';
+    const activeRunId = 'cancel-prestart-active';
+    let finishActiveRun!: () => void;
+    let handoffStarted = false;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+    pubsub.owners.set(`${resourceId}\u0000${threadId}`, activeRunId);
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const queued = runtime.queueMessage(agent, 'cancel before execution', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(runtime.cancelQueuedMessages({ resourceId, threadId, signalIds: [queued.signal.id] }, pubsub)).toEqual({
+      cancelledSignalIds: [queued.signal.id],
+    });
+    handoff.resolve();
+    await nextTick();
+    await nextTick();
+
+    expect(stream).not.toHaveBeenCalled();
   });
 
   it('fans out sequential idle signal runs to many same-thread subscribers', async () => {
@@ -3739,6 +3789,12 @@ describe('Agent signals', () => {
     // observable via the subscription's active run id before registerRun populates the stream.
     expect(result.accepted).toBeInstanceOf(Promise);
     expect(subscription.activeRunId()).not.toBeNull();
+
+    const queued = runtime.queueMessage(agent, 'separate queued message', { resourceId, threadId });
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+    expect(runtime.cancelQueuedMessages({ resourceId, threadId, signalIds: [queued.signal.id] })).toEqual({
+      cancelledSignalIds: [queued.signal.id],
+    });
 
     subscription.unsubscribe();
   });
@@ -4664,6 +4720,132 @@ describe('Agent signals', () => {
     await pubsub.releaseLease('remote-resource\u0000remote-thread', 'remote-run-1');
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('resumes cached thread subscriptions after the last consumed signal', async () => {
+    const cache = new InMemoryServerCache();
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+    const firstRuntime = new AgentThreadStreamRuntime();
+    const secondRuntime = new AgentThreadStreamRuntime();
+    const agent = { id: 'cached-signal-agent' } as Agent<any, any, any, any>;
+    const resourceId = 'cached-signal-resource';
+    const threadId = 'cached-signal-thread';
+    const runId = 'cached-signal-run';
+    const key = `${resourceId}\u0000${threadId}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(key)}`;
+
+    const firstSubscription = await firstRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    await firstRuntime.registerRun(
+      agent,
+      {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    await pubsub.publish(topic, {
+      type: 'signal-enqueued',
+      runId,
+      data: {
+        type: 'signal-enqueued',
+        runId,
+        sourceId: 'remote-runtime',
+        signal: createSignal({ id: 'cached-signal-1', type: 'user', contents: 'first' }),
+      },
+    });
+
+    let firstSignals: ReturnType<typeof firstRuntime.drainPendingSignals> = [];
+    await waitForCondition(() => {
+      firstSignals = firstRuntime.drainPendingSignals(runId, pubsub);
+      return firstSignals.length === 1;
+    });
+    expect(firstSignals[0]?.contents).toBe('first');
+    expect(await pubsub.getLastConsumedIndex(topic)).toBe(1);
+    firstSubscription.unsubscribe();
+
+    const secondSubscription = await secondRuntime.subscribeToThread(agent, { resourceId, threadId }, pubsub);
+    await secondRuntime.registerRun(
+      agent,
+      {
+        runId,
+        status: 'running',
+        fullStream: new ReadableStream(),
+        _waitUntilFinished: () => new Promise<void>(() => {}),
+      } as any,
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    expect(secondRuntime.drainPendingSignals(runId, pubsub)).toEqual([]);
+
+    await pubsub.publish(topic, {
+      type: 'signal-enqueued',
+      runId,
+      data: {
+        type: 'signal-enqueued',
+        runId,
+        sourceId: 'remote-runtime',
+        signal: createSignal({ id: 'cached-signal-2', type: 'user', contents: 'second' }),
+      },
+    });
+
+    let secondSignals: ReturnType<typeof secondRuntime.drainPendingSignals> = [];
+    await waitForCondition(() => {
+      secondSignals = secondRuntime.drainPendingSignals(runId, pubsub);
+      return secondSignals.length === 1;
+    });
+    expect(secondSignals[0]?.contents).toBe('second');
+    expect(await pubsub.getLastConsumedIndex(topic)).toBe(3);
+    secondSubscription.unsubscribe();
+  });
+
+  it('does not acknowledge or advance a cached checkpoint when persistence fails', async () => {
+    class AwaitingCallbackPubSub extends PubSub {
+      callback: EventCallback | undefined;
+      acknowledgements = 0;
+
+      async publish(_topic: string, event: any): Promise<void> {
+        await this.callback?.({ ...event, id: 'inner-event', createdAt: new Date() }, async () => {
+          this.acknowledgements += 1;
+        });
+      }
+
+      async subscribe(_topic: string, callback: EventCallback): Promise<void> {
+        this.callback = callback;
+      }
+
+      async unsubscribe(): Promise<void> {}
+
+      async flush(): Promise<void> {}
+    }
+
+    class FailingCheckpointPubSub extends CachingPubSub {
+      override async setLastConsumedIndex(): Promise<void> {
+        throw new Error('checkpoint persistence failed');
+      }
+    }
+
+    const inner = new AwaitingCallbackPubSub();
+    const pubsub = new FailingCheckpointPubSub(inner, new InMemoryServerCache());
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'checkpoint-failure-resource';
+    const threadId = 'checkpoint-failure-thread';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const subscription = await runtime.subscribeToThread(
+      { id: 'checkpoint-failure-agent' } as Agent<any, any, any, any>,
+      { resourceId, threadId },
+      pubsub,
+    );
+
+    await expect(
+      pubsub.publish(topic, { type: 'ignored', runId: 'checkpoint-failure-run', data: { type: 'ignored' } }),
+    ).rejects.toThrow('checkpoint persistence failed');
+
+    expect(inner.acknowledgements).toBe(0);
+    expect(await pubsub.getLastConsumedIndex(topic)).toBeUndefined();
+    subscription.unsubscribe();
   });
 
   it('wakes a new run instead of delivering to a stale remote active run id', async () => {

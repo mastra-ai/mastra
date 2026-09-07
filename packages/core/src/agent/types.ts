@@ -265,6 +265,22 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface CancelQueuedAgentMessagesOptions {
+  resourceId: string;
+  threadId: string;
+  signalIds: string[];
+}
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface CancelQueuedAgentMessagesResult {
+  cancelledSignalIds: string[];
+}
+
+/**
  * @experimental Agent stream resume APIs are experimental and may change in a future release.
  */
 export type SendAgentStreamResumeOptions<OUTPUT = unknown> = {

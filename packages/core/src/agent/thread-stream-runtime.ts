@@ -23,6 +23,8 @@ import type {
   AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
+  CancelQueuedAgentMessagesOptions,
+  CancelQueuedAgentMessagesResult,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
   SendAgentMessageOptions,
@@ -172,6 +174,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
+  cancelled?: boolean;
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -200,6 +203,8 @@ type AgentThreadRuntimeState = {
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
+  /** A dequeued idle message retains its cancellation identity until execution begins. */
+  drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   watchedThreadStreamIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
@@ -264,6 +269,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
+    drainingIdleSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     watchedThreadStreamIds: new Set(),
     preparedRunsById: new Map(),
@@ -1833,6 +1839,7 @@ export class AgentThreadStreamRuntime {
     if (idleQueue.length === 0) {
       state.pendingIdleSignalsByThread.delete(key);
     }
+    state.drainingIdleSignalsByThread.set(key, pendingIdle);
 
     state.activeThreadRunIds.set(key, pendingIdle.runId);
     state.threadKeysByRunId.set(pendingIdle.runId, key);
@@ -1851,6 +1858,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
       if (owns.owner) {
@@ -1865,7 +1873,19 @@ export class AgentThreadStreamRuntime {
       return true;
     }
 
+    if (pendingIdle.cancelled) {
+      state.drainingIdleSignalsByThread.delete(key);
+      state.threadKeysByRunId.delete(pendingIdle.runId);
+      if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
+        state.activeThreadRunIds.delete(key);
+      }
+      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
+      void this.#drainPendingIdleSignals(state, pubsub, key);
+      return true;
+    }
+
     try {
+      state.drainingIdleSignalsByThread.delete(key);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -2091,6 +2111,17 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
+    const consumedIndexPubSub = resolvedPubSub as PubSub & {
+      getLastConsumedIndex?: (topic: string) => Promise<number | undefined>;
+      setLastConsumedIndex?: (topic: string, index: number) => Promise<void>;
+    };
+    const supportsConsumedIndexCheckpoint =
+      resolvedPubSub.supportsOffsets &&
+      typeof consumedIndexPubSub.getLastConsumedIndex === 'function' &&
+      typeof consumedIndexPubSub.setLastConsumedIndex === 'function';
+    let lastConsumedIndex = supportsConsumedIndexCheckpoint
+      ? ((await consumedIndexPubSub.getLastConsumedIndex!(topic)) ?? -1)
+      : -1;
     const seenStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
@@ -2516,6 +2547,15 @@ export class AgentThreadStreamRuntime {
       }
     };
 
+    const checkpointEvent = async (event: Parameters<EventCallback>[0]) => {
+      if (!supportsConsumedIndexCheckpoint || typeof event.index !== 'number') return;
+      // Checkpoints are a contiguous high-water mark. If a previous event failed
+      // and is later redelivered, do not let a newer successful event skip it.
+      if (event.index !== lastConsumedIndex + 1) return;
+      await consumedIndexPubSub.setLastConsumedIndex!(topic, event.index);
+      lastConsumedIndex = event.index;
+    };
+
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
       // Events are processed strictly in publish order, but each delivery is
@@ -2523,7 +2563,10 @@ export class AgentThreadStreamRuntime {
       // has been inspected — including events this subscriber filters out —
       // because a persistent backend (Redis consumer groups) keeps unacked
       // deliveries pending for the lifetime of the subscription.
-      const processed = eventTail.then(() => handleEvent(event));
+      const processed = eventTail.then(async () => {
+        await handleEvent(event);
+        await checkpointEvent(event);
+      });
       // The tail must survive a failed event so later events still run.
       eventTail = processed.then(
         () => {},
@@ -2533,7 +2576,11 @@ export class AgentThreadStreamRuntime {
       return processed.then(() => ack?.());
     };
 
-    await resolvedPubSub.subscribe(topic, onEvent);
+    if (supportsConsumedIndexCheckpoint) {
+      await resolvedPubSub.subscribeFromOffset(topic, lastConsumedIndex + 1, onEvent);
+    } else {
+      await resolvedPubSub.subscribe(topic, onEvent);
+    }
 
     const currentRunId = activeRunId();
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
@@ -2650,6 +2697,35 @@ export class AgentThreadStreamRuntime {
     return this.sendSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
+  cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions, pubsub?: PubSub): CancelQueuedAgentMessagesResult {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(target.resourceId, target.threadId);
+    const signalIds = new Set(target.signalIds);
+    if (signalIds.size === 0) return { cancelledSignalIds: [] };
+
+    const cancelledSignalIds: string[] = [];
+    const queue = state.pendingIdleSignalsByThread.get(key);
+    if (queue) {
+      const remaining = queue.filter(pending => {
+        if (!signalIds.has(pending.signal.id)) return true;
+        cancelledSignalIds.push(pending.signal.id);
+        return false;
+      });
+      if (remaining.length === 0) {
+        state.pendingIdleSignalsByThread.delete(key);
+      } else {
+        state.pendingIdleSignalsByThread.set(key, remaining);
+      }
+    }
+
+    const draining = state.drainingIdleSignalsByThread.get(key);
+    if (draining && signalIds.has(draining.signal.id)) {
+      draining.cancelled = true;
+      cancelledSignalIds.push(draining.signal.id);
+    }
+    return { cancelledSignalIds };
+  }
+
   queueMessage<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     message: AgentMessageInput,
@@ -2694,11 +2770,13 @@ export class AgentThreadStreamRuntime {
     const queuedRunId = randomUUID();
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
 
-    if (activeRecord) {
+    if (activeRecord || state.activeThreadRunIds.has(key)) {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      if (activeRecord) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
       return {
         signal,
         accepted: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),
