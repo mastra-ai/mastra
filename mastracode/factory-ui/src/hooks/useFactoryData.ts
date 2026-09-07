@@ -17,8 +17,10 @@ export const INTAKE_POLL_MS = 30_000;
  * but the feed must still self-heal after the connection is repaired. */
 export const INTAKE_ERROR_POLL_MS = 5 * 60_000;
 
-function intakePollInterval(query: { state: { status: string } }): number {
-  return query.state.status === 'error' ? INTAKE_ERROR_POLL_MS : INTAKE_POLL_MS;
+function intakePollInterval(query: { state: { status: string; data: { pages: unknown[] } | undefined } }): number {
+  if (query.state.status === 'error') return INTAKE_ERROR_POLL_MS;
+  const loadedPages = query.state.data?.pages.length ?? 1;
+  return INTAKE_POLL_MS * loadedPages;
 }
 
 /**
@@ -35,9 +37,7 @@ export function useProjectIssuesQuery(projectRepositoryId: string | undefined, l
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     select: data => data.pages.flatMap(page => page.issues),
-    // New intake must show up on the board without a reload. The endpoint
-    // proxies the live GitHub API (and a refetch replays every loaded page),
-    // so poll gently and refresh when the user returns to the tab.
+    // A refetch replays every loaded page through GitHub, hence the spacing per page.
     refetchInterval: intakePollInterval,
     refetchOnWindowFocus: true,
   });

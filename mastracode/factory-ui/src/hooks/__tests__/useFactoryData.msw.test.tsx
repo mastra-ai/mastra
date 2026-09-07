@@ -129,6 +129,36 @@ describe('useProjectIssuesQuery', () => {
     }
   });
 
+  it('given two pages loaded, when one interval elapses, then the replay waits one interval per loaded page', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const requestedPages: string[] = [];
+      server.use(
+        http.get(ISSUES_URL, ({ request }) => {
+          const page = new URL(request.url).searchParams.get('page') ?? '1';
+          requestedPages.push(page);
+          return page === '1'
+            ? HttpResponse.json({ issues, nextPage: 2 })
+            : HttpResponse.json({ issues: [{ ...issues[0]!, number: 13, title: 'Older intake' }], nextPage: null });
+        }),
+      );
+
+      const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+      await waitFor(() => expect(result.current.data).toHaveLength(1));
+      await result.current.fetchNextPage();
+      await waitFor(() => expect(result.current.data).toHaveLength(2));
+      expect(requestedPages).toEqual(['1', '2']);
+
+      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
+      expect(requestedPages).toEqual(['1', '2']);
+
+      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS);
+      await waitFor(() => expect(requestedPages).toEqual(['1', '2', '1', '2']));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('given the server fails, when the hook resolves, then it surfaces the server message', async () => {
     server.use(
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
