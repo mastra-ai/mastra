@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.8
+
+### Minor Changes
+
+- Added a `thread` variant to the `Comment` component, plus `CommentQuote`, `CommentEditor` and `CommentArrival` parts, so a dense comment feed (avatar gutter, grouped rows, quoted replies, inline editing, hover actions) can be built from the design system instead of hand-rolled per app. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+  ```tsx
+  <Comment variant="thread">
+    <CommentItem continued={sameAuthorAsAbove} highlighted={isLinkedComment}>
+      <CommentItemAvatar>{sameAuthorAsAbove ? null : <Avatar name={author} />}</CommentItemAvatar>
+      <CommentItemContent>
+        <CommentItemHeader>
+          <CommentItemAuthor>{author}</CommentItemAuthor>
+          <CommentItemTimestamp dateTime={occurredAt}>{relative}</CommentItemTimestamp>
+        </CommentItemHeader>
+        <CommentQuote authorName={replyTo.authorName} quote={replyTo.quote} />
+        <CommentItemBody>{body}</CommentItemBody>
+      </CommentItemContent>
+      <CommentItemActions>{/* revealed on row hover */}</CommentItemActions>
+    </CommentItem>
+  </Comment>
+  ```
+
+  `CommentEditor` owns only the draft: pass `isPending` and `error` from the mutation that saves it, and close it from that mutation's success. While `isPending` the textarea is read-only and both buttons are disabled.
+
+  The existing `default` and `embed` variants are unchanged.
+
+### Patch Changes
+
+- Fixed inconsistent empty-state icons and centering in Studio and Agent Builder. ([#23200](https://github.com/mastra-ai/mastra/pull/23200))
+
 ## 53.0.0-alpha.7
 
 ### Patch Changes

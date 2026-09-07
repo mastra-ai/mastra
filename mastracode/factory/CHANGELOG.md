@@ -1,5 +1,13 @@
 # @mastra/factory
 
+## 0.13.0-alpha.11
+
+### Patch Changes
+
+- Comment rows in the work item feed now share one look for quoted replies and inline editing. Row actions (quote, copy link, edit, delete) appear only when you hover that row, instead of lighting up on every row while the card is hovered. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+- Fixed Factory custom API routes to honor validated bearer organization selection. ([#23203](https://github.com/mastra-ai/mastra/pull/23203))
+
 ## 0.13.0-alpha.10
 
 ### Patch Changes
