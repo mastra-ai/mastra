@@ -1,8 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
-import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
+import { AlertTriangle, BookOpen, CircleSlashIcon, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 import { useLinkComponent } from '@/lib/framework';
@@ -174,7 +173,7 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex max-w-md flex-col items-center text-center">
         <div className="bg-surface4 mb-4 rounded-full p-4">
-          <SkillIcon className="text-neutral3 h-8 w-8" />
+          <CircleSlashIcon className="text-neutral3 h-8 w-8" />
         </div>
         <h2 className="text-neutral6 mb-2 text-lg font-medium">Skills Not Configured</h2>
         <p className="text-neutral4 mb-6 text-sm">
