@@ -58,7 +58,7 @@ For ClickHouse vNext, the method records the complete predicate and waits for li
 
 ### `SpanTypeMap`
 
-Mapping of span types to their corresponding attribute interfaces.
+Mapping of span types to their corresponding attribute interfaces. The list below is abbreviated; the `SpanTypeMap` interface in `@mastra/core/observability` is the complete one.
 
 ```typescript
 interface SpanTypeMap {
@@ -66,6 +66,7 @@ interface SpanTypeMap {
   WORKFLOW_RUN: WorkflowRunAttributes
   MODEL_GENERATION: ModelGenerationAttributes
   MODEL_STEP: ModelStepAttributes
+  MODEL_INFERENCE: ModelInferenceAttributes
   MODEL_CHUNK: ModelChunkAttributes
   TOOL_CALL: ToolCallAttributes
   CLIENT_TOOL_CALL: ClientToolCallAttributes
@@ -472,7 +473,7 @@ interface SpanOutputProcessor {
 
 ### `SpanType`
 
-AI-specific span types with their associated metadata.
+AI-specific span types with their associated metadata. The list below is abbreviated; the `SpanType` enum in `@mastra/core/observability` is the complete one.
 
 ```typescript
 enum SpanType {
@@ -487,6 +488,9 @@ enum SpanType {
 
   /** Single model execution step within a generation (one API call) */
   MODEL_STEP = 'model_step',
+
+  /** Model provider call within a step - wraps only the inference, excluding processors and tool executions */
+  MODEL_INFERENCE = 'model_inference',
 
   /** Individual model streaming chunk/event */
   MODEL_CHUNK = 'model_chunk',
