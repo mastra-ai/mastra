@@ -465,6 +465,42 @@ describe('checkoutSessionBranch', () => {
     expect(scrub).not.toContain('tok-secret');
   });
 
+  it('starts a pull request session on the PR head, fetched shallow against its base', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await expect(
+      checkoutSessionBranch(sandbox, '/workspace/repo', { ...opts, branch: 'factory/pr-42', pullRequestNumber: 42 }),
+    ).resolves.toBeUndefined();
+
+    expect(sandbox.calls).toContain(
+      "git -C '/workspace/repo' fetch origin --shallow-exclude='main' refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
+    );
+    expect(sandbox.calls.join('\n')).not.toContain('--depth=1');
+  });
+
+  it('falls back to the PR head alone when the base already contains it', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('--shallow-exclude')) {
+        return { exitCode: 128, stdout: '', stderr: 'fatal: error processing shallow info: 4\n' };
+      }
+      return OK;
+    });
+
+    await expect(
+      checkoutSessionBranch(sandbox, '/workspace/repo', { ...opts, branch: 'factory/pr-42', pullRequestNumber: 42 }),
+    ).resolves.toBeUndefined();
+
+    expect(sandbox.calls).toContain(
+      "git -C '/workspace/repo' fetch origin --depth=1 refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
+    );
+  });
+
   it('surfaces the collision when the wedged ref cannot be dropped', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };

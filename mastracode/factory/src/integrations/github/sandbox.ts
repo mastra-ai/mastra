@@ -354,11 +354,31 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
+export interface SessionBranchOptions {
+  branch: string;
+  baseBranch: string;
+  token: string;
+  repoFullName: string;
+  /** A pull-request card's session starts on the PR head instead of the base tip. */
+  pullRequestNumber?: number;
+}
+
+type StartPointDepth = 'pr-commits' | 'head-only';
+
+function startPointFetchArgs(
+  { baseBranch, pullRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber'>,
+  depth: StartPointDepth,
+): string {
+  if (pullRequestNumber === undefined) return shellQuote(baseBranch);
+  const head = `refs/pull/${pullRequestNumber}/head`;
+  return depth === 'head-only' ? `--depth=1 ${head}` : `--shallow-exclude=${shellQuote(baseBranch)} ${head}`;
+}
+
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
   sandbox: ExecutableSandbox,
   workdir: string,
-  options: { branch: string; baseBranch: string; token: string; repoFullName: string },
+  options: SessionBranchOptions,
 ): Promise<void> {
   return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
 }
@@ -366,13 +386,9 @@ export async function checkoutSessionBranch(
 async function checkoutSessionBranchImpl(
   sandbox: ExecutableSandbox,
   workdir: string,
-  {
-    branch,
-    baseBranch,
-    token,
-    repoFullName,
-  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
+  options: SessionBranchOptions,
 ): Promise<void> {
+  const { branch, baseBranch, token, repoFullName, pullRequestNumber } = options;
   if (!isValidGitRef(branch) || !isValidGitRef(baseBranch)) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
@@ -405,11 +421,18 @@ async function checkoutSessionBranchImpl(
       phase: 'branch checkout remote',
     });
     if (setUrl.exitCode !== 0) throw classifyGitFailure(setUrl, 'pull-failed');
-    const fetch = await sh(
-      sandbox,
-      `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
-      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
-    );
+    const createBranchFrom = (fetchArgs: string) =>
+      sh(
+        sandbox,
+        `git -C ${shellQuote(workdir)} fetch origin ${fetchArgs} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+        { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
+      );
+    let fetch = await createBranchFrom(startPointFetchArgs(options, 'pr-commits'));
+    // git refuses `--shallow-exclude` when the PR head is already reachable from
+    // the base (merged by rebase or merge commit); the tip alone still checks out.
+    const shallowExcludeRefused =
+      fetch.exitCode !== 0 && pullRequestNumber !== undefined && !isBranchCollision(fetch) && !isBlockedByLocalWork(fetch);
+    if (shallowExcludeRefused) fetch = await createBranchFrom(startPointFetchArgs(options, 'head-only'));
     if (fetch.exitCode !== 0) {
       // Same rule as above: uncommitted work in the tree blocks the switch
       // to the new branch. Leave the checkout on its current branch.
