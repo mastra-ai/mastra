@@ -14,9 +14,13 @@ import {
 } from '@mastra/playground-ui/components/Composer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import {
+  buildThreadRailTurns,
+  getClientMessageKey,
+  groupTurns,
+  ThreadRail,
+} from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -143,17 +147,10 @@ export const Thread = ({
   // Keyed by the opening message's client key: `data-user-message` reconciliation
   // swaps `message.id` to the server signal id, and a changing key would remount
   // the whole turn.
-  const turnGroups: { key: string; messages: MastraDBMessage[]; opensTurn: boolean }[] = [];
-  for (const message of messages) {
-    if (threadRailAnchorIds.has(message.id) || turnGroups.length === 0) {
-      turnGroups.push({
-        key: getClientMessageKey(message),
-        messages: [],
-        opensTurn: threadRailAnchorIds.has(message.id),
-      });
-    }
-    turnGroups.at(-1)?.messages.push(message);
-  }
+  const turnGroups = groupTurns(messages, {
+    key: getClientMessageKey,
+    opensTurn: message => threadRailAnchorIds.has(message.id),
+  });
 
   return (
     <ComposerAttachmentsProvider>
@@ -175,16 +172,16 @@ export const Thread = ({
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
                       const isLiveTurn = index === turnGroups.length - 1;
+                      // The first turn opens at the top already; room under it would only add empty scroll.
+                      const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
                       return (
-                        // The room a fresh turn scrolls up into is this min-height: pure
-                        // layout, filled by the streaming reply. It stays after the run —
-                        // collapsing it would shift the reader — and moves to the next
-                        // turn with the anchor scroll.
-                        <div
+                        <ChatShell.Turn
                           key={group.key}
-                          className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
+                          opensTurn={group.opensTurn}
+                          holdsRoom={holdsRoom}
+                          className="gap-6"
                         >
-                          {group.messages.map(message => (
+                          {group.entries.map(message => (
                             <MessageScrollerItem
                               key={getClientMessageKey(message)}
                               messageId={message.id}
@@ -200,7 +197,7 @@ export const Thread = ({
                             </MessageScrollerItem>
                           ))}
                           {isLiveTurn && delayedPending && <PendingIndicator />}
-                        </div>
+                        </ChatShell.Turn>
                       );
                     })}
                   </ArrivalScope>
