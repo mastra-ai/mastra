@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { stripAnsi, stripSerializedAnsi } from '../ansi';
+import { stripAnsi, stripSerializedAnsi } from './ansi';
 
 describe('stripAnsi', () => {
   it('removes color escape sequences from PTY output', () => {
