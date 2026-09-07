@@ -53,7 +53,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -237,10 +240,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     setBranchesUnsupported(true);
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
-
-  useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),

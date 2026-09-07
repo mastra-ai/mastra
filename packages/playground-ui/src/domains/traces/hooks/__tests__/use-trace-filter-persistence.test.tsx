@@ -9,16 +9,17 @@ import type { SetURLSearchParamsLike } from '../use-trace-url-state';
 const KEY = 'test:traces:saved-filters';
 
 let currentSearch: string;
-let setSearch: (next: string) => void;
+let setSearch: SetURLSearchParamsLike;
+let setSearchWithoutPersistence: (next: string) => void;
 
 function Harness({ initial }: { initial: string }) {
   const [params, setParams] = useState(() => new URLSearchParams(initial));
   currentSearch = params.toString();
-  setSearch = next => setParams(new URLSearchParams(next));
+  setSearchWithoutPersistence = next => setParams(new URLSearchParams(next));
   const setSearchParams = useCallback<SetURLSearchParamsLike>(next => {
     setParams(prev => (typeof next === 'function' ? next(new URLSearchParams(prev)) : new URLSearchParams(next)));
   }, []);
-  useTraceFilterPersistence(params, setSearchParams, { storageKey: KEY });
+  setSearch = useTraceFilterPersistence(params, setSearchParams, { storageKey: KEY });
   return null;
 }
 
@@ -42,24 +43,50 @@ describe('useTraceFilterPersistence', () => {
     render(<Harness initial="status=success" />);
 
     expect(currentSearch).toBe('status=success');
+    expect(localStorage.getItem(KEY)).toBe('status=error');
   });
 
-  it('saves every filter change without an explicit action', () => {
+  it('saves every change made through the returned setter (value form)', () => {
     render(<Harness initial="" />);
 
-    act(() => setSearch('status=error&datePreset=last-24h'));
+    act(() => setSearch(new URLSearchParams('status=error&datePreset=last-24h')));
+    expect(currentSearch).toBe('status=error&datePreset=last-24h');
     expect(localStorage.getItem(KEY)).toBe('status=error&datePreset=last-24h');
 
-    act(() => setSearch('status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02'));
+    act(() => setSearch(new URLSearchParams('status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02')));
     expect(localStorage.getItem(KEY)).toBe('status=error');
+  });
+
+  it('saves every change made through the returned setter (updater form)', () => {
+    render(<Harness initial="status=error" />);
+
+    act(() =>
+      setSearch(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('datePreset', 'last-7d');
+        return next;
+      }),
+    );
+
+    expect(currentSearch).toBe('status=error&datePreset=last-7d');
+    expect(localStorage.getItem(KEY)).toBe('status=error&datePreset=last-7d');
   });
 
   it('forgets the saved set once all filters are removed', () => {
     localStorage.setItem(KEY, 'status=error');
     render(<Harness initial="status=error" />);
 
-    act(() => setSearch(''));
+    act(() => setSearch(new URLSearchParams()));
 
     expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('does not touch storage when the URL changes outside the returned setter', () => {
+    localStorage.setItem(KEY, 'status=error');
+    render(<Harness initial="status=error" />);
+
+    act(() => setSearchWithoutPersistence('status=success'));
+
+    expect(localStorage.getItem(KEY)).toBe('status=error');
   });
 });

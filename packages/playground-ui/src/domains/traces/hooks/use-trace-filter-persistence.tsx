@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { hasAnyTraceFilterParams, loadTraceFiltersFromStorage, saveTraceFiltersToStorage } from '../trace-filters';
 import type { SetURLSearchParamsLike } from './use-trace-url-state';
 
@@ -13,8 +13,9 @@ export interface TraceFilterPersistenceOptions {
  * Owns the localStorage save/restore lifecycle for trace filters:
  * - hydrates the URL from saved filters once on mount, but only if the URL is filter-clean
  *   (so a shared link / direct nav with explicit filters wins over the saved set)
- * - saves the filter params on every change afterwards; only relative date presets are
- *   kept (see `saveTraceFiltersToStorage`)
+ * - returns a `setSearchParams` wrapper that persists the resulting params as part of the
+ *   update itself; only relative date presets are kept (see `saveTraceFiltersToStorage`).
+ *   Route every filter mutation through the returned setter (e.g. hand it to `useTraceUrlState`).
  *
  * Pass `storageKey` to scope persistence (e.g. per-entity).
  */
@@ -22,7 +23,7 @@ export function useTraceFilterPersistence(
   searchParams: URLSearchParams,
   setSearchParams: SetURLSearchParamsLike,
   options?: TraceFilterPersistenceOptions,
-): void {
+): SetURLSearchParamsLike {
   const { storageKey, skipHydration } = options ?? {};
 
   // Hydrate from the saved filter set on mount, but only when the URL is
@@ -50,17 +51,17 @@ export function useTraceFilterPersistence(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Save on change only: the URL at mount is either about to be hydrated (empty) or an explicit
-  // link, and neither should overwrite what the user last used.
-  const search = searchParams.toString();
-  const lastSavedSearchRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (lastSavedSearchRef.current === null) {
-      lastSavedSearchRef.current = search;
-      return;
-    }
-    if (lastSavedSearchRef.current === search) return;
-    lastSavedSearchRef.current = search;
-    saveTraceFiltersToStorage(new URLSearchParams(search), storageKey);
-  }, [search, storageKey]);
+  // Persist as part of the user's update rather than by observing the URL: the URL at mount
+  // is either about to be hydrated (empty) or an explicit link, and neither is "what the user
+  // last chose".
+  return useCallback<SetURLSearchParamsLike>(
+    (next, setOptions) => {
+      setSearchParams(prev => {
+        const resolved = typeof next === 'function' ? next(prev) : next;
+        saveTraceFiltersToStorage(resolved, storageKey);
+        return resolved;
+      }, setOptions);
+    },
+    [setSearchParams, storageKey],
+  );
 }
