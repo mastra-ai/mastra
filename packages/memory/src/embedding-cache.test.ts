@@ -1,17 +1,31 @@
-import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { Memory } from './index';
 
 // Mock embedMany across AI SDK versions so embedMessageContent does no network I/O.
 vi.mock('@internal/ai-v6', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 vi.mock('@internal/ai-sdk-v5', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 vi.mock('@internal/ai-sdk-v4', () => ({
-  embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens: 1 } }),
+  embedMany: vi.fn(async ({ values }: { values: string[] }) => ({
+    values,
+    embeddings: values.map(() => [0.1, 0.2]),
+    usage: { tokens: 1 },
+    warnings: [],
+  })),
 }));
 
 function createMemory() {
@@ -57,13 +71,14 @@ describe('observation indexing IDs', () => {
   });
 
   it('does not duplicate chunks when a successful write reports a timeout', async () => {
-    vi.mocked(embedManyV6).mockImplementationOnce(async ({ values }) => ({
-      values,
-      embeddings: values.map(() => [0.1, 0.2]),
-      usage: { tokens: 1 },
-      warnings: [],
-    }));
     const memory = createMemory();
+    const chunks = ['first', 'second', 'third', 'fourth'];
+    vi.spyOn(memory as any, 'embedMessageContent').mockResolvedValue({
+      chunks,
+      embeddings: chunks.map(() => [0.1, 0.2]),
+      usage: { tokens: 1 },
+      dimension: 2,
+    });
     const rows = new Set<string>();
     let attempts = 0;
     vi.mocked(memory.vector!.upsert).mockImplementation(async ({ ids, vectors }) => {
@@ -72,9 +87,8 @@ describe('observation indexing IDs', () => {
       if (++attempts === 1) throw new Error('Connection terminated due to connection timeout');
       return storedIds;
     });
-    const input = { ...observation, text: 'observation '.repeat(5000) };
-    await expect(memory.indexObservation(input)).rejects.toThrow('connection timeout');
-    await memory.indexObservation(input);
+    await expect(memory.indexObservation(observation)).rejects.toThrow('connection timeout');
+    await memory.indexObservation(observation);
     const calls = vi.mocked(memory.vector!.upsert).mock.calls;
     const ids = calls[0]![0].ids!;
     expect(ids.length).toBeGreaterThan(1);
