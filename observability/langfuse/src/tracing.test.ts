@@ -719,6 +719,55 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
     });
 
+    it('does not forward dedicated metadata keys with falsy values', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: {
+            userId: '',
+            sessionId: '',
+            threadId: '',
+            traceName: '',
+            version: 0,
+            langfuse: '',
+            runId: 'run-1',
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.userId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.sessionId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.threadId']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.traceName']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.version']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.langfuse']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+    });
+
+    it('skips only the root metadata key that cannot be serialized', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          metadata: { big: BigInt(1), runId: 'run-1' },
+        } as any),
+      );
+
+      expect(processedSpans).toHaveLength(1);
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.big']).toBeUndefined();
+      expect(attrs['langfuse.trace.metadata.runId']).toBe('run-1');
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+    });
+
     it('lets explicit metadata.langfuse.* values take precedence over root span metadata', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(

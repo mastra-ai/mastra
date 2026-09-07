@@ -17,6 +17,8 @@ import { SpanConverter } from '@mastra/otel-exporter';
 
 const LOG_PREFIX = '[LangfuseExporter]';
 const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
+/** Metadata keys mapped to dedicated Langfuse fields; never forwarded as trace metadata. */
+const DEDICATED_METADATA_KEYS = new Set(['userId', 'sessionId', 'threadId', 'traceName', 'version', 'langfuse']);
 
 export const LANGFUSE_DEFAULT_BASE_URL = 'https://cloud.langfuse.com';
 
@@ -412,19 +414,29 @@ function mapMastraToLangfuseAttributes(
     // they stay first-level, filterable trace metadata, as they were before the
     // OTLP migration. Langfuse only nests unmapped attributes under
     // metadata.attributes, which cannot be used in trace filters or evaluator
-    // scopes. Keys that map to dedicated Langfuse fields (userId, sessionId,
-    // threadId, traceName, version, langfuse.*) were already removed above.
-    // Explicit metadata.langfuse.* values and the identity keys above take
-    // precedence. Child spans are skipped because Langfuse applies
-    // langfuse.trace.* from any span, so a child could overwrite the trace.
-    // The mastra.metadata.* attribute is kept on the observation.
+    // scopes. Keys that map to dedicated Langfuse fields are skipped by name:
+    // the truthy checks above leave falsy values (empty string, 0, false) in
+    // place, and those must not leak into trace metadata either. Explicit
+    // metadata.langfuse.* values and the identity keys above take precedence.
+    // Child spans are skipped because Langfuse applies langfuse.trace.* from
+    // any span, so a child could overwrite the trace. The mastra.metadata.*
+    // attribute is kept on the observation. A value that cannot be serialized
+    // (e.g. BigInt) skips only its own key so the span still exports.
     for (const [key, value] of Object.entries(attributes)) {
-      if (!key.startsWith(MASTRA_METADATA_PREFIX) || value === null || value === undefined) {
+      if (!key.startsWith(MASTRA_METADATA_PREFIX)) {
         continue;
       }
-      const traceKey = `langfuse.trace.metadata.${key.slice(MASTRA_METADATA_PREFIX.length)}`;
-      if (attributes[traceKey] === undefined) {
-        attributes[traceKey] = typeof value === 'string' ? value : JSON.stringify(value);
+      const metadataKey = key.slice(MASTRA_METADATA_PREFIX.length);
+      if (DEDICATED_METADATA_KEYS.has(metadataKey) || value === null || value === undefined) {
+        continue;
+      }
+      const traceKey = `langfuse.trace.metadata.${metadataKey}`;
+      if (attributes[traceKey] !== undefined) {
+        continue;
+      }
+      const serialized = serializeTraceIo(value);
+      if (serialized !== undefined) {
+        attributes[traceKey] = serialized;
       }
     }
   }
