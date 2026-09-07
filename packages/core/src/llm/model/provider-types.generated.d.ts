@@ -903,6 +903,7 @@ export type ProviderModelsMap = {
     'gpt-5.6-luna',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
+    'gpt-6-astra',
     'kimi-k3',
   ];
   readonly auriko: readonly [
@@ -1280,7 +1281,6 @@ export type ProviderModelsMap = {
     'deepinfra/gemma-4-31b-it',
     'deepinfra/glm-5.1',
     'deepinfra/hy3',
-    'deepinfra/kimi-k2.5',
     'deepinfra/ling-3.0-flash',
     'deepinfra/mimo-v2.5',
     'deepinfra/mimo-v2.5-pro',
@@ -3543,10 +3543,8 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-highspeed',
     'minimax/minimax-m2.7',
-    'minimax/minimax-m2.7-free',
     'minimax/minimax-m2.7-highspeed',
     'minimax/minimax-m3',
-    'minimax/minimax-m3-free',
     'mistral/codestral',
     'mistral/codestral-embed',
     'mistral/devstral-2',
