@@ -1,0 +1,11 @@
+{
+  "overrides": [
+    {
+      "filter": [".changeset/*.md"],
+      "config": {
+        "MD041": false,
+      },
+      "combine": "merge",
+    },
+  ],
+}
