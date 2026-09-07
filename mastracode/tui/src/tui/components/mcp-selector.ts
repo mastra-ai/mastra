@@ -43,6 +43,8 @@ export interface McpSelectorOptions {
     disabled: boolean,
     options?: { global?: boolean },
   ) => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
+  /** Clear a server's project override so it inherits the global default. */
+  onInheritServer: (name: string) => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
   /** Get captured stderr logs for a server */
   getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
@@ -61,9 +63,11 @@ interface ServerAction {
 }
 
 const DISABLE_ACTIONS: ServerAction[] = [
-  { label: 'Disable (this project)', key: 'disable' },
-  { label: 'Disable globally (all projects)', key: 'disable-global' },
+  { label: 'Disable in this project', key: 'disable' },
+  { label: 'Disable by default for all projects', key: 'disable-global' },
 ];
+
+const INHERIT_ACTION: ServerAction = { label: 'Use global default', key: 'inherit' };
 
 const CONNECTED_ACTIONS: ServerAction[] = [
   { label: 'View tools', key: 'tools' },
@@ -87,9 +91,12 @@ const NEEDS_AUTH_ACTIONS: ServerAction[] = [
   ...DISABLE_ACTIONS,
 ];
 
-const DISABLED_ACTIONS: ServerAction[] = [{ label: 'Enable', key: 'enable' }];
+const DISABLED_PROJECT_ACTIONS: ServerAction[] = [{ label: 'Enable in this project', key: 'enable' }, INHERIT_ACTION];
 
-const DISABLED_GLOBAL_ACTIONS: ServerAction[] = [{ label: 'Enable globally (all projects)', key: 'enable-global' }];
+const DISABLED_GLOBAL_ACTIONS: ServerAction[] = [
+  { label: 'Enable in this project', key: 'enable' },
+  { label: 'Enable by default for all projects', key: 'enable-global' },
+];
 
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
@@ -110,6 +117,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
   private onCancelAuthenticateServerCallback: McpSelectorOptions['onCancelAuthenticateServer'];
   private onSetServerDisabledCallback: McpSelectorOptions['onSetServerDisabled'];
+  private onInheritServerCallback: McpSelectorOptions['onInheritServer'];
   private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
@@ -157,6 +165,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.onAuthenticateServerCallback = options.onAuthenticateServer;
     this.onCancelAuthenticateServerCallback = options.onCancelAuthenticateServer;
     this.onSetServerDisabledCallback = options.onSetServerDisabled;
+    this.onInheritServerCallback = options.onInheritServer;
     this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
@@ -210,7 +219,10 @@ export class McpSelectorComponent extends Box implements Focusable {
         // Disabled wins over the reloading spinner — a disabled server is not
         // reconnecting during a reload/enable/disable rebuild.
         icon = theme.fg('muted', '⊘');
-        stateText = theme.fg('muted', status.disabledScope === 'global' ? 'disabled (global)' : 'disabled');
+        stateText = theme.fg(
+          'muted',
+          status.disabledScope === 'global' ? 'disabled (global default)' : 'disabled (project override)',
+        );
       } else if (this._reloading) {
         icon = theme.fg('warning', '⟳');
         stateText = theme.fg('warning', 'reconnecting...');
@@ -234,6 +246,9 @@ export class McpSelectorComponent extends Box implements Focusable {
       } else {
         icon = theme.fg('error', '✗');
         stateText = theme.fg('error', 'failed');
+      }
+      if (!status.disabled && status.projectOverride) {
+        stateText += theme.fg('muted', ` (project override: ${status.projectOverride})`);
       }
 
       const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
@@ -395,7 +410,13 @@ export class McpSelectorComponent extends Box implements Focusable {
     if (!status) return;
 
     if (status.disabled) {
-      this.subMenuActions = status.disabledScope === 'global' ? DISABLED_GLOBAL_ACTIONS : DISABLED_ACTIONS;
+      if (status.projectOverride === 'disabled') {
+        this.subMenuActions = DISABLED_PROJECT_ACTIONS;
+      } else if (status.projectOverride === 'enabled') {
+        this.subMenuActions = [INHERIT_ACTION];
+      } else {
+        this.subMenuActions = DISABLED_GLOBAL_ACTIONS;
+      }
     } else if (this.isAuthenticating(status)) {
       // A server mid-OAuth shows a cancel path (the user may have closed the
       // browser). Authoritative even if a polled refresh cleared `connecting`,
@@ -409,6 +430,10 @@ export class McpSelectorComponent extends Box implements Focusable {
       this.subMenuActions = NEEDS_AUTH_ACTIONS;
     } else {
       this.subMenuActions = FAILED_ACTIONS;
+    }
+
+    if (!status.disabled && status.projectOverride) {
+      this.subMenuActions = [...this.subMenuActions, INHERIT_ACTION];
     }
 
     this.subMenuOpen = true;
@@ -495,6 +520,11 @@ export class McpSelectorComponent extends Box implements Focusable {
         this.doSetServerDisabled(status, false, true);
         break;
       }
+      case 'inherit': {
+        this.subMenuOpen = false;
+        this.doInheritServer(status);
+        break;
+      }
     }
   }
 
@@ -517,32 +547,70 @@ export class McpSelectorComponent extends Box implements Focusable {
           this.selectedIndex = Math.max(0, total - 1);
         }
         const updated = result.statuses.find(s => s.name === name);
-        if (disabled) {
+        if (global) {
           this.showInfoCallback(
-            global
-              ? `MCP: Disabled "${name}" globally (all projects). Re-enable it from /mcp.`
-              : `MCP: Disabled "${name}". Re-enable it from /mcp.`,
+            disabled
+              ? `MCP: Disabled "${name}" by default for all projects. Explicit project enables remain active.`
+              : `MCP: Enabled "${name}" by default for all projects.`,
           );
+          if (!disabled && updated?.projectOverride === 'disabled') {
+            this.showInfoCallback(`MCP: "${name}" is still disabled by this project's override.`);
+          } else if (!disabled && updated?.disabled) {
+            this.showInfoCallback(`MCP: All MCP is still disabled by the global kill switch.`);
+          }
+        } else if (disabled) {
+          this.showInfoCallback(`MCP: Disabled "${name}" in this project. Use "Use global default" to inherit.`);
         } else if (updated?.disabled) {
-          // Removed from one scope but the other still disables it.
-          this.showInfoCallback(
-            updated.disabledScope === 'global'
-              ? `MCP: "${name}" is still disabled globally — use "Enable globally" to re-enable it.`
-              : `MCP: "${name}" is still disabled in this project — use "Enable" to re-enable it.`,
-          );
+          this.showInfoCallback(`MCP: Enabled "${name}" in this project, but the global kill switch is active.`);
         } else if (updated?.connected) {
-          this.showInfoCallback(`MCP: Enabled "${name}" — ${updated.toolCount} tool(s)`);
+          this.showInfoCallback(`MCP: Enabled "${name}" in this project — ${updated.toolCount} tool(s)`);
         } else if (updated?.needsAuth) {
-          this.showInfoCallback(`MCP: Enabled "${name}" — needs authentication \u2192 run /mcp to authenticate`);
+          this.showInfoCallback(
+            `MCP: Enabled "${name}" in this project — needs authentication \u2192 run /mcp to authenticate`,
+          );
         } else {
           this.showInfoCallback(
-            `MCP: Enabled "${name}" but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
+            `MCP: Enabled "${name}" in this project but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
           );
         }
       })
       .catch((err: unknown) => {
         const errMsg = err instanceof Error ? err.message : String(err);
         this.showInfoCallback(`MCP: Failed to ${disabled ? 'disable' : 'enable'} "${name}": ${errMsg}`);
+      })
+      .finally(() => {
+        this._reloading = false;
+        this.updateList();
+      });
+  }
+
+  private doInheritServer(status: McpServerStatus): void {
+    const name = status.name;
+    this._reloading = true;
+    this.updateList();
+
+    this.onInheritServerCallback(name)
+      .then(result => {
+        this.statuses = result.statuses;
+        this.skipped = result.skipped;
+        this._authenticating.clear();
+        this._cancelling.clear();
+        const updated = result.statuses.find(server => server.name === name);
+        if (updated?.disabled) {
+          this.showInfoCallback(`MCP: "${name}" now inherits its global default and is disabled.`);
+        } else if (updated?.connected) {
+          this.showInfoCallback(`MCP: "${name}" now inherits its global default — ${updated.toolCount} tool(s).`);
+        } else if (updated?.needsAuth) {
+          this.showInfoCallback(`MCP: "${name}" now inherits its global default — needs authentication.`);
+        } else {
+          this.showInfoCallback(
+            `MCP: "${name}" now inherits its global default but failed to connect: ${updated?.error ?? 'Unknown error'}`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        this.showInfoCallback(`MCP: Failed to inherit "${name}": ${errMsg}`);
       })
       .finally(() => {
         this._reloading = false;

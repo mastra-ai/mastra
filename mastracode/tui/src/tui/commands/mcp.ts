@@ -25,12 +25,16 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
     return;
   }
 
-  // /mcp disable <name|all> [--global] and /mcp enable <name|all> [--global]
+  // /mcp disable|enable <name|all> [--global] and /mcp inherit <name|all>
   if (subcommand === 'disable' || subcommand === 'enable') {
     const rest = args.slice(1);
     const global = rest.includes('--global') || rest.includes('-g');
     const target = rest.find(a => a !== '--global' && a !== '-g');
     await setDisabled(ctx, subcommand === 'disable', target, global);
+    return;
+  }
+  if (subcommand === 'inherit') {
+    await inheritServer(ctx, args[1]);
     return;
   }
 
@@ -109,6 +113,13 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         skipped: mm.getSkippedServers(),
       };
     },
+    onInheritServer: async (name: string) => {
+      await mm.inheritServer(name);
+      return {
+        statuses: mm.getServerStatuses(),
+        skipped: mm.getSkippedServers(),
+      };
+    },
     getServerLogs: (name: string) => {
       return mm.getServerLogs(name);
     },
@@ -140,58 +151,110 @@ async function setDisabled(
     return;
   }
 
-  const scopeSuffix = global ? ' --global' : '';
-  const scopeLabel = global ? ' globally (all projects)' : '';
-
   if (target === 'all') {
+    const scopeLabel = global ? ' globally (all projects)' : ' in this project';
     ctx.showInfo(`MCP: ${disabled ? 'Disabling' : 'Enabling'} all servers${scopeLabel}...`);
     await mm.setAllDisabled(disabled, { global });
     if (disabled) {
-      ctx.showInfo(`MCP: All servers disabled${scopeLabel}. Re-enable with /mcp enable all${scopeSuffix}.`);
-    } else {
-      const statuses = mm.getServerStatuses();
-      const connected = statuses.filter(s => s.connected);
-      const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
       ctx.showInfo(
-        `MCP: All servers enabled${scopeLabel}. ${connected.length} server(s) connected, ${totalTools} tool(s).`,
+        global
+          ? 'MCP: All servers disabled globally (all projects). Re-enable with /mcp enable all --global.'
+          : 'MCP: All servers disabled in this project. Use /mcp inherit all to restore global defaults.',
       );
-      const stillDisabled = statuses.filter(s => s.disabled);
-      if (!global && mm.isAllDisabledGlobally()) {
-        ctx.showInfo('MCP: All MCP is still disabled globally — re-enable with /mcp enable all --global.');
-      } else if (stillDisabled.length > 0) {
-        const otherScope = global ? 'in this project' : 'globally';
-        const otherSuffix = global ? '' : ' --global';
+      return;
+    }
+
+    const statuses = mm.getServerStatuses();
+    const connected = statuses.filter(s => s.connected);
+    const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
+    ctx.showInfo(
+      global
+        ? `MCP: Global defaults enabled. ${connected.length} server(s) connected, ${totalTools} tool(s).`
+        : `MCP: All servers enabled in this project. ${connected.length} server(s) connected, ${totalTools} tool(s).`,
+    );
+    if (!global && mm.isAllDisabledGlobally()) {
+      ctx.showInfo('MCP: The project overrides are saved, but all MCP is disabled by the global kill switch.');
+    } else if (global) {
+      const projectDisabled = statuses.filter(s => s.projectOverride === 'disabled');
+      if (projectDisabled.length > 0) {
         ctx.showInfo(
-          `MCP: Still disabled ${otherScope}: ${stillDisabled.map(s => s.name).join(', ')} — re-enable with /mcp enable <name|all>${otherSuffix}.`,
+          `MCP: Still disabled in this project: ${projectDisabled.map(s => s.name).join(', ')} — use /mcp inherit <name|all> or /mcp enable <name|all>.`,
         );
       }
     }
     return;
   }
 
-  ctx.showInfo(`MCP: ${disabled ? 'Disabling' : 'Enabling'} "${target}"${scopeLabel}...`);
   const status = await mm.setServerDisabled(target, disabled, { global });
-  if (disabled) {
-    if (status.disabled) {
-      ctx.showInfo(`MCP: Disabled "${target}"${scopeLabel}. Re-enable with /mcp enable ${target}${scopeSuffix}.`);
+  if (status.error && /not found/i.test(status.error)) {
+    ctx.showInfo(`MCP: Failed to ${verb} "${target}": ${status.error}`);
+    return;
+  }
+
+  if (global) {
+    if (disabled) {
+      ctx.showInfo(`MCP: Disabled "${target}" by default for all projects. Explicit project enables remain active.`);
     } else {
-      ctx.showInfo(`MCP: Failed to disable "${target}": ${status.error ?? 'Unknown error'}`);
+      ctx.showInfo(`MCP: Enabled "${target}" by default for all projects.`);
+      if (status.projectOverride === 'disabled') {
+        ctx.showInfo(`MCP: "${target}" is still disabled by this project's override.`);
+      } else if (mm.isAllDisabledGlobally()) {
+        ctx.showInfo('MCP: All MCP is still disabled by the global kill switch.');
+      }
     }
-  } else if (status.disabled) {
-    // Removed from the requested scope, but something else still disables it.
+    return;
+  }
+
+  if (disabled) {
     ctx.showInfo(
-      mm.isAllDisabledGlobally()
-        ? `MCP: "${target}" is still disabled — all MCP is disabled globally. Re-enable with /mcp enable all --global.`
-        : status.disabledScope === 'global'
-          ? `MCP: "${target}" is still disabled globally — re-enable with /mcp enable ${target} --global.`
-          : `MCP: "${target}" is still disabled in this project — re-enable with /mcp enable ${target}.`,
+      `MCP: Disabled "${target}" in this project. Use /mcp inherit ${target} to restore the global default.`,
+    );
+  } else if (status.disabled) {
+    ctx.showInfo(
+      `MCP: Enabled "${target}" in this project, but all MCP is disabled by the global kill switch. The override is saved.`,
     );
   } else if (status.connected) {
-    ctx.showInfo(`MCP: Enabled "${target}" — ${status.toolCount} tool(s)`);
+    ctx.showInfo(`MCP: Enabled "${target}" in this project — ${status.toolCount} tool(s)`);
   } else if (status.needsAuth) {
-    ctx.showInfo(`MCP: Enabled "${target}" — needs authentication \u2192 run /mcp to authenticate`);
+    ctx.showInfo(`MCP: Enabled "${target}" in this project — needs authentication \u2192 run /mcp to authenticate`);
   } else {
-    ctx.showInfo(`MCP: Failed to enable "${target}": ${status.error ?? 'Unknown error'}`);
+    ctx.showInfo(
+      `MCP: Enabled "${target}" in this project, but it failed to connect: ${status.error ?? 'Unknown error'}`,
+    );
+  }
+}
+
+async function inheritServer(ctx: SlashCommandContext, target: string | undefined): Promise<void> {
+  const mm = ctx.mcpManager;
+  if (!mm) return;
+  if (!target) {
+    ctx.showInfo('Usage: /mcp inherit <server-name|all>');
+    return;
+  }
+
+  if (target === 'all') {
+    await mm.inheritAllServers();
+    const disabled = mm.getServerStatuses().filter(status => status.disabled);
+    ctx.showInfo('MCP: Cleared all project overrides. Servers now inherit global defaults.');
+    if (disabled.length > 0) {
+      ctx.showInfo(`MCP: Disabled by global settings: ${disabled.map(status => status.name).join(', ')}.`);
+    }
+    return;
+  }
+
+  const status = await mm.inheritServer(target);
+  if (status.error && /not found/i.test(status.error)) {
+    ctx.showInfo(`MCP: Failed to inherit "${target}": ${status.error}`);
+  } else if (status.disabled) {
+    ctx.showInfo(`MCP: "${target}" now inherits its global default and is disabled.`);
+  } else if (status.connected) {
+    ctx.showInfo(`MCP: "${target}" now inherits its global default — ${status.toolCount} tool(s).`);
+  } else if (status.needsAuth) {
+    ctx.showInfo(`MCP: "${target}" now inherits its global default — needs authentication \u2192 run /mcp.`);
+  } else {
+    ctx.showInfo(
+      `MCP: "${target}" now inherits its global default, but failed to connect: ${status.error ?? 'Unknown error'}`,
+    );
   }
 }
 
@@ -247,19 +310,20 @@ function showTextStatus(ctx: SlashCommandContext): void {
             : status.needsAuth
               ? '\u26a0'
               : '\u2717';
+    const overrideLabel = status.projectOverride ? `; project override: ${status.projectOverride}` : '';
     const state = status.disabled
       ? status.disabledScope === 'global'
-        ? `disabled globally — enable via /mcp enable ${status.name} --global`
-        : `disabled — enable via /mcp enable ${status.name}`
+        ? `disabled by global setting${overrideLabel} — override via /mcp enable ${status.name}`
+        : `disabled in this project — use /mcp inherit ${status.name} to restore global default`
       : status.authenticating
-        ? 'authenticating — cancel via /mcp'
+        ? `authenticating${overrideLabel} — cancel via /mcp`
         : status.connecting
-          ? 'connecting...'
+          ? `connecting${overrideLabel}...`
           : status.connected
-            ? 'connected'
+            ? `connected${overrideLabel}`
             : status.needsAuth
-              ? 'needs auth — authenticate via /mcp'
-              : `error: ${status.error}`;
+              ? `needs auth${overrideLabel} — authenticate via /mcp`
+              : `error: ${status.error}${overrideLabel}`;
     lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {
@@ -278,8 +342,9 @@ function showTextStatus(ctx: SlashCommandContext): void {
 
   lines.push('');
   lines.push(`  /mcp reload - Disconnect and reconnect all servers`);
-  lines.push(`  /mcp disable <name|all> [--global] - Disable server(s) for this project or globally (persists)`);
-  lines.push(`  /mcp enable <name|all> [--global] - Re-enable disabled server(s)`);
+  lines.push(`  /mcp disable <name|all> [--global] - Disable in this project or change the global default`);
+  lines.push(`  /mcp enable <name|all> [--global] - Enable in this project or change the global default`);
+  lines.push(`  /mcp inherit <name|all> - Clear project overrides and use global defaults`);
 
   ctx.showInfo(lines.join('\n'));
 }

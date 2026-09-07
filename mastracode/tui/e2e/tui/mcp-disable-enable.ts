@@ -92,48 +92,50 @@ export const mcpDisableEnableScenario = {
     terminal.submit('/mcp reload');
     await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 15_000);
 
-    // Disable the server and confirm status + persisted state.
+    // Disable the server and confirm the explicit project override persists.
     terminal.submit('/mcp disable disable_target');
     await runtime.waitForScreenText(
-      /MCP: Disabled "disable_target"\. Re-enable with \/mcp enable disable_target\./i,
+      /MCP: Disabled "disable_target" in this project\. Use \/mcp inherit disable_target to restore the global default\./i,
       terminal,
       15_000,
     );
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(
-      /disable_target \[http\] \(disabled — enable via \/mcp enable disable_target\)/i,
+      /disable_target \[http\] \(disabled in this project — use \/mcp inherit disable_target to restore global default\)/i,
       terminal,
       10_000,
     );
     runtime.printScreen('mcp disabled status', terminal);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/mcp-state.json","utf8")); const disabled=Object.values(s.projects||{}).flatMap(p=>p.disabledServers||[]); console.log("MCP_DISABLE_PERSISTED="+disabled.join("|"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/mcp-state.json","utf8")); console.log("MCP_PROJECT_OVERRIDE="+s.projects[process.cwd()].serverOverrides.disable_target);'`,
     );
-    await runtime.waitForScreenText(/MCP_DISABLE_PERSISTED=disable_target/i, terminal, 10_000);
+    await runtime.waitForScreenText(/MCP_PROJECT_OVERRIDE=disabled/i, terminal, 10_000);
 
     // Reload must keep the server disabled without reporting a connect failure.
     terminal.submit('/mcp reload');
     await runtime.waitForScreenText(/MCP: Reloaded\. 0 server\(s\) connected, 0 tool\(s\)\./i, terminal, 15_000);
 
-    // Re-enable and confirm the tool comes back.
-    terminal.submit('/mcp enable disable_target');
-    await runtime.waitForScreenText(/MCP: Enabled "disable_target" — 1 tool\(s\)/i, terminal, 15_000);
-    terminal.submit('/mcp status');
-    await runtime.waitForScreenText(/disable_target \[http\] \(connected\)/i, terminal, 15_000);
-    await runtime.waitForScreenText(/disable_target_disable_probe/i, terminal, 15_000);
-    runtime.printScreen('mcp re-enabled status', terminal);
-
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); let s={}; try{s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/mcp-state.json","utf8"));}catch{} const disabled=Object.values(s.projects||{}).flatMap(p=>p.disabledServers||[]); console.log("MCP_ENABLE_PERSISTED="+(disabled.length===0?"empty":disabled.join("|")));'`,
+    // Clear the project override and confirm the inherited global default reconnects it.
+    terminal.submit('/mcp inherit disable_target');
+    await runtime.waitForScreenText(
+      /MCP: "disable_target" now inherits its global default — 1 tool\(s\)\./i,
+      terminal,
+      15_000,
     );
-    await runtime.waitForScreenText(/MCP_ENABLE_PERSISTED=empty/i, terminal, 10_000);
+    terminal.submit('/mcp status');
+    await runtime.waitForScreenText(/disable_target_disable_probe/i, terminal, 15_000);
 
-    // Global scope: disable across all projects, verify project-level enable
-    // can't undo it, then re-enable globally.
+    // A global per-server disable is a default that this project can override.
     terminal.submit('/mcp disable disable_target --global');
     await runtime.waitForScreenText(
-      /MCP: Disabled "disable_target" globally \(all projects\)\. Re-enable with \/mcp enable disable_target --global\./i,
+      /MCP: Disabled "disable_target" by default for all projects\. Explicit project enables remain active\./i,
+      terminal,
+      15_000,
+    );
+    terminal.submit('/mcp status');
+    await runtime.waitForScreenText(
+      /disable_target \[http\] \(disabled by global setting — override via \/mcp enable disable_target\)/i,
       terminal,
       15_000,
     );
@@ -143,20 +145,24 @@ export const mcpDisableEnableScenario = {
     await runtime.waitForScreenText(/MCP_GLOBAL_PERSISTED=disable_target/i, terminal, 10_000);
 
     terminal.submit('/mcp enable disable_target');
+    await runtime.waitForScreenText(/MCP: Enabled "disable_target" in this project — 1 tool\(s\)/i, terminal, 15_000);
+    terminal.submit('/mcp status');
     await runtime.waitForScreenText(
-      /MCP: "disable_target" is still disabled globally — re-enable with \/mcp enable disable_target --global\./i,
+      /disable_target \[http\] \(connected; project override: enabled\)/i,
+      terminal,
+      15_000,
+    );
+    runtime.printScreen('mcp project override enabled', terminal);
+
+    terminal.submit('/mcp inherit disable_target');
+    await runtime.waitForScreenText(
+      /MCP: "disable_target" now inherits its global default and is disabled\./i,
       terminal,
       15_000,
     );
 
     terminal.submit('/mcp enable disable_target --global');
-    // The "Enabled ... 1 tool(s)" text already appeared for the project-scope
-    // enable above, so verify the global re-enable through the persisted
-    // state instead of screen text alone.
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); let s={}; try{s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/mcp-state.json","utf8"));}catch{} const g=(s.global&&s.global.disabledServers)||[]; console.log("MCP_GLOBAL_ENABLE_PERSISTED="+(g.length===0?"empty":g.join("|")));'`,
-    );
-    await runtime.waitForScreenText(/MCP_GLOBAL_ENABLE_PERSISTED=empty/i, terminal, 10_000);
+    await runtime.waitForScreenText(/MCP: Enabled "disable_target" by default for all projects\./i, terminal, 15_000);
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(/disable_target \[http\] \(connected\)/i, terminal, 15_000);
     runtime.printScreen('mcp globally re-enabled', terminal);

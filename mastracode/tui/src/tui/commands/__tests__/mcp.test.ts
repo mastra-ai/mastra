@@ -53,6 +53,16 @@ function createContext() {
     }),
   );
   const setAllDisabled = vi.fn(async () => undefined);
+  const inheritServer = vi.fn(
+    async (name: string): Promise<McpServerStatus> => ({
+      name,
+      connected: true,
+      transport: 'stdio',
+      toolCount: 2,
+      toolNames: ['read_file', 'write_file'],
+    }),
+  );
+  const inheritAllServers = vi.fn(async () => undefined);
   const isAllDisabledGlobally = vi.fn(() => false);
   const mcpManager = {
     hasServers: vi.fn(() => true),
@@ -68,6 +78,8 @@ function createContext() {
     getServerLogs,
     setServerDisabled,
     setAllDisabled,
+    inheritServer,
+    inheritAllServers,
     isAllDisabledGlobally,
   };
   const ctx = {
@@ -87,6 +99,8 @@ function createContext() {
     getServerLogs,
     setServerDisabled,
     setAllDisabled,
+    inheritServer,
+    inheritAllServers,
   };
 }
 
@@ -117,6 +131,7 @@ describe('handleMcpCommand', () => {
         onReloadAll: expect.any(Function),
         onReconnectServer: expect.any(Function),
         onSetServerDisabled: expect.any(Function),
+        onInheritServer: expect.any(Function),
         getServerLogs: expect.any(Function),
         showInfo: expect.any(Function),
         onClose: expect.any(Function),
@@ -132,6 +147,7 @@ describe('handleMcpCommand', () => {
       onReloadAll: () => Promise<unknown>;
       onReconnectServer: (name: string) => Promise<unknown>;
       onSetServerDisabled: (name: string, disabled: boolean, options?: { global?: boolean }) => Promise<unknown>;
+      onInheritServer: (name: string) => Promise<unknown>;
       getServerLogs: (name: string) => string[];
     };
     expect(options.getStatuses()).toEqual({ statuses, skipped });
@@ -147,6 +163,8 @@ describe('handleMcpCommand', () => {
       skipped,
     });
     expect(mcpManager.setServerDisabled).toHaveBeenCalledWith('registry', true, { global: true });
+    await expect(options.onInheritServer('filesystem')).resolves.toEqual({ statuses, skipped });
+    expect(mcpManager.inheritServer).toHaveBeenCalledWith('filesystem');
     expect(getServerLogs).toHaveBeenCalledWith('filesystem');
   });
 
@@ -230,7 +248,9 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['disable', 'filesystem']);
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', true, { global: false });
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Disabled "filesystem". Re-enable with /mcp enable filesystem.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: Disabled "filesystem" in this project. Use /mcp inherit filesystem to restore the global default.',
+    );
   });
 
   it('disables a single server globally via /mcp disable <name> --global', async () => {
@@ -240,12 +260,13 @@ describe('handleMcpCommand', () => {
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', true, { global: true });
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Disabled "filesystem" globally (all projects). Re-enable with /mcp enable filesystem --global.',
+      'MCP: Disabled "filesystem" by default for all projects. Explicit project enables remain active.',
     );
   });
 
-  it('explains when project-level enable leaves a global disable in effect', async () => {
-    const { ctx, setServerDisabled } = createContext();
+  it('explains when a project-level enable is saved beneath the global kill switch', async () => {
+    const { ctx, mcpManager, setServerDisabled } = createContext();
+    mcpManager.isAllDisabledGlobally.mockReturnValue(true);
     setServerDisabled.mockResolvedValueOnce({
       name: 'filesystem',
       connected: false,
@@ -255,12 +276,13 @@ describe('handleMcpCommand', () => {
       toolNames: [],
       disabled: true,
       disabledScope: 'global',
+      projectOverride: 'enabled',
     });
 
     await handleMcpCommand(ctx, ['enable', 'filesystem']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: "filesystem" is still disabled globally — re-enable with /mcp enable filesystem --global.',
+      'MCP: Enabled "filesystem" in this project, but all MCP is disabled by the global kill switch. The override is saved.',
     );
   });
 
@@ -273,12 +295,12 @@ describe('handleMcpCommand', () => {
       transport: 'stdio',
       toolCount: 0,
       toolNames: [],
-      error: 'Server "nope" not found',
+      error: 'Server "nope" not found in config',
     });
 
     await handleMcpCommand(ctx, ['disable', 'nope']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Failed to disable "nope": Server "nope" not found');
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Failed to disable "nope": Server "nope" not found in config');
   });
 
   it('enables a single server via /mcp enable <name> and reports tool count', async () => {
@@ -287,7 +309,7 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['enable', 'filesystem']);
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', false, { global: false });
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Enabled "filesystem" — 2 tool(s)');
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Enabled "filesystem" in this project — 2 tool(s)');
   });
 
   it('reports needs-auth when an enabled server requires authentication', async () => {
@@ -305,7 +327,7 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['enable', 'oauth_server']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Enabled "oauth_server" — needs authentication \u2192 run /mcp to authenticate',
+      'MCP: Enabled "oauth_server" in this project — needs authentication \u2192 run /mcp to authenticate',
     );
   });
 
@@ -314,12 +336,16 @@ describe('handleMcpCommand', () => {
 
     await handleMcpCommand(ctx, ['disable', 'all']);
     expect(setAllDisabled).toHaveBeenCalledWith(true, { global: false });
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: All servers disabled. Re-enable with /mcp enable all.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: All servers disabled in this project. Use /mcp inherit all to restore global defaults.',
+    );
 
     await handleMcpCommand(ctx, ['enable', 'all']);
     expect(setAllDisabled).toHaveBeenCalledWith(false, { global: false });
     expect(mcpManager.getServerStatuses).toHaveBeenCalled();
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: All servers enabled. 1 server(s) connected, 2 tool(s).');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: All servers enabled in this project. 1 server(s) connected, 2 tool(s).',
+    );
   });
 
   it('disables and enables all servers globally via /mcp disable|enable all --global', async () => {
@@ -333,12 +359,10 @@ describe('handleMcpCommand', () => {
 
     await handleMcpCommand(ctx, ['enable', 'all', '--global']);
     expect(setAllDisabled).toHaveBeenCalledWith(false, { global: true });
-    expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: All servers enabled globally (all projects). 1 server(s) connected, 2 tool(s).',
-    );
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Global defaults enabled. 1 server(s) connected, 2 tool(s).');
   });
 
-  it('lists servers still disabled in the other scope after enable all', async () => {
+  it('lists project disables that remain after enabling global defaults', async () => {
     const { ctx, mcpManager } = createContext();
     mcpManager.getServerStatuses.mockReturnValue([
       {
@@ -349,14 +373,15 @@ describe('handleMcpCommand', () => {
         toolCount: 0,
         toolNames: [],
         disabled: true,
-        disabledScope: 'global',
+        disabledScope: 'project',
+        projectOverride: 'disabled',
       },
     ]);
 
-    await handleMcpCommand(ctx, ['enable', 'all']);
+    await handleMcpCommand(ctx, ['enable', 'all', '--global']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Still disabled globally: filesystem — re-enable with /mcp enable <name|all> --global.',
+      'MCP: Still disabled in this project: filesystem — use /mcp inherit <name|all> or /mcp enable <name|all>.',
     );
   });
 
@@ -379,7 +404,44 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['enable', 'all']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: All MCP is still disabled globally — re-enable with /mcp enable all --global.',
+      'MCP: The project overrides are saved, but all MCP is disabled by the global kill switch.',
+    );
+  });
+
+  it('clears a single project override via /mcp inherit <name>', async () => {
+    const { ctx, inheritServer } = createContext();
+
+    await handleMcpCommand(ctx, ['inherit', 'filesystem']);
+
+    expect(inheritServer).toHaveBeenCalledWith('filesystem');
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: "filesystem" now inherits its global default — 2 tool(s).');
+  });
+
+  it('reports when inheriting a globally disabled server', async () => {
+    const { ctx, inheritServer } = createContext();
+    inheritServer.mockResolvedValueOnce({
+      name: 'filesystem',
+      connected: false,
+      transport: 'stdio',
+      toolCount: 0,
+      toolNames: [],
+      disabled: true,
+      disabledScope: 'global',
+    });
+
+    await handleMcpCommand(ctx, ['inherit', 'filesystem']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: "filesystem" now inherits its global default and is disabled.');
+  });
+
+  it('clears all project overrides via /mcp inherit all', async () => {
+    const { ctx, inheritAllServers } = createContext();
+
+    await handleMcpCommand(ctx, ['inherit', 'all']);
+
+    expect(inheritAllServers).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: Cleared all project overrides. Servers now inherit global defaults.',
     );
   });
 
