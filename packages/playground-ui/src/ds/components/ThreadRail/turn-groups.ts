@@ -32,6 +32,7 @@ export function groupTurns<T>(entries: T[], { key, opensTurn, introduces = intro
     }
     const last = previous?.entries.at(-1);
     const introduction = previous && last !== undefined && introduces(last) ? previous.entries.splice(-1) : [];
+    if (previous?.entries.length === 0) groups.pop();
     groups.push({ key: key(entry), entries: [...introduction, entry], opensTurn: opens });
   }
 

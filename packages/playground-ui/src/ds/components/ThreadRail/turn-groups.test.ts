@@ -37,4 +37,14 @@ describe('groupTurns', () => {
     expect(ids(groups)).toEqual([['a0'], ['u1']]);
     expect(groups[0].opensTurn).toBe(false);
   });
+
+  it('leaves no empty turn behind when a gap opens the list', () => {
+    const groups = groupTurns(['gap', 'user'], {
+      key: entry => entry,
+      opensTurn: entry => entry === 'user',
+      introduces: entry => entry === 'gap',
+    });
+
+    expect(groups).toEqual([{ key: 'user', entries: ['gap', 'user'], opensTurn: true }]);
+  });
 });
