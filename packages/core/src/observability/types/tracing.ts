@@ -900,6 +900,56 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 // ============================================================================
 
 /**
+ * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
+ * when the run stops before the span's own result exists: a durable run
+ * suspended, or the caller aborted.
+ */
+export interface InterruptedSpanOutput {
+  status: 'suspended' | 'aborted';
+  /** Why the run stopped */
+  reason?: string;
+  /** Tool that suspended the run */
+  toolName?: string;
+  /** Tool call that suspended the run */
+  toolCallId?: string;
+}
+
+/**
+ * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
+ * passed, plus the suspended tool's identity when it is known.
+ */
+export interface AgentRunResumeInput {
+  /** Resume data, kept nested when it names a different tool than the suspended one */
+  resumeData?: unknown;
+  /** Tool the run resumes into */
+  toolName?: string;
+  /** Tool call the run resumes into */
+  toolCallId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Input recorded on `AGENT_RUN` spans: the messages the caller passed for a
+ * fresh run, or the resume data for a resumed run.
+ */
+export type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput;
+
+/** Output recorded on an `AGENT_RUN` span when the run finishes. */
+export interface AgentRunResult {
+  /** Final response text */
+  text?: string;
+  /** Final structured output */
+  object?: unknown;
+  /** Generated files */
+  files?: unknown[];
+  /** Tripwire that aborted the run */
+  tripwire?: StepTripwireData;
+}
+
+/** Output recorded on `AGENT_RUN` spans. */
+export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
+
+/**
  * Input recorded on `MODEL_GENERATION` spans.
  *
  * Mastra's own loop records the normalized model messages, system messages
@@ -935,21 +985,6 @@ export interface ModelGenerationResult {
   toolCalls?: unknown[];
   /** Provider warnings */
   warnings?: unknown[];
-}
-
-/**
- * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
- * when the run stops before the span's own result exists: a durable run
- * suspended, or the caller aborted.
- */
-export interface InterruptedSpanOutput {
-  status: 'suspended' | 'aborted';
-  /** Why the run stopped */
-  reason?: string;
-  /** Tool that suspended the run */
-  toolName?: string;
-  /** Tool call that suspended the run */
-  toolCallId?: string;
 }
 
 /** Output recorded on `MODEL_GENERATION` spans. */
@@ -988,41 +1023,6 @@ export interface ModelStepResult {
 
 /** Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans. */
 export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
-
-/**
- * Input recorded on a resumed `AGENT_RUN` span: the resume data the caller
- * passed, plus the suspended tool's identity when it is known.
- */
-export interface AgentRunResumeInput {
-  /** Resume data, kept nested when it names a different tool than the suspended one */
-  resumeData?: unknown;
-  /** Tool the run resumes into */
-  toolName?: string;
-  /** Tool call the run resumes into */
-  toolCallId?: string;
-  [key: string]: unknown;
-}
-
-/**
- * Input recorded on `AGENT_RUN` spans: the messages the caller passed for a
- * fresh run, or the resume data for a resumed run.
- */
-export type AgentRunInput = MessageListInput | { messages: MessageListInput } | AgentRunResumeInput;
-
-/** Output recorded on an `AGENT_RUN` span when the run finishes. */
-export interface AgentRunResult {
-  /** Final response text */
-  text?: string;
-  /** Final structured output */
-  object?: unknown;
-  /** Generated files */
-  files?: unknown[];
-  /** Tripwire that aborted the run */
-  tripwire?: StepTripwireData;
-}
-
-/** Output recorded on `AGENT_RUN` spans. */
-export type AgentRunOutput = AgentRunResult | InterruptedSpanOutput;
 
 /**
  * Span types whose `input` Mastra writes itself with a fixed shape. Every

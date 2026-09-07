@@ -2,19 +2,15 @@
 '@mastra/core': minor
 ---
 
-Added typed `input` and `output` payloads for spans.
-
-Every span carried `input?: any` and `output?: any`, so consumers had to guess what a span recorded. Two new maps, `SpanInputMap` and `SpanOutputMap`, now sit beside `SpanTypeMap` and describe the payload for the span types Mastra writes itself. `AGENT_RUN`, `MODEL_GENERATION`, `MODEL_STEP` and `MODEL_INFERENCE` get concrete shapes (`AgentRunInput`, `AgentRunOutput`, `ModelGenerationInput`, `ModelGenerationOutput`, `ModelStepInput`, `ModelStepOutput`, `InterruptedSpanOutput`). Every other span type keeps `any`, exactly as before; `SpanInput<TType>` and `SpanOutput<TType>` resolve a span type to its payload.
-
-Stored spans can be narrowed the same way. `SpanRecord` accepts a span type, and `isSpanRecordOfType` narrows a record to it, typing `attributes`, `input` and `output`:
+Added typed `input` and `output` payloads for the spans Mastra records itself: `AGENT_RUN`, `MODEL_GENERATION`, `MODEL_STEP` and `MODEL_INFERENCE`. Every other span type keeps `any`. Stored spans narrow the same way with `isSpanRecordOfType`, which types `attributes`, `input` and `output` without a cast:
 
 ```ts
 import { SpanType, isSpanRecordOfType } from '@mastra/core/observability';
 
 if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
-  span.attributes?.usage; // UsageStats | undefined, no cast
+  span.attributes?.usage; // UsageStats | undefined
   span.input?.messages; // MessageListInput
 }
 ```
 
-Nothing changes on the wire or in storage: the runtime schema stays permissive, so existing traces keep loading. If you create `AGENT_RUN` or `MODEL_GENERATION` spans yourself, their `input` and `output` must now match the new types at compile time; every other span type is unaffected.
+Nothing changes at runtime or in storage. Spans you create yourself with one of those four types must now match the new shapes at compile time.
