@@ -7,7 +7,7 @@ packages:
 
 # Integrations
 
-Mastra platform integrations connect your project to third-party providers such as Linear, Notion, and Snowflake. You complete a provider's authorization flow once, the platform stores the connection, and your application consumes it through the `@mastra/connect` package.
+Mastra platform integrations connect your project to third-party providers such as Linear, Notion, and Snowflake. You complete a provider's authorization flow once and the platform stores the connection. Your application then consumes it through the `@mastra/connect` package.
 
 Your app never handles provider credentials. Every tool call is routed through the platform connection proxy, which injects credentials and refreshes tokens on your behalf.
 
@@ -27,7 +27,7 @@ Your app never handles provider credentials. Every tool call is routed through t
 
 ## Connect a provider
 
-Connect the provider from your project in the Mastra platform dashboard. OAuth providers open the provider's consent screen; API-key providers accept the key directly. The resulting **connection** becomes available to your project.
+Connect the provider from your project in the Mastra platform dashboard. OAuth providers open the provider's consent screen, while API-key providers accept the key directly. The resulting **connection** becomes available to your project.
 
 Multiple connections per provider are allowed. [`connect()`](/reference/connect/overview) and the per-provider builders resolve which connection to use at runtime, as described below.
 
@@ -41,7 +41,7 @@ npm install @mastra/connect
 
 ### Discover connections at runtime
 
-[`connect()`](/reference/connect/overview) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools`: Mastra calls it on every generate/stream, and it serves a cached view of the project's connections that revalidates in the background (every 30 seconds by default, configurable with `ttlMs`):
+[`connect()`](/reference/connect/overview) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools` and Mastra calls it on every generate/stream. The resolver serves a cached view of the project's connections, revalidating in the background every 30 seconds by default (configurable with `ttlMs`):
 
 ```typescript title="src/agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -55,11 +55,11 @@ const agent = new Agent({
 })
 ```
 
-`connect()` reads `MASTRA_PROJECT_ID` to know which project to list connections for. When a provider has exactly one active connection, it is used automatically. When a provider has several connections, pass the one you want through the `integrations` option, or set the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var.
+`connect()` reads `MASTRA_PROJECT_ID` to know which project to list connections for. When a provider has exactly one active connection, it's used automatically. When a provider has several connections, pass the one you want through the `integrations` option, or set the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var.
 
-When someone connects a new integration to the project in the platform dashboard, its tools become available to the running server within the TTL — no restart or redeploy. Tools for a disconnected integration are dropped the same way.
+When someone connects a new integration to the project in the platform dashboard, its tools become available to the running server within the TTL, with no restart or redeploy. Tools for a disconnected integration are dropped the same way.
 
-The resolver stays safe on a long-running server: if the platform is unreachable during a background refresh, it keeps serving the last good toolsets and warns. A provider that needs re-authentication, has ambiguous connections, or is not connected yet is skipped with a warning instead of failing the whole resolution. To force an immediate refresh, for example right after connecting a provider, call `refresh()` or `invalidate()` on the resolver returned by `connect()`.
+The resolver stays safe on a long-running server. If the platform is unreachable during a background refresh, it keeps serving the last good toolsets and warns. A provider that needs re-authentication or has ambiguous connections is skipped with a warning instead of failing the whole resolution. The same applies to an allowlisted provider that isn't connected yet. To force an immediate refresh right after connecting a provider, call `refresh()` or `invalidate()` on the resolver returned by `connect()`.
 
 To resolve toolsets on demand instead, call the resolver directly. The result is a plain record suitable for the `toolsets` option at generate time:
 

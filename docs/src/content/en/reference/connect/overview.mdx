@@ -7,7 +7,7 @@ packages:
 
 # connect()
 
-Returns a live toolset resolver over the connections available to a Mastra platform project. Pass it to an agent's dynamic `tools` argument: Mastra calls it on every generate/stream, and it serves a cached snapshot of one toolset per connected provider, revalidating from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
+Returns a live toolset resolver over the connections available to a Mastra platform project. Pass it to an agent's dynamic `tools` argument and Mastra calls it on every generate/stream. The resolver serves a cached snapshot of one toolset per connected provider and revalidates from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
 
 ```typescript title="src/agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -20,7 +20,7 @@ const agent = new Agent({
 })
 ```
 
-Returns: `ConnectTools` — a resolver producing `Record<string, ToolsInput>` keyed by provider (`linear`, `notion`, `jira`, `gitlab`, `snowflake`, `neon`, `cloudflare`, `resend`, `anthropic`). See [The resolver](#the-resolver).
+Returns: `ConnectTools`, a resolver producing `Record<string, ToolsInput>` keyed by provider (`linear`, `notion`, `jira`, `gitlab`, `snowflake`, `neon`, `cloudflare`, `resend`, `anthropic`). See [The resolver](#the-resolver).
 
 See [Integrations](/docs/mastra-platform/integrations) for the concept overview.
 
@@ -105,7 +105,7 @@ Every field falls back to an environment variable, so a fully env-configured app
 
 ## The resolver
 
-The returned `ConnectTools` resolver caches its toolset snapshot and revalidates stale-while-revalidate: within `ttlMs` of the last fetch, resolutions return the cached snapshot; after that, the cached snapshot is served immediately while a background refresh runs. Connections attached to the project after startup become available within the TTL, and detached connections are dropped — no restart or redeploy required.
+The returned `ConnectTools` resolver caches its toolset snapshot. Within `ttlMs` of the last fetch, resolutions return the cached snapshot. After that, the cached snapshot is served immediately while a background refresh runs (stale-while-revalidate). Connections attached to the project after startup become available within the TTL, and detached connections are dropped, with no restart or redeploy required.
 
 Call the resolver directly when you need a plain toolsets record, for example for an agent's `toolsets` option at generate time:
 
@@ -122,11 +122,11 @@ const response = await agent.generate('Summarize my open Linear issues.', { tool
 The resolver also exposes two methods for manual control:
 
 - `invalidate()` drops the cached snapshot so the next resolution fetches fresh.
-- `refresh()` fetches from the platform immediately, updates the cache, and returns the toolsets.
+- `refresh()` fetches from the platform immediately, then updates the cache and returns the toolsets.
 
 Failure handling is tuned for long-running servers:
 
-- Configuration errors — missing project id or token, unknown `integrations` keys, invalid `ttlMs` — throw eagerly at `connect()` call time.
+- Configuration errors (missing project id or token, unknown `integrations` keys, invalid `ttlMs`) throw eagerly at `connect()` call time.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
 
 ## Integrations allowlist
@@ -137,7 +137,7 @@ When `integrations` is provided, only listed providers are returned:
 - `false` excludes it.
 - An object configures it: `connectionId` picks a specific connection, `allowTools` restricts the toolset by tool key.
 
-A listed provider with no connection in the project yet is skipped with a one-time warning and appears automatically once a connection is attached. Without `integrations`, every connected provider is included.
+A listed provider with no connection in the project yet is skipped with a one-time warning and is included automatically once a connection is attached. Without `integrations`, every connected provider is included.
 
 ## Connection resolution
 
@@ -147,7 +147,7 @@ For each provider present in the project's connections:
 1. Otherwise, a single active connection is used automatically.
 1. Otherwise the provider is ambiguous and is skipped with a `console.warn` listing the candidates.
 
-Connections in `needs_reauth` status are never silently mapped: they are skipped with a warning until reconnected on the platform. Connections whose integration has no toolset in this package are also skipped with a warning. Every per-provider failure during resolution is downgraded to a warning so a single bad integration never fails the whole resolution.
+Connections in `needs_reauth` status are never silently mapped: they're skipped with a warning until reconnected on the platform. Connections whose integration has no toolset in this package are also skipped with a warning. Every per-provider failure during resolution is downgraded to a warning so a single bad integration never fails the whole resolution.
 
 ## Errors
 
