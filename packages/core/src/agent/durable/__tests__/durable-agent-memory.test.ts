@@ -7,11 +7,13 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { InputProcessor } from '../../../processors';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -675,6 +677,127 @@ describe('DurableAgent memory edge cases', () => {
   // title-generation branch, so `memory.options.generateTitle` silently never fired for
   // durable/evented agents (and Inngest). See create-durable-agentic-workflow.ts.
   describe('generateTitle', () => {
+    it.each(['same wrapper', 'restored wrapper'] as const)(
+      'does not call the title model when a saved approval is canceled through the %s',
+      async wrapper => {
+        const storage = new InMemoryStore();
+        const memory = new MockMemory({ storage, options: { generateTitle: true } });
+        const restoredPubsub = new EventEmitterPubSub();
+        const network = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('No network in this test'));
+        const execute = vi.fn(async () => 'done');
+        const results: Array<{ finishReason: string; totalTokens: number | undefined }> = [];
+        let modelCalls = 0;
+        const makeAgent = (events: EventEmitterPubSub) =>
+          createDurableAgent({
+            pubsub: events,
+            agent: new Agent({
+              id: 'canceled-title-agent',
+              name: 'Canceled Title',
+              instructions: 'Request approval for action.',
+              memory,
+              model: new MockLanguageModelV2({
+                doGenerate: async options => {
+                  modelCalls++;
+                  return createTextModel('Unexpected title after cancellation').doGenerate(options);
+                },
+                doStream: async options => {
+                  modelCalls++;
+                  return modelCalls === 1
+                    ? createToolCallModel('action', {}).doStream(options)
+                    : createTextModel('Unexpected title after cancellation').doStream(options);
+                },
+              }),
+              tools: {
+                action: createTool({
+                  id: 'action',
+                  description: 'Local action',
+                  inputSchema: z.object({}),
+                  execute,
+                }),
+              },
+              outputProcessors: [
+                {
+                  id: 'canceled-title-output',
+                  processOutputResult({ result, messageList }) {
+                    results.push({ finishReason: result.finishReason, totalTokens: result.usage.totalTokens });
+                    return messageList;
+                  },
+                },
+              ],
+            }),
+          });
+        const firstAgent = makeAgent(pubsub);
+        const firstMastra = new Mastra({
+          agents: { agent: firstAgent },
+          storage,
+          pubsub,
+          workers: false,
+          logger: false,
+        });
+        let restoredMastra: Mastra | undefined;
+        let first: Awaited<ReturnType<typeof firstAgent.stream>> | undefined;
+        let resumed: Awaited<ReturnType<typeof firstAgent.resume>> | undefined;
+        const threadId = 'canceled-title-thread';
+        const resourceId = 'canceled-title-owner';
+        try {
+          first = await firstAgent.stream('Request action approval.', {
+            memory: { thread: threadId, resource: resourceId },
+            requireToolApproval: true,
+          });
+          void first.output.consumeStream().catch(() => undefined);
+          const runId = first.runId;
+          await expect
+            .poll(async () => (await firstAgent.listSuspendedRuns({ threadId, resourceId })).runs.map(run => run.runId))
+            .toContain(runId);
+          expect(modelCalls).toBe(1);
+          expect((await memory.getThreadById({ threadId }))?.title).toBeFalsy();
+
+          const owner = wrapper === 'same wrapper' ? firstAgent : makeAgent(restoredPubsub);
+          if (owner !== firstAgent) {
+            restoredMastra = new Mastra({
+              agents: { agent: owner },
+              storage,
+              pubsub: restoredPubsub,
+              workers: false,
+              logger: false,
+            });
+          }
+          resumed = await owner.resume(
+            runId,
+            { approved: false, reason: 'Aborted by user' },
+            { toolCallId: 'call-1', abortSignal: AbortSignal.abort() },
+          );
+          await resumed.output.consumeStream();
+
+          expect(results).toEqual([{ finishReason: 'abort', totalTokens: 30 }]);
+          expect(execute).not.toHaveBeenCalled();
+          const recalled = await memory.recall({ threadId, resourceId });
+          const toolStates = recalled.messages.flatMap(message =>
+            message.content.parts.flatMap(part =>
+              part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'call-1'
+                ? [part.toolInvocation.state]
+                : [],
+            ),
+          );
+          expect(toolStates).toEqual(['output-denied']);
+          for (const message of recalled.messages) {
+            expect(message.content.metadata?.pendingToolApprovals ?? {}).not.toHaveProperty('call-1');
+          }
+          expect(network).not.toHaveBeenCalled();
+          expect(modelCalls).toBe(1);
+          expect((await memory.getThreadById({ threadId }))?.title).toBeFalsy();
+        } finally {
+          resumed?.cleanup();
+          first?.cleanup();
+          await firstMastra.stopWorkers();
+          await restoredMastra?.stopWorkers();
+          await restoredPubsub.close();
+          network.mockRestore();
+        }
+      },
+      15000,
+    );
+
     it('generates a thread title from the first message after a completed durable stream', async () => {
       const mockMemory = new MockMemory();
       // Mirror the non-durable title-generation test: a dedicated title model so we can

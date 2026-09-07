@@ -67,6 +67,12 @@ it.each([
   'single-agent-navigation',
   'single-agent-future',
   'single-agent-duplicate',
+  'single-agent-save-delay',
+  'single-agent-end-navigation',
+  'single-agent-save-failure',
+  'single-agent-approval',
+  'single-agent-end-new-run',
+  'single-agent-end-preparing-run',
 ] as const)(
   'Cold reopened Session Stop keeps its captured target: %s',
   async scenario => {
@@ -74,9 +80,22 @@ it.each([
     const singleAgent = scenario.startsWith('single-agent');
     const navigate = scenario === 'single-agent-navigation' || scenario === 'single-agent-future';
     const startFutureRun = scenario === 'single-agent-future';
+    const failSave = scenario === 'single-agent-save-failure';
+    const approval = scenario === 'single-agent-approval';
+    const preparingRun = scenario === 'single-agent-end-preparing-run';
+    const newRunAtEnd = scenario === 'single-agent-end-new-run' || preparingRun;
+    const holdEnd = scenario === 'single-agent-end-navigation' || newRunAtEnd;
     const directory = fs.mkdtempSync(path.join(tmpdir(), `mastra-cold-mode-stop-${scenario}-`));
     const url = pathToFileURL(path.join(directory, 'native.db')).href;
     const calls = { plan: 0, build: 0, network: 0 };
+    let enterNewModel = () => {};
+    let releaseNewModel = () => {};
+    const newModelEntered = new Promise<void>(resolve => {
+      enterNewModel = resolve;
+    });
+    const heldNewModel = new Promise<void>(resolve => {
+      releaseNewModel = resolve;
+    });
     const deny = () => {
       calls.network++;
       throw new Error('Unexpected network');
@@ -103,8 +122,17 @@ it.each([
           id: 'plan-agent',
           name: 'Plan',
           instructions: 'Submit a local plan.',
-          model: new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: response(++calls.plan) }) }),
-          memory: new Memory({ storage }),
+          model: new MastraLanguageModelV2Mock({
+            doStream: async () => {
+              const call = ++calls.plan;
+              if (call === 2 && preparingRun) {
+                enterNewModel();
+                await heldNewModel;
+              }
+              return { stream: response(call) };
+            },
+          }),
+          memory: new Memory({ storage, options: { generateTitle: approval } }),
           tools: { submit_plan: submitPlanTool },
           outputProcessors: [
             {
@@ -136,7 +164,7 @@ it.each([
         id: 'mode-stop-controller',
         storage,
         workspace,
-        initialState: { yolo: true },
+        initialState: { yolo: !approval },
         ...(singleAgent
           ? { agent: requireNativeAgent(planAgent), modes: [{ id: 'web', name: 'Web', default: true }] }
           : {
@@ -190,7 +218,15 @@ it.each([
     const events = (session: Awaited<ReturnType<AgentController['createSession']>>, phase: string) =>
       session.subscribe(event => {
         if (
-          ['tool_suspended', 'tool_suspension_cancelled', 'agent_end', 'error', 'mode_changed'].includes(event.type)
+          [
+            'tool_suspended',
+            'tool_suspension_cancelled',
+            'agent_end',
+            'message_end',
+            'display_state_changed',
+            'error',
+            'mode_changed',
+          ].includes(event.type)
         ) {
           receipt.events.push({
             phase,
@@ -199,6 +235,8 @@ it.each([
             toolCallId: (event as any).toolCallId,
             modeId: (event as any).modeId,
             error: (event as any).error?.message,
+            message: event.type === 'message_end' ? structuredClone(event.message) : undefined,
+            displayState: event.type === 'display_state_changed' ? structuredClone(event.displayState) : undefined,
           });
         }
       });
@@ -208,6 +246,8 @@ it.each([
     let planAbort: ReturnType<typeof vi.spyOn> | undefined;
     let buildAbort: ReturnType<typeof vi.spyOn> | undefined;
     let releaseRead = () => {};
+    let releaseSave = () => {};
+    let releaseEnd = () => {};
     try {
       await host.controller.init();
       owners(host, 'writer');
@@ -219,7 +259,9 @@ it.each([
       });
       await warm.thread.create();
       unsubscribe = events(warm, 'writer');
-      await warm.sendMessage({ content: 'Create a plan.' });
+      const initialSend = warm.sendMessage({ content: 'Create a plan.' });
+      if (approval) void initialSend.catch(() => {});
+      else await initialSend;
       await vi.waitFor(
         async () => {
           receipt.beforeRows = await rows(host.storage);
@@ -299,6 +341,17 @@ it.each([
       }
       planAbort = vi.spyOn(host.planAgent, 'abortRunStream');
       buildAbort = vi.spyOn(host.buildAgent, 'abortRunStream');
+      const realCancel = host.planAgent.__abortRunStreamAndWait.bind(host.planAgent);
+      vi.spyOn(host.planAgent, '__abortRunStreamAndWait').mockImplementation(async runId => {
+        const result = await realCancel(runId);
+        receipt.cancelResult = result;
+        receipt.cancelSession = {
+          threadId: fresh.thread.getId(),
+          runId: fresh.getCurrentRunId(),
+          operationId: fresh.run.getOperationId(),
+        };
+        return result;
+      });
       let enteredResolve = () => {};
       const entered = new Promise<void>(resolve => {
         enteredResolve = resolve;
@@ -320,7 +373,45 @@ it.each([
         }
       }
       owners(host, 'before-stop');
-      fresh.abortRun();
+      let saveEntered = Promise.resolve();
+      if (scenario === 'single-agent-save-delay') {
+        let enterSave = () => {};
+        saveEntered = new Promise<void>(resolve => {
+          enterSave = resolve;
+        });
+        const heldSave = new Promise<void>(resolve => {
+          releaseSave = resolve;
+        });
+        const memory = (await host.planAgent.getMemory())!;
+        const save = memory.saveMessages.bind(memory);
+        vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+          enterSave();
+          await heldSave;
+          return save(args);
+        });
+      }
+      let endEntered = Promise.resolve();
+      if (failSave) {
+        const memory = (await host.planAgent.getMemory())!;
+        const memoryStore = (await memory.storage.getStore('memory'))!;
+        vi.spyOn(memoryStore, 'saveMessages').mockRejectedValue(new Error('Simulated final save failure'));
+      }
+      if (holdEnd) {
+        let enterEnd = () => {};
+        endEntered = new Promise<void>(resolve => {
+          enterEnd = resolve;
+        });
+        const heldEnd = new Promise<void>(resolve => {
+          releaseEnd = resolve;
+        });
+        fresh.onBeforeAgentEnd(async event => {
+          if (event.reason === 'aborted') {
+            enterEnd();
+            await heldEnd;
+          }
+        });
+      }
+      fresh.abort();
       if (scenario === 'single-agent-duplicate') {
         const duplicate = await host.controller.createSession({
           id: 'duplicate-stop-session',
@@ -368,8 +459,71 @@ it.each([
         }
         releaseRead();
       }
+      if (scenario === 'single-agent-save-delay') {
+        await saveEntered;
+        expect(
+          receipt.events.filter(
+            (event: any) => event.phase === 'reopened' && ['message_end', 'agent_end'].includes(event.type),
+          ),
+        ).toEqual([]);
+        releaseSave();
+      }
+      if (holdEnd) {
+        await endEntered;
+        expect(receipt.events.filter((event: any) => event.phase === 'reopened' && event.type === 'agent_end')).toEqual(
+          [],
+        );
+        if (newRunAtEnd) {
+          const newerSend = fresh.sendMessage({ content: 'Create a newer plan while the old end hook waits.' });
+          if (preparingRun) {
+            await newModelEntered;
+            receipt.preparingRunId = fresh.getCurrentRunId();
+            releaseEnd();
+            await new Promise<void>(resolve => setImmediate(resolve));
+            expect(structuredClone(fresh.displayState.get()).isRunning).toBe(true);
+            expect(fresh.getCurrentRunId()).toBe(receipt.preparingRunId);
+            expect(
+              receipt.events.filter((event: any) => event.phase === 'reopened' && event.type === 'agent_end'),
+            ).toEqual([]);
+            releaseNewModel();
+          }
+          await newerSend;
+          const oldIds = new Set(receipt.beforeStopRows.map((row: any) => row.runId));
+          receipt.futureRows = (await rows(host.storage)).filter(row => !oldIds.has(row.runId));
+          expect(receipt.futureRows).toHaveLength(2);
+          expect(fresh.displayState.get().pendingSuspensions.size).toBe(1);
+        } else {
+          await fresh.thread.switch({ threadId: emptyThreadId! });
+        }
+        receipt.navigatedDisplay = structuredClone(fresh.displayState.get());
+        releaseEnd();
+      }
+      if (failSave) {
+        await vi.waitFor(
+          () => {
+            expect(
+              receipt.events.filter((event: any) => event.phase === 'reopened' && event.type === 'error'),
+            ).toHaveLength(1);
+          },
+          { timeout: 5000, interval: 20 },
+        );
+      } else if (!navigate && scenario !== 'single-agent-duplicate' && !holdEnd) {
+        await vi.waitFor(
+          () => {
+            expect(
+              receipt.events.filter((event: any) => event.phase === 'reopened' && event.type === 'message_end'),
+            ).toHaveLength(1);
+            expect(
+              receipt.events.filter((event: any) => event.phase === 'reopened' && event.type === 'agent_end'),
+            ).toHaveLength(1);
+          },
+          { timeout: 5000, interval: 20 },
+        );
+      }
       const shutdown = host.mastra.shutdown();
-      if (scenario === 'single-agent-duplicate') {
+      if (failSave) {
+        await expect(shutdown).rejects.toThrow('cancellation');
+      } else if (scenario === 'single-agent-duplicate') {
         // Recovery admits one owner. The competing Session gets an explicit
         // conflict; it must not prepare a second stream or resurrect a row.
         await expect(shutdown).rejects.toMatchObject({
@@ -400,18 +554,59 @@ it.each([
       expect(receipt.terminalOutputs).toEqual([
         { finishReason: 'abort', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
       ]);
-      expect(receipt.events.filter((event: { type: string }) => event.type === 'error')).toEqual([]);
-      for (const message of receipt.stoppedMessages) {
+      if (!failSave) expect(receipt.events.filter((event: { type: string }) => event.type === 'error')).toEqual([]);
+      const stoppedEvents = receipt.events.filter((event: any) => event.phase === 'reopened');
+      const stoppedMessageEvents = stoppedEvents.filter((event: any) => event.type === 'message_end');
+      if (failSave) {
+        expect(stoppedMessageEvents).toEqual([]);
+        expect(stoppedEvents.filter((event: any) => event.type === 'agent_end')).toEqual([]);
+        expect(
+          receipt.stoppedMessages.some((message: any) => message.content.metadata?.suspendedTools?.['plan-call-1']),
+        ).toBe(true);
+      } else if (!navigate && scenario !== 'single-agent-duplicate' && !holdEnd) {
+        const originalAssistant = receipt.stoppedMessages.find((message: any) => message.role === 'assistant');
+        expect(originalAssistant).toBeDefined();
+        expect(stoppedMessageEvents.map((event: any) => event.message)).toEqual([originalAssistant]);
+        expect(stoppedEvents.filter((event: any) => event.type === 'agent_end')).toMatchObject([{ reason: 'aborted' }]);
+        const finalDisplay = stoppedEvents
+          .filter((event: any) => event.type === 'display_state_changed')
+          .at(-1)?.displayState;
+        expect(finalDisplay).toMatchObject({ isRunning: false, pendingApproval: null });
+        expect(finalDisplay.pendingSuspensions.size).toBe(0);
+      } else if (holdEnd) {
+        expect(stoppedMessageEvents).toHaveLength(newRunAtEnd ? 2 : 1);
+        expect(
+          stoppedEvents.filter((event: any) => event.type === 'agent_end').map((event: any) => event.reason),
+        ).toEqual(newRunAtEnd ? ['suspended'] : []);
+        expect(fresh.displayState.get()).toEqual(receipt.navigatedDisplay);
+      } else if (navigate) {
+        expect(stoppedMessageEvents).toEqual([]);
+        expect(stoppedEvents.filter((event: any) => event.type === 'agent_end')).toEqual([]);
+      } else {
+        expect(stoppedMessageEvents.length).toBeLessThanOrEqual(1);
+      }
+      for (const message of failSave ? [] : receipt.stoppedMessages) {
         expect(message.content.metadata?.suspendedTools?.['plan-call-1']).toBeUndefined();
         expect(message.content.metadata?.pendingToolApprovals?.['plan-call-1']).toBeUndefined();
       }
+      if (approval) {
+        expect(
+          receipt.stoppedMessages
+            .flatMap((message: any) => message.content.parts)
+            .filter((part: any) => part.type === 'tool-invocation')
+            .map((part: any) => part.toolInvocation.state),
+        ).toEqual(['output-denied']);
+      }
       expect(receipt.afterRows.filter((row: any) => oldIds.has(row.runId))).toEqual([]);
       expect(receipt.afterRows.filter((row: any) => !oldIds.has(row.runId)).map((row: any) => row.status)).toEqual(
-        startFutureRun ? ['suspended', 'suspended'] : [],
+        startFutureRun || newRunAtEnd ? ['suspended', 'suspended'] : [],
       );
-      expect(calls).toEqual({ plan: startFutureRun ? 2 : 1, build: 0, network: 0 });
+      expect(calls).toEqual({ plan: startFutureRun || newRunAtEnd ? 2 : 1, build: 0, network: 0 });
     } finally {
       releaseRead();
+      releaseSave();
+      releaseEnd();
+      releaseNewModel();
       try {
         await host.mastra.shutdown();
       } catch (error) {

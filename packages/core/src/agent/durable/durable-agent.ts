@@ -21,7 +21,7 @@ import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
-import type { MessageListInput } from '../message-list';
+import type { MastraDBMessage, MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
@@ -1625,7 +1625,9 @@ export class DurableAgent<
   #abortDurableRun(runId: string): void {
     this.#signalDurableRun(runId);
     const cancellation = this.#mastra
-      ? this.#mastra.__runDurableAgentCancellation(() => this.cancelStoredRun(runId))
+      ? this.#mastra.__runDurableAgentCancellation(async () => {
+          await this.cancelStoredRun(runId);
+        })
       : this.cancelStoredRun(runId);
     void cancellation.catch(async error => {
       // A competing restoration owns this run's stream. Keep the rejection
@@ -1646,10 +1648,10 @@ export class DurableAgent<
   }
 
   /** Complete cancellation inside an already admitted native lifecycle operation. @internal */
-  async __abortRunStreamAndWait(runId: string): Promise<void> {
+  async __abortRunStreamAndWait(runId: string): Promise<{ messages: MastraDBMessage[] } | void> {
     super.abortRunStream(runId);
     this.#signalDurableRun(runId);
-    await this.cancelStoredRun(runId);
+    return this.cancelStoredRun(runId);
   }
 
   #signalDurableRun(runId: string): void {
@@ -1663,7 +1665,7 @@ export class DurableAgent<
   }
 
   /** Close stored work after execution stops; no model is resumed. */
-  private async cancelStoredRun(runId: string): Promise<void> {
+  private async cancelStoredRun(runId: string): Promise<{ messages: MastraDBMessage[] } | void> {
     const needsRestoration = !this.#runRegistry.get(runId);
     const entry = this.#runRegistry.get(runId) ?? globalRunRegistry.get(runId);
     // Execution reports its own failure. A rejected executor must not prevent
@@ -1725,11 +1727,55 @@ export class DurableAgent<
         { abortSignal: AbortSignal.abort() },
         { toolCallId: pendingToolCallId },
       );
-      const resumedExecution = globalRunRegistry.get(runId)?.workflowExecution;
-      await resumed.output.consumeStream();
-      await resumedExecution;
-      resumed.cleanup();
-      return;
+      const resumedEntry = globalRunRegistry.get(runId);
+      const resumedExecution = resumedEntry?.workflowExecution;
+      try {
+        await resumed.output.consumeStream();
+        await resumedExecution;
+        // Cold cancellation owns no thread stream. Give its awaiting Session
+        // the actual finalized messages without acquiring a newer run's lease.
+        const durableState = snapshot.context.input.state;
+        if (
+          !durableState?.threadId ||
+          !durableState.resourceId ||
+          durableState.observationalMemory ||
+          durableState.memoryConfig?.readOnly
+        ) {
+          return { messages: [] };
+        }
+        const finalMessages = resumedEntry?.messageList?.getPersisted.response.db() ?? [];
+        if (!finalMessages.length) return { messages: [] };
+        const memory = resumedEntry?.memory ?? (await this.getMemory({ requestContext }));
+        if (!memory) return { messages: [] };
+        const memoryStore = await memory.storage.getStore('memory');
+        if (!memoryStore) throw new Error('Cannot read back cancelled durable messages');
+        const { messages } = await memoryStore.listMessagesById({
+          messageIds: finalMessages.map(message => message.id),
+        });
+        const byId = new Map(messages.map(message => [message.id, message]));
+        const savedMessages = finalMessages.map(finalMessage => {
+          const saved = byId.get(finalMessage.id);
+          if (!saved || saved.threadId !== finalMessage.threadId || saved.resourceId !== finalMessage.resourceId) {
+            throw new Error('Cancelled durable message was not retained in its original scope');
+          }
+          for (const tool of suspendedTools) {
+            const toolCallId = tool?.suspendPayload?.toolCallId;
+            if (typeof toolCallId !== 'string') continue;
+            for (const waits of [
+              saved.content.metadata?.pendingToolApprovals,
+              saved.content.metadata?.suspendedTools,
+            ]) {
+              if (waits && typeof waits === 'object' && toolCallId in waits) {
+                throw new Error('Cancelled durable message still contains a saved tool wait');
+              }
+            }
+          }
+          return saved;
+        });
+        return { messages: savedMessages };
+      } finally {
+        resumed.cleanup();
+      }
     }
     const workflow = this.getWorkflow();
     const nested = workflow.steps[DurableStepIds.AGENTIC_EXECUTION];
