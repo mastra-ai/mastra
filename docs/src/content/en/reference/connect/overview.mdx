@@ -1,23 +1,26 @@
 ---
 title: "Reference: connect() | Connect"
-description: "API reference for connect() in @mastra/connect: discover a project's platform connections and return a toolset per provider, or a live resolver that picks up new connections without a restart."
+description: "API reference for connect() in @mastra/connect: a live toolset resolver over a project's platform connections that picks up new connections without a restart."
 packages:
   - "@mastra/connect"
 ---
 
 # connect()
 
-Discovers the connections available to a Mastra platform project and returns one toolset per connected provider, ready to pass to an agent's `toolsets` option. With `live: true`, returns a resolver for an agent's dynamic `tools` argument instead, so connections attached later are picked up without a restart (see [Live mode](#live-mode)).
+Returns a live toolset resolver over the connections available to a Mastra platform project. Pass it to an agent's dynamic `tools` argument: Mastra calls it on every generate/stream, and it serves a cached snapshot of one toolset per connected provider, revalidating from the platform every `ttlMs`, so connections attached after startup are picked up without a restart.
 
 ```typescript title="src/agent.ts"
+import { Agent } from '@mastra/core/agent'
 import { connect } from '@mastra/connect'
 
-const toolsets = await connect()
-
-const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
+const agent = new Agent({
+  name: 'ops',
+  model: 'openai/gpt-5-mini',
+  tools: connect(),
+})
 ```
 
-Returns: `Promise<Record<string, ToolsInput>>` keyed by provider (`linear`, `notion`, `jira`, `gitlab`, `snowflake`, `neon`, `cloudflare`, `resend`, `anthropic`), or a `ConnectLiveTools` resolver when `live: true`.
+Returns: `ConnectTools` — a resolver producing `Record<string, ToolsInput>` keyed by provider (`linear`, `notion`, `jira`, `gitlab`, `snowflake`, `neon`, `cloudflare`, `resend`, `anthropic`). See [The resolver](#the-resolver).
 
 See [Integrations](/docs/mastra-platform/integrations) for the concept overview.
 
@@ -47,16 +50,10 @@ See [Integrations](/docs/mastra-platform/integrations) for the concept overview.
             isOptional: true,
           },
           {
-            name: 'live',
-            type: 'true',
-            description: 'Return a live resolver instead of a one-time snapshot. See Live mode below.',
-            isOptional: true,
-          },
-          {
             name: 'ttlMs',
             type: 'number',
             description:
-              'How long a live snapshot stays fresh, in milliseconds. Default 30000. 0 revalidates on every resolution. Live mode only.',
+              'How long a resolved snapshot stays fresh, in milliseconds. Default 30000. 0 revalidates on every resolution.',
             isOptional: true,
           },
           {
@@ -106,6 +103,32 @@ Every field falls back to an environment variable, so a fully env-configured app
 ]}
 />
 
+## The resolver
+
+The returned `ConnectTools` resolver caches its toolset snapshot and revalidates stale-while-revalidate: within `ttlMs` of the last fetch, resolutions return the cached snapshot; after that, the cached snapshot is served immediately while a background refresh runs. Connections attached to the project after startup become available within the TTL, and detached connections are dropped — no restart or redeploy required.
+
+Call the resolver directly when you need a plain toolsets record, for example for an agent's `toolsets` option at generate time:
+
+```typescript title="src/generate.ts"
+import { connect } from '@mastra/connect'
+
+const tools = connect()
+
+const toolsets = await tools()
+
+const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
+```
+
+The resolver also exposes two methods for manual control:
+
+- `invalidate()` drops the cached snapshot so the next resolution fetches fresh.
+- `refresh()` fetches from the platform immediately, updates the cache, and returns the toolsets.
+
+Failure handling is tuned for long-running servers:
+
+- Configuration errors — missing project id or token, unknown `integrations` keys, invalid `ttlMs` — throw eagerly at `connect()` call time.
+- If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
+
 ## Integrations allowlist
 
 When `integrations` is provided, only listed providers are returned:
@@ -114,7 +137,7 @@ When `integrations` is provided, only listed providers are returned:
 - `false` excludes it.
 - An object configures it: `connectionId` picks a specific connection, `allowTools` restricts the toolset by tool key.
 
-A listed provider with no connection in the project throws `connection_not_found`. Without `integrations`, every connected provider is included. In live mode, a listed provider with no connection yet is skipped with a one-time warning and appears automatically once a connection is attached.
+A listed provider with no connection in the project yet is skipped with a one-time warning and appears automatically once a connection is attached. Without `integrations`, every connected provider is included.
 
 ## Connection resolution
 
@@ -122,34 +145,9 @@ For each provider present in the project's connections:
 
 1. An explicit `connectionId` (option or the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var) wins.
 1. Otherwise, a single active connection is used automatically.
-1. Otherwise the provider is ambiguous: explicitly requested providers throw `multiple_connections`; in undirected calls the provider is skipped with a `console.warn` listing the candidates.
+1. Otherwise the provider is ambiguous and is skipped with a `console.warn` listing the candidates.
 
-Connections in `needs_reauth` status are never silently mapped: explicitly requested providers throw `needs_reauth`, undirected calls skip them with a warning. Connections whose integration has no toolset in this package are skipped with a warning. In live mode, every one of these per-provider failures is downgraded to a warning so a single bad integration never fails the whole resolution.
-
-## Live mode
-
-With `live: true`, `connect()` returns a resolver compatible with an agent's dynamic `tools` argument instead of a one-time promise. Mastra calls the resolver on every generate/stream, and it serves a cached snapshot of the project's toolsets, revalidating from the platform every `ttlMs` (stale-while-revalidate). Connections attached to the project after startup become available within the TTL, and detached connections are dropped — no restart or redeploy required.
-
-```typescript title="src/agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { connect } from '@mastra/connect'
-
-const agent = new Agent({
-  name: 'ops',
-  model: 'openai/gpt-5-mini',
-  tools: connect({ live: true, ttlMs: 30_000 }),
-})
-```
-
-The returned resolver also exposes two methods for manual control:
-
-- `invalidate()` drops the cached snapshot so the next resolution fetches fresh.
-- `refresh()` fetches from the platform immediately, updates the cache, and returns the toolsets.
-
-Failure handling is tuned for long-running servers:
-
-- Configuration errors — missing project id or token, unknown `integrations` keys, invalid `ttlMs` — still throw eagerly at `connect()` call time.
-- If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
+Connections in `needs_reauth` status are never silently mapped: they are skipped with a warning until reconnected on the platform. Connections whose integration has no toolset in this package are also skipped with a warning. Every per-provider failure during resolution is downgraded to a warning so a single bad integration never fails the whole resolution.
 
 ## Errors
 
@@ -159,9 +157,7 @@ Throws `MastraConnectError` with a `code` property:
 | - | - |
 | `missing_access_token` | No platform token configured |
 | `missing_project_id` | No `projectId` option or `MASTRA_PROJECT_ID` |
-| `invalid_options` | Invalid `ttlMs` in live mode |
-| `connection_not_found` | A requested provider has no connection, or a directed connection id 404s |
-| `multiple_connections` | A requested provider is ambiguous |
-| `needs_reauth` | A requested provider's connection needs reauthorization |
+| `invalid_options` | Invalid `ttlMs` |
+| `connection_not_found` | An unknown key in `integrations`, or a directed connection id 404s at tool execution |
 | `unauthorized` | The platform rejected the token (401/403) |
 | `platform_error` | Any other platform request failure |

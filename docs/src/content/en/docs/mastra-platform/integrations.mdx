@@ -41,7 +41,7 @@ npm install @mastra/connect
 
 ### Discover connections at runtime
 
-[`connect()`](/reference/connect/overview) lists your project's connections and returns a toolset per provider, ready to pass to an agent:
+[`connect()`](/reference/connect/overview) returns a live toolset resolver over your project's connections. Pass it straight to an agent's `tools`: Mastra calls it on every generate/stream, and it serves a cached view of the project's connections that revalidates in the background (every 30 seconds by default, configurable with `ttlMs`):
 
 ```typescript title="src/agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -51,34 +51,27 @@ const agent = new Agent({
   name: 'ops',
   instructions: 'You manage our workspaces.',
   model: 'openai/gpt-5-mini',
+  tools: connect(),
 })
-
-const toolsets = await connect()
-
-const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
 ```
 
 `connect()` reads `MASTRA_PROJECT_ID` to know which project to list connections for. When a provider has exactly one active connection, it is used automatically. When a provider has several connections, pass the one you want through the `integrations` option, or set the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var.
 
-### Pick up new connections automatically
-
-With `live: true`, `connect()` returns a resolver instead of a one-time snapshot. Pass it straight to an agent's `tools`: Mastra calls it on every generate/stream, and it serves a cached view of the project's connections that revalidates in the background (every 30 seconds by default, configurable with `ttlMs`):
-
-```typescript title="src/agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { connect } from '@mastra/connect'
-
-const agent = new Agent({
-  name: 'ops',
-  instructions: 'You manage our workspaces.',
-  model: 'openai/gpt-5-mini',
-  tools: connect({ live: true }),
-})
-```
-
 When someone connects a new integration to the project in the platform dashboard, its tools become available to the running server within the TTL — no restart or redeploy. Tools for a disconnected integration are dropped the same way.
 
 The resolver stays safe on a long-running server: if the platform is unreachable during a background refresh, it keeps serving the last good toolsets and warns. A provider that needs re-authentication, has ambiguous connections, or is not connected yet is skipped with a warning instead of failing the whole resolution. To force an immediate refresh, for example right after connecting a provider, call `refresh()` or `invalidate()` on the resolver returned by `connect()`.
+
+To resolve toolsets on demand instead, call the resolver directly. The result is a plain record suitable for the `toolsets` option at generate time:
+
+```typescript title="src/generate.ts"
+import { connect } from '@mastra/connect'
+
+const tools = connect()
+
+const toolsets = await tools()
+
+const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
+```
 
 ### Wire providers explicitly
 
@@ -115,10 +108,10 @@ const readOnlyNotion = createNotionTools({
 })
 ```
 
-When using `connect()`, the `integrations` option acts as an allowlist. Listed providers are included, `false` excludes a provider, and a listed provider with no connection in the project raises an error:
+When using `connect()`, the `integrations` option acts as an allowlist. Listed providers are included, `false` excludes a provider, and a listed provider with no connection in the project yet is skipped with a warning until one is attached:
 
 ```typescript
-const toolsets = await connect({
+const tools = connect({
   integrations: {
     linear: true,
     notion: { allowTools: ['notion_search'] },

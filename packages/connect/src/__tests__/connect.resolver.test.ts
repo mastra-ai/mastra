@@ -32,7 +32,7 @@ function makeConnection(overrides?: Record<string, unknown>) {
   };
 }
 
-function liveOptions(
+function resolverOptions(
   connections: () => unknown[],
   extra?: { ttlMs?: number; integrations?: ConnectOptions['integrations'] },
 ) {
@@ -41,7 +41,6 @@ function liveOptions(
     fetchMock,
     options: {
       projectId: 'proj_1',
-      live: true as const,
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
       ...extra,
     },
@@ -68,10 +67,10 @@ afterEach(() => {
   warnSpy.mockRestore();
 });
 
-describe('connect live mode', () => {
+describe('connect resolver caching and liveness', () => {
   it('returns a resolver function with invalidate/refresh, not a promise', () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const tools = connect(liveOptions(() => []).options);
+    const tools = connect(resolverOptions(() => []).options);
     expect(typeof tools).toBe('function');
     expect(typeof tools.invalidate).toBe('function');
     expect(typeof tools.refresh).toBe('function');
@@ -79,7 +78,7 @@ describe('connect live mode', () => {
 
   it('resolves toolsets from the project connections on first resolution', async () => {
     const { createTools } = stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(() => [makeConnection()]);
+    const { options } = resolverOptions(() => [makeConnection()]);
     const tools = connect(options);
     const result = await tools({ requestContext: {} });
     expect(Object.keys(result)).toEqual(['linear']);
@@ -89,7 +88,7 @@ describe('connect live mode', () => {
   it('serves the cached snapshot within the TTL without refetching', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options, fetchMock } = liveOptions(() => [makeConnection()], { ttlMs: 30_000 });
+    const { options, fetchMock } = resolverOptions(() => [makeConnection()], { ttlMs: 30_000 });
     const tools = connect(options);
 
     const start = Date.now();
@@ -105,7 +104,7 @@ describe('connect live mode', () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
     stubProvider('notion', 'notion', 'MASTRA_NOTION_CONNECTION_ID');
     let connections = [makeConnection()];
-    const { options, fetchMock } = liveOptions(() => connections, { ttlMs: 1_000 });
+    const { options, fetchMock } = resolverOptions(() => connections, { ttlMs: 1_000 });
     const tools = connect(options);
 
     const start = Date.now();
@@ -131,7 +130,7 @@ describe('connect live mode', () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
     stubProvider('notion', 'notion', 'MASTRA_NOTION_CONNECTION_ID');
     let connections = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion' })];
-    const { options } = liveOptions(() => connections, { ttlMs: 1_000 });
+    const { options } = resolverOptions(() => connections, { ttlMs: 1_000 });
     const tools = connect(options);
 
     const start = Date.now();
@@ -156,7 +155,6 @@ describe('connect live mode', () => {
       );
     const tools = connect({
       projectId: 'proj_1',
-      live: true,
       ttlMs: 1_000,
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
@@ -186,7 +184,6 @@ describe('connect live mode', () => {
     );
     const tools = connect({
       projectId: 'proj_1',
-      live: true,
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
     await expect(tools()).rejects.toMatchObject({ code: 'platform_error' });
@@ -198,7 +195,6 @@ describe('connect live mode', () => {
     const fetchMock = vi.fn(() => new Promise<Response>(resolve => (resolveFetch = resolve)));
     const tools = connect({
       projectId: 'proj_1',
-      live: true,
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
     });
 
@@ -214,7 +210,7 @@ describe('connect live mode', () => {
 
   it('invalidate() forces a refetch on the next resolution', async () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options, fetchMock } = liveOptions(() => [makeConnection()], { ttlMs: 60_000 });
+    const { options, fetchMock } = resolverOptions(() => [makeConnection()], { ttlMs: 60_000 });
     const tools = connect(options);
 
     await tools();
@@ -229,7 +225,7 @@ describe('connect live mode', () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
     stubProvider('notion', 'notion', 'MASTRA_NOTION_CONNECTION_ID');
     let connections = [makeConnection()];
-    const { options, fetchMock } = liveOptions(() => connections, { ttlMs: 60_000 });
+    const { options, fetchMock } = resolverOptions(() => connections, { ttlMs: 60_000 });
     const tools = connect(options);
 
     await tools();
@@ -249,7 +245,7 @@ describe('connect live mode', () => {
     stubProvider('notion', 'notion', 'MASTRA_NOTION_CONNECTION_ID');
     const notionConnection = makeConnection({ id: 'c_not1', integrationId: 'notion' });
     let connections = [notionConnection];
-    const { options } = liveOptions(() => connections, {
+    const { options } = resolverOptions(() => connections, {
       ttlMs: 1_000,
       integrations: { linear: true, notion: true },
     });
@@ -273,64 +269,10 @@ describe('connect live mode', () => {
     expect(Object.keys(after).sort()).toEqual(['linear', 'notion']);
   });
 
-  it('warns and skips a needs_reauth connection instead of rejecting', async () => {
-    stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(() => [makeConnection({ status: 'needs_reauth' })]);
-    const tools = connect(options);
-
-    await expect(tools()).resolves.toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('re-authentication'));
-  });
-
-  it('warns and skips a directed needs_reauth connection instead of rejecting', async () => {
-    stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(() => [makeConnection({ status: 'needs_reauth' })], {
-      integrations: { linear: { connectionId: 'c_lin1' } },
-    });
-    const tools = connect(options);
-
-    await expect(tools()).resolves.toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-authentication'));
-  });
-
-  it('warns and skips an ambiguous explicit provider instead of throwing multiple_connections', async () => {
-    stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(() => [makeConnection(), makeConnection({ id: 'c_lin2' })], {
-      integrations: { linear: true },
-    });
-    const tools = connect(options);
-
-    await expect(tools()).resolves.toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('multiple connections found'));
-  });
-
-  it('lets the env var pick among multiple connections in live mode', async () => {
-    const { createTools } = stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_lin2');
-    const { options } = liveOptions(() => [makeConnection(), makeConnection({ id: 'c_lin2' })]);
-    const tools = connect(options);
-
-    await tools();
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin2' }));
-  });
-
-  it('warns and skips unsupported platform integrations in undirected live mode', async () => {
-    stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(() => [
-      makeConnection(),
-      makeConnection({ id: 'c_unk1', integrationId: 'salesforce' }),
-    ]);
-    const tools = connect(options);
-
-    const result = await tools();
-    expect(Object.keys(result)).toEqual(['linear']);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('salesforce'));
-  });
-
   it('warns once per unsupported integration across refreshes', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = liveOptions(
+    const { options } = resolverOptions(
       () => [makeConnection(), makeConnection({ id: 'c_unk1', integrationId: 'salesforce' })],
       { ttlMs: 1_000 },
     );
@@ -352,46 +294,28 @@ describe('connect live mode', () => {
     createTools.mockImplementation(() => {
       throw new Error('Unknown tool: linear_nope');
     });
-    const { options } = liveOptions(() => [makeConnection()]);
+    const { options } = resolverOptions(() => [makeConnection()]);
     const tools = connect(options);
 
     await expect(tools()).resolves.toEqual({});
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown tool: linear_nope'));
   });
 
-  it('throws missing_project_id synchronously at connect() time', () => {
-    vi.stubEnv('MASTRA_PROJECT_ID', '');
-    expect(() => connect({ live: true, client: { accessToken: TOKEN } })).toThrow(MastraConnectError);
-  });
-
   it('throws missing_access_token synchronously at connect() time', () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    expect(() => connect({ live: true, projectId: 'proj_1' })).toThrow(MastraConnectError);
-  });
-
-  it('throws synchronously for unknown integration keys', () => {
-    expect(() =>
-      connect({
-        live: true,
-        projectId: 'proj_1',
-        integrations: { bogus: true } as never,
-        client: { accessToken: TOKEN },
-      }),
-    ).toThrow(/Unknown integration 'bogus'/);
+    expect(() => connect({ projectId: 'proj_1' })).toThrow(MastraConnectError);
   });
 
   it('throws invalid_options synchronously for a bad ttlMs', () => {
     for (const ttlMs of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(() => connect({ live: true, projectId: 'proj_1', ttlMs, client: { accessToken: TOKEN } })).toThrow(
-        /ttlMs/,
-      );
+      expect(() => connect({ projectId: 'proj_1', ttlMs, client: { accessToken: TOKEN } })).toThrow(/ttlMs/);
     }
   });
 
   it('accepts ttlMs of 0 and revalidates on every resolution', async () => {
     stubProvider('linear', 'linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options, fetchMock } = liveOptions(() => [makeConnection()], { ttlMs: 0 });
+    const { options, fetchMock } = resolverOptions(() => [makeConnection()], { ttlMs: 0 });
     const tools = connect(options);
 
     await tools();

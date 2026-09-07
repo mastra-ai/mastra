@@ -10,11 +10,14 @@ Added @mastra/connect, a new package that turns Mastra-platform integration conn
 import { Agent } from '@mastra/core/agent';
 import { connect } from '@mastra/connect';
 
-const toolsets = await connect(); // uses MASTRA_PROJECT_ID
-const response = await agent.generate('Whats on my plate?', { toolsets });
+const agent = new Agent({
+  // Live: resolved per generate/stream, uses MASTRA_PROJECT_ID.
+  tools: connect(),
+  model: 'openai/gpt-5-mini',
+});
 ```
 
-`connect({ live: true })` returns a resolver compatible with an agent's dynamic `tools` argument, backed by a TTL cache (stale-while-revalidate, default 30s, configurable via `ttlMs`). Integrations attached to — or detached from — the project on the platform are picked up (or dropped) by running agents without a server restart; `invalidate()` and `refresh()` give manual control. Per-integration problems (needs re-auth, ambiguity, not attached yet) downgrade to warn-and-skip so one bad integration never takes down the whole toolset.
+`connect()` returns a live resolver compatible with an agent's dynamic `tools` argument, backed by a TTL cache (stale-while-revalidate, default 30s, configurable via `ttlMs`). Integrations attached to — or detached from — the project on the platform are picked up (or dropped) by running agents without a server restart; `invalidate()` and `refresh()` give manual control, and calling the resolver directly (`await connect()()`) yields a plain toolsets record for an agent's `toolsets` option. Per-integration problems (needs re-auth, ambiguity, not attached yet) downgrade to warn-and-skip so one bad integration never takes down the whole toolset.
 
 **Explicit per-provider toolsets for all nine platform integrations**
 

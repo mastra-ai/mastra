@@ -4,8 +4,6 @@ export type MastraConnectErrorCode =
   | 'missing_connection_id'
   | 'invalid_options'
   | 'connection_not_found'
-  | 'multiple_connections'
-  | 'needs_reauth'
   | 'unauthorized'
   | 'proxy_error'
   | 'unsupported_credential_type'

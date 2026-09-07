@@ -17,35 +17,23 @@ export interface ConnectOptions {
   /**
    * Integration allowlist. When provided, only listed providers are returned:
    * `true` (or an options object) includes a provider, `false` excludes it.
-   * In snapshot mode, providers listed but absent from the project's
-   * connections throw; in live mode they are skipped (with a one-time warning)
-   * until a connection is attached.
+   * Providers listed but absent from the project's connections are skipped
+   * (with a one-time warning) until a connection is attached.
    */
   integrations?: Partial<Record<ProviderKey, ConnectIntegrationOptions | boolean>>;
   client?: ConnectClientOptions;
-}
-
-export interface ConnectLiveOptions extends ConnectOptions {
-  /**
-   * Live mode: instead of resolving toolsets once, connect() returns a
-   * resolver compatible with an agent's dynamic `tools` argument. Mastra
-   * invokes it on every generate/stream, and it serves a cached snapshot of
-   * the project's toolsets, revalidating from the platform every `ttlMs`.
-   * Integrations attached to (or detached from) the project on the Mastra
-   * platform are picked up (or dropped) by running agents without a restart.
-   */
-  live: true;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates on every resolution. */
   ttlMs?: number;
 }
 
 /**
- * Live toolset resolver returned by `connect({ live: true })`. Pass it
- * straight to an agent's dynamic `tools` argument: Mastra calls it per
- * generate/stream, so project integrations attached or detached on the
- * platform are reflected without restarting the server.
+ * Live toolset resolver returned by `connect()`. Pass it straight to an
+ * agent's dynamic `tools` argument: Mastra calls it per generate/stream, so
+ * project integrations attached or detached on the platform are reflected
+ * without restarting the server. Call it directly (`await tools()`) when you
+ * need a plain toolsets record, e.g. for an agent's `toolsets` option.
  */
-export interface ConnectLiveTools {
+export interface ConnectTools {
   (ctx?: { requestContext?: unknown; mastra?: unknown }): Promise<Record<string, ToolsInput>>;
   /** Drops the cached snapshot; the next resolution fetches fresh from the platform. */
   invalidate(): void;
@@ -60,59 +48,22 @@ interface ResolvedIntegrationRequest {
   options: ConnectIntegrationOptions;
 }
 
-const DEFAULT_LIVE_TTL_MS = 30_000;
+const DEFAULT_TTL_MS = 30_000;
 
 /**
- * Discovers the project's platform connections and returns a toolset per
- * connected provider, suitable for an agent's `toolsets` option.
+ * Returns a live toolset resolver over the project's platform connections.
+ * The resolver serves a cached snapshot of one toolset per connected
+ * provider, revalidating from the platform every `ttlMs`, so integrations
+ * attached to (or detached from) the project are picked up (or dropped) by
+ * running agents without a restart.
  *
- * With `live: true`, returns a resolver instead of a one-time snapshot (see
- * {@link ConnectLiveOptions}).
+ * Configuration errors (missing project id/token, unknown integration keys,
+ * bad ttlMs) throw here — at connect() call time — so they surface at
+ * startup. Per-integration problems during resolution (needs re-auth,
+ * ambiguity, not attached yet) are downgraded to warn-and-skip so one bad
+ * integration never takes down the whole toolset.
  */
-export function connect(options: ConnectLiveOptions): ConnectLiveTools;
-export function connect(options?: ConnectOptions): Promise<Record<string, ToolsInput>>;
-export function connect(
-  options?: ConnectOptions | ConnectLiveOptions,
-): Promise<Record<string, ToolsInput>> | ConnectLiveTools {
-  if (options && 'live' in options && options.live) {
-    return createLiveConnect(options);
-  }
-
-  return connectSnapshot(options);
-}
-
-async function connectSnapshot(options?: ConnectOptions): Promise<Record<string, ToolsInput>> {
-  const projectId = options?.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
-  if (!projectId) {
-    throw new MastraConnectError('missing_project_id', 'Missing project id: set MASTRA_PROJECT_ID or pass projectId.');
-  }
-
-  const client = resolveClient(options?.client);
-  const connections = await listProjectConnections(client, projectId);
-
-  const byIntegrationId = groupByIntegrationId(connections);
-  const requests = buildRequests(options?.integrations, byIntegrationId, { requireConnected: true });
-
-  const result: Record<string, ToolsInput> = {};
-  for (const request of requests) {
-    const candidates = byIntegrationId.get(request.registration.integrationId) ?? [];
-    const connectionId = resolveProviderConnection(request, candidates, true);
-    if (!connectionId) continue; // warned + skipped
-    result[request.key] = request.registration.createTools({
-      connectionId,
-      allowTools: request.options.allowTools,
-      client: options?.client,
-    });
-  }
-  return result;
-}
-
-/**
- * Builds the live resolver. Configuration errors (missing project id/token,
- * unknown integration keys, bad ttlMs) throw here — at connect() call time —
- * so they surface at startup, never on a request path.
- */
-function createLiveConnect(options: ConnectLiveOptions): ConnectLiveTools {
+export function connect(options: ConnectOptions = {}): ConnectTools {
   const projectId = options.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
   if (!projectId) {
     throw new MastraConnectError('missing_project_id', 'Missing project id: set MASTRA_PROJECT_ID or pass projectId.');
@@ -123,7 +74,7 @@ function createLiveConnect(options: ConnectLiveOptions): ConnectLiveTools {
       `Invalid ttlMs (${options.ttlMs}): expected a finite number of milliseconds >= 0.`,
     );
   }
-  const ttlMs = options.ttlMs ?? DEFAULT_LIVE_TTL_MS;
+  const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
 
   const client = resolveClient(options.client);
   validateIntegrationKeys(options.integrations);
@@ -138,7 +89,7 @@ function createLiveConnect(options: ConnectLiveOptions): ConnectLiveTools {
       inflight = (async () => {
         try {
           const connections = await listProjectConnections(client, projectId);
-          const snapshot = mapLiveToolsets(connections, options, warnedMissing, warnedUnsupported);
+          const snapshot = mapToolsets(connections, options, warnedMissing, warnedUnsupported);
           cache = { snapshot, fetchedAt: Date.now() };
           return snapshot;
         } catch (error) {
@@ -180,17 +131,14 @@ function createLiveConnect(options: ConnectLiveOptions): ConnectLiveTools {
 }
 
 /** Maps one platform connection list snapshot to toolsets, downgrading every per-provider failure to warn+skip. */
-function mapLiveToolsets(
+function mapToolsets(
   connections: ProjectConnection[],
-  options: ConnectLiveOptions,
+  options: ConnectOptions,
   warnedMissing: Set<ProviderKey>,
   warnedUnsupported: Set<string>,
 ): Record<string, ToolsInput> {
   const byIntegrationId = groupByIntegrationId(connections);
-  const requests = buildRequests(options.integrations, byIntegrationId, {
-    requireConnected: false,
-    warnedUnsupported,
-  });
+  const requests = buildRequests(options.integrations, byIntegrationId, warnedUnsupported);
 
   const result: Record<string, ToolsInput> = {};
   for (const request of requests) {
@@ -205,7 +153,7 @@ function mapLiveToolsets(
         }
         continue;
       }
-      const connectionId = resolveProviderConnection(request, candidates, false);
+      const connectionId = resolveProviderConnection(request, candidates);
       if (!connectionId) continue; // warned + skipped
       result[request.key] = request.registration.createTools({
         connectionId,
@@ -245,14 +193,13 @@ function validateIntegrationKeys(integrations: ConnectOptions['integrations']): 
 
 /**
  * Builds the list of providers to resolve: the allowlist when given, else
- * every supported connected provider. With `requireConnected: false` (live
- * mode), allowlisted providers without a connection yet are kept so they can
- * appear once a connection is attached.
+ * every supported connected provider. Allowlisted providers without a
+ * connection yet are kept so they can appear once a connection is attached.
  */
 function buildRequests(
   integrations: ConnectOptions['integrations'],
   byIntegrationId: Map<string, ProjectConnection[]>,
-  opts: { requireConnected: boolean; warnedUnsupported?: Set<string> },
+  warnedUnsupported: Set<string>,
 ): ResolvedIntegrationRequest[] {
   if (integrations) {
     const requests: ResolvedIntegrationRequest[] = [];
@@ -265,19 +212,7 @@ function buildRequests(
           `Unknown integration '${key}' in connect() options: no such provider is supported by @mastra/connect.`,
         );
       }
-      const options = value === true ? {} : value;
-      if (!byIntegrationId.has(registration.integrationId)) {
-        if (opts.requireConnected) {
-          throw new MastraConnectError(
-            'connection_not_found',
-            `No ${key} connection found in this project. Connect ${key} on the Mastra platform or remove it from connect() integrations.`,
-          );
-        }
-        // Live mode: keep the request; mapping warns once and skips until attached.
-        requests.push({ key, registration, explicit: true, options });
-        continue;
-      }
-      requests.push({ key, registration, explicit: true, options });
+      requests.push({ key, registration, explicit: true, options: value === true ? {} : value });
     }
     return requests;
   }
@@ -286,10 +221,10 @@ function buildRequests(
   for (const integrationId of byIntegrationId.keys()) {
     const found = findProviderByIntegrationId(integrationId);
     if (!found) {
-      // Live mode re-runs this mapping on every refresh: warn once per
-      // integration id instead of spamming the log on every TTL cycle.
-      if (!opts.warnedUnsupported?.has(integrationId)) {
-        opts.warnedUnsupported?.add(integrationId);
+      // This mapping re-runs on every refresh: warn once per integration id
+      // instead of spamming the log on every TTL cycle.
+      if (!warnedUnsupported.has(integrationId)) {
+        warnedUnsupported.add(integrationId);
         const ids = (byIntegrationId.get(integrationId) ?? []).map(connection => connection.id).join(', ');
         console.warn(
           `[@mastra/connect] Skipping unsupported integration '${integrationId}' (connection ${ids}): no toolset is registered for it.`,
@@ -308,27 +243,19 @@ function readEnvConnectionId(registration: ProviderRegistration): string | undef
 
 /**
  * Resolves the connection to use for one provider, per the contract:
- * option/env var wins; else a single active connection; ambiguity throws for
- * explicitly requested providers and warns+skips otherwise. A needs_reauth
- * connection is never silently mapped. With `strict: false` (live mode) every
- * throw is downgraded to warn+skip so one bad integration never takes down
- * the whole toolset resolution.
+ * option/env var wins; else a single active connection; anything else
+ * (ambiguity, needs_reauth, no usable candidate) warns and skips so one bad
+ * integration never takes down the whole toolset resolution. A needs_reauth
+ * connection is never silently mapped.
  */
 function resolveProviderConnection(
   request: ResolvedIntegrationRequest,
   candidates: ProjectConnection[],
-  strict: boolean,
 ): string | undefined {
   const directed = request.options.connectionId?.trim() || readEnvConnectionId(request.registration);
   if (directed) {
     const match = candidates.find(connection => connection.id === directed);
     if (match?.status === 'needs_reauth') {
-      if (strict) {
-        throw new MastraConnectError(
-          'needs_reauth',
-          `Connection ${directed} (${request.key}) needs re-authentication. Reconnect it on the Mastra platform.`,
-        );
-      }
       console.warn(
         `[@mastra/connect] Skipping ${request.key}: connection ${directed} needs re-authentication. Reconnect it on the Mastra platform.`,
       );
@@ -343,39 +270,20 @@ function resolveProviderConnection(
   if (active.length === 0) {
     const reauth = candidates.filter(connection => connection.status === 'needs_reauth');
     if (reauth.length > 0) {
-      if (request.explicit && strict) {
-        throw new MastraConnectError(
-          'needs_reauth',
-          `All ${request.key} connections need re-authentication (${reauth.map(connection => connection.id).join(', ')}). Reconnect on the Mastra platform.`,
-        );
-      }
       console.warn(
         `[@mastra/connect] Skipping ${request.key}: its connection(s) need re-authentication (${reauth.map(connection => connection.id).join(', ')}).`,
       );
       return undefined;
     }
     // No usable candidates (e.g. only connections in an unknown status).
-    if (request.explicit && strict) {
-      throw new MastraConnectError(
-        'connection_not_found',
-        `No usable ${request.key} connection found in this project (${candidates.map(connection => `${connection.id}: ${connection.status}`).join(', ')}).`,
-      );
-    }
     console.warn(
       `[@mastra/connect] Skipping ${request.key}: no usable connection (${candidates.map(connection => `${connection.id}: ${connection.status}`).join(', ')}).`,
     );
     return undefined;
   }
 
-  const ids = active.map(connection => connection.id).join(', ');
-  if (request.explicit && strict) {
-    throw new MastraConnectError(
-      'multiple_connections',
-      `Multiple ${request.key} connections found (${ids}). Set ${request.registration.envVar} or pass integrations.${request.key}.connectionId to choose one.`,
-    );
-  }
   console.warn(
-    `[@mastra/connect] Skipping ${request.key}: multiple connections found (${ids}). Set ${request.registration.envVar} to choose one.`,
+    `[@mastra/connect] Skipping ${request.key}: multiple connections found (${active.map(connection => connection.id).join(', ')}). Set ${request.registration.envVar} to choose one.`,
   );
   return undefined;
 }
