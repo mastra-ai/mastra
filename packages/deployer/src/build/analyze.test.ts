@@ -2,7 +2,8 @@ import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
-import { afterEach, describe, expect, it } from 'vitest';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyzeBundle } from './analyze';
 import { slash } from './utils';
 
@@ -612,6 +613,7 @@ describe('externalized packages and the validation pass (issues #18626, #16626)'
   async function build(
     { entryFile, outputDir, projectRoot, tempDir }: Awaited<ReturnType<typeof setupWorkspaceWithLoadTimeDependency>>,
     externals: boolean | string[],
+    logger: IMastraLogger = noopLogger,
   ) {
     const originalCwd = process.cwd();
     process.chdir(tempDir);
@@ -625,7 +627,7 @@ describe('externalized packages and the validation pass (issues #18626, #16626)'
           platform: 'node',
           bundlerOptions: { externals, enableSourcemap: false },
         },
-        noopLogger,
+        logger,
       );
     } finally {
       process.chdir(originalCwd);
@@ -747,7 +749,17 @@ describe('externalized packages and the validation pass (issues #18626, #16626)'
 
   it('builds when the externalized package is the parent of the one that throws', async () => {
     const workspace = await setupWorkspaceWithThrowingTransitiveDependency('mastra-externals-transitive-array-');
+    const logger = { ...noopLogger, warn: vi.fn() } as IMastraLogger;
 
-    await expect(build(workspace, ['external-root'])).resolves.toBeDefined();
+    await expect(build(workspace, ['external-root'], logger)).resolves.toBeDefined();
+
+    // Blame lands on `external-root`, not on `buried-thrower`. The consumer uses a named import
+    // of it, which the bare stub cannot satisfy, so the retry is inconclusive and says so.
+    const skipped = vi
+      .mocked(logger.warn)
+      .mock.calls.filter(([message]) => String(message).startsWith('Skipped validating'));
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]![0]).toContain('"external-root"');
+    expect(skipped[0]![0]).not.toContain('buried-thrower');
   }, 20000);
 });

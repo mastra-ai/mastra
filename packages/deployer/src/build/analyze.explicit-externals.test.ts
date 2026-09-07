@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../validator/validate', () => ({
@@ -55,7 +56,10 @@ describe('validateOutput stubbedExternals (issue #16626)', () => {
     return { entryFile, outputDir, projectRoot: tempDir };
   }
 
-  function build({ entryFile, outputDir, projectRoot }: { entryFile: string; outputDir: string; projectRoot: string }) {
+  function build(
+    { entryFile, outputDir, projectRoot }: Awaited<ReturnType<typeof setupProject>>,
+    { externals = ['drizzle-orm', 'pg'], logger = noopLogger }: { externals?: string[]; logger?: IMastraLogger } = {},
+  ) {
     return analyzeBundle(
       [entryFile],
       entryFile,
@@ -64,12 +68,20 @@ describe('validateOutput stubbedExternals (issue #16626)', () => {
         projectRoot,
         platform: 'browser',
         bundlerOptions: {
-          externals: ['drizzle-orm', 'pg'],
+          externals,
           enableSourcemap: false,
         },
       },
-      noopLogger,
+      logger,
     );
+  }
+
+  function missingPackage(packageName: string, outputDir: string) {
+    return new ValidationError({
+      type: 'Error',
+      message: `Cannot find package '${packageName}' imported from ${outputDir}`,
+      stack: `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '${packageName}' imported from ${outputDir}`,
+    });
   }
 
   // Bundling a real @mastra/core entry through rollup is slow under parallel suite load
@@ -113,5 +125,70 @@ describe('validateOutput stubbedExternals (issue #16626)', () => {
       .mocked(validate)
       .mock.calls.some(([, opts]) => opts.stubbedExternals?.includes('drizzle-orm'));
     expect(retriedWithStub).toBe(true);
+  }, 60000);
+
+  it('keeps stubbing when the retry surfaces another externalized package', async () => {
+    const project = await setupProject('mastra-user-externals-chain-');
+
+    // Stubbing the first package lets the chunk run further, where it trips over a second
+    // externalized package that is not installed either. The third attempt succeeds.
+    vi.mocked(validate)
+      .mockImplementationOnce(() => Promise.reject(missingPackage('drizzle-orm', project.outputDir)))
+      .mockImplementationOnce(() => Promise.reject(missingPackage('ioredis', project.outputDir)));
+
+    await expect(build(project, { externals: ['drizzle-orm', 'pg', 'ioredis'] })).resolves.toBeDefined();
+
+    const retriedWithBothStubs = vi
+      .mocked(validate)
+      .mock.calls.some(
+        ([, opts]) => opts.stubbedExternals?.includes('drizzle-orm') && opts.stubbedExternals?.includes('ioredis'),
+      );
+    expect(retriedWithBothStubs).toBe(true);
+  }, 60000);
+
+  it('warns instead of failing when the stub itself cannot link', async () => {
+    const project = await setupProject('mastra-user-externals-stub-link-');
+    const logger = { ...noopLogger, warn: vi.fn() } as IMastraLogger;
+
+    // The stub is a bare `export default {}`, so a chunk with a named import from the
+    // externalized package cannot link against it. That says nothing about the bundle.
+    vi.mocked(validate)
+      .mockImplementationOnce(() => Promise.reject(missingPackage('drizzle-orm', project.outputDir)))
+      .mockImplementationOnce(() =>
+        Promise.reject(
+          new ValidationError({
+            type: 'SyntaxError',
+            message: "The requested module 'drizzle-orm' does not provide an export named 'sql'",
+            stack: `SyntaxError: The requested module 'drizzle-orm' does not provide an export named 'sql'\n    at ModuleJob._instantiate (node:internal/modules/esm/module_job:180:21)`,
+          }),
+        ),
+      );
+
+    await expect(build(project, { logger })).resolves.toBeDefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('"drizzle-orm"'));
+  }, 60000);
+
+  it('still fails the build when the retry surfaces a defect the stub did not cause', async () => {
+    const project = await setupProject('mastra-user-externals-retry-defect-');
+    const logger = { ...noopLogger, warn: vi.fn() } as IMastraLogger;
+
+    // With the externalized package out of the way the chunk gets further and hits a genuine
+    // bundling problem in a package that is *not* externalized. That must not be swallowed.
+    vi.mocked(validate)
+      .mockImplementationOnce(() => Promise.reject(missingPackage('drizzle-orm', project.outputDir)))
+      .mockImplementationOnce(() =>
+        Promise.reject(
+          new ValidationError({
+            type: 'TypeError',
+            message: "Cannot read properties of undefined (reading 'prototype')",
+            stack: `TypeError: Cannot read properties of undefined (reading 'prototype')\n    at Object.<anonymous> (${project.projectRoot}/node_modules/legacy-cjs-package/index.js:3:41)`,
+          }),
+        ),
+      );
+
+    await expect(build(project, { logger })).rejects.toThrow(/legacy-cjs-package/);
+    expect(logger.warn).not.toHaveBeenCalled();
   }, 60000);
 });

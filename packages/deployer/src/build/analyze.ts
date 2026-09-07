@@ -296,6 +296,19 @@ function findExternalizedPackageInError(
   return undefined;
 }
 
+/**
+ * Whether a validation failure is the stub itself failing to link, rather than the bundle.
+ *
+ * The stub for an externalized package is a bare `export default {}`, so a chunk that imports a
+ * named binding from that package cannot link:
+ * `SyntaxError: The requested module 'pkg' does not provide an export named 'x'`.
+ */
+function isStubLinkError(err: Error, stubbedExternals: string[]): boolean {
+  const specifier = err.message.match(/^The requested module '([^']+)' does not provide an export named/)?.[1];
+
+  return specifier !== undefined && stubbedExternals.some(external => isDependencyPartOfPackage(specifier, external));
+}
+
 async function validateFile(
   root: string,
   file: OutputChunk,
@@ -353,35 +366,53 @@ async function validateFile(
       // survive being executed here. Retry with that one package stubbed out. Stubbing on demand
       // rather than up front keeps externalized packages that bundled code legitimately uses at
       // module-evaluation time working. See issues #18626 and #16626.
-      const externalizedPackage = findExternalizedPackageInError(errorToHandle, {
-        externalizablePackages,
-        externalsPreset,
-        workspaceMap,
-      });
+      //
+      // Each retry runs the chunk further than the last, so it can surface the next externalized
+      // package the chunk touches. Keep going until the chunk loads, the failure can no longer be
+      // blamed on an externalized package, or the stub itself is what fails.
+      const retryStubbedExternals = [...stubbedExternals];
 
-      if (externalizedPackage) {
+      while (errorToHandle instanceof Error) {
+        const externalizedPackage = findExternalizedPackageInError(errorToHandle, {
+          externalizablePackages,
+          externalsPreset,
+          workspaceMap,
+        });
+
+        if (!externalizedPackage || retryStubbedExternals.includes(externalizedPackage)) {
+          break;
+        }
+
+        retryStubbedExternals.push(externalizedPackage);
         logger.debug('Retrying validation with externalized package stubbed', {
           fileName: file.fileName,
           packageName: externalizedPackage,
         });
 
-        errorToHandle = null;
-
         try {
           await validate(join(root, file.fileName), {
             moduleResolveMapLocation,
             injectESMShim,
-            stubbedExternals: [...stubbedExternals, externalizedPackage],
+            stubbedExternals: retryStubbedExternals,
           });
-        } catch {
-          // The stub is a bare `export default {}`, so it cannot stand in for every import shape
-          // — a named import of it fails to link, for instance. That tells us nothing about the
-          // bundle: this chunk can only be executed with the real package, which is precisely the
-          // package we have decided not to execute. Validation is inconclusive here rather than
-          // failed, so warn and keep going instead of ending the build.
-          logger.warn(
-            `Skipped validating "${file.fileName}": it cannot be executed without "${externalizedPackage}", which is externalized. If the built output misbehaves, check that "${externalizedPackage}" is installed where you deploy it.`,
-          );
+          errorToHandle = null;
+        } catch (retryErr) {
+          if (retryErr instanceof Error && isStubLinkError(retryErr, retryStubbedExternals)) {
+            // The stub is a bare `export default {}`, so it cannot stand in for every import shape
+            // — a named import of it fails to link. That tells us nothing about the bundle: this
+            // chunk can only be executed with the real package, which is precisely the package we
+            // have decided not to execute. Validation is inconclusive here rather than failed, so
+            // warn and keep going instead of ending the build.
+            logger.warn(
+              `Skipped validating "${file.fileName}": it cannot be executed without "${externalizedPackage}", which is externalized. If the built output misbehaves, check that "${externalizedPackage}" is installed where you deploy it.`,
+            );
+            errorToHandle = null;
+          } else {
+            // Anything else is about the bundle, not the stub: either the next externalized package
+            // (the next pass stubs it) or a genuine defect, which still has to fail the build with
+            // the usual guidance.
+            errorToHandle = retryErr;
+          }
         }
       }
     }
