@@ -19297,8 +19297,8 @@ export type GetEditorWorkflowBuilderSettings_Response = {
     | {
         active: boolean;
         pickerVisible?: boolean | undefined;
-        allowed?: Shared_Type_153[] | undefined;
-        default?: Shared_Type_154 | undefined;
+        allowed?: Shared_Type_151[] | undefined;
+        default?: Shared_Type_152 | undefined;
       }
     | undefined;
 };
