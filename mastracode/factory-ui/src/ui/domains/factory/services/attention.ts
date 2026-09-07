@@ -1,3 +1,4 @@
+import type { FactoryHealthRepair } from '@mastra/factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
 import { requestJson } from './request';
@@ -29,6 +30,13 @@ export interface FactoryAutomationFailedAttentionItem extends FactoryAttentionIt
   canRetry: boolean;
 }
 
+/** A run parked for approval: the lane composed it, nobody has released it yet. */
+export interface FactoryAutomationProposedAttentionItem extends FactoryAttentionItemBase {
+  kind: 'automation-proposed';
+  decisionId: string;
+  decisionType: string;
+}
+
 export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
   kind: 'mention';
   commentId: string;
@@ -45,14 +53,25 @@ export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
+export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionItemBase {
+  kind: 'supervisor-finding';
+  findingKey: string;
+  findingTitle: string;
+  evidence: string;
+  ageMs: number | null;
+  suggestedRepair: FactoryHealthRepair | null;
+}
+
 export type FactoryAttentionItem =
   | FactoryAutomationFailedAttentionItem
+  | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
-  | FactoryActivityAttentionItem;
+  | FactoryActivityAttentionItem
+  | FactorySupervisorFindingAttentionItem;
 
-/** A failed automation has no author; the other two tiers carry the person who wrote the comment. */
+/** Automated attention items have no author; comment-driven tiers carry the person who wrote the comment. */
 export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
-  return item.kind === 'automation-failed' ? undefined : item.authorName;
+  return item.kind === 'mention' || item.kind === 'activity' ? item.authorName : undefined;
 }
 
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
@@ -62,14 +81,16 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
     case 'activity':
       return item.workItemId;
     case 'automation-failed':
+    case 'automation-proposed':
       return item.decisionId;
+    case 'supervisor-finding':
+      return item.findingKey;
   }
 }
 
 export interface FactoryAttentionResponse {
   items: FactoryAttentionItem[];
   openCount: number;
-  approvalCount: number;
   badgeCount: number;
   unreadCount: number;
   /** Counted apart: the activity tier never reaches the sidebar badge. */

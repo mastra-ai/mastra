@@ -41,8 +41,12 @@ export class FileService {
 
   public getFirstExistingFile(files: string[]): string {
     for (const f of files) {
-      if (fs.existsSync(f)) {
-        return f;
+      try {
+        if (fs.statSync(f).isFile()) {
+          return f;
+        }
+      } catch {
+        continue;
       }
     }
 
@@ -58,7 +62,7 @@ export class FileService {
   }) {
     let fileContent = fs.readFileSync(filePath, 'utf8');
     replacements.forEach(({ search, replace }) => {
-      fileContent = fileContent.replaceAll(search, replace);
+      fileContent = fileContent.replaceAll(search, () => replace);
     });
 
     fs.writeFileSync(filePath, fileContent);

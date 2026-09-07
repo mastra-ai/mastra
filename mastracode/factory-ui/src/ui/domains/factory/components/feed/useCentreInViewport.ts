@@ -9,7 +9,7 @@ import type { RefObject } from 'react';
 export function useCentreInViewport(viewportRef: RefObject<HTMLDivElement | null>) {
   const centred = useRef<HTMLElement | undefined>(undefined);
 
-  return (row: HTMLDivElement | null) => {
+  return (row: HTMLElement | null) => {
     const viewport = viewportRef.current;
     if (!row || !viewport || centred.current === row) return;
     centred.current = row;

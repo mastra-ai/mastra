@@ -49,7 +49,7 @@ function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { t
 export const NoTracesInfo = ({ datePreset, dateFrom, dateTo }: NoTracesInfoProps = {}) => {
   const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex h-full items-center-safe justify-center-safe">
       <EmptyState iconSlot={<CircleSlashIcon />} titleSlot={title} descriptionSlot={description} />
     </div>
   );

@@ -81,6 +81,19 @@ export interface PlatformRepoTemplateOptions {
 
 export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder | undefined>;
 
+/** Last default-branch head resolved per clone URL, shared across resolvers in this process. */
+const lastKnownHeads = new Map<string, string>();
+const MAX_LAST_KNOWN_HEADS = 1000;
+
+function rememberHead(cloneUrl: string, sha: string): void {
+  // Re-insert so the map stays in recency order and the oldest URL is evicted first.
+  lastKnownHeads.delete(cloneUrl);
+  lastKnownHeads.set(cloneUrl, sha);
+  if (lastKnownHeads.size > MAX_LAST_KNOWN_HEADS) {
+    lastKnownHeads.delete(lastKnownHeads.keys().next().value!);
+  }
+}
+
 /**
  * Create a lazy repository template definition for PlatformSandbox, mirroring
  * `@mastra/e2b`'s `createRepoTemplate`: pass the sandbox context through and a
@@ -91,8 +104,10 @@ export type PlatformRepoTemplateResolver = () => Promise<SandboxTemplateBuilder 
  * what gets cloned and what the template is identified by can't drift — and
  * pins repositories to their current default-branch commit. Private repository
  * credentials are used for head resolution and sent to the provider as
- * transient build envs; they never enter the serialized definition. If the
- * repository or its head cannot be resolved, the resolver keeps `cpuCount` and
+ * transient build envs; they never enter the serialized definition. A failed
+ * head lookup reuses the last head resolved for the same clone URL in this
+ * process. If the repository cannot be resolved, or no head has been resolved
+ * yet, the resolver keeps `cpuCount` and
  * `memoryMB` in a resources-only template so the sandbox still boots at the
  * requested size, and the caller's runtime setup materializes the checkout.
  */
@@ -131,17 +146,34 @@ export function createRepoTemplate(options: PlatformRepoTemplateOptions): Platfo
 
     const token = access.authorization?.token;
     let headError: unknown;
-    const sha = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
+    const resolved = await (token ? resolveHead(cloneUrl, token) : resolveHead(cloneUrl)).catch(error => {
       headError = error;
       return undefined;
     });
-    if (!sha || !SHA_PATTERN.test(sha)) {
-      console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+    let sha: string;
+    if (resolved && SHA_PATTERN.test(resolved)) {
+      sha = resolved;
+      rememberHead(cloneUrl, sha);
+    } else {
+      // A transient lookup failure (rate limit, timeout) must not drop the
+      // repo steps: an older pin still boots a warm family image, and the
+      // caller's checkout fetches the current tip regardless of the pin.
+      const lastKnown = lastKnownHeads.get(cloneUrl);
+      if (!lastKnown) {
+        console.warn('[platform-workspace] repo template skipped: could not resolve default-branch head', {
+          cloneUrl,
+          sha: resolved,
+          error: redactSecrets(headError),
+        });
+        return resourcesOnly();
+      }
+      console.warn('[platform-workspace] repo template pinned to the last known default-branch head', {
         cloneUrl,
-        sha,
+        sha: lastKnown,
+        resolved,
         error: redactSecrets(headError),
       });
-      return resourcesOnly();
+      sha = lastKnown;
     }
 
     const workingDirectory =

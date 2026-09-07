@@ -1,15 +1,21 @@
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { InMemoryDB, InMemoryKnowledgeStorage, InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-inspector.js';
+import { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
-const orgScope = ['org:owner-1'];
-const resourceScope = ['org:owner-1', 'resource:project-1'];
-const threadScope = ['org:owner-1', 'resource:project-1', 'thread:thread-1'];
+// TUI/studio sessions curate under the fixed local org rung (see knowledge-scope.ts);
+// the inspector must read the same rung.
+const LOCAL_ORG = LOCAL_KNOWLEDGE_ORG_ID;
+const orgScope = [`org:${LOCAL_ORG}`];
+const resourceScope = [...orgScope, 'resource:project-1'];
+const threadScope = [...resourceScope, 'thread:thread-1'];
 
-function createSessionHarness() {
+function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
+  let state = initialState;
   let resourceId = 'project-1';
   let threadId: string | null = 'thread-1';
   const threadResources = new Map([
@@ -20,8 +26,10 @@ function createSessionHarness() {
   const listeners = new Set<(event: AgentControllerEvent) => void>();
   const session = {
     identity: {
-      getOwnerId: () => 'owner-1',
       getResourceId: () => resourceId,
+    },
+    state: {
+      get: () => state,
     },
     thread: {
       getId: () => threadId,
@@ -48,6 +56,9 @@ function createSessionHarness() {
     setResourceId(value: string) {
       resourceId = value;
     },
+    setState(value: Partial<MastraCodeState>) {
+      state = value;
+    },
     setThreadId(value: string | null) {
       threadId = value;
     },
@@ -57,10 +68,10 @@ function createSessionHarness() {
   };
 }
 
-async function createHarness() {
+async function createHarness(state: Partial<MastraCodeState> = {}) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
-  const session = createSessionHarness();
+  const session = createSessionHarness(state);
   const inspector = await createKnowledgeInspector({ storage, session: session.session });
   if (!inspector) throw new Error('Expected knowledge inspector');
   return { knowledge, storage, inspector, session };
@@ -80,24 +91,24 @@ describe('KnowledgeInspector', () => {
     await harness.knowledge.createNode({
       name: 'Sibling thread node',
       kind: 'note',
-      scope: ['org:owner-1', 'resource:project-1', 'thread:thread-2'],
+      scope: [...resourceScope, 'thread:thread-2'],
     });
     await harness.knowledge.createNode({
       name: 'Foreign node',
       kind: 'secret',
-      scope: ['org:owner-1', 'resource:other-project'],
+      scope: [...orgScope, 'resource:other-project'],
     });
 
     const tree = await harness.inspector.getScopeTree();
     expect(tree).toMatchObject({
       defaultLevel: 'resource',
       roots: [
-        { level: 'org', id: 'owner-1', available: true },
+        { level: 'org', id: LOCAL_ORG, available: true },
         { level: 'resource', id: 'project-1', available: true },
         { level: 'thread', id: 'thread-1', available: true },
       ],
     });
-    expect(tree.identityKey).not.toContain('owner-1');
+    expect(tree.identityKey).not.toContain(LOCAL_ORG);
 
     await expect(harness.inspector.listNodes({ level: 'org' })).resolves.toMatchObject({
       nodes: [{ name: 'Org node' }],
@@ -315,7 +326,7 @@ describe('KnowledgeInspector', () => {
     await harness.knowledge.updateNode({
       id: node.id,
       version: node.version,
-      scope: ['org:owner-1', 'resource:other-project'],
+      scope: [...orgScope, 'resource:other-project'],
     });
 
     await expect(harness.inspector.getNode({ handle })).rejects.toBeInstanceOf(KnowledgeInspectorError);
@@ -385,6 +396,115 @@ describe('KnowledgeInspector', () => {
     releaseRead();
 
     await expect(pending).rejects.toMatchObject({ code: 'stale-handle' });
+  });
+
+  it('reads the same org rung the subconscious writes instead of the session owner id', async () => {
+    // Regression: the inspector keyed the org rung on the session owner id
+    // (`mastracode-<hash>`), a scope nothing ever writes to, so /knowledge showed
+    // nothing even though curation had populated `org:local`.
+    await harness.knowledge.createNode({ name: 'Curated', kind: 'concept', scope: orgScope });
+    await harness.knowledge.createNode({ name: 'Orphaned', kind: 'concept', scope: ['org:owner-1'] });
+
+    await expect(harness.inspector.listNodes({ level: 'org' })).resolves.toMatchObject({
+      nodes: [{ name: 'Curated' }],
+    });
+    await expect(harness.inspector.listNodes({ level: 'resource' })).resolves.toMatchObject({
+      nodes: [{ name: 'Curated' }],
+    });
+  });
+
+  it('anchors Factory sessions on the seeded org and project ids', async () => {
+    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
+    await factory.knowledge.createNode({ name: 'Org node', kind: 'concept', scope: ['org:org-42'] });
+    await factory.knowledge.createNode({
+      name: 'Project node',
+      kind: 'project',
+      scope: ['org:org-42', 'resource:proj-7'],
+    });
+    await factory.knowledge.createNode({ name: 'Local node', kind: 'concept', scope: orgScope });
+
+    await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
+      roots: expect.arrayContaining([
+        { level: 'org', id: 'org-42', available: true },
+        { level: 'resource', id: 'proj-7', available: true },
+      ]),
+    });
+    await expect(factory.inspector.listNodes({ level: 'resource' })).resolves.toMatchObject({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ name: 'Org node' }),
+        expect.objectContaining({ name: 'Project node' }),
+      ]),
+    });
+    const names = (await factory.inspector.listNodes({ level: 'resource' })).nodes.map(node => node.name);
+    expect(names).not.toContain('Local node');
+
+    // The thread rung stays the raw thread id even though the resource rung is
+    // the project id, matching how the memory package composes thread scopes.
+    await factory.knowledge.createNode({
+      name: 'Thread node',
+      kind: 'note',
+      scope: ['org:org-42', 'resource:proj-7', 'thread:thread-1'],
+    });
+    await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
+      nodes: expect.arrayContaining([expect.objectContaining({ name: 'Thread node' })]),
+    });
+  });
+
+  it('rotates handles and cursors when the org is seeded mid-session', async () => {
+    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
+    await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
+
+    factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-42' });
+    await factory.knowledge.createNode({ name: 'Seeded', kind: 'concept', scope: ['org:org-42'] });
+    await factory.knowledge.createNode({ name: 'Seeded too', kind: 'concept', scope: ['org:org-42'] });
+    const first = await factory.inspector.listNodes({ level: 'org', limit: 1 });
+    expect(first.nodes).toHaveLength(1);
+    expect(first.nextCursor).toBeDefined();
+    const handle = first.nodes[0]!.handle;
+    await expect(factory.inspector.getNode({ handle })).resolves.toMatchObject({
+      node: { name: first.nodes[0]!.name },
+    });
+    const page2 = await factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 });
+    expect(page2.nodes).toHaveLength(1);
+    expect(page2.nodes[0]!.name).not.toBe(first.nodes[0]!.name);
+
+    factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-99' });
+    await expect(factory.inspector.getNode({ handle })).rejects.toMatchObject({ code: 'invalid-handle' });
+    await expect(
+      factory.inspector.listNodes({ level: 'org', cursor: first.nextCursor, limit: 1 }),
+    ).rejects.toMatchObject({ code: 'invalid-cursor' });
+    const second = await factory.inspector.listNodes({ level: 'org' });
+    expect(second.identityKey).not.toBe(first.identityKey);
+    expect(second.nodes).toEqual([]);
+  });
+
+  it('validates thread ownership against the session resource while reading under the Factory project', async () => {
+    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
+    // The session's own resource id (`project-1`) differs from the Factory
+    // project id; the active thread belongs to the session resource, not to
+    // `proj-7`, and must still be accepted as this session's thread rung.
+    expect(factory.session.session.identity.getResourceId()).not.toBe('proj-7');
+    await factory.knowledge.createNode({
+      name: 'Thread node',
+      kind: 'note',
+      scope: ['org:org-42', 'resource:proj-7', 'thread:thread-1'],
+    });
+
+    await expect(factory.inspector.getScopeTree()).resolves.toMatchObject({
+      roots: expect.arrayContaining([
+        { level: 'resource', id: 'proj-7', available: true },
+        { level: 'thread', id: 'thread-1', available: true },
+      ]),
+    });
+    await expect(factory.inspector.listNodes({ level: 'thread' })).resolves.toMatchObject({
+      nodes: [expect.objectContaining({ name: 'Thread node' })],
+    });
+  });
+
+  it('fails closed when a Factory-owned session has no resolved org', async () => {
+    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
+    await expect(factory.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
+    await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
   it('returns no capability when the composite has no knowledge domain', async () => {

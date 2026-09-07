@@ -287,7 +287,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
-  it('hands review feedback to the factory rules so the authoring agent is woken', async () => {
+  it('forwards created PR comments to Factory rules but never retriggers from edits', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,

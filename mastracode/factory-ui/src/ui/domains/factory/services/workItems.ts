@@ -179,6 +179,8 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
+  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
+  plansPreapproved?: true;
 }
 
 /**
@@ -221,7 +223,15 @@ export async function transitionWorkItem(
   baseUrl: string,
   githubProjectId: string,
   id: string,
-  input: { board: FactoryBoard; stage: FactoryRuleStage; expectedRevision: number; requestId: string; cause: string },
+  input: {
+    board: FactoryBoard;
+    stage: FactoryRuleStage;
+    expectedRevision: number;
+    requestId: string;
+    cause: string;
+    /** Re-enter the lane the card is already in, so its rule runs again. */
+    reenter?: boolean;
+  },
 ): Promise<FactoryTransitionResult> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
@@ -249,14 +259,9 @@ export async function updateWorkItem(baseUrl: string, id: string, patch: UpdateW
 export interface StartFactoryRunRequest {
   sessionId: string;
   threadTitle: string;
-  threadTags?: Record<string, string>;
   kickoffKey: string;
-  invocation?: { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
-  /** Hands-off run: the dispatcher approves this item's parked plans on the starter's behalf. */
-  preapprovePlans?: boolean;
-  destinationStage: FactoryRuleStage;
   workItem: {
-    id?: string;
+    id: string;
     role: string;
     input: CreateWorkItemInput;
   };

@@ -1,12 +1,17 @@
-import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
+import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
+  type CommentVariant,
   CommentComposer,
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
+  CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
+  CommentItemContent,
   CommentItemHeader,
   CommentItemTimestamp,
   CommentList,
@@ -15,6 +20,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
+
 type FeedbackThreadProps = {
   feedbackData?: ListFeedbackResponse | null;
   isLoadingFeedbackData?: boolean;
@@ -22,13 +29,63 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
+  /**
+   * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
+   * `embed` renders a compact card suitable for inline use.
+   */
+  variant?: CommentVariant;
 };
 
-function formatBody(fb: FeedbackRecord): string {
+function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
   if (text) return text;
   if (fb.feedbackType === 'thumbs') return fb.value === 1 ? '\u{1F44D}' : '\u{1F44E}';
   return String(fb.value ?? '');
+}
+
+function FeedbackItems({ variant, items }: { variant: CommentVariant; items: FeedbackItem[] }) {
+  const rows = items.map((fb, index) => {
+    const ts = new Date(fb.timestamp);
+    const author = feedbackAuthorLabel(fb);
+    const avatar = author ? <Avatar name={author} src={fb.author?.avatarUrl} size="sm" /> : null;
+    const name = author && <CommentItemAuthor>{author}</CommentItemAuthor>;
+    const timestamp = (
+      <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
+    );
+    const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
+    const key = `${fb.traceId}-${index}`;
+
+    // The thread variant lays the row out as avatar gutter + content column.
+    if (variant === 'thread') {
+      return (
+        <CommentItem key={key}>
+          <CommentItemAvatar>{avatar}</CommentItemAvatar>
+          <CommentItemContent>
+            <CommentItemHeader>
+              {name}
+              {timestamp}
+            </CommentItemHeader>
+            {body}
+          </CommentItemContent>
+        </CommentItem>
+      );
+    }
+
+    // Stacked variants have no gutter, so the avatar sits inline in the header.
+    return (
+      <CommentItem key={key}>
+        <CommentItemHeader>
+          {avatar}
+          {name}
+          {timestamp}
+        </CommentItemHeader>
+        {body}
+      </CommentItem>
+    );
+  });
+
+  // Thread rows are stream entries rendered as `div`s, not list items.
+  return variant === 'thread' ? <>{rows}</> : <CommentList>{rows}</CommentList>;
 }
 
 /**
@@ -41,6 +98,7 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
+  variant = 'thread',
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -50,7 +108,7 @@ export function FeedbackThread({
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
 
   return (
-    <Comment className="min-h-0 gap-4 px-3">
+    <Comment variant={variant} className="min-h-0 gap-4 px-3">
       <div className="min-h-0 overflow-y-auto">
         {isLoadingFeedbackData ? (
           <Txt variant="ui-md" className="text-neutral3">
@@ -61,21 +119,7 @@ export function FeedbackThread({
             No feedback yet
           </Txt>
         ) : (
-          <CommentList>
-            {feedbackItems.map((fb, index) => {
-              const ts = new Date(fb.timestamp);
-              return (
-                <CommentItem key={`${fb.traceId}-${index}`}>
-                  <CommentItemHeader>
-                    <CommentItemTimestamp dateTime={ts.toISOString()}>
-                      {format(ts, 'MMM d, h:mm:ss aaa')}
-                    </CommentItemTimestamp>
-                  </CommentItemHeader>
-                  <CommentItemBody>{formatBody(fb)}</CommentItemBody>
-                </CommentItem>
-              );
-            })}
-          </CommentList>
+          <FeedbackItems variant={variant} items={feedbackItems} />
         )}
       </div>
 

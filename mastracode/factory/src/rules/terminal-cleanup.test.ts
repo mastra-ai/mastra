@@ -73,6 +73,25 @@ describe('createTerminalStageCleanup', () => {
     ]);
   });
 
+  it('does not revoke a re-entered card after terminal cleanup becomes stale', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBinding(storage);
+    const releaseSandboxes = vi.fn();
+    const cleanup = createTerminalStageCleanup({ workItems: storage, releaseSandboxes });
+
+    await cleanup({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      revision: prepared.item.revision + 1,
+    });
+
+    await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+      expect.objectContaining({ id: prepared.binding.id, status: 'active' }),
+    ]);
+    expect(releaseSandboxes).not.toHaveBeenCalled();
+  });
+
   it('skips reconcile for bindings that are already revoked', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
@@ -206,6 +225,7 @@ describe('createTerminalStageCleanup', () => {
     const releaseSandboxes = vi.fn(async () => {});
     const cleanup = createTerminalStageCleanup({
       workItems: {
+        get: vi.fn().mockResolvedValue({ revision: 1 }),
         listRunBindings: vi.fn().mockRejectedValue(new Error('storage down')),
         revokeRunBindingsForWorkItem: vi.fn(),
         supersedeTerminalDecisionsForWorkItem: vi.fn().mockRejectedValue(new Error('storage down')),

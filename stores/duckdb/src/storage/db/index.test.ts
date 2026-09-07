@@ -3,6 +3,62 @@ import { describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from './index';
 
 describe('DuckDBConnection', () => {
+  describe('executeTransaction', () => {
+    it('commits parameterized statements using one DuckDB connection', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+      const getConnectionSpy = vi.spyOn(db, 'getConnection');
+
+      try {
+        await db.execute('CREATE TABLE transaction_rows (id INTEGER)');
+        getConnectionSpy.mockClear();
+
+        await db.executeTransaction([
+          { sql: 'INSERT INTO transaction_rows VALUES (?)', params: [1] },
+          { sql: 'INSERT INTO transaction_rows VALUES (?)', params: [2] },
+        ]);
+
+        expect(getConnectionSpy).toHaveBeenCalledTimes(1);
+        await expect(db.query<{ id: number }>('SELECT id FROM transaction_rows ORDER BY id')).resolves.toEqual([
+          { id: 1 },
+          { id: 2 },
+        ]);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('rolls back every statement when one fails', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+
+      try {
+        await db.execute('CREATE TABLE transaction_rollback (id INTEGER PRIMARY KEY)');
+
+        await expect(
+          db.executeTransaction([
+            { sql: 'INSERT INTO transaction_rollback VALUES (?)', params: [1] },
+            { sql: 'INSERT INTO transaction_rollback VALUES (?)', params: [1] },
+          ]),
+        ).rejects.toThrow();
+
+        await expect(db.query('SELECT * FROM transaction_rollback')).resolves.toEqual([]);
+      } finally {
+        await db.close();
+      }
+    });
+
+    it('skips an empty transaction without opening a connection', async () => {
+      const db = new DuckDBConnection({ path: ':memory:' });
+      const getConnectionSpy = vi.spyOn(db, 'getConnection');
+
+      try {
+        await db.executeTransaction([]);
+        expect(getConnectionSpy).not.toHaveBeenCalled();
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
   describe('executeBatch', () => {
     it('executes multiple statements with one DuckDB connection', async () => {
       const db = new DuckDBConnection({ path: ':memory:' });

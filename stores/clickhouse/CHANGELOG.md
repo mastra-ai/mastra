@@ -1,5 +1,31 @@
 # @mastra/clickhouse
 
+## 1.17.0-alpha.1
+
+### Patch Changes
+
+- Improved `batchDeleteTraces()` with a durable deletion request and synchronous lightweight delete masking across trace branches, metrics, logs, scores, and feedback. Physical removal follows the deployment's configured retention TTL and merge policy. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+  ```ts
+  await observabilityStore.batchDeleteTraces({ traceIds: ['trace-123'] });
+  ```
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
+## 1.17.0-alpha.0
+
+### Minor Changes
+
+- Added schema-neutral advanced trace-query execution over ClickHouse's existing completion-only observability tables. ([#22727](https://github.com/mastra-ai/mastra/pull/22727))
+
+  Trace queries read from the historical-complete root table, deduplicate completed deliveries by the existing `dedupeKey`, reconstruct each referenced relation once within the bounded root scope, fail closed on unsupported order fields, and enforce a configurable 15-second execution timeout. This feature requires no schema, table-engine, or data migration.
+
+### Patch Changes
+
+- Updated dependencies [[`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771)]:
+  - @mastra/core@1.65.0-alpha.2
+
 ## 1.16.1
 
 ### Patch Changes

@@ -1,9 +1,9 @@
 ---
-title: "Subagents"
-description: "Build Mastra supervisor agents that delegate work to specialized subagents with hooks, request context, message filtering, and completion scoring."
+title: 'Subagents'
+description: 'Build Mastra supervisor agents that delegate work to specialized subagents with hooks, request context, message filtering, and completion scoring.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Subagents
@@ -150,7 +150,7 @@ Called after a delegation finishes. Use it to inspect results or provide feedbac
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the parent agent's memory and is visible to subsequent iterations
 - Return `{ resultText: '...' }`: Replace the tool result text the parent model sees for this delegation, within the current run
 
-Set `resultText` when the subagent's own result would give the parent a misleading signal. For example, empty text from a subagent stopped on a tool-calls step looks like a successful but empty delegation to the parent model. Unlike `feedback` on the next turn, `resultText` affects the parent's reasoning immediately.
+Set `resultText` when the subagent's own result would give the parent a misleading signal. For example, empty text from a subagent stopped on a tool-calls step looks like a successful but empty delegation to the parent model. You can also replace the error text from a failed delegation with a more useful message. This doesn't recover the delegation. The parent still receives a failed tool result. Unlike `feedback` on the next turn, `resultText` affects the parent's reasoning immediately.
 
 ```typescript title="src/mastra/agents/parent-agent.ts"
 const stream = await parentAgent.stream('Research AI trends', {

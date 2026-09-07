@@ -2,9 +2,9 @@
  * Linear tools exposed to the coding agent.
  *
  * Wired into the agent through the SDK's async `extraTools` provider: on each
- * tool-set resolution we map the session's resourceId (the factory project id)
- * to its owning org and only expose the Linear tools when that org has a
- * Linear connection. Projects whose org never connected Linear (or when the
+ * tool-set resolution we map the session's factory project to its owning org
+ * and only expose the Linear tools when that org has a Linear connection.
+ * Projects whose org never connected Linear (or when the
  * feature is disabled) see no Linear tools at all — the model is never shown
  * tools it can't use.
  *
@@ -108,11 +108,17 @@ export async function buildLinearAgentTools({
 }): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
   if (!linear.authEnabled) return {};
 
-  const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  const resourceId = ctx?.resourceId;
-  if (!resourceId) return {};
+  const ctx = requestContext.get('controller') as
+    | AgentControllerRequestContext<{ factoryProjectId?: string }>
+    | undefined;
+  if (!ctx) return {};
 
-  const orgId = await linear.resolveOrgId(resourceId);
+  // Board-run resourceId is the work-item session id, not the project id stored
+  // in factory_projects. Project-scoped sessions may not carry factoryProjectId.
+  const projectId = ctx.getState().factoryProjectId ?? ctx.resourceId;
+  if (!projectId) return {};
+
+  const orgId = await linear.resolveOrgId(projectId);
   if (!orgId) return {};
   const check = await linear.checkConnection(orgId);
   if (!check.connected) return {};

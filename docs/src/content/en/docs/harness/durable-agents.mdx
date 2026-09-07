@@ -253,6 +253,8 @@ await durableAgent.resume(runId, { approved: true })
 
 If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys). On the next server start you can re-drive these orphaned runs so they pick up where they left off.
 
+Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
+
 ### Automatic recovery
 
 Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, right after restarting active workflow runs:

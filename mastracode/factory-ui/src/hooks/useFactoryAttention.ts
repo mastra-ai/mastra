@@ -18,6 +18,9 @@ import type {
 /** The badge's standing safety net, and the page's fallback while its stream is down. */
 export const ATTENTION_POLL_MS = 5_000;
 
+/** How deep a preview reaches before the inbox page takes over. Shared, so the sidebar and the Overview share one cached query. */
+export const ATTENTION_PREVIEW_LIMIT = 25;
+
 export function useFactoryAttention(
   factoryProjectId: string | undefined,
   view: FactoryAttentionView,
