@@ -1,6 +1,7 @@
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CloudflareDeployer } from './index.js';
@@ -190,6 +191,72 @@ describe('CloudflareDeployer', () => {
 
         expect(wranglerConfig.alias['readable-stream']).toBe('./custom-stream.js');
       });
+    });
+  });
+
+  describe('getEntry', () => {
+    type Counters = { mastra: number; server: number };
+
+    const stubModule = (body: string) => `data:text/javascript,${encodeURIComponent(body).replaceAll("'", '%27')}`;
+
+    // Turns the generated entry into a runnable module by swapping the
+    // bundler-provided virtual imports for inline stubs that count calls.
+    async function loadEntry(entry: string, mastraFactoryBody: string): Promise<{ fetch: Function }> {
+      const runnable = entry
+        .replace(`import '#polyfills';`, '')
+        .replace(
+          `import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';`,
+          'const scoreTracesWorkflow = {};',
+        )
+        .replaceAll(`'#mastra'`, `'${stubModule(`export const mastra = () => { ${mastraFactoryBody} };`)}'`)
+        .replaceAll(`'#tools'`, `'${stubModule('export const tools = {};')}'`)
+        .replaceAll(
+          `'#server'`,
+          `'${stubModule(
+            'export const createHonoServer = async () => { globalThis.__entryCounters.server++; return { fetch: async () => new Response("ok") }; }; export const getToolExports = (t) => t;',
+          )}'`,
+        );
+
+      const entryFile = join(tempDir, `entry-${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`);
+      await writeFile(entryFile, runnable);
+      const mod = await import(pathToFileURL(entryFile).href);
+      return mod.default;
+    }
+
+    beforeEach(() => {
+      (globalThis as { __entryCounters?: Counters }).__entryCounters = { mastra: 0, server: 0 };
+    });
+
+    it('constructs the Mastra app once per isolate instead of once per request', async () => {
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+
+      // @ts-expect-error - accessing private method for testing
+      const handler = await loadEntry(
+        deployer.getEntry(),
+        'globalThis.__entryCounters.mastra++; return { getStorage: () => null };',
+      );
+
+      await handler.fetch(new Request('http://localhost/a'), {}, {});
+      await handler.fetch(new Request('http://localhost/b'), {}, {});
+
+      const counters = (globalThis as { __entryCounters?: Counters }).__entryCounters!;
+      expect(counters.mastra).toBe(1);
+      expect(counters.server).toBe(1);
+    });
+
+    it('retries construction on the next request when the first one fails', async () => {
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+
+      // @ts-expect-error - accessing private method for testing
+      const handler = await loadEntry(
+        deployer.getEntry(),
+        'globalThis.__entryCounters.mastra++; if (globalThis.__entryCounters.mastra === 1) { throw new Error("transient"); } return { getStorage: () => null };',
+      );
+
+      await expect(handler.fetch(new Request('http://localhost/a'), {}, {})).rejects.toThrow('transient');
+
+      const response = (await handler.fetch(new Request('http://localhost/b'), {}, {})) as Response;
+      expect(await response.text()).toBe('ok');
     });
   });
 });
