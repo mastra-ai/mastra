@@ -16,4 +16,4 @@ phases: {
 }
 ```
 
-Decision and tool-input validation still accept only built-in board IDs and phase names, and `factory-ui` still renders the built-in pipeline.
+Decision and tool-input validation still accept only built-in board IDs and phase names; the exported built-in stage and role constants are unchanged.
