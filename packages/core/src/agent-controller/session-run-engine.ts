@@ -726,7 +726,7 @@ export class SessionRunEngine {
           // display state shows the denied result instead of a call stuck
           // mid-flight.
           this.settleToolCallAsDenied(state, { toolCallId, toolName, args: toolArgs });
-          this.#session.completeDeferredAbort();
+          await this.#session.completeDeferredAbort();
         }
         break;
       }
