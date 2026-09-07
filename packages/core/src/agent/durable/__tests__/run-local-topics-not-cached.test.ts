@@ -2,6 +2,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
+import { CachingPubSub } from '../../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { Agent } from '../../agent';
@@ -94,5 +96,56 @@ describe('durable/evented agent — run-local topics are never written to the ca
     expect(writes.length).toBeGreaterThan(0);
     const history = await agent.pubsub.getHistory(topic);
     expect(history.map(e => (e.data as { c: string }).c)).toEqual(['0', '1']);
+  });
+
+  describe('when mastra.pubsub is already a CachingPubSub (reused, not double-wrapped — #18148)', () => {
+    // In this configuration the user's CachingPubSub sits *below* the
+    // `mastra.pubsub` proxy, so the proxy's `localOnly` tag *is* visible to it
+    // and the built-in bypass applies. No agent-level `shouldCache` is needed.
+    function makeReusedAgent(id: string) {
+      const writes: string[] = [];
+      const cache = new InMemoryServerCache();
+      const listPushIndexed = cache.listPushIndexed.bind(cache);
+      cache.listPushIndexed = async (listKey: string, counterKey: string, value: any) => {
+        writes.push(listKey);
+        return listPushIndexed(listKey, counterKey, value);
+      };
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+
+      const agent = createEventedAgent({
+        agent: new Agent({ id, name: id, instructions: 'test', model: makeMockModel() }),
+      });
+      const mastra = new Mastra({ pubsub, cache, agents: { [id]: agent as any } });
+      void mastra;
+
+      return { agent, writes };
+    }
+
+    it('does not write workflow.events.v2.* events to the cache', async () => {
+      const { agent, writes } = makeReusedAgent('reused-run-local-agent');
+      const topic = `workflow.events.v2.run-4`;
+      const received: Event[] = [];
+
+      await agent.pubsub.subscribe(topic, event => {
+        received.push(event);
+      });
+      await agent.pubsub.publish(topic, { type: 'watch', runId: 'run-4', data: { big: 'payload' } });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(received.map(event => event.type)).toEqual(['watch']);
+      expect(writes).toEqual([]);
+      expect(await agent.pubsub.getHistory(topic)).toHaveLength(0);
+    });
+
+    it('still caches agent stream events', async () => {
+      const { agent, writes } = makeReusedAgent('reused-run-local-agent-2');
+      const topic = AGENT_STREAM_TOPIC('run-5');
+
+      await agent.pubsub.publish(topic, { type: 'chunk', runId: 'run-5', data: { c: '0' } });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(writes).toHaveLength(1);
+      expect(await agent.pubsub.getHistory(topic)).toHaveLength(1);
+    });
   });
 });
