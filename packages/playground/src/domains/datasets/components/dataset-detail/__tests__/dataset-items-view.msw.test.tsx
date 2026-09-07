@@ -32,6 +32,7 @@ function renderView() {
           datasetId={DATASET_ID}
           leftSlot={<span>left slot</span>}
           rightSlot={<span>right slot</span>}
+          belowToolbarSlot={<span>below toolbar slot</span>}
         />
       </DatasetItemPanelProvider>
     </TestLinkProvider>,
@@ -63,6 +64,17 @@ describe('DatasetItemsView', () => {
     const left = within(toolbar).getByText('left slot');
     const addItem = within(toolbar).getByRole('button', { name: /add item/i });
     expect(left.compareDocumentPosition(addItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders the below-toolbar slot on its own row, after the toolbar and before the items', async () => {
+    renderView();
+    const firstItem = await screen.findByText('item-a');
+
+    const toolbar = screen.getByTestId('dataset-items-toolbar');
+    const below = screen.getByText('below toolbar slot');
+    expect(toolbar.contains(below)).toBe(false);
+    expect(toolbar.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(below.compareDocumentPosition(firstItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('does not own the "View experiments" action (it lives in the page header)', async () => {

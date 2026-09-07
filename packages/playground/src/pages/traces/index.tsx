@@ -53,7 +53,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const url = useTraceUrlState(searchParams, setSearchParams);
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -238,10 +241,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     if (url.listMode === 'branches') url.handleListModeChange('traces');
   }, [tracesError, branchesUnsupported, url]);
 
-  const persistence = useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
-
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeFilterTokens(filterFields, url.filterTokens)),
     [filterFields, url],
@@ -367,8 +366,6 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onFilterTokensChange={url.handleFilterTokensChange}
         onClear={handleClear}
         onRemoveAll={url.handleRemoveAll}
-        onSave={persistence.handleSave}
-        onRemoveSaved={persistence.hasSavedFilters ? persistence.handleRemoveSaved : undefined}
         autoFocusFilterFieldId={autoFocusFilterFieldId}
         lockedFieldIds={lockedFieldIds}
         lockedTooltipContent={lockedTooltipContent}

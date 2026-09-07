@@ -46,6 +46,7 @@ export type { DatasetVersionsProps } from './components/dataset-versions';
 export { DatasetHeader } from './components/dataset-detail/dataset-header';
 export type { DatasetHeaderProps } from './components/dataset-detail/dataset-header';
 export { DatasetItemsView } from './components/dataset-detail/dataset-items-view';
+export { DatasetTagsEditor } from './components/dataset-detail/dataset-tags-editor';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
