@@ -13,6 +13,7 @@ import {
   CommentQuote,
 } from '@mastra/playground-ui/components/Comment';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { useMutation } from '@tanstack/react-query';
 import { Link2, Pencil, Quote, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Ref } from 'react';
@@ -84,23 +85,27 @@ function CommentRowEditor({
   const editComment = useEditWorkItemCommentMutation({ workItemId: comment.workItemId, factoryProjectId });
   const resolveMentions = useMentionResolver(factoryProjectId);
 
-  const saveEdit = async (body: string) => {
-    // An unreadable roster omits the field, so the server keeps the mention
-    // rows it already has instead of wiping them.
-    const mentions = await resolveMentions(body);
-    editComment.mutate(
-      { commentId: comment.id, input: { body, expectedRevision: comment.revision, ...(mentions ? { mentions } : {}) } },
-      { onSuccess: onClose },
-    );
-  };
+  // One pending state for the roster wait and the request: the box stays locked from the first Enter.
+  const saveEdit = useMutation({
+    mutationFn: async (body: string) => {
+      // An unreadable roster omits the field, so the server keeps the mention
+      // rows it already has instead of wiping them.
+      const mentions = await resolveMentions(body);
+      return editComment.mutateAsync({
+        commentId: comment.id,
+        input: { body, expectedRevision: comment.revision, ...(mentions ? { mentions } : {}) },
+      });
+    },
+    onSuccess: onClose,
+  });
 
   return (
     <CommentEditor
       initialBody={comment.body}
-      onSave={body => void saveEdit(body)}
+      onSave={body => saveEdit.mutate(body)}
       onClose={onClose}
-      isPending={editComment.isPending}
-      error={editComment.error?.message}
+      isPending={saveEdit.isPending}
+      error={saveEdit.error?.message}
     />
   );
 }

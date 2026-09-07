@@ -14,6 +14,7 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 const ITEM_ID = 'item-1';
+const PROJECT_ID = 'project-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
 
 const item: WorkItem = {
@@ -273,6 +274,40 @@ describe('CommentList', () => {
     await user.click(screen.getByRole('button', { name: 'Saving…' }));
 
     release();
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    expect(patches).toBe(1);
+  });
+
+  it('stays locked while the mention roster loads, so a second Enter sends nothing', async () => {
+    let patches = 0;
+    let releaseRoster = () => {};
+    const roster = new Promise<void>(resolve => {
+      releaseRoster = resolve;
+    });
+    server.use(
+      http.get(COMMENTS_URL, () => HttpResponse.json({ comments: [comment('c1', 'original')] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/mention-roster`, async () => {
+        await roster;
+        return HttpResponse.json({ members: [{ id: 'user-ada', name: 'Ada' }] });
+      }),
+      http.patch(`${COMMENTS_URL}/c1`, () => {
+        patches += 1;
+        return HttpResponse.json({ comment: comment('c1', 'ping @Ada') });
+      }),
+    );
+    const user = userEvent.setup();
+    renderList({ factoryProjectId: PROJECT_ID });
+
+    await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit comment' });
+    await user.clear(editor);
+    await user.type(editor, 'ping @Ada{Enter}');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled());
+    expect(editor).toHaveAttribute('readonly');
+    await user.type(editor, '{Enter}');
+    expect(patches).toBe(0);
+
+    releaseRoster();
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
     expect(patches).toBe(1);
   });

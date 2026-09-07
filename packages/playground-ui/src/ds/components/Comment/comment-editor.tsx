@@ -56,6 +56,7 @@ export function CommentEditor({
           value={draft}
           onChange={event => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
+          readOnly={isPending}
           aria-label={ariaLabel}
           rows={2}
           className="text-neutral6 border-border1 bg-surface2 text-ui-sm focus:border-border2 block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border px-2 pt-1.5 pb-9 outline-none"
