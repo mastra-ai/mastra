@@ -893,7 +893,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.tags === undefined ? null : JSON.stringify(input.tags),
             input.comment !== undefined,
             input.comment ?? null,
-            input.experimentId,
+            ...(input.experimentId ? [input.experimentId] : []),
           ],
         );
       });

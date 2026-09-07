@@ -64,4 +64,58 @@ describe('Spanner dataset purge barrier', () => {
     });
     expect(transaction.runUpdate).toHaveBeenCalledTimes(2);
   });
+
+  it('declares integer parameter types when updating an existing experiment result', async () => {
+    const now = new Date('2026-09-07T00:00:00.000Z');
+    const transaction = createTransaction([
+      [{ datasetId: null }],
+      [
+        {
+          id: 'result-1',
+          experimentId: 'experiment-1',
+          itemId: 'item-1',
+          itemDatasetVersion: 1,
+          organizationId: null,
+          projectId: null,
+          input: null,
+          output: null,
+          groundTruth: null,
+          metadata: null,
+          error: null,
+          startedAt: now,
+          completedAt: now,
+          retryCount: 0,
+          attempt: 0,
+          traceId: null,
+          status: null,
+          tags: null,
+          toolMockReport: null,
+          comment: null,
+          createdAt: now,
+        },
+      ],
+    ]);
+    const database = createDatabase(transaction);
+    const experiments = new ExperimentsSpanner({ database: database as never });
+
+    await experiments.upsertExperimentResult({
+      experimentId: 'experiment-1',
+      itemId: 'item-1',
+      itemDatasetVersion: 1,
+      input: null,
+      output: null,
+      groundTruth: null,
+      error: null,
+      startedAt: now,
+      completedAt: now,
+      retryCount: 2,
+      attempt: 3,
+    });
+
+    expect(transaction.runUpdate.mock.calls[0]?.[0].types).toMatchObject({
+      itemDatasetVersion: 'int64',
+      retryCount: 'int64',
+      attempt: 'int64',
+    });
+  });
 });

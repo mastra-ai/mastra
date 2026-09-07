@@ -637,6 +637,22 @@ describe('DatasetsInMemory', () => {
       );
     });
 
+    it('rejects updates that would restore purged item data', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: dataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_PURGED' });
+      await expect(storage.getItemHistory(item.id)).resolves.toHaveLength(1);
+      await expect(storage.getItemById({ id: item.id })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+    });
+
     it('redacts in-memory experiment result writes submitted after item purge', async () => {
       const experiments = new ExperimentsInMemory({ db });
       const dataset = await storage.createDataset({ name: 'test' });

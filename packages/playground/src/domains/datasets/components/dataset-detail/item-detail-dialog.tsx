@@ -298,7 +298,13 @@ export function ItemDetailDialog({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handlePurgeConfirm} disabled={purgeItem.isPending}>
+            <AlertDialog.Action
+              onClick={event => {
+                event.preventDefault();
+                void handlePurgeConfirm();
+              }}
+              disabled={purgeItem.isPending}
+            >
               {purgeItem.isPending ? 'Purging...' : 'Purge Data'}
             </AlertDialog.Action>
           </AlertDialog.Footer>

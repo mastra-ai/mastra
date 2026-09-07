@@ -742,6 +742,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
             },
             types: {
               itemDatasetVersion: 'int64',
+              retryCount: 'int64',
+              attempt: 'int64',
               organizationId: 'string',
               projectId: 'string',
               input: 'json',

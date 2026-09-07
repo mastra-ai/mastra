@@ -287,6 +287,9 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (currentRow.datasetId !== args.datasetId) {
       throw new Error(`Item ${args.id} does not belong to dataset ${args.datasetId}`);
     }
+    if (currentRow.metadata?.__purged === true) {
+      throw new Error(`Purged dataset item cannot be updated: ${args.id}`);
+    }
 
     const dataset = this.db.datasets.get(args.datasetId);
     if (!dataset) {

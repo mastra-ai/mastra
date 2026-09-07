@@ -198,6 +198,17 @@ export abstract class DatasetsStorage extends StorageDomain {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
 
+    const existing = await this.getItemById({ id: args.id });
+    if (existing?.metadata?.__purged === true) {
+      throw new MastraError({
+        id: 'DATASET_ITEM_PURGED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { datasetId: args.datasetId, itemId: args.id },
+        text: `Purged dataset item cannot be updated: ${args.id}`,
+      });
+    }
+
     const { id: _id, datasetId: _datasetId, filters: _filters, ...payload } = args;
     validateDatasetItemPayloadSerialization(payload, 'item');
 
@@ -245,7 +256,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    */
   async purgeItem(args: PurgeDatasetItemInput): Promise<void> {
     if (args.filters) {
-      const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
+      const dataset = await this.getDatasetForMutation({ id: args.datasetId, filters: args.filters });
       if (!dataset) return;
     }
     return this._doPurgeItem(args);

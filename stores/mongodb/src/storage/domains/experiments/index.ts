@@ -4,7 +4,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   ExperimentsStorage,
   createStorageErrorId,
-  TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
@@ -158,19 +157,23 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     fn: (session: ClientSession | undefined, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
   ): Promise<T> {
     const experiments = await this.getCollection(TABLE_EXPERIMENTS);
-    const datasets = await this.getCollection(TABLE_DATASETS);
     const items = await this.getCollection(TABLE_DATASET_ITEMS);
     return this.#connector.withTransaction(async session => {
       const experiment = await experiments.findOne<{ datasetId?: string | null }>({ id: experimentId }, { session });
       const datasetId = experiment?.datasetId ?? null;
       let purgeMetadata: Record<string, unknown> | null = null;
       if (datasetId) {
-        await datasets.updateOne({ id: datasetId }, { $inc: { purgeBarrierRevision: 1 } }, { session });
-        const purgedItem = await items.findOne<{ metadata?: Record<string, unknown> }>(
-          { id: itemId, datasetId, 'metadata.__purged': true },
-          { projection: { metadata: 1 }, session },
-        );
-        purgeMetadata = purgedItem?.metadata ?? null;
+        const item = (await items.findOneAndUpdate(
+          { id: itemId, datasetId },
+          { $inc: { purgeBarrierRevision: 1 } },
+          {
+            projection: { metadata: 1 },
+            returnDocument: 'after',
+            session,
+            sort: { datasetVersion: -1 },
+          },
+        )) as { metadata?: Record<string, unknown> } | null;
+        purgeMetadata = item?.metadata?.__purged === true ? item.metadata : null;
       }
       return fn(session, purgeMetadata);
     });

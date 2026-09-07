@@ -831,7 +831,6 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           details: { datasetId, itemId: id },
         });
       }
-      const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
       const experimentResultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
@@ -842,8 +841,16 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const metadata = { __purged: true, purgedAt };
 
       await this.#connector.withTransaction(async session => {
-        await datasetsCollection.updateOne({ id: datasetId }, { $inc: { purgeBarrierRevision: 1 } }, { session });
-        const item = await itemsCollection.findOne({ id, datasetId }, { projection: { id: 1 }, session });
+        const item = await itemsCollection.findOneAndUpdate(
+          { id, datasetId },
+          { $inc: { purgeBarrierRevision: 1 } },
+          {
+            projection: { id: 1 },
+            returnDocument: 'after',
+            session,
+            sort: { datasetVersion: -1 },
+          },
+        );
         if (!item) return;
 
         await itemsCollection.updateMany(

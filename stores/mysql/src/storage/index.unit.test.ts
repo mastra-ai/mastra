@@ -313,6 +313,120 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
+  it('creates the effective experiment-result natural key during init', async () => {
+    const store = newStore();
+    const { pool } = poolInstances[poolInstances.length - 1];
+
+    await store.init();
+
+    const statements = pool.execute.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('SET `attempt` = 0 WHERE `attempt` IS NULL'))).toBe(true);
+    expect(
+      statements.some(sql =>
+        sql.includes(
+          'CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt` ON `mastra_experiment_results` (`experimentId`(191), `itemId`(191), `attempt`)',
+        ),
+      ),
+    ).toBe(true);
+
+    await store.close();
+  });
+
+  it('atomically upserts experiment results by experiment, item, and effective attempt', async () => {
+    const store = newStore();
+    const experiments = (await store.getStore('experiments')) as any;
+    const { connection } = poolInstances[poolInstances.length - 1];
+    const now = new Date();
+    connection.execute
+      .mockResolvedValueOnce([[{ datasetId: null }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'existing-result',
+            experimentId: 'e1',
+            itemId: 'i1',
+            itemDatasetVersion: 1,
+            organizationId: null,
+            projectId: null,
+            input: JSON.stringify({ patient: 'Alice' }),
+            output: JSON.stringify({ diagnosis: 'updated' }),
+            groundTruth: null,
+            metadata: null,
+            error: null,
+            startedAt: now,
+            completedAt: now,
+            retryCount: 0,
+            attempt: 0,
+            traceId: null,
+            status: null,
+            tags: null,
+            comment: null,
+            createdAt: now,
+          },
+        ],
+      ]);
+
+    const result = await experiments.upsertExperimentResult({
+      experimentId: 'e1',
+      itemId: 'i1',
+      itemDatasetVersion: 1,
+      input: { patient: 'Alice' },
+      output: { diagnosis: 'updated' },
+      groundTruth: null,
+      error: null,
+      startedAt: now,
+      completedAt: now,
+      retryCount: 0,
+    });
+
+    expect(connection.execute.mock.calls[1]?.[0]).toContain('ON DUPLICATE KEY UPDATE');
+    expect(connection.execute.mock.calls[2]?.[0]).toContain('AND `attempt` = ?');
+    expect(connection.execute.mock.calls[2]?.[1]).toEqual(['e1', 'i1', 0]);
+    expect(result.id).toBe('existing-result');
+    expect(connection.commit).toHaveBeenCalledOnce();
+
+    await store.close();
+  });
+
+  it('preserves the transaction error when the purge barrier rollback fails', async () => {
+    const store = newStore();
+    const experiments = (await store.getStore('experiments')) as any;
+    const { connection } = poolInstances[poolInstances.length - 1];
+    const transactionError = new Error('insert failed');
+    const rollbackError = new Error('rollback failed');
+    connection.execute.mockResolvedValueOnce([[]]).mockRejectedValueOnce(transactionError);
+    connection.rollback.mockRejectedValueOnce(rollbackError);
+
+    let thrown: unknown;
+    try {
+      await experiments.addExperimentResult({
+        experimentId: 'e1',
+        itemId: 'i1',
+        itemDatasetVersion: 1,
+        input: null,
+        output: null,
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toMatchObject({
+      cause: expect.objectContaining({
+        message: 'Transaction and rollback both failed',
+        errors: [transactionError, rollbackError],
+      }),
+    });
+    expect(connection.release).toHaveBeenCalledOnce();
+
+    await store.close();
+  });
+
   it('clears user content from linked experiment results during purge', async () => {
     const store = newStore();
     const datasets = (await store.getStore('datasets')) as any;

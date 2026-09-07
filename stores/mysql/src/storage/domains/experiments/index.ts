@@ -199,11 +199,49 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       await connection.commit();
       return result;
     } catch (error) {
-      await connection.rollback();
-      throw error;
+      let transactionError = error;
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        transactionError = new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+      }
+      throw transactionError;
     } finally {
       connection.release();
     }
+  }
+
+  async #ensureExperimentResultNaturalKey(): Promise<void> {
+    const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
+    const indexName = 'idx_experiment_results_exp_item_attempt';
+
+    const [indexRows] = await this.pool.execute(
+      `SELECT 1 FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+       LIMIT 1`,
+      [TABLE_EXPERIMENT_RESULTS, indexName],
+    );
+    if (Array.isArray(indexRows) && indexRows.length > 0) return;
+
+    await this.pool.execute(
+      `UPDATE ${tableName} SET ${quoteIdentifier('attempt', 'column name')} = 0 WHERE ${quoteIdentifier('attempt', 'column name')} IS NULL`,
+    );
+    await this.pool.execute(
+      `DELETE older FROM ${tableName} older
+       INNER JOIN ${tableName} newer
+         ON older.${quoteIdentifier('experimentId', 'column name')} = newer.${quoteIdentifier('experimentId', 'column name')}
+        AND older.${quoteIdentifier('itemId', 'column name')} = newer.${quoteIdentifier('itemId', 'column name')}
+        AND older.${quoteIdentifier('attempt', 'column name')} = newer.${quoteIdentifier('attempt', 'column name')}
+        AND (older.${quoteIdentifier('createdAt', 'column name')} < newer.${quoteIdentifier('createdAt', 'column name')}
+          OR (older.${quoteIdentifier('createdAt', 'column name')} = newer.${quoteIdentifier('createdAt', 'column name')}
+            AND older.${quoteIdentifier('id', 'column name')} < newer.${quoteIdentifier('id', 'column name')}))`,
+    );
+    await this.pool.execute(
+      `ALTER TABLE ${tableName} MODIFY COLUMN ${quoteIdentifier('attempt', 'column name')} INT NOT NULL DEFAULT 0`,
+    );
+    await this.pool.execute(
+      `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ${quoteIdentifier('attempt', 'column name')})`,
+    );
   }
 
   /**
@@ -259,6 +297,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       schema: EXPERIMENT_RESULTS_SCHEMA,
       ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
     });
+    await this.#ensureExperimentResultNaturalKey();
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -788,13 +827,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       const attempt = input.attempt ?? 0;
       return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (connection, marker) => {
         const tableName = formatTableName(TABLE_EXPERIMENT_RESULTS);
-        const [existingRows] = await connection.execute(
-          `SELECT ${quoteIdentifier('id', 'column name')} FROM ${tableName} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND COALESCE(${quoteIdentifier('attempt', 'column name')}, 0) = ? FOR UPDATE`,
-          [input.experimentId, input.itemId, attempt],
-        );
-        const existingId = Array.isArray(existingRows)
-          ? ((existingRows[0] as { id?: string } | undefined)?.id ?? null)
-          : null;
         const updateColumns = [
           'itemDatasetVersion',
           'organizationId',
@@ -829,26 +861,23 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           input.status ?? null,
           marker || input.tags == null ? null : JSON.stringify(input.tags),
         ];
-        const id = existingId ?? randomUUID();
+        const columns = ['id', 'experimentId', 'itemId', ...updateColumns, 'createdAt'];
 
-        if (existingId) {
-          await connection.execute(
-            `UPDATE ${tableName} SET ${updateColumns
-              .map(column => `${quoteIdentifier(column, 'column name')} = ?`)
-              .join(', ')} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
-            [...updateValues, existingId],
-          );
-        } else {
-          const columns = ['id', 'experimentId', 'itemId', ...updateColumns, 'createdAt'];
-          await connection.execute(
-            `INSERT INTO ${tableName} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')}) VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})`,
-            [id, input.experimentId, input.itemId, ...updateValues, new Date()],
-          );
-        }
+        await connection.execute(
+          `INSERT INTO ${tableName} (${columns.map(column => quoteIdentifier(column, 'column name')).join(', ')})
+           VALUES (${Array.from({ length: columns.length }, () => '?').join(', ')})
+           ON DUPLICATE KEY UPDATE ${updateColumns
+             .map(
+               column =>
+                 `${quoteIdentifier(column, 'column name')} = VALUES(${quoteIdentifier(column, 'column name')})`,
+             )
+             .join(', ')}`,
+          [randomUUID(), input.experimentId, input.itemId, ...updateValues, new Date()],
+        );
 
         const [rows] = await connection.execute(
-          `SELECT * FROM ${tableName} WHERE ${quoteIdentifier('id', 'column name')} = ?`,
-          [id],
+          `SELECT * FROM ${tableName} WHERE ${quoteIdentifier('experimentId', 'column name')} = ? AND ${quoteIdentifier('itemId', 'column name')} = ? AND ${quoteIdentifier('attempt', 'column name')} = ?`,
+          [input.experimentId, input.itemId, attempt],
         );
         const row = Array.isArray(rows) ? (rows[0] as ExperimentResultRow | undefined) : undefined;
         if (!row) {
@@ -856,7 +885,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
             id: 'MYSQL_UPSERT_EXPERIMENT_RESULT_NOT_FOUND',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
-            text: `Experiment result ${id} not found after upsert`,
+            text: `Experiment result not found after upsert`,
             details: { experimentId: input.experimentId, itemId: input.itemId, attempt },
           });
         }
