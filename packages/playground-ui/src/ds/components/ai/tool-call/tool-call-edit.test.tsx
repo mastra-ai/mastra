@@ -22,14 +22,16 @@ describe('ToolCallEdit', () => {
       <ToolCallEdit edit={{ path: 'a.ts', oldText: 'const a = 1', newText: 'const a = 2\nconst b = 3' }} />,
     );
 
-    await waitFor(() => expect(container.querySelectorAll('.shiki-token').length).toBeGreaterThan(0), {
-      timeout: 5000,
-    });
-    const rows = container.querySelectorAll('[role="group"] > div');
-    expect(rows[0]?.textContent).toBe('-const a = 1');
-    expect(rows[2]?.textContent).toBe('+const b = 3');
-    expect(rows[0]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
-    expect(rows[2]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
+    const rows = () => container.querySelectorAll('[role="group"] > div');
+    await waitFor(
+      () => {
+        expect(rows()[0]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
+        expect(rows()[2]?.querySelectorAll('.shiki-token').length).toBeGreaterThan(1);
+      },
+      { timeout: 5000 },
+    );
+    expect(rows()[0]?.textContent).toBe('-const a = 1');
+    expect(rows()[2]?.textContent).toBe('+const b = 3');
   });
 
   it('shows a written file as its content', () => {
