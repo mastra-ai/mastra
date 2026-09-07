@@ -150,7 +150,7 @@ describe('@mastra/core runtime-only dependencies', () => {
   if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
   const coreDistDir = join(corePkg.dir, 'dist');
 
-  const runtimeOnlyDeps = ['execa', '@ast-grep/napi'];
+  const runtimeOnlyDeps = ['execa', '@ast-grep/napi', 'tokenx'];
 
   // Read dist once, shared by the per-dependency test cases below.
   let distFiles: { file: string; content: string }[] = [];

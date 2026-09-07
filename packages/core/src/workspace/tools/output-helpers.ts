@@ -1,6 +1,5 @@
-import { estimateTokenCount, sliceByTokens } from 'tokenx';
-
 import { isValidationError } from '../../tools/validation';
+import { estimateTokenCount, sliceByTokens } from '../../utils/tokenx';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -93,10 +92,10 @@ export async function applyTokenLimit(
 ): Promise<string> {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
+  const totalTokens = await estimateTokenCount(output);
   if (totalTokens <= limit) return output;
 
-  const kept = from === 'start' ? sliceByTokens(output, -limit) : sliceByTokens(output, 0, limit);
+  const kept = from === 'start' ? await sliceByTokens(output, -limit) : await sliceByTokens(output, 0, limit);
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -120,13 +119,13 @@ export async function applyTokenLimitSandwich(
 ): Promise<string> {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
+  const totalTokens = await estimateTokenCount(output);
   if (totalTokens <= limit) return output;
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  const head = headBudget > 0 ? sliceByTokens(output, 0, headBudget) : '';
-  const tail = tailBudget > 0 ? sliceByTokens(output, -tailBudget) : '';
+  const head = headBudget > 0 ? await sliceByTokens(output, 0, headBudget) : '';
+  const tail = tailBudget > 0 ? await sliceByTokens(output, -tailBudget) : '';
 
   const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${totalTokens} tokens...]`;
   return [head, notice, tail].filter(Boolean).join('\n');
