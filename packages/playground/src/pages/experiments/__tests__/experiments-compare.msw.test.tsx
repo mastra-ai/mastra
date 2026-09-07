@@ -36,6 +36,13 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/experiments`, () =>
       HttpResponse.json(buildListExperimentsResponse([sameDatasetA, sameDatasetB, otherDataset])),
     ),
+    http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments`, ({ params }) =>
+      HttpResponse.json(
+        buildListExperimentsResponse(
+          [sameDatasetA, sameDatasetB, otherDataset].filter(experiment => experiment.datasetId === params.datasetId),
+        ),
+      ),
+    ),
     http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () =>
       HttpResponse.json(buildListDatasetsResponse([datasetOne, datasetTwo])),
