@@ -2397,10 +2397,52 @@ describe('ObservabilityStorageDuckDB', () => {
         metadata: null,
       };
       await storage.createScore({ score });
+      const bootstrap = await storage.listScores({ mode: 'delta', filters: { traceId: 'trace-retry-score' } });
+
       await storage.createScore({ score: { ...score, score: 0.4 } });
+
       const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
       expect(result.scores).toHaveLength(1);
       expect(result.scores[0]).toMatchObject({ scoreId: 'score-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
+    });
+
+    it('batch re-inserts replace scores without advancing their delta cursors', async () => {
+      const score = {
+        scoreId: 'score-batch-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-batch-retry-score',
+        spanId: null,
+        scorerId: 'scorer-1',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      await storage.batchCreateScores({ scores: [score] });
+      const bootstrap = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+      });
+
+      await storage.batchCreateScores({ scores: [{ ...score, score: 0.4 }] });
+
+      const result = await storage.listScores({ filters: { traceId: 'trace-batch-retry-score' } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]).toMatchObject({ scoreId: 'score-batch-retry-1', score: 0.4 });
+
+      const delta = await storage.listScores({
+        mode: 'delta',
+        filters: { traceId: 'trace-batch-retry-score' },
+        after: bootstrap.deltaCursor!,
+      });
+      expect(delta.scores).toEqual([]);
     });
 
     it('re-inserting the same feedbackId does not throw or duplicate', async () => {

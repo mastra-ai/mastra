@@ -112,6 +112,36 @@ describe('getDynamicInstructionSections', () => {
     expect(joinPromptSections(sections)).toBe(await getDynamicInstructions({ requestContext }));
   });
 
+  it('advertises subconscious tools only when the caller says they are registered, not from the env flag', async () => {
+    const requestContext = makeRequestContext({});
+    const previous = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    try {
+      const withoutFlag = await getDynamicInstructions({ requestContext });
+      expect(withoutFlag).not.toContain('# Subconscious Memory');
+
+      const withFlag = await getDynamicInstructions({ requestContext, hasSubconscious: true });
+      expect(withFlag).toContain('# Subconscious Memory');
+      expect(withFlag).toContain('**ask_memory**');
+
+      // A resolver is evaluated against the session state, so Factory sessions
+      // can be refused per request.
+      const seen: unknown[] = [];
+      const resolved = await getDynamicInstructions({
+        requestContext: makeRequestContext({ factoryProjectId: 'proj-1' }),
+        hasSubconscious: s => {
+          seen.push(s?.factoryProjectId);
+          return false;
+        },
+      });
+      expect(seen).toEqual(['proj-1']);
+      expect(resolved).not.toContain('# Subconscious Memory');
+    } finally {
+      if (previous === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+      else process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = previous;
+    }
+  });
+
   it('rejoins into exactly getDynamicInstructions output with plugin instructions', async () => {
     const requestContext = makeRequestContext({
       pluginInstructions: ['First plugin guidance.', 'Second plugin guidance.'],

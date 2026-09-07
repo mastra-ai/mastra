@@ -4,6 +4,7 @@ import type {
   ChannelHandler,
   ChannelHandlerContext,
   ChannelHandlers,
+  ChannelSessionResolve,
   ChannelSessionStart,
   ResolveResourceId,
   ResolveThreadId,
@@ -388,6 +389,24 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
  */
 export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThreadId }) =>
   resourceId.startsWith('channel:') ? defaultThreadId : resourceId;
+
+/** Create channel sessions with their Factory ownership present in initial controller state. */
+export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
+  const { sourceControl } = deps;
+  return async ({ controller, thread, requestContext }) => {
+    const owner =
+      sourceControl && !thread.resourceId.startsWith('channel:')
+        ? await resolveFactoryProjectForSession({ sourceControl, sessionId: thread.resourceId })
+        : null;
+    return controller.createSession({
+      id: thread.resourceId,
+      ownerId: controller.id,
+      resourceId: thread.resourceId,
+      requestContext,
+      ...(owner ? { tags: { factoryProjectId: owner.factoryProjectId } } : {}),
+    });
+  };
+}
 
 /**
  * Apply the factory's configuration to a Slack-created session the first time
@@ -791,6 +810,7 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
     // resourceId, which is what makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps),
     resolveThreadId: resolveChannelThreadId,
+    resolveSession: createChannelSessionResolver(deps),
     // Those sessions are created by the channel machinery, not the web kickoff,
     // so this is where they pick up the factory's configuration.
     onSessionStart: createChannelSessionStartHook(deps),

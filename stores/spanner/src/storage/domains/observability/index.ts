@@ -619,19 +619,38 @@ export class ObservabilitySpanner extends ObservabilityStorage {
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
+    this.assertUnscopedBatchDeleteTraces(args);
     try {
       if (args.traceIds.length === 0) return;
-      const tableName = quoteIdent(TABLE_SPANS, 'table name');
       const params: Record<string, any> = {};
       const placeholders = args.traceIds.map((id, i) => {
         const name = `t${i}`;
         params[name] = id;
         return `@${name}`;
       });
-      await this.db.runDml({
-        sql: `DELETE FROM ${tableName} WHERE ${quoteIdent('traceId', 'column name')} IN (${placeholders.join(', ')})`,
-        params,
-      });
+      const traceIdFilter = `${quoteIdent('traceId', 'column name')} IN (${placeholders.join(', ')})`;
+      await this.db.runWithAbortRetry(() =>
+        this.database.runTransactionAsync(async tx => {
+          try {
+            await tx.runUpdate({
+              sql: `DELETE FROM ${quoteIdent(TABLE_SPANS, 'table name')} WHERE ${traceIdFilter}`,
+              params,
+            });
+            if (!this.disableMetrics) {
+              await tx.runUpdate({
+                sql: `DELETE FROM ${quoteIdent(TABLE_AI_METRICS, 'table name')} WHERE ${traceIdFilter}`,
+                params,
+              });
+            }
+            await tx.commit();
+          } catch (error) {
+            await tx.rollback().catch(rollbackError => {
+              throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+            });
+            throw error;
+          }
+        }),
+      );
     } catch (error) {
       throw new MastraError(
         {

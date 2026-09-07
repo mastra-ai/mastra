@@ -17,9 +17,12 @@ describe('Section', () => {
       </Section>,
     );
 
-    expect(screen.getByRole('heading', { name: 'Overview' }).className).toContain(
-      'group-data-[variant=default]/section:font-bold',
-    );
+    const heading = screen.getByRole('heading', { name: 'Overview' });
+    const headerClasses = heading.closest('[data-slot="section-header"]')?.className.split(' ');
+
+    expect(heading.className).toContain('group-data-[variant=default]/section:font-bold');
+    expect(headerClasses).toContain('group-data-[variant=default]/section:grid');
+    expect(headerClasses).not.toContain('px-4');
     expect(screen.getByText('Section content').closest('[data-slot="section"]')?.dataset.variant).toBe('default');
   });
 
@@ -59,7 +62,7 @@ describe('Section', () => {
     expect(screen.getByText('Leave organization').className).toContain('text-accent2');
   });
 
-  it('aligns flat and factory content to the same horizontal inset', () => {
+  it('keeps flat and factory headings on the card edge while rows retain their inset', () => {
     render(
       <div>
         <Section variant="factory">
@@ -90,18 +93,49 @@ describe('Section', () => {
     expect(flatHeading.className).toContain('group-data-[variant=flat]/section:font-medium');
     expect(factory?.className).toContain('w-full');
     expect(flat?.className).toContain('w-full');
-    expect(factory?.querySelector('[data-slot="section-header"]')?.className).toContain(
-      'group-data-[variant=factory]/section:px-4',
-    );
-    expect(flat?.querySelector('[data-slot="section-header"]')?.className).toContain(
-      'group-data-[variant=flat]/section:px-4',
-    );
+    const factoryHeaderClasses = factory?.querySelector('[data-slot="section-header"]')?.className.split(' ');
+
+    expect(factoryHeaderClasses).toContain('group-data-[variant=factory]/section:flex');
+    expect(factoryHeaderClasses).not.toContain('px-4');
+    const flatHeaderClasses = flat?.querySelector('[data-slot="section-header"]')?.className.split(' ');
+
+    expect(flatHeaderClasses).toContain('group-data-[variant=flat]/section:flex');
+    expect(flatHeaderClasses).not.toContain('px-4');
     expect(screen.getByText('Factory row').closest('[data-slot="section-row"]')?.className).toContain(
       'group-data-[variant=factory]/section:px-4',
     );
     expect(screen.getByText('Flat row').closest('[data-slot="section-row"]')?.className).toContain(
       'group-data-[variant=flat]/section:p-4',
     );
+  });
+
+  it('supports inset flat and factory headings', () => {
+    render(
+      <div>
+        <Section variant="factory">
+          <Section.Header inset>
+            <Section.Heading>Project</Section.Heading>
+          </Section.Header>
+          <Section.Content>
+            <Section.Row label="Project row" />
+          </Section.Content>
+        </Section>
+        <Section variant="flat">
+          <Section.Header inset>
+            <Section.Heading>Account</Section.Heading>
+          </Section.Header>
+          <Section.Content>
+            <Section.Row label="Account row" />
+          </Section.Content>
+        </Section>
+      </div>,
+    );
+
+    for (const name of ['Project', 'Account']) {
+      expect(
+        screen.getByRole('heading', { name }).closest('[data-slot="section-header"]')?.className.split(' '),
+      ).toContain('px-4');
+    }
   });
 
   it('renders factory rows with explicit dividers', () => {

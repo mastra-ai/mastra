@@ -17,7 +17,7 @@ type Shared_Auxiliary_298 =
       [key: string]: Shared_Auxiliary_298;
     };
 
-type Shared_Auxiliary_587 =
+type Shared_Auxiliary_589 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,32 +52,32 @@ type Shared_Auxiliary_587 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_587[];
+      args: Shared_Auxiliary_589[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_587;
+      arg: Shared_Auxiliary_589;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_605;
+            some: Shared_Auxiliary_607;
           }
         | {
-            none: Shared_Auxiliary_605;
+            none: Shared_Auxiliary_607;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_605;
+            some: Shared_Auxiliary_607;
           }
         | {
-            none: Shared_Auxiliary_605;
+            none: Shared_Auxiliary_607;
           };
     };
 
-type Shared_Auxiliary_605 =
+type Shared_Auxiliary_607 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -112,14 +112,14 @@ type Shared_Auxiliary_605 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_605[];
+      args: Shared_Auxiliary_607[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_605;
+      arg: Shared_Auxiliary_607;
     };
 
-type Shared_Auxiliary_1136 =
+type Shared_Auxiliary_1138 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +164,19 @@ type Shared_Auxiliary_1136 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1136[];
+      args: Shared_Auxiliary_1138[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1136;
+      arg: Shared_Auxiliary_1138;
     };
 
-type Shared_Auxiliary_1276 = {
+type Shared_Auxiliary_1278 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1276[] | undefined;
+  children?: Shared_Auxiliary_1278[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -2684,7 +2684,7 @@ type Shared_Type_113 = {
       }
     | undefined;
   steps: Shared_Type_108;
-  predicates: Shared_Auxiliary_1136[];
+  predicates: Shared_Auxiliary_1138[];
 };
 
 type Shared_Type_114 = {
@@ -2707,7 +2707,7 @@ type Shared_Type_114 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1136;
+  predicate: Shared_Auxiliary_1138;
 };
 
 type Shared_Type_115 =
@@ -3061,7 +3061,7 @@ type Shared_Type_128 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1276[] | undefined;
+  files?: Shared_Auxiliary_1278[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -8960,6 +8960,37 @@ export interface GetObservabilityTracesTraceIdTrajectory_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /observability/traces/delete
+// ============================================================================
+export type PostObservabilityTracesDelete_Body = {
+  /** Trace IDs to delete (maximum 1000) */
+  traceIds: string[];
+};
+
+export type PostObservabilityTracesDelete_Response = {
+  success: true;
+};
+
+export type PostObservabilityTracesDelete_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostObservabilityTracesDelete_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesDelete_Body
+        ? { body?: PostObservabilityTracesDelete_Body }
+        : { body: PostObservabilityTracesDelete_Body })
+>;
+
+export interface PostObservabilityTracesDelete_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostObservabilityTracesDelete_Body;
+  request: PostObservabilityTracesDelete_Request;
+  response: PostObservabilityTracesDelete_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /observability/traces/score
 // ============================================================================
 export type PostObservabilityTracesScore_Body = {
@@ -9151,7 +9182,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_587 | undefined;
+  where?: Shared_Auxiliary_589 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16700,7 +16731,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1276[] | undefined;
+  files?: Shared_Auxiliary_1278[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16758,7 +16789,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1276[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1278[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -22072,6 +22103,7 @@ export interface RouteTypes {
   'GET /observability/traces/:traceId/light': GetObservabilityTracesTraceIdLight_RouteContract;
   'GET /observability/traces/:traceId/spans/:spanId': GetObservabilityTracesTraceIdSpansSpanId_RouteContract;
   'GET /observability/traces/:traceId/trajectory': GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  'POST /observability/traces/delete': PostObservabilityTracesDelete_RouteContract;
   'POST /observability/traces/score': PostObservabilityTracesScore_RouteContract;
   'GET /observability/traces/:traceId/:spanId/scores': GetObservabilityTracesTraceIdSpanIdScores_RouteContract;
   'POST /observability/traces/query': PostObservabilityTracesQuery_RouteContract;
@@ -22998,6 +23030,9 @@ export interface Client {
   };
   '/observability/traces/:traceId/trajectory': {
     GET: GetObservabilityTracesTraceIdTrajectory_RouteContract;
+  };
+  '/observability/traces/delete': {
+    POST: PostObservabilityTracesDelete_RouteContract;
   };
   '/observability/traces/light': {
     GET: GetObservabilityTracesLight_RouteContract;

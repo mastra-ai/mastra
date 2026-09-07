@@ -106,6 +106,17 @@ describe('TraceSpanPanel', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
+    it('when rendered, then a "View full thread" link points to the advanced thread view', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByText('No rain is expected.');
+
+      const link = screen.getByRole('link', { name: 'View full thread' });
+      expect(link.getAttribute('href')).toBe('/agents/weather-agent/threads/weather-thread?variant=advanced');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
     it('does not render the highlight action when no handler is provided', async () => {
       installHandlers();
       const { queryClient } = renderPanel({ showPartialThread: true });

@@ -10,6 +10,7 @@ import {
   isConnectionStringConfig,
   isHostConfig,
   isPoolConfig,
+  isWritePoolConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
@@ -196,12 +197,14 @@ export { PgFactoryStorage, type PgFactoryStorageConfig } from './factory-storage
  * ```
  */
 export class PostgresStore extends MastraCompositeStore {
-  #pool: Pool;
+  #writePool: Pool;
+  #readPool: Pool;
   // Narrowed to RoutingDbClient so init()'s pin/unpin path is type-checked.
   // The public `db` getter still exposes it as DbClient.
   #db: RoutingDbClient;
-  #ownsPool: boolean;
-  #poolClosed: boolean = false;
+  #readDb: DbClient;
+  #ownsWritePool: boolean;
+  #writePoolClosed: boolean = false;
   private schema: string;
   private isInitialized: boolean = false;
   // Caches the in-flight init() so concurrent callers share one initialization
@@ -218,19 +221,25 @@ export class PostgresStore extends MastraCompositeStore {
       this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 
       if (isPoolConfig(config)) {
-        this.#pool = config.pool;
-        this.#ownsPool = false;
+        this.#writePool = config.pool;
+        this.#ownsWritePool = false;
+      } else if (isWritePoolConfig(config)) {
+        this.#writePool = config.writePool;
+        this.#ownsWritePool = false;
       } else {
-        this.#pool = this.createPool(config);
-        this.#ownsPool = true;
+        this.#writePool = this.createPool(config);
+        this.#ownsWritePool = true;
       }
+      this.#readPool = config.readPool ?? this.#writePool;
 
-      // Wrap the pool adapter in a routing client so init() can temporarily
+      // Wrap the writer adapter in a routing client so init() can temporarily
       // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
-      this.#db = new RoutingDbClient(new PoolAdapter(this.#pool));
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool));
+      this.#readDb = this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool);
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
+        readClient: this.#readDb,
         schemaName: this.schema,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
@@ -346,8 +355,8 @@ export class PostgresStore extends MastraCompositeStore {
     let pinnedClient: PoolClient | undefined;
 
     try {
-      pinnedClient = await this.#pool.connect();
-      const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
+      pinnedClient = await this.#writePool.connect();
+      const pinned = new PinnedClientAdapter(this.#writePool, pinnedClient);
       this.#db.pin(pinned);
       // Read the schema's catalog once, up front, so the domains below can
       // answer "does this table/column/index already exist?" locally instead of
@@ -403,22 +412,30 @@ export class PostgresStore extends MastraCompositeStore {
     return this.#db;
   }
 
-  /**
-   * The underlying pg.Pool for direct database access or ORM integration.
-   */
+  /** Database client for queries that may run against the configured read replica. */
+  public get readDb(): DbClient {
+    return this.#readDb;
+  }
+
+  /** The underlying writer pg.Pool for direct database access or ORM integration. */
   public get pool(): Pool {
-    return this.#pool;
+    return this.#writePool;
+  }
+
+  /** The underlying reader pg.Pool, falling back to the writer pool when unset. */
+  public get readPool(): Pool {
+    return this.#readPool;
   }
 
   /**
-   * Closes the connection pool if it was created by this store.
-   * If a pool was passed in via config, it will not be closed.
+   * Closes the writer connection pool if it was created by this store.
+   * Caller-provided writer and reader pools are not closed.
    * Safe to call multiple times — subsequent calls are no-ops.
    */
   async close(): Promise<void> {
-    if (this.#ownsPool && !this.#poolClosed) {
-      this.#poolClosed = true;
-      await this.#pool.end();
+    if (this.#ownsWritePool && !this.#writePoolClosed) {
+      this.#writePoolClosed = true;
+      await this.#writePool.end();
     }
   }
 }

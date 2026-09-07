@@ -7,7 +7,7 @@ description: "Browse Cortecs model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
-Access 111 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 109 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -394,18 +394,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.39
   },
   {
-    "model": "cortecs/glm-4.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202752,
-    "maxOutput": 202752,
-    "inputCost": 0.78,
-    "outputCost": 2.785
-  },
-  {
     "model": "cortecs/glm-4.7-flash",
     "imageInput": false,
     "audioInput": false,
@@ -704,18 +692,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.996,
     "outputCost": 2.989
-  },
-  {
-    "model": "cortecs/hermes-4-70b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.129,
-    "outputCost": 0.399
   },
   {
     "model": "cortecs/kimi-k2.5",
@@ -1158,8 +1134,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 32000,
     "maxOutput": 32000,
-    "inputCost": 0.25,
-    "outputCost": 0.747
+    "inputCost": 1.014,
+    "outputCost": 1.014
   },
   {
     "model": "cortecs/qwen3-235b-a22b-instruct-2507",
@@ -1192,10 +1168,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 40000,
-    "maxOutput": 40000,
-    "inputCost": 0.099,
-    "outputCost": 0.299
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.089,
+    "outputCost": 0.312
   },
   {
     "model": "cortecs/qwen3-coder-30b-a3b-instruct",

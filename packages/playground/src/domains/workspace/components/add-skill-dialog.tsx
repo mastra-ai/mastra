@@ -13,7 +13,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Search, Download, ExternalLink, Loader2, Package, Check, Folder } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
@@ -215,14 +215,21 @@ export function AddSkillDialog({
               <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
-              <ScrollArea className="border-border1 flex-1 rounded-lg border">
+              <ScrollArea
+                className="border-border1 flex-1 rounded-lg border"
+                viewPortClassName={
+                  !isLoadingPopular && !isSearching && displaySkills.length === 0
+                    ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
+                    : undefined
+                }
+              >
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-neutral4 flex flex-col items-center justify-center py-8">
-                    <Package className="mb-2 h-8 w-8" />
+                  <div className="text-neutral4 flex flex-1 flex-col items-center-safe justify-center-safe py-8">
+                    <CircleSlashIcon className="mb-2 h-8 w-8" />
                     <p className="text-sm">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
                 ) : (
