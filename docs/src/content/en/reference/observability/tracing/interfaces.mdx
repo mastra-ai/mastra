@@ -891,7 +891,7 @@ interface ModelStepMessage {
 
 ### `ModelStepOutput`
 
-Output recorded on `MODEL_STEP` spans: a `ModelStepResult` when the step finishes, or an `InterruptedSpanOutput` when the run stops first. `MODEL_INFERENCE` spans record a `ModelStepResult` only. The result is the step output without `usage`, which lives on the attributes.
+Output recorded on `MODEL_STEP` spans. A finished step records a `ModelStepResult`, which is the step output without `usage` (that lives on the attributes). A step cut short by a suspension or an abort records an `InterruptedSpanOutput` instead. `MODEL_INFERENCE` spans always record a `ModelStepResult`.
 
 ```typescript
 type ModelStepOutput = ModelStepResult | InterruptedSpanOutput
