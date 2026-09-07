@@ -13,7 +13,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -135,7 +135,7 @@ describe('Intake candidate paging', () => {
 
     const intake = await screen.findByTestId('board-column-intake');
     await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1']);
 
     await userEvent.click(within(intake).getByRole('button', { name: 'Load more candidates' }));
@@ -150,12 +150,12 @@ describe('Intake candidate paging', () => {
 
     const intake = await screen.findByTestId('board-column-intake');
     await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1']);
 
     scrollSentinel(true);
     await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
-    await waitFor(() => expect(client.isFetching()).toBe(0));
+    await waitForMutationsIdle(client);
     expect(requestedPages).toEqual(['1', '2']);
 
     scrollSentinel(false);
