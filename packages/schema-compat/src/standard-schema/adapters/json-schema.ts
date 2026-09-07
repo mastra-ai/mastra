@@ -8,21 +8,21 @@ import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
-function isDynamicCodegenAllowed(): boolean {
-  try {
-    const fn = new Function('return 1');
-    return fn() === 1;
-  } catch {
-    return false;
-  }
-}
-
 function isCodegenDisallowedError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
   return error.name === 'EvalError' || /code generation from strings/i.test(error.message);
 }
+
+type JsonSchemaZod = {
+  safeParse: (
+    data: unknown,
+    params?: { jitless?: boolean },
+  ) =>
+    | { success: true; data: unknown }
+    | { success: false; error: { issues: Array<{ message: string; path: PropertyKey[] }> } };
+};
 
 /**
  * Vendor name for JSON Schema wrapped schemas.
@@ -40,6 +40,7 @@ export interface JsonSchemaAdapterOptions {
 
   /**
    * Ajv options to customize validation behavior.
+   * Only applied when Ajv compiles (runtimes that allow `new Function`).
    * @see https://ajv.js.org/options.html
    */
   ajvOptions?: ConstructorParameters<typeof Ajv>[0];
@@ -52,6 +53,7 @@ export interface JsonSchemaAdapterOptions {
  * (JSON Schema conversion) interfaces. Validation uses Ajv when `new Function` is
  * allowed. On runtimes that block dynamic code generation (Cloudflare Workers), it
  * falls back to converting the JSON Schema to Zod via `zod-from-json-schema`.
+ * `ajvOptions` only apply on the Ajv path.
  *
  * @typeParam T - The TypeScript type that the JSON Schema represents
  *
@@ -82,8 +84,7 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
   readonly #options: JsonSchemaAdapterOptions;
   #ajvValidateCache: ReturnType<Ajv['compile']> | null = null;
   #ajvInstance: Ajv | null = null;
-  #useAjv: boolean | null = null;
-  #zodFromJsonSchema: z.ZodTypeAny | null = null;
+  #zodFromJsonSchema: JsonSchemaZod | null = null;
 
   readonly '~standard': StandardSchemaWithJSONProps<Input, Output>;
 
@@ -111,7 +112,7 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
    */
   #validate(value: unknown): StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>> {
     try {
-      if (!this.#shouldUseAjv()) {
+      if (this.#zodFromJsonSchema) {
         return this.#validateWithZodFromJsonSchema(value);
       }
 
@@ -145,7 +146,6 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
       return { issues };
     } catch (error) {
       if (isCodegenDisallowedError(error)) {
-        this.#useAjv = false;
         return this.#validateWithZodFromJsonSchema(value);
       }
       // If validation fails unexpectedly, return a validation error
@@ -156,29 +156,24 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
     }
   }
 
-  #shouldUseAjv(): boolean {
-    if (this.#useAjv === null) {
-      this.#useAjv = isDynamicCodegenAllowed();
+  #getZodFromJsonSchema(): JsonSchemaZod {
+    if (this.#zodFromJsonSchema) {
+      return this.#zodFromJsonSchema;
     }
-    return this.#useAjv;
-  }
-
-  #getZodFromJsonSchema(): z.ZodTypeAny {
-    if (!this.#zodFromJsonSchema) {
-      if ('toJSONSchema' in z) {
-        // @ts-expect-error - type issue in convertJsonSchemaToZod
-        this.#zodFromJsonSchema = convertJsonSchemaToZod(this.#schema);
-      } else {
-        // @ts-expect-error - type issue in convertJsonSchemaToZodV3
-        this.#zodFromJsonSchema = convertJsonSchemaToZodV3(this.#schema);
-      }
-    }
-    return this.#zodFromJsonSchema;
+    const schema: JsonSchemaZod =
+      'toJSONSchema' in z
+        ? (convertJsonSchemaToZod(this.#schema as any) as JsonSchemaZod)
+        : (convertJsonSchemaToZodV3(this.#schema as any) as JsonSchemaZod);
+    this.#zodFromJsonSchema = schema;
+    return schema;
   }
 
   #validateWithZodFromJsonSchema(value: unknown): StandardSchemaV1.Result<Output> {
     try {
-      const result = this.#getZodFromJsonSchema().safeParse(value);
+      const schema = this.#getZodFromJsonSchema();
+      // Zod v4 may have already cached allowsEval=true and enabled object JIT.
+      // jitless skips that fastpass so parse does not call new Function on Workers.
+      const result = 'toJSONSchema' in z ? schema.safeParse(value, { jitless: true }) : schema.safeParse(value);
       if (result.success) {
         return { value: result.data as Output };
       }
@@ -297,6 +292,7 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
 
   /**
    * Returns the Ajv instance used for validation.
+   * Throws on runtimes that block dynamic code generation.
    * Useful for advanced use cases like adding custom formats or keywords.
    */
   getAjv(): Ajv {

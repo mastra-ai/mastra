@@ -1,5 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { isStandardSchemaWithJSON } from '../standard-schema';
 import { toStandardSchema } from './json-schema';
 
@@ -336,21 +337,19 @@ describe('json-schema standard-schema adapter', () => {
 
     function withBlockedCodegen<T>(fn: () => T): T {
       const OriginalFunction = globalThis.Function;
-      const originalEval = globalThis.eval;
       const blowUp = function BlockedFunction() {
         throw new EvalError('Code generation from strings disallowed for this context');
       };
       globalThis.Function = blowUp as unknown as FunctionConstructor;
-      globalThis.eval = blowUp as unknown as typeof eval;
       try {
         return fn();
       } finally {
         globalThis.Function = OriginalFunction;
-        globalThis.eval = originalEval;
       }
     }
 
-    it('validates JSON Schema input when new Function/eval is blocked', async () => {
+    it('validates JSON Schema input when new Function is blocked', async () => {
+      z.object({ a: z.string() }).safeParse({ a: 'x' });
       const standardSchema = toStandardSchema(workflowToolSchema);
       const result = await withBlockedCodegen(() =>
         standardSchema['~standard'].validate({
