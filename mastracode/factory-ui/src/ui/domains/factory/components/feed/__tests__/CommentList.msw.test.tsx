@@ -262,7 +262,7 @@ describe('CommentList', () => {
       }),
     );
     const user = userEvent.setup();
-    renderList();
+    const { client } = renderList();
 
     await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
     const editor = screen.getByRole('textbox', { name: 'Edit comment' });
@@ -275,6 +275,7 @@ describe('CommentList', () => {
 
     release();
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    await waitForMutationsIdle(client);
     expect(patches).toBe(1);
   });
 
@@ -296,7 +297,7 @@ describe('CommentList', () => {
       }),
     );
     const user = userEvent.setup();
-    renderList({ factoryProjectId: PROJECT_ID });
+    const { client } = renderList({ factoryProjectId: PROJECT_ID });
 
     await user.click(await screen.findByRole('button', { name: 'Edit comment' }));
     const editor = screen.getByRole('textbox', { name: 'Edit comment' });
@@ -309,6 +310,7 @@ describe('CommentList', () => {
 
     releaseRoster();
     await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit comment' })).toBeNull());
+    await waitForMutationsIdle(client);
     expect(patches).toBe(1);
   });
 

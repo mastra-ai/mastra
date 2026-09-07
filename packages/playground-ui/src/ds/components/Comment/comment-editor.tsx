@@ -63,7 +63,7 @@ export function CommentEditor({
         />
         {/* Opaque, so a scrolled line passes behind the actions instead of under them. */}
         <div className="bg-surface2 absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg px-1.5 pt-1 pb-1.5">
-          <Button type="button" variant="ghost" size="xs" onClick={onClose}>
+          <Button type="button" variant="ghost" size="xs" disabled={isPending} onClick={onClose}>
             Cancel
           </Button>
           <Button type="button" variant="outline" size="xs" disabled={!canSave} onClick={save}>

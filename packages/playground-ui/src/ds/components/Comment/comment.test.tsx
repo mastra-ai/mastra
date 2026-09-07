@@ -206,6 +206,7 @@ describe('CommentEditor', () => {
 
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Saving…' }).disabled).toBe(true);
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Edit comment' }).readOnly).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
     expect(onSave).not.toHaveBeenCalled();
   });
 
