@@ -99,6 +99,7 @@ export const CodeModeBadge = ({
   return (
     <BadgeWrapper
       data-testid="code-mode-badge"
+      toolCallId={toolCallId}
       icon={<ToolCoinIcon className="text-accent6" />}
       title={toolName}
       initialCollapsed={!toolApprovalMetadata}

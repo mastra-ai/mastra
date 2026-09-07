@@ -12,7 +12,7 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. For custom-board handlers, edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
+4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
@@ -36,6 +36,37 @@ GitHub and Linear integrations exclusively own their event handlers; configure t
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
 Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
+
+## Configure board transition policy
+
+Search the installed `defineBoard()` definition for `transitionPolicy`. Read `src/boards/transition-policy.ts` for the public contract and `src/boards/work-transition-policy.ts` for Work's automatic classification, approval, and acceptance policy. Review has no additional policy. Custom boards without a policy do not inherit Work's classification or acceptance behavior through phase or role names.
+
+Topology declares allowed moves; transition policy adds business restrictions; lifecycle handlers return effects. Add custom restrictions to the board definition, not the generic transition service or global rules:
+
+```typescript
+import type { BoardTransitionPolicy } from '@mastra/factory/boards';
+
+const transitionPolicy: BoardTransitionPolicy = context => {
+  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+  }
+};
+// Pass transitionPolicy to the installed custom defineBoard() definition.
+```
+
+The policy receives a deeply readonly snapshot with ISO-string dates. Return `undefined`, `{ type: 'allow', triageType?, accept?: true }`, or `{ type: 'reject', code, reason }`, never skill calls, transitions, consent overrides, or patches. Classification intents require the existing triage-agent path and must match its requested classification. Acceptance requires both human actor and human ingress. Runtime validates results and commits intents atomically only after successful lifecycle evaluation.
+
+Policies must be side-effect-free and share the lifecycle timeout budget. Initial entry, reentry, and same-stage requests evaluate policy; completed replay does not. Concurrent attempts may evaluate more than once, and timing out does not cancel work started by a callback. Do not access storage or integrations from a policy.
+
+Policy allowance cannot bypass topology, board ownership, ingress authorization, external-author safety, revision checks, replay, or decision validation. Phase meaning is declared on the phase (`kind`), not in the policy. Do not invent built-in replacement APIs.
+
+## Configure board phase semantics
+
+Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `src/boards/work.ts` and `src/boards/review.ts`.
+
+Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
+
+To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Decision and tool-input validation still accept only built-in board IDs and phase names, so custom-board handlers cannot emit `transition` decisions into custom phases yet.
 
 ## Apply supported overrides
 

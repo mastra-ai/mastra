@@ -1,5 +1,106 @@
 # @mastra/factory
 
+## 0.13.0-alpha.12
+
+### Patch Changes
+
+- Fixed the board's Intake column pulling every open pull request or issue of the repository on its own, behind a spinner, whenever a filter, cards already on the board, or drafts left the loaded pages with little to show. ([#23220](https://github.com/mastra-ai/mastra/pull/23220))
+
+  Reaching the end of the column now loads one page. A page that adds nothing to scroll past leaves the end where it is, so the next page waits for a scroll or the Load more button instead of loading by itself. The Activity, Attention, and Rules lists follow the same rule.
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/code-sdk@1.7.0-alpha.9
+
+## 0.13.0-alpha.11
+
+### Patch Changes
+
+- Comment rows in the work item feed now share one look for quoted replies and inline editing. Row actions (quote, copy link, edit, delete) appear only when you hover that row, instead of lighting up on every row while the card is hovered. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+- Fixed Factory custom API routes to honor validated bearer organization selection. ([#23203](https://github.com/mastra-ai/mastra/pull/23203))
+
+## 0.13.0-alpha.10
+
+### Patch Changes
+
+- Fixed hosted Factory bearer requests to select only organizations proven by the authenticated user's memberships. ([#23196](https://github.com/mastra-ai/mastra/pull/23196))
+
+## 0.13.0-alpha.9
+
+### Patch Changes
+
+- Thread messages now show who sent them. In a shared session, a message written by someone else carries a small avatar beside it; hover or focus it to see their name. Messages that came in from Slack keep their "via Slack" badge. A teammate's message also appears in the thread the moment they send it, instead of after a reload. ([#23085](https://github.com/mastra-ai/mastra/pull/23085))
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+  - @mastra/code-sdk@1.7.0-alpha.8
+
+## 0.13.0-alpha.8
+
+### Minor Changes
+
+- Added board-owned transitionPolicy for custom transition restrictions. Work retains its classification, approval, and acceptance policy automatically. Custom boards no longer accidentally inherit Work policy through phase or role names; shared runtime safeguards remain enforced. ([#23153](https://github.com/mastra-ai/mastra/pull/23153))
+
+  ```typescript
+  const board = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'approval',
+    phases: {
+      approval: { title: 'Approval', next: 'shipped' },
+      shipped: { title: 'Shipped' },
+    },
+    transitionPolicy: context => {
+      if (context.toStage === 'shipped' && !context.isHumanTransition) {
+        return { type: 'reject', code: 'approval_required', reason: 'Human approval required.' };
+      }
+    },
+  });
+  ```
+
+  Import defineBoard from @mastra/factory/boards and install the board through MastraFactory boards. Phase execution semantics and built-in customization are unchanged.
+
+- Removed global Work and Review lifecycle configuration. Installed board definitions now exclusively supply phase entry and exit handlers; custom boards declare them through defineBoard(). Work and Review remain installed automatically, and built-in customization is deferred. Global rules retain shared audit version and tool-result handlers. ([#23148](https://github.com/mastra-ai/mastra/pull/23148))
+
+  Remove former rules.work and rules.review overrides. For a custom board, declare handlers on phases instead:
+
+  ```typescript
+  const releaseBoard = defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { title: 'Queued', onEnter: { manual: () => undefined } },
+    },
+  });
+  new MastraFactory({ storage, boards: [releaseBoard] });
+  ```
+
+  The web deployment now uses guarded built-in intake: only eligible linked GitHub arrivals automatically invoke factory-triage. Manual and noncandidate arrivals no longer start solely from entering Intake. Explicit triage and existing approval safeguards remain unchanged.
+
+- Moved Linear event rules into `LinearIntegration` and `PlatformLinearIntegration`. Built-in handlers remain enabled without configuration. Constructor `rules` accept replacements or `null` to disable an event; omitted events retain defaults. ([#23139](https://github.com/mastra-ai/mastra/pull/23139))
+
+  Move former global `rules.linear[event].onEvent` values to the owning integration constructor:
+
+  ```typescript
+  // Before: global Factory overrides
+  const overrides = { linear: { issueClosed: { onEvent: null } } };
+
+  // After: integration constructor options
+  const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
+  ```
+
+  Both direct and platform integrations use their own handlers for fetched issues and reconciliation while preserving shared audit metadata.
+
+### Patch Changes
+
+- Fixed Work approval bypasses through intermediate phases. Classified non-bug items without recorded acceptance now require a human transition into Planning or Execute regardless of their previous phase, including historical items without an acceptance stamp. ([#23153](https://github.com/mastra-ai/mastra/pull/23153))
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`311f2b9`](https://github.com/mastra-ai/mastra/commit/311f2b994c411d64a821e317d838dc30ca3ab58b), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/code-sdk@1.7.0-alpha.7
+
 ## 0.13.0-alpha.7
 
 ### Minor Changes

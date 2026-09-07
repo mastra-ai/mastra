@@ -10,7 +10,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip, SearchIcon } from 'lucide-react';
+import { CircleSlashIcon, ChevronLeft, Plus, Paperclip, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router';
@@ -493,9 +493,9 @@ export function AgentPlaygroundEvaluate({
 
     if (!experiments?.length) {
       return (
-        <div className="flex h-full items-center justify-center py-20">
+        <div className="flex h-full items-center-safe justify-center-safe py-20">
           <EmptyState
-            iconSlot={<FlaskConical className="text-neutral3 size-10" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
             titleSlot="No Experiments Yet"
             descriptionSlot="Run experiments against your datasets to see results here."
           />
@@ -563,9 +563,9 @@ export function AgentPlaygroundEvaluate({
 
     if (!datasets.length) {
       return (
-        <div className="flex h-full items-center justify-center py-20">
+        <div className="flex h-full items-center-safe justify-center-safe py-20">
           <EmptyState
-            iconSlot={<Database className="text-neutral3 size-10" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
             titleSlot="No Datasets"
             descriptionSlot="Create or attach a dataset to begin testing your agent."
           />
@@ -645,9 +645,9 @@ export function AgentPlaygroundEvaluate({
 
     if (!attachedScorers.length) {
       return (
-        <div className="flex h-full items-center justify-center py-20">
+        <div className="flex h-full items-center-safe justify-center-safe py-20">
           <EmptyState
-            iconSlot={<GaugeIcon className="text-neutral3 size-10" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 size-10" />}
             titleSlot="No Scorers Attached"
             descriptionSlot="Attach or create a scorer to evaluate your agent's performance."
           />
@@ -959,7 +959,11 @@ export function AgentPlaygroundEvaluate({
           <TabContent value="experiments" className="h-full overflow-hidden">
             <Columns className={hasDetailPanel && detailView?.type === 'experiment' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
-                <Column.Content>{renderExperimentsTab()}</Column.Content>
+                <Column.Content
+                  className={!isLoadingExperiments && !experiments?.length ? 'content-stretch' : undefined}
+                >
+                  {renderExperimentsTab()}
+                </Column.Content>
               </Column>
               {detailView?.type === 'experiment' && renderDetailPanel()}
             </Columns>
@@ -968,7 +972,9 @@ export function AgentPlaygroundEvaluate({
           <TabContent value="datasets" className="h-full overflow-hidden">
             <Columns className={hasDetailPanel && detailView?.type === 'dataset' ? 'grid-cols-[1fr_1fr]' : ''}>
               <Column>
-                <Column.Content>{renderDatasetsTab()}</Column.Content>
+                <Column.Content className={!isLoadingDatasets && !datasets.length ? 'content-stretch' : undefined}>
+                  {renderDatasetsTab()}
+                </Column.Content>
               </Column>
               {detailView?.type === 'dataset' && renderDetailPanel()}
             </Columns>
@@ -986,7 +992,11 @@ export function AgentPlaygroundEvaluate({
               }
             >
               <Column>
-                <Column.Content>{renderScorersTab()}</Column.Content>
+                <Column.Content
+                  className={!isLoadingScorers && !attachedScorers.length ? 'content-stretch' : undefined}
+                >
+                  {renderScorersTab()}
+                </Column.Content>
               </Column>
               {(detailView?.type === 'scorer' ||
                 detailView?.type === 'new-scorer' ||

@@ -144,6 +144,56 @@ describe('Combobox', () => {
     });
   });
 
+  it('reports the search text through onInputValueChange and resets it after a selection', async () => {
+    const onInputValueChange = vi.fn();
+    render(<Combobox options={options} onInputValueChange={onInputValueChange} searchPlaceholder="Search providers" />);
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+
+    await waitFor(() => {
+      expect(onInputValueChange).toHaveBeenCalledWith('goo');
+    });
+
+    const google = await screen.findByRole('option', { name: 'Google' });
+    fireEvent.pointerDown(google, { pointerType: 'mouse' });
+    fireEvent.click(google, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onInputValueChange).toHaveBeenLastCalledWith('');
+    });
+  });
+
+  it('keeps a consumer-injected option whose label contains the search text as the first option', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        options={[{ label: 'Create "goo"', value: '__create__' }, ...options]}
+        onValueChange={onValueChange}
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+
+    await screen.findByRole('option', { name: 'Google' });
+    const visible = screen.getAllByRole('option');
+    expect(visible.map(o => o.textContent)).toEqual(['Create "goo"', 'Google']);
+
+    const createOption = screen.getByRole('option', { name: 'Create "goo"' });
+    fireEvent.pointerDown(createOption, { pointerType: 'mouse' });
+    fireEvent.click(createOption, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith('__create__');
+    });
+  });
+
   it('does not offer a custom value unless custom values are allowed', async () => {
     renderCombobox();
 

@@ -62,6 +62,20 @@ export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
  */
 export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
 
+/**
+ * Reserved key naming who sent a user message: `{ id, name?, avatarUrl? }`.
+ * Set by the host that authenticated the request; the agent-controller copies
+ * it onto the sent message as `providerMetadata.mastra.author` so a shared
+ * thread can show who wrote what.
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+ * ```
+ */
+export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
+
 export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
 
 export type VersionOverrides = {

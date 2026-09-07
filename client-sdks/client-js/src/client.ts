@@ -33,7 +33,6 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
@@ -104,6 +103,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
