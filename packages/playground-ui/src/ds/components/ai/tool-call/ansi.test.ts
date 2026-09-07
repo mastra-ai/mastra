@@ -28,4 +28,13 @@ describe('stripSerializedAnsi', () => {
   it('removes JSON-escaped title sequences too', () => {
     expect(stripSerializedAnsi(JSON.stringify('\u001b]0;title\u0007text'))).toBe('"text"');
   });
+
+  it('keeps a source file that spells an escape sequence as text', () => {
+    const sourceLine = "const clearLine = '\\u001b[2K';";
+    expect(stripSerializedAnsi(JSON.stringify(sourceLine))).toBe(JSON.stringify(sourceLine));
+  });
+
+  it('keeps a literal backslash that precedes a real escape sequence', () => {
+    expect(stripSerializedAnsi(JSON.stringify('path\\\u001b[32mok'))).toBe(JSON.stringify('path\\ok'));
+  });
 });
