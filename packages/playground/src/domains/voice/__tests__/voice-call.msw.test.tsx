@@ -131,6 +131,17 @@ describe('voice call', () => {
       expect(startButton.getAttribute('aria-disabled')).toBe('true');
     });
 
+    it('explains how to enable calls when the start control is focused', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(liveKitUnavailableSystemPackages)),
+      );
+
+      await renderHarness();
+      screen.getByRole('button', { name: 'Start voice call' }).focus();
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Configure @mastra/livekit to start voice calls.');
+    });
+
     it('does not request connection details', async () => {
       const onConnectionDetails = vi.fn();
       server.use(
