@@ -4,7 +4,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Volume2Icon, VolumeXIcon } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { DONE_SOUND_OPTIONS } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
@@ -40,32 +40,30 @@ interface ThinkingLevelPickerProps {
  */
 export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onChange }: ThinkingLevelPickerProps) {
   const [dragged, setDragged] = useState<number>();
-  const inFlight = useRef<number>(undefined);
+  const [held, setHeld] = useState<number>();
   const last = THINKING_LEVELS.length - 1;
 
   const indexOf = (level: ThinkingLevel) => THINKING_LEVELS.findIndex(entry => entry.value === level);
   const inheriting = inherited !== undefined && value === undefined;
   const settled = indexOf(value ?? inherited ?? 'off');
-  const shown = dragged ?? settled;
+  const pending = dragged ?? held;
+  const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
   const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-neutral2' : 'text-neutral5';
-  const valueText = `${label}${inheriting && dragged === undefined ? ' \u00b7 follows base' : ''}`;
+  const valueText = `${label}${inheriting && pending === undefined ? ' \u00b7 follows base' : ''}`;
   const travelled = `calc(0.5rem + (100% - 1rem) * ${shown / last})`;
 
   // Holding the drop until the write settles: clearing it first shows the old
   // stop for a frame, then the new one — two jumps for one change.
   const commit = async () => {
     const level = dragged === undefined ? undefined : THINKING_LEVELS[dragged];
-    if (!level || dragged === settled) return setDragged(undefined);
-    // Release and blur both ask to commit, and blur can land before the write does.
-    if (dragged === inFlight.current) return;
-    inFlight.current = dragged;
+    setDragged(undefined);
+    if (!level || dragged === settled) return;
+    setHeld(dragged);
     try {
       await onChange(level.value);
     } finally {
-      // A later release replaces the marker; clearing it there would let a blur resend that value.
-      if (inFlight.current === dragged) inFlight.current = undefined;
-      setDragged(current => (current === dragged ? undefined : current));
+      setHeld(current => (current === dragged ? undefined : current));
     }
   };
 
