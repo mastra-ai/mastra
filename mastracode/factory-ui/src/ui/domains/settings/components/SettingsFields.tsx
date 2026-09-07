@@ -40,13 +40,13 @@ interface ThinkingLevelPickerProps {
  */
 export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onChange }: ThinkingLevelPickerProps) {
   const [dragged, setDragged] = useState<number>();
-  const [held, setHeld] = useState<number>();
+  const [held, setHeld] = useState<{ stop: number }>();
   const last = THINKING_LEVELS.length - 1;
 
   const indexOf = (level: ThinkingLevel) => THINKING_LEVELS.findIndex(entry => entry.value === level);
   const inheriting = inherited !== undefined && value === undefined;
   const settled = indexOf(value ?? inherited ?? 'off');
-  const pending = dragged ?? held;
+  const pending = dragged ?? held?.stop;
   const shown = pending ?? settled;
   const label = THINKING_LEVELS[shown]?.label ?? '';
   const tone = shown >= last - 1 ? 'text-warning1' : shown === 0 ? 'text-neutral2' : 'text-neutral5';
@@ -56,14 +56,17 @@ export function ThinkingLevelPicker({ value, ariaLabel, disabled, inherited, onC
   // Holding the drop until the write settles: clearing it first shows the old
   // stop for a frame, then the new one — two jumps for one change.
   const commit = async () => {
-    const level = dragged === undefined ? undefined : THINKING_LEVELS[dragged];
+    const stop = dragged;
     setDragged(undefined);
-    if (!level || dragged === settled) return;
-    setHeld(dragged);
+    if (stop === undefined || stop === settled) return;
+    const level = THINKING_LEVELS[stop];
+    if (!level) return;
+    const release = { stop };
+    setHeld(release);
     try {
       await onChange(level.value);
     } finally {
-      setHeld(current => (current === dragged ? undefined : current));
+      setHeld(current => (current === release ? undefined : current));
     }
   };
 
