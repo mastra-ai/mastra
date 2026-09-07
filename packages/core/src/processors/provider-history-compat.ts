@@ -199,6 +199,19 @@ function matchesProviderPrefix(model: unknown, providerPrefix: string): boolean 
   return false;
 }
 
+export function isMaybeBedrockMantleGptOss(model: unknown): boolean {
+  if (model == null || typeof model === 'string' || typeof model === 'function') return false;
+
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeBedrockMantleGptOss((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (typeof model !== 'object') return false;
+  const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+  // Keep the exact Chat route and case-sensitive model prefix; Responses is out of scope.
+  return provider === 'bedrock-mantle.chat' && typeof modelId === 'string' && modelId.startsWith('openai.gpt-oss-');
+}
+
 export function isMaybeCerebras(
   model:
     | string
@@ -556,6 +569,14 @@ export const azureSystemReminderTransform: CompatRule = {
   },
 };
 
+export const bedrockMantleGptOssStripReasoningContent: CompatRule = {
+  name: 'bedrock-mantle-gpt-oss-strip-reasoning-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeBedrockMantleGptOss(model)) return undefined;
+    return stripReasoningFromPrompt(prompt);
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
@@ -571,7 +592,38 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
+  bedrockMantleGptOssStripReasoningContent,
 ];
+
+function applyPromptCompatRules(
+  rules: CompatRule[],
+  prompt: LanguageModelV2Prompt,
+  model: unknown,
+): LanguageModelV2Prompt | undefined {
+  let current = prompt;
+  let mutated = false;
+  for (const rule of rules) {
+    if (!rule.applyToPrompt) continue;
+    const next = rule.applyToPrompt({ prompt: current, model });
+    if (next) {
+      current = next;
+      mutated = true;
+    }
+  }
+  return mutated ? current : undefined;
+}
+
+class ProviderBoundaryCompat implements Processor<'provider-boundary-compat'> {
+  readonly id = 'provider-boundary-compat' as const;
+  readonly name = 'Provider Boundary Compat';
+
+  processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
+    const next = applyPromptCompatRules([bedrockMantleGptOssStripReasoningContent], prompt, model);
+    return next ? { prompt: next } : undefined;
+  }
+}
+
+export const providerBoundaryCompat = new ProviderBoundaryCompat();
 
 // ---------------------------------------------------------------------------
 // Processor
@@ -601,6 +653,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **bedrock-mantle-gpt-oss-strip-reasoning-content** — strips assistant
+ *   `reasoning` parts for Bedrock Mantle Chat GPT-OSS models in the outbound
+ *   prompt. Mantle Responses is not matched.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
@@ -620,17 +675,8 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   }
 
   processLLMRequest({ prompt, model }: ProcessLLMRequestArgs): ProcessLLMRequestResult {
-    let current = prompt;
-    let mutated = false;
-    for (const rule of this.rules) {
-      if (!rule.applyToPrompt) continue;
-      const next = rule.applyToPrompt({ prompt: current, model });
-      if (next) {
-        current = next;
-        mutated = true;
-      }
-    }
-    return mutated ? { prompt: current } : undefined;
+    const next = applyPromptCompatRules(this.rules, prompt, model);
+    return next ? { prompt: next } : undefined;
   }
 
   async processAPIError({
