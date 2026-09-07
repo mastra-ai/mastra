@@ -1485,6 +1485,9 @@ export class AgentThreadStreamRuntime {
         // internal-workflow registry, which already bounds parked runs this way.
         record.suspendedAt = Date.now();
         this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId, streamId: record.streamId });
+        // Follow-up work queued while the run was suspending (a generic, non-approval
+        // suspension can never drain it itself) must be handed to a fresh run now.
+        this.#resumeParkedGenericSuspension(state, pubsub, key);
         return;
       }
 
@@ -1535,6 +1538,49 @@ export class AgentThreadStreamRuntime {
         }
       });
     });
+  }
+
+  /**
+   * Hand a thread parked on GENERIC (non-approval) tool suspensions over to its
+   * queued follow-up work.
+   *
+   * A generic suspension resumes through the model (e.g.
+   * `autoResumeSuspendedTools` re-calling the tool with `resumeData` from the
+   * user's next message), which requires a fresh run carrying that message. But
+   * the parked run's loop never re-enters an iteration on its own, and the
+   * completion watcher's suspended branch keeps the record (and thread
+   * reservation) intact — so signals queued onto the parked run would otherwise
+   * strand until the suspended-run TTL sweep, with the thread pinned `active`
+   * the whole time. Approval suspensions are excluded: `approveToolCall` /
+   * `declineToolCall` resume the parked loop, which drains the queue itself.
+   *
+   * Mirrors the direct-stream path's same-agent exemption in
+   * `waitForCrossAgentThreadRun` (a suspended same-agent record does not block a
+   * new stream). When follow-up work is queued, detach the parked run from the
+   * thread reservation — its record stays registered for subscriber replay,
+   * resume routing, and the TTL sweep — and drain the queue into a follow-up
+   * run under the lease transferred from the parked run.
+   *
+   * Returns true when a drain was started (the caller must not re-arm the
+   * completion watcher in that case; the parked record has already settled).
+   */
+  #resumeParkedGenericSuspension(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string): boolean {
+    const runId = state.activeThreadRunIds.get(key);
+    if (!runId) return false;
+    // Only the process that registered the parked run can start its follow-up:
+    // it holds the record's stream options and the thread lease to transfer.
+    if (state.threadKeysByRunId.get(runId) !== key) return false;
+    const record = state.threadRunsById.get(runId);
+    if (!record || record.lifecycle !== 'suspended') return false;
+    if (!state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId)) return false;
+    if (!this.#hasPendingThreadWork(state, key)) return false;
+
+    if (state.activeThreadStreamIds.get(key) === record.streamId) {
+      state.activeThreadStreamIds.delete(key);
+    }
+    state.activeThreadRunIds.delete(key);
+    void this.#drainPendingSignals(state, pubsub, key, record);
+    return true;
   }
 
   async #drainPendingSignals(
@@ -2375,6 +2421,11 @@ export class AgentThreadStreamRuntime {
         const queue = signalsByThread.get(key) ?? [];
         queue.push(createSignal(data.signal));
         signalsByThread.set(key, queue);
+        // A cross-process follow-up targeting a run this instance parked on a
+        // generic suspension would otherwise strand in the queue forever.
+        if (!data.preRun) {
+          this.#resumeParkedGenericSuspension(state, resolvedPubSub, key);
+        }
         return;
       }
       if (data.type === 'run-abort-requested') {
@@ -2682,7 +2733,11 @@ export class AgentThreadStreamRuntime {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({ agent, signal, runId: queuedRunId, resourceId, threadId, streamOptions: queuedStreamOptions });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      // A run parked on a generic (non-approval) suspension never completes, so the
+      // watcher alone would strand this queue — hand the thread over immediately.
+      if (!this.#resumeParkedGenericSuspension(state, pubsub, key)) {
+        this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+      }
       return {
         signal,
         accepted: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),
@@ -2878,7 +2933,11 @@ export class AgentThreadStreamRuntime {
             signal: this.#serializeSignal(signal),
             sourceId: this.#getSourceId(),
           });
-          this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+          // A run parked on a generic (non-approval) suspension never drains this
+          // queue itself — hand the thread to a follow-up run carrying the signal.
+          if (!this.#resumeParkedGenericSuspension(state, pubsub, key)) {
+            this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+          }
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
