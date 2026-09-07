@@ -33,7 +33,6 @@ import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
 import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
-  FactoryDispatchStatus,
   UpdateWorkItemInput,
   WorkItemPriorState,
   WorkItemRow,
@@ -152,55 +151,8 @@ function parseStartBody(
   return parsed.success ? { ...tenant, factoryProjectId, ...parsed.data } : null;
 }
 
-const DECISION_STATUSES = new Set<FactoryDispatchStatus>([
-  'pending',
-  'proposed',
-  'dismissed',
-  'superseded',
-  'leased',
-  'retry',
-  'succeeded',
-  'failed',
-]);
-const DEFAULT_DECISION_PAGE_SIZE = 25;
-const MAX_DECISION_PAGE_SIZE = 50;
-
-function parseDecisionStatuses(raw: string | undefined): FactoryDispatchStatus[] | undefined {
-  if (!raw) return undefined;
-  const statuses = [...new Set(raw.split(',').map(status => status.trim()))].filter(
-    (status): status is FactoryDispatchStatus => DECISION_STATUSES.has(status as FactoryDispatchStatus),
-  );
-  return statuses.length > 0 ? statuses : undefined;
-}
-
-function parseDecisionLimit(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_DECISION_PAGE_SIZE;
-  if (!Number.isFinite(parsed)) return DEFAULT_DECISION_PAGE_SIZE;
-  return Math.max(1, Math.min(MAX_DECISION_PAGE_SIZE, parsed));
-}
-
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
   return Buffer.from(JSON.stringify([decision.createdAt.toISOString(), decision.id]), 'utf8').toString('base64url');
-}
-
-function parseDecisionCursor(raw: string | undefined): { createdAt: Date; id: string } | undefined {
-  if (!raw) return undefined;
-  try {
-    const decoded = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as unknown;
-    if (
-      !Array.isArray(decoded) ||
-      decoded.length !== 2 ||
-      typeof decoded[0] !== 'string' ||
-      typeof decoded[1] !== 'string'
-    ) {
-      return undefined;
-    }
-    const createdAt = new Date(decoded[0]);
-    if (Number.isNaN(createdAt.getTime()) || !UUID_RE.test(decoded[1])) return undefined;
-    return { createdAt, id: decoded[1] };
-  } catch {
-    return undefined;
-  }
 }
 
 /** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
@@ -479,16 +431,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             before: context.req.query('before'),
             limit: context.req.query('limit'),
           });
-          if (!query.success) return c.json({ error: 'invalid_decision_query' }, 400);
-          const before = parseDecisionCursor(query.data.before);
-          if (query.data.before && !before) return c.json({ error: 'invalid_cursor' }, 400);
+          if (!query.success) {
+            const field = query.error.issues[0]?.path[0];
+            return c.json({ error: field === 'before' ? 'invalid_cursor' : 'invalid_decision_query' }, 400);
+          }
           await workItems.ensureReady();
           const page = await workItems.listDeferredDecisionPage({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
-            statuses: parseDecisionStatuses(query.data.statuses),
-            before,
-            limit: parseDecisionLimit(query.data.limit),
+            statuses: query.data.statuses,
+            before: query.data.before,
+            limit: query.data.limit,
           });
           const last = page.decisions.at(-1);
           return c.json({

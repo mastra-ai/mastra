@@ -456,7 +456,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'Create a work item in Intake',
-        command: `mastra api factory work-item create <project-id> '{"title":"Investigate flaky tests"}'`,
+        command: `mastra api factory work-item create 11111111-1111-4111-8111-111111111111 '{"title":"Investigate flaky tests"}'`,
       },
     ],
   });
@@ -476,7 +476,7 @@ export function registerApiCommand(program: CommanderCommand): void {
     examples: [
       {
         description: 'Move a work item with optimistic concurrency',
-        command: `mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
+        command: `mastra api factory work-item transition 11111111-1111-4111-8111-111111111111 22222222-2222-4222-8222-222222222222 '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'`,
       },
     ],
   });

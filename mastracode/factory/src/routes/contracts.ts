@@ -158,26 +158,143 @@ export const metricsQuerySchema = z.object({
   to: z.string().optional(),
 });
 
+const decisionStatusSchema = z.enum([
+  'pending',
+  'proposed',
+  'dismissed',
+  'superseded',
+  'leased',
+  'retry',
+  'succeeded',
+  'failed',
+]);
+const boundedLimitSchema = (defaultValue: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform(value => {
+      const parsed = value ? Number.parseInt(value, 10) : defaultValue;
+      return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
+    });
+const decisionCursorSchema = z
+  .string()
+  .optional()
+  .transform((value, context) => {
+    if (!value) return undefined;
+    try {
+      const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+      if (
+        !Array.isArray(decoded) ||
+        decoded.length !== 2 ||
+        typeof decoded[0] !== 'string' ||
+        typeof decoded[1] !== 'string'
+      ) {
+        throw new Error('invalid cursor');
+      }
+      const createdAt = new Date(decoded[0]);
+      if (Number.isNaN(createdAt.getTime()) || !new RegExp(UUID_PATTERN).test(decoded[1])) {
+        throw new Error('invalid cursor');
+      }
+      return { createdAt, id: decoded[1] };
+    } catch {
+      context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+      return z.NEVER;
+    }
+  });
+
 export const decisionQuerySchema = z.object({
-  statuses: z.string().optional(),
-  before: z.string().optional(),
-  limit: z.string().optional(),
+  statuses: z
+    .string()
+    .optional()
+    .transform(value => {
+      if (!value) return undefined;
+      const statuses = [...new Set(value.split(',').map(status => status.trim()))].filter(
+        status => decisionStatusSchema.safeParse(status).success,
+      ) as Array<z.infer<typeof decisionStatusSchema>>;
+      return statuses.length > 0 ? statuses : undefined;
+    }),
+  before: decisionCursorSchema,
+  limit: boundedLimitSchema(25, 50),
 });
 
+const attentionKindSchema = z.enum([
+  'automation-failed',
+  'automation-proposed',
+  'mention',
+  'activity',
+  'supervisor-finding',
+]);
+type AttentionKind = z.infer<typeof attentionKindSchema>;
+type AttentionStreamPosition = { occurredAt: Date; id: string };
+type AttentionCursorMap = Map<AttentionKind, AttentionStreamPosition | undefined>;
+
+function parseAttentionStreamPosition(value: unknown): AttentionStreamPosition | undefined {
+  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || typeof value[1] !== 'string') {
+    return undefined;
+  }
+  const occurredAt = new Date(value[0]);
+  if (Number.isNaN(occurredAt.getTime()) || !new RegExp(UUID_PATTERN).test(value[1])) return undefined;
+  return { occurredAt, id: value[1] };
+}
+
+const attentionCursorSchema = z
+  .string()
+  .optional()
+  .transform((value, context) => {
+    if (!value) return undefined;
+    try {
+      const decoded: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+      if (Array.isArray(decoded)) {
+        const legacy = parseAttentionStreamPosition(decoded);
+        if (!legacy) throw new Error('invalid cursor');
+        return new Map<AttentionKind, AttentionStreamPosition | undefined>([['automation-failed', legacy]]);
+      }
+      if (!decoded || typeof decoded !== 'object') throw new Error('invalid cursor');
+      const cursors: AttentionCursorMap = new Map();
+      for (const [kind, positionValue] of Object.entries(decoded)) {
+        const parsedKind = attentionKindSchema.safeParse(kind);
+        if (!parsedKind.success) throw new Error('invalid cursor');
+        if (positionValue === null) {
+          cursors.set(parsedKind.data, undefined);
+          continue;
+        }
+        const position = parseAttentionStreamPosition(positionValue);
+        if (!position) throw new Error('invalid cursor');
+        cursors.set(parsedKind.data, position);
+      }
+      if (cursors.size === 0) throw new Error('invalid cursor');
+      return cursors;
+    } catch {
+      context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+      return z.NEVER;
+    }
+  });
+
 export const attentionQuerySchema = z.object({
-  view: z.enum(['open', 'unread', 'archived']).optional(),
-  tier: z.enum(['all', 'badge', 'activity']).optional(),
-  before: z.string().optional(),
-  limit: z.string().optional(),
-  search: z.string().optional(),
+  view: z.enum(['open', 'unread', 'archived']).optional().default('open'),
+  tier: z.enum(['all', 'badge', 'activity']).optional().default('all'),
+  before: attentionCursorSchema,
+  limit: boundedLimitSchema(25, 50),
+  search: z
+    .string()
+    .optional()
+    .transform(value => value?.trim().toLowerCase().slice(0, 200) || undefined),
 });
 
 const attentionActionPathSchema = z
   .object({
     id: uuidSchema,
-    kind: z.enum(['automation-failed', 'automation-proposed', 'mention', 'activity', 'supervisor-finding']),
+    kind: attentionKindSchema,
     sourceId: z.string().min(1).max(256),
-    occurrence: z.string().regex(/^(0|[1-9]\d*)$/),
+    occurrence: z
+      .string()
+      .regex(/^(0|[1-9]\d*)$/)
+      .transform((value, context) => {
+        const occurrence = Number(value);
+        if (Number.isSafeInteger(occurrence)) return occurrence;
+        context.addIssue({ code: 'custom', message: 'Invalid occurrence' });
+        return z.NEVER;
+      }),
   })
   .refine(
     input =>
@@ -322,8 +439,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
     responseSchema: z.object({
       items: z.array(entitySchema),
       openCount: z.number(),
-      approvalCount: z.number(),
+      badgeCount: z.number(),
       unreadCount: z.number(),
+      activityUnreadCount: z.number(),
+      latestOccurrenceKey: z.string().nullable(),
+      latestOccurrenceAt: z.string().nullable(),
+      latestOccurrenceUnread: z.boolean(),
       hasMore: z.boolean(),
       nextCursor: z.string().optional(),
     }),
@@ -333,7 +454,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/attention/read-all',
     description: 'Mark all Factory attention as read',
     pathSchema: projectPathSchema,
-    querySchema: z.object({ before: z.string().optional() }),
+    querySchema: z.object({ before: attentionCursorSchema }),
     responseSchema: z.object({ ok: z.literal(true), hasMore: z.boolean(), nextCursor: z.string().optional() }),
   },
   attentionRead: {

@@ -572,6 +572,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "view": {
+          "default": "open",
           "type": "string",
           "enum": [
             "open",
@@ -580,6 +581,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "tier": {
+          "default": "all",
           "type": "string",
           "enum": [
             "all",
@@ -615,11 +617,37 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "openCount": {
           "type": "number"
         },
-        "approvalCount": {
+        "badgeCount": {
           "type": "number"
         },
         "unreadCount": {
           "type": "number"
+        },
+        "activityUnreadCount": {
+          "type": "number"
+        },
+        "latestOccurrenceKey": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latestOccurrenceAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latestOccurrenceUnread": {
+          "type": "boolean"
         },
         "hasMore": {
           "type": "boolean"
@@ -631,8 +659,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "items",
         "openCount",
-        "approvalCount",
+        "badgeCount",
         "unreadCount",
+        "activityUnreadCount",
+        "latestOccurrenceKey",
+        "latestOccurrenceAt",
+        "latestOccurrenceUnread",
         "hasMore"
       ]
     }

@@ -12,6 +12,7 @@ import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -167,6 +168,7 @@ describe('supervisor finding attention items', () => {
       badgeCount: 1,
       latestOccurrenceUnread: true,
     });
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);

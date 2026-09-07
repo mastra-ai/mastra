@@ -14,8 +14,10 @@ import {
 } from '../../scripts/generate-api-cli-route-metadata.js';
 import { buildAttentionRoutes } from './attention.js';
 import {
+  attentionQuerySchema,
   createProjectBodySchema,
   createWorkItemBodySchema,
+  decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
   transitionBodySchema,
   updateProjectBodySchema,
@@ -83,6 +85,46 @@ describe('Factory route contracts', () => {
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
   });
 
+  it('normalizes deterministic decision and attention query inputs', () => {
+    const decisionCursor = Buffer.from(JSON.stringify(['2030-01-01T00:00:00.000Z', decisionId])).toString('base64url');
+    expect(
+      decisionQuerySchema.parse({ statuses: 'proposed,invalid,proposed', before: decisionCursor, limit: '100' }),
+    ).toEqual({
+      statuses: ['proposed'],
+      before: { createdAt: new Date('2030-01-01T00:00:00.000Z'), id: decisionId },
+      limit: 50,
+    });
+    expect(decisionQuerySchema.safeParse({ before: 'invalid' }).success).toBe(false);
+
+    const attentionCursor = Buffer.from(JSON.stringify({ mention: ['2030-01-02T00:00:00.000Z', decisionId] })).toString(
+      'base64url',
+    );
+    const attention = attentionQuerySchema.parse({ before: attentionCursor, limit: '0', search: '  FIND ME  ' });
+    expect(attention).toMatchObject({ view: 'open', tier: 'all', limit: 1, search: 'find me' });
+    expect(attention.before?.get('mention')).toEqual({
+      occurredAt: new Date('2030-01-02T00:00:00.000Z'),
+      id: decisionId,
+    });
+    expect(attentionQuerySchema.safeParse({ before: 'invalid' }).success).toBe(false);
+
+    expect(
+      FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.parse({
+        id: projectId,
+        kind: 'mention',
+        sourceId: decisionId,
+        occurrence: String(Number.MAX_SAFE_INTEGER),
+      }).occurrence,
+    ).toBe(Number.MAX_SAFE_INTEGER);
+    expect(
+      FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.safeParse({
+        id: projectId,
+        kind: 'mention',
+        sourceId: decisionId,
+        occurrence: '9007199254740992',
+      }).success,
+    ).toBe(false);
+  });
+
   it('preserves governed transition validation and normalization', () => {
     expect(
       transitionBodySchema.parse({
@@ -118,8 +160,12 @@ describe('Factory route contracts', () => {
       FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse({
         items: [],
         openCount: 1,
-        approvalCount: 0,
+        badgeCount: 1,
         unreadCount: 1,
+        activityUnreadCount: 0,
+        latestOccurrenceKey: null,
+        latestOccurrenceAt: null,
+        latestOccurrenceUnread: false,
         hasMore: false,
       }).success,
     ).toBe(true);
