@@ -4,7 +4,7 @@
 
 Switched the default platform integrations endpoint used by `PlatformGithubIntegration` and `PlatformLinearIntegration` from `https://platform.mastra.ai/v1` to `https://integrations.mastra.ai`, and added `MASTRA_PLATFORM_REGION` support. Set it to `us` or `eu` (case-insensitive) to route to the regional replica at `https://integrations.us.mastra.ai` or `https://integrations.eu.mastra.ai`.
 
-Endpoint resolution precedence: `MASTRA_INTEGRATIONS_API_URL` (new, integrations-specific) > `MASTRA_SHARED_API_URL` (legacy shared platform URL, still honored) > `MASTRA_PLATFORM_REGION` > global default. A trailing `/v1` on either override is stripped, so legacy values keep working unchanged.
+Endpoint resolution precedence: `MASTRA_INTEGRATIONS_API_URL` (dedicated integrations override) > `MASTRA_PLATFORM_REGION` > global default. `MASTRA_SHARED_API_URL` configures the shared platform API and does not affect integrations routing. A trailing `/v1` on the override is stripped, so version-suffixed URLs keep working unchanged.
 
 Migration:
 
@@ -21,5 +21,3 @@ export MASTRA_PLATFORM_REGION=us
 # Keep the previous route (e.g. pinned deployments)
 export MASTRA_INTEGRATIONS_API_URL=https://platform.mastra.ai/v1
 ```
-
-Deployments that already pin `MASTRA_SHARED_API_URL` need no changes.

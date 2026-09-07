@@ -26,9 +26,8 @@ describe('PlatformApiClient', () => {
     });
   });
 
-  it('resolves config from legacy MASTRA_SHARED_API_URL and strips a trailing /v1', () => {
-    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
+  it('strips a trailing /v1 from MASTRA_INTEGRATIONS_API_URL so versioned paths do not duplicate', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.example.com/v1');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
 
@@ -40,7 +39,6 @@ describe('PlatformApiClient', () => {
 
   it('defaults config to integrations.mastra.ai and requires a platform credential', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.mastra.ai' });
@@ -51,7 +49,6 @@ describe('PlatformApiClient', () => {
 
   it('resolves to the US integrations replica when MASTRA_PLATFORM_REGION is us', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.us.mastra.ai' });
@@ -59,7 +56,6 @@ describe('PlatformApiClient', () => {
 
   it('resolves to the EU integrations replica when MASTRA_PLATFORM_REGION is EU (case-insensitive, trimmed)', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     vi.stubEnv('MASTRA_PLATFORM_REGION', '  EU  ');
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.eu.mastra.ai' });
@@ -67,7 +63,6 @@ describe('PlatformApiClient', () => {
 
   it('falls back to the global integrations default for unknown MASTRA_PLATFORM_REGION values', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'apac');
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.mastra.ai' });
@@ -75,25 +70,19 @@ describe('PlatformApiClient', () => {
 
   it('prefers an explicit MASTRA_INTEGRATIONS_API_URL over MASTRA_PLATFORM_REGION', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://staging.integrations.example.com/');
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
     expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://staging.integrations.example.com' });
   });
 
-  it('prefers a legacy MASTRA_SHARED_API_URL over MASTRA_PLATFORM_REGION', () => {
+  it('ignores MASTRA_SHARED_API_URL: the platform API override never reroutes integrations', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
     vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
-    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://platform.example.com' });
-  });
+    expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.mastra.ai' });
 
-  it('prefers MASTRA_INTEGRATIONS_API_URL over legacy MASTRA_SHARED_API_URL', () => {
-    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://staging.integrations.example.com');
-    vi.stubEnv('MASTRA_SHARED_API_URL', 'https://platform.example.com/v1');
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://staging.integrations.example.com' });
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
+    expect(platformApiClientConfigFromEnv()).toMatchObject({ baseUrl: 'https://integrations.us.mastra.ai' });
   });
 
   it('prefers the platform-injected MASTRA_PLATFORM_ACCESS_TOKEN over MASTRA_PLATFORM_SECRET_KEY', () => {
