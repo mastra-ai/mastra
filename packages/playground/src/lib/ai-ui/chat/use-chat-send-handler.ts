@@ -201,10 +201,15 @@ export const useChatSendHandler = ({
           // Refetch the panel again once buffering completes, so any records that
           // only landed after awaitBufferStatus resolved are reflected immediately.
           refreshTimelinePanel(currentThreadId);
+          // OM's working-memory extractor persists server-side during this async
+          // buffering cycle, often after the chat stream has ended. Without this
+          // refresh the Working Memory sidebar keeps its pre-run value until a
+          // page reload.
+          void refreshWorkingMemory?.();
         })
         .catch(() => {});
     },
-    [agentId, baseClient, queryClient, refreshTimelinePanel, setMessages],
+    [agentId, baseClient, queryClient, refreshTimelinePanel, refreshWorkingMemory, setMessages],
   );
 
   const handleHandledChunk = useCallback(
@@ -228,8 +233,21 @@ export const useChatSendHandler = ({
       if (handled?.type === 'data-om-activation') {
         handleActivation(handled.data);
       }
+      // Observational Memory can persist working memory server-side via its
+      // working-memory extractor, with no tool call in the chat stream. Refresh
+      // it whenever an observation cycle lands so the sidebar stays current.
+      if (handled?.type === 'data-om-observation-end') {
+        void refreshWorkingMemory?.();
+      }
     },
-    [handleActivation, handleObservationStart, handleProgressUpdate, refreshObservationalMemory, setStreamErrors],
+    [
+      handleActivation,
+      handleObservationStart,
+      handleProgressUpdate,
+      refreshObservationalMemory,
+      refreshWorkingMemory,
+      setStreamErrors,
+    ],
   );
 
   const send = useCallback(
