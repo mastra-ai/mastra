@@ -2111,17 +2111,6 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
-    const consumedIndexPubSub = resolvedPubSub as PubSub & {
-      getLastConsumedIndex?: (topic: string) => Promise<number | undefined>;
-      setLastConsumedIndex?: (topic: string, index: number) => Promise<void>;
-    };
-    const supportsConsumedIndexCheckpoint =
-      resolvedPubSub.supportsOffsets &&
-      typeof consumedIndexPubSub.getLastConsumedIndex === 'function' &&
-      typeof consumedIndexPubSub.setLastConsumedIndex === 'function';
-    let lastConsumedIndex = supportsConsumedIndexCheckpoint
-      ? ((await consumedIndexPubSub.getLastConsumedIndex!(topic)) ?? -1)
-      : -1;
     const seenStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
@@ -2547,15 +2536,6 @@ export class AgentThreadStreamRuntime {
       }
     };
 
-    const checkpointEvent = async (event: Parameters<EventCallback>[0]) => {
-      if (!supportsConsumedIndexCheckpoint || typeof event.index !== 'number') return;
-      // Checkpoints are a contiguous high-water mark. If a previous event failed
-      // and is later redelivered, do not let a newer successful event skip it.
-      if (event.index !== lastConsumedIndex + 1) return;
-      await consumedIndexPubSub.setLastConsumedIndex!(topic, event.index);
-      lastConsumedIndex = event.index;
-    };
-
     let eventTail = Promise.resolve();
     const onEvent: EventCallback = (event, ack) => {
       // Events are processed strictly in publish order, but each delivery is
@@ -2563,10 +2543,7 @@ export class AgentThreadStreamRuntime {
       // has been inspected — including events this subscriber filters out —
       // because a persistent backend (Redis consumer groups) keeps unacked
       // deliveries pending for the lifetime of the subscription.
-      const processed = eventTail.then(async () => {
-        await handleEvent(event);
-        await checkpointEvent(event);
-      });
+      const processed = eventTail.then(() => handleEvent(event));
       // The tail must survive a failed event so later events still run.
       eventTail = processed.then(
         () => {},
@@ -2576,11 +2553,7 @@ export class AgentThreadStreamRuntime {
       return processed.then(() => ack?.());
     };
 
-    if (supportsConsumedIndexCheckpoint) {
-      await resolvedPubSub.subscribeFromOffset(topic, lastConsumedIndex + 1, onEvent);
-    } else {
-      await resolvedPubSub.subscribe(topic, onEvent);
-    }
+    await resolvedPubSub.subscribe(topic, onEvent);
 
     const currentRunId = activeRunId();
     const currentRecord = currentRunId ? state.threadRunsById.get(currentRunId) : undefined;
