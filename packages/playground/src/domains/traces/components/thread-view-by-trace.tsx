@@ -14,7 +14,7 @@ import { useMeasuredAutoHeight } from '@mastra/playground-ui/hooks/use-measured-
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageSquare } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
@@ -62,9 +62,15 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
   const [selected, setSelected] = useState<SelectedSpan | null>(null);
   // Spans behind the message the user asked to highlight; scoped to one trace since each row has its own tree.
   const [highlight, setHighlight] = useState<{ traceId: string; spanIds: string[] } | null>(null);
+  // "View full thread" on the traces page lands here with the originating trace: that row starts
+  // expanded and scrolls into view when it mounts (see `scrollIntoViewOnMount`).
+  const [searchParams] = useSearchParams();
+  const anchorTraceId = searchParams.get('traceId');
   // Rows whose timeline is shown in full rather than clamped to the messages column. Selecting a
   // span expands its row and it stays expanded until the reader collapses it with "Show less".
-  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(
+    () => new Set(anchorTraceId ? [anchorTraceId] : []),
+  );
 
   const setTraceExpanded = (traceId: string, expanded: boolean) => {
     setExpandedTraceIds(current => {
@@ -82,20 +88,6 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
     // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
     if (!spanId) setHighlight(null);
   };
-
-  // "View full thread" on the traces page lands here with the originating trace; best effort on
-  // the first loaded page, since older pages only stream in as the reader scrolls up.
-  const [searchParams] = useSearchParams();
-  const anchorTraceId = searchParams.get('traceId');
-  const anchoredRef = useRef(false);
-  useEffect(() => {
-    if (anchoredRef.current || !anchorTraceId || !traceIds.includes(anchorTraceId)) return;
-    const row = findRow(anchorTraceId);
-    if (!row) return;
-    anchoredRef.current = true;
-    row.scrollIntoView({ block: 'start' });
-    setTraceExpanded(anchorTraceId, true);
-  }, [anchorTraceId, traceIds]);
 
   const highlightSpans = (traceId: string, spanIds: string[]) => {
     const lastSpanId = spanIds.at(-1);
@@ -167,6 +159,7 @@ export function ThreadViewByTrace({ threadId }: ThreadViewByTraceProps) {
               featuredSpanIds={highlight?.traceId === trace.traceId ? highlight.spanIds : undefined}
               isCurrent={currentTraceId === trace.traceId}
               isExpanded={expandedTraceIds.has(trace.traceId)}
+              isAnchor={anchorTraceId === trace.traceId}
               onExpandedChange={expanded => setTraceExpanded(trace.traceId, expanded)}
               onSpanSelect={spanId => selectSpan(trace.traceId, spanId)}
               onHighlightSpans={spanIds => highlightSpans(trace.traceId, spanIds)}
@@ -193,10 +186,17 @@ interface TraceThreadRowProps {
   featuredSpanIds?: string[];
   isCurrent: boolean;
   isExpanded: boolean;
+  /** The row the reader came from via "View full thread"; scrolled into view once it mounts. */
+  isAnchor: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onSpanSelect: (spanId: string | undefined) => void;
   onHighlightSpans: (spanIds: string[]) => void;
 }
+
+// Module-level so the callback ref keeps its identity and React only invokes it on mount/unmount.
+const scrollIntoViewOnMount = (row: HTMLDivElement | null) => {
+  row?.scrollIntoView({ block: 'start' });
+};
 
 function TraceThreadRow({
   traceId,
@@ -204,6 +204,7 @@ function TraceThreadRow({
   featuredSpanIds,
   isCurrent,
   isExpanded,
+  isAnchor,
   onExpandedChange,
   onSpanSelect,
   onHighlightSpans,
@@ -237,6 +238,7 @@ function TraceThreadRow({
       )}
       data-trace-id={traceId}
       data-active={isActive || undefined}
+      ref={isAnchor ? scrollIntoViewOnMount : undefined}
     >
       {/* The messages column has no bottom border so consecutive turns read as one
           continuous conversation; the vertical border separates it from the trace. */}
