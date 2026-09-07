@@ -57,6 +57,8 @@ interface SlackChannelDeps {
    * get an ephemeral "connect your account" card instead.
    */
   accountLinks?: ChannelIdentityStorage;
+  /** Grants directory access only after both sender and project routing succeed. */
+  authorizeDirectory?: (context: ChannelHandlerContext['requestContext'], teamId: string) => void;
   /**
    * Factory projects domain. When provided (alongside `accountLinks`), a
    * linked sender's run must also resolve to a Factory project before it
@@ -500,7 +502,7 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
-  { accountLinks, projects }: SlackChannelDeps,
+  { accountLinks, projects, authorizeDirectory }: SlackChannelDeps,
   ctx: ChannelHandlerContext,
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
@@ -520,6 +522,8 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
+      const teamId = slackTeamId(message);
+      if (teamId) authorizeDirectory?.(ctx.requestContext, teamId);
       return {
         routed: {
           link: sender.link,

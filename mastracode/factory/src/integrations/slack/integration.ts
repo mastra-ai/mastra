@@ -19,15 +19,18 @@
  */
 
 import type { TypingStatusFn } from '@mastra/core/channels';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
+import { buildSlackAgentTools } from './agent-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
 import { createSlackChannelsConfig } from './slack.js';
+import { SlackUserDirectory } from './user-directory.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -109,6 +112,10 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #directory?: SlackUserDirectory;
+  // Object identity prevents user-supplied or persisted request-context values
+  // from impersonating a successfully routed Slack request.
+  readonly #directoryGrants = new WeakMap<RequestContext, { teamId: string; user: unknown }>();
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -123,6 +130,19 @@ export class SlackIntegration implements FactoryIntegration {
       );
     }
     this.#config = config;
+    if (config.botToken) this.#directory = new SlackUserDirectory(config.botToken);
+  }
+
+  async agentTools({ requestContext }: { requestContext: RequestContext }) {
+    if (!this.#directory) return {};
+    return buildSlackAgentTools({
+      requestContext,
+      directory: this.#directory,
+      authorizedWorkspace: context => {
+        const grant = this.#directoryGrants.get(context);
+        return grant && grant.user === context.get('user') ? grant.teamId : undefined;
+      },
+    });
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
@@ -138,6 +158,9 @@ export class SlackIntegration implements FactoryIntegration {
         botToken: this.#config.botToken,
       },
       accountLinks: ctx.storage.channelIdentity,
+      authorizeDirectory: (context, teamId) => {
+        this.#directoryGrants.set(context, { teamId, user: context.get('user') });
+      },
       projects: ctx.storage.projects,
       sourceControl: sourceControlOwner,
       memorySettings: ctx.storage.memorySettings,
