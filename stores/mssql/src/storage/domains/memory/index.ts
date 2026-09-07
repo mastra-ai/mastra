@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -12,20 +13,39 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageMetadataFilter,
   CreateIndexOptions,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
+  BufferedObservationChunk,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  UpdateBufferedReflectionInput,
+  SwapBufferedReflectionToActiveInput,
+  CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
+
+const OM_TABLE = 'mastra_observational_memory' as const;
 
 function bindMssqlMetadataParams(request: sql.Request, params: Record<string, unknown>): void {
   for (const [paramName, paramValue] of Object.entries(params)) {
@@ -65,6 +85,8 @@ function buildMssqlMessageMetadataFilter(metadataFilter: StorageMetadataFilter |
 
 export class MemoryMSSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
+  readonly supportsObservationalMemory = true;
+
   private pool: sql.ConnectionPool;
   private schema?: string;
   private db: MssqlDB;
@@ -73,7 +95,7 @@ export class MemoryMSSQL extends MemoryStorage {
   private indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
     // Parse content back to objects if they were stringified during storage
@@ -117,6 +139,15 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+
+    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    if (omSchema) {
+      await this.db.createTable({
+        tableName: OM_TABLE as any,
+        schema: omSchema,
+      });
+    }
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -127,7 +158,7 @@ export class MemoryMSSQL extends MemoryStorage {
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.schema ? `${this.schema}_` : '';
-    return [
+    const indexes: CreateIndexOptions[] = [
       {
         name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
         table: TABLE_THREADS,
@@ -139,6 +170,17 @@ export class MemoryMSSQL extends MemoryStorage {
         columns: ['thread_id', 'seq_id DESC'],
       },
     ];
+
+    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    if (omSchema) {
+      indexes.push({
+        name: `${schemaPrefix}idx_om_lookup_key`,
+        table: OM_TABLE as any,
+        columns: ['lookupKey'],
+      });
+    }
+
+    return indexes;
   }
 
   /**
@@ -181,6 +223,10 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.clearTable({ tableName: TABLE_MESSAGES });
     await this.db.clearTable({ tableName: TABLE_THREADS });
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
+    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    if (omSchema) {
+      await this.db.clearTable({ tableName: OM_TABLE as any });
+    }
   }
 
   async getThreadById({
@@ -541,6 +587,179 @@ export class MemoryMSSQL extends MemoryStorage {
           details: {
             threadId,
           },
+        },
+        error,
+      );
+    }
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    const newThreadId = providedThreadId || randomUUID();
+
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'CLONE_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    try {
+      const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+
+      let messageQuery = `SELECT id, content, role, type, [createdAt], thread_id, [resourceId] FROM ${messagesTable} WHERE thread_id = @threadId`;
+      const messageReq = this.pool.request();
+      messageReq.input('threadId', sourceThreadId);
+
+      const conditions: string[] = [];
+      let paramIndex = 1;
+
+      if (options?.messageFilter?.startDate) {
+        paramIndex++;
+        messageReq.input(`startDate${paramIndex}`, options.messageFilter.startDate instanceof Date ? options.messageFilter.startDate.toISOString() : options.messageFilter.startDate);
+        conditions.push(`AND [createdAt] >= @startDate${paramIndex}`);
+      }
+      if (options?.messageFilter?.endDate) {
+        paramIndex++;
+        messageReq.input(`endDate${paramIndex}`, options.messageFilter.endDate instanceof Date ? options.messageFilter.endDate.toISOString() : options.messageFilter.endDate);
+        conditions.push(`AND [createdAt] <= @endDate${paramIndex}`);
+      }
+      if (options?.messageFilter?.messageIds && options.messageFilter.messageIds.length > 0) {
+        const placeholders = options.messageFilter.messageIds.map((_, i) => `@messageId${i + 1}`).join(', ');
+        conditions.push(`AND id IN (${placeholders})`);
+        options.messageFilter.messageIds.forEach((id, i) => {
+          messageReq.input(`messageId${i + 1}`, id);
+        });
+      }
+
+      messageQuery += ` ${conditions.join(' ')} ORDER BY [createdAt] ASC`;
+
+      if (options?.messageLimit && options.messageLimit > 0) {
+        paramIndex++;
+        const limitQuery = `SELECT * FROM (${messageQuery.replace('ORDER BY [createdAt] ASC', 'ORDER BY [createdAt] DESC')}) AS sub ORDER BY [createdAt] ASC OFFSET 0 ROWS FETCH NEXT @messageLimit ROWS ONLY`;
+        messageReq.input('messageLimit', options.messageLimit);
+        messageQuery = limitQuery;
+      }
+
+      const sourceMessagesResult = await messageReq.query(messageQuery);
+      const sourceMessages = sourceMessagesResult.recordset || [];
+
+      const now = new Date();
+      const nowStr = now.toISOString();
+
+      const lastMessageId = sourceMessages.length > 0 ? (sourceMessages[sourceMessages.length - 1]!.id as string) : undefined;
+
+      const cloneMetadata: ThreadCloneMetadata = {
+        sourceThreadId,
+        clonedAt: now,
+        ...(lastMessageId && { lastMessageId }),
+      };
+
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: resourceId || sourceThread.resourceId,
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
+        metadata: {
+          ...metadata,
+          clone: cloneMetadata,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const tx = this.pool.transaction();
+      try {
+        await tx.begin();
+
+        const threadReq = tx.request();
+        threadReq.input('id', newThread.id);
+        threadReq.input('resourceId', newThread.resourceId);
+        threadReq.input('title', newThread.title ?? '');
+        threadReq.input('metadata', JSON.stringify(newThread.metadata));
+        threadReq.input('createdAt', nowStr);
+        threadReq.input('updatedAt', nowStr);
+
+        await threadReq.query(
+          `INSERT INTO ${threadsTable} (id, [resourceId], title, metadata, [createdAt], [updatedAt]) VALUES (@id, @resourceId, @title, @metadata, @createdAt, @updatedAt)`,
+        );
+
+        const clonedMessages: MastraDBMessage[] = [];
+        const messageIdMap: Record<string, string> = {};
+        const targetResourceId = resourceId || sourceThread.resourceId;
+
+        for (const sourceMsg of sourceMessages) {
+          const newMessageId = randomUUID();
+          messageIdMap[sourceMsg.id as string] = newMessageId;
+          const contentStr = sourceMsg.content as string;
+          let parsedContent: MastraDBMessage['content'];
+          try {
+            parsedContent = JSON.parse(contentStr);
+          } catch {
+            parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
+          }
+
+          const msgReq = tx.request();
+          msgReq.input('id', newMessageId);
+          msgReq.input('threadId', newThreadId);
+          msgReq.input('content', contentStr);
+          msgReq.input('role', sourceMsg.role as string);
+          msgReq.input('type', (sourceMsg.type as string) || 'v2');
+          msgReq.input('createdAt', sourceMsg.createdAt as string);
+          msgReq.input('resourceId', targetResourceId);
+
+          await msgReq.query(
+            `INSERT INTO ${messagesTable} (id, thread_id, content, role, type, [createdAt], [resourceId]) VALUES (@id, @threadId, @content, @role, @type, @createdAt, @resourceId)`,
+          );
+
+          clonedMessages.push({
+            id: newMessageId,
+            threadId: newThreadId,
+            content: parsedContent,
+            role: sourceMsg.role as MastraDBMessage['role'],
+            type: (sourceMsg.type as string) || undefined,
+            createdAt: new Date(sourceMsg.createdAt as string),
+            resourceId: targetResourceId,
+          });
+        }
+
+        await tx.commit();
+
+        return {
+          thread: newThread,
+          clonedMessages,
+          messageIdMap,
+        };
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'CLONE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
         },
         error,
       );
@@ -1310,6 +1529,1112 @@ export class MemoryMSSQL extends MemoryStorage {
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
       throw mastraError;
+    }
+  }
+
+  // ============================================
+  // Observational Memory Methods
+  // ============================================
+
+  private getOMKey(threadId: string | null, resourceId: string): string {
+    return threadId ? `thread:${threadId}` : `resource:${resourceId}`;
+  }
+
+  private parseOMRow(row: any): ObservationalMemoryRecord {
+    return {
+      id: row.id,
+      scope: row.scope,
+      threadId: row.threadId || null,
+      resourceId: row.resourceId,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      lastObservedAt: row.lastObservedAt ? new Date(row.lastObservedAt) : undefined,
+      originType: row.originType || 'initial',
+      generationCount: Number(row.generationCount || 0),
+      activeObservations: row.activeObservations || '',
+      bufferedObservationChunks: row.bufferedObservationChunks
+        ? typeof row.bufferedObservationChunks === 'string'
+          ? JSON.parse(row.bufferedObservationChunks)
+          : row.bufferedObservationChunks
+        : undefined,
+      bufferedObservations: row.activeObservationsPendingUpdate || undefined,
+      bufferedObservationTokens: row.bufferedObservationTokens ? Number(row.bufferedObservationTokens) : undefined,
+      bufferedMessageIds: undefined,
+      bufferedReflection: row.bufferedReflection || undefined,
+      bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
+      bufferedReflectionInputTokens: row.bufferedReflectionInputTokens
+        ? Number(row.bufferedReflectionInputTokens)
+        : undefined,
+      reflectedObservationLineCount: row.reflectedObservationLineCount
+        ? Number(row.reflectedObservationLineCount)
+        : undefined,
+      totalTokensObserved: Number(row.totalTokensObserved || 0),
+      observationTokenCount: Number(row.observationTokenCount || 0),
+      pendingMessageTokens: Number(row.pendingMessageTokens || 0),
+      isReflecting: Boolean(row.isReflecting),
+      isObserving: Boolean(row.isObserving),
+      isBufferingObservation:
+        row.isBufferingObservation === true || row.isBufferingObservation === 'true' || row.isBufferingObservation === 1,
+      isBufferingReflection:
+        row.isBufferingReflection === true || row.isBufferingReflection === 'true' || row.isBufferingReflection === 1,
+      lastBufferedAtTokens:
+        typeof row.lastBufferedAtTokens === 'number'
+          ? row.lastBufferedAtTokens
+          : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
+      config: row.config ? (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) : {},
+      metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : undefined,
+      observedMessageIds: row.observedMessageIds
+        ? typeof row.observedMessageIds === 'string'
+          ? JSON.parse(row.observedMessageIds)
+          : row.observedMessageIds
+        : undefined,
+      observedTimezone: row.observedTimezone || undefined,
+    };
+  }
+
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+      request.input('lookupKey', lookupKey);
+      const sql = `SELECT TOP 1 * FROM ${tableName} WHERE [lookupKey] = @lookupKey ORDER BY [generationCount] DESC`;
+      const resultSet = await request.query(sql);
+      if (!resultSet.recordset || resultSet.recordset.length === 0) return null;
+      return this.parseOMRow(resultSet.recordset[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
+  ): Promise<ObservationalMemoryRecord[]> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+      request.input('lookupKey', lookupKey);
+
+      const conditions = ['[lookupKey] = @lookupKey'];
+      let paramIndex = 1;
+
+      if (options?.from) {
+        paramIndex++;
+        request.input(`from${paramIndex}`, options.from.toISOString());
+        conditions.push(`[createdAt] >= @from${paramIndex}`);
+      }
+      if (options?.to) {
+        paramIndex++;
+        request.input(`to${paramIndex}`, options.to.toISOString());
+        conditions.push(`[createdAt] <= @to${paramIndex}`);
+      }
+
+      paramIndex++;
+      request.input('limit', limit);
+      let sql = `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY [generationCount] DESC OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY`;
+
+      if (options?.offset != null) {
+        sql = sql.replace('OFFSET 0 ROWS', `OFFSET @offset ROWS`);
+        request.input('offset', options.offset);
+      }
+
+      const resultSet = await request.query(sql);
+      if (!resultSet.recordset) return [];
+      return resultSet.recordset.map(row => this.parseOMRow(row));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_OBSERVATIONAL_MEMORY_HISTORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId, limit },
+        },
+        error,
+      );
+    }
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.scope,
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: undefined,
+        originType: 'initial',
+        generationCount: 0,
+        activeObservations: '',
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
+        config: input.config,
+        observedTimezone: input.observedTimezone,
+      };
+
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const nowStr = now.toISOString();
+      const request = this.pool.request();
+      request.input('id', id);
+      request.input('lookupKey', lookupKey);
+      request.input('scope', input.scope);
+      request.input('resourceId', input.resourceId);
+      request.input('threadId', input.threadId || null);
+      request.input('activeObservations', '');
+      request.input('activeObservationsPendingUpdate', null);
+      request.input('originType', 'initial');
+      request.input('config', JSON.stringify(input.config));
+      request.input('generationCount', 0);
+      request.input('lastObservedAt', null);
+      request.input('lastReflectionAt', null);
+      request.input('pendingMessageTokens', 0);
+      request.input('totalTokensObserved', 0);
+      request.input('observationTokenCount', 0);
+      request.input('isObserving', false);
+      request.input('isReflecting', false);
+      request.input('isBufferingObservation', false);
+      request.input('isBufferingReflection', false);
+      request.input('lastBufferedAtTokens', 0);
+      request.input('lastBufferedAtTime', null);
+      request.input('observedTimezone', input.observedTimezone || null);
+      request.input('createdAt', nowStr);
+      request.input('updatedAt', nowStr);
+
+      await request.query(
+        `INSERT INTO ${tableName} (
+          id, [lookupKey], scope, [resourceId], [threadId],
+          [activeObservations], [activeObservationsPendingUpdate],
+          [originType], config, [generationCount], [lastObservedAt], [lastReflectionAt],
+          [pendingMessageTokens], [totalTokensObserved], [observationTokenCount],
+          [isObserving], [isReflecting], [isBufferingObservation], [isBufferingReflection], [lastBufferedAtTokens], [lastBufferedAtTime],
+          [observedTimezone], [createdAt], [updatedAt]
+        ) VALUES (
+          @id, @lookupKey, @scope, @resourceId, @threadId,
+          @activeObservations, @activeObservationsPendingUpdate,
+          @originType, @config, @generationCount, @lastObservedAt, @lastReflectionAt,
+          @pendingMessageTokens, @totalTokensObserved, @observationTokenCount,
+          @isObserving, @isReflecting, @isBufferingObservation, @isBufferingReflection, @lastBufferedAtTokens, @lastBufferedAtTime,
+          @observedTimezone, @createdAt, @updatedAt
+        )`,
+      );
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('id', record.id);
+      request.input('lookupKey', lookupKey);
+      request.input('scope', record.scope);
+      request.input('resourceId', record.resourceId);
+      request.input('threadId', record.threadId || null);
+      request.input('activeObservations', record.activeObservations || '');
+      request.input('activeObservationsPendingUpdate', null);
+      request.input('originType', record.originType || 'initial');
+      request.input('config', record.config ? JSON.stringify(record.config) : null);
+      request.input('generationCount', record.generationCount || 0);
+      request.input('lastObservedAt', record.lastObservedAt ? record.lastObservedAt.toISOString() : null);
+      request.input('lastReflectionAt', null);
+      request.input('pendingMessageTokens', record.pendingMessageTokens || 0);
+      request.input('totalTokensObserved', record.totalTokensObserved || 0);
+      request.input('observationTokenCount', record.observationTokenCount || 0);
+      request.input('observedMessageIds', record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null);
+      request.input('bufferedObservationChunks', record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null);
+      request.input('bufferedReflection', record.bufferedReflection || null);
+      request.input('bufferedReflectionTokens', record.bufferedReflectionTokens ?? null);
+      request.input('bufferedReflectionInputTokens', record.bufferedReflectionInputTokens ?? null);
+      request.input('reflectedObservationLineCount', record.reflectedObservationLineCount ?? null);
+      request.input('isObserving', record.isObserving || false);
+      request.input('isReflecting', record.isReflecting || false);
+      request.input('isBufferingObservation', record.isBufferingObservation || false);
+      request.input('isBufferingReflection', record.isBufferingReflection || false);
+      request.input('lastBufferedAtTokens', record.lastBufferedAtTokens || 0);
+      request.input('lastBufferedAtTime', record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null);
+      request.input('observedTimezone', record.observedTimezone || null);
+      request.input('metadata', record.metadata ? JSON.stringify(record.metadata) : null);
+      request.input('createdAt', record.createdAt.toISOString());
+      request.input('updatedAt', record.updatedAt.toISOString());
+
+      await request.query(
+        `INSERT INTO ${tableName} (
+          id, [lookupKey], scope, [resourceId], [threadId],
+          [activeObservations], [activeObservationsPendingUpdate],
+          [originType], config, [generationCount], [lastObservedAt], [lastReflectionAt],
+          [pendingMessageTokens], [totalTokensObserved], [observationTokenCount],
+          [observedMessageIds], [bufferedObservationChunks],
+          [bufferedReflection], [bufferedReflectionTokens], [bufferedReflectionInputTokens],
+          [reflectedObservationLineCount],
+          [isObserving], [isReflecting], [isBufferingObservation], [isBufferingReflection],
+          [lastBufferedAtTokens], [lastBufferedAtTime],
+          [observedTimezone], metadata, [createdAt], [updatedAt]
+        ) VALUES (
+          @id, @lookupKey, @scope, @resourceId, @threadId,
+          @activeObservations, @activeObservationsPendingUpdate,
+          @originType, @config, @generationCount, @lastObservedAt, @lastReflectionAt,
+          @pendingMessageTokens, @totalTokensObserved, @observationTokenCount,
+          @observedMessageIds, @bufferedObservationChunks,
+          @bufferedReflection, @bufferedReflectionTokens, @bufferedReflectionInputTokens,
+          @reflectedObservationLineCount,
+          @isObserving, @isReflecting, @isBufferingObservation, @isBufferingReflection,
+          @lastBufferedAtTokens, @lastBufferedAtTime,
+          @observedTimezone, @metadata, @createdAt, @updatedAt
+        )`,
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    try {
+      const now = new Date();
+      const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('activeObservations', input.observations);
+      request.input('lastObservedAt', input.lastObservedAt.toISOString());
+      request.input('observationTokenCount', input.tokenCount);
+      request.input('tokenCount', input.tokenCount);
+      request.input('observedMessageIds', observedMessageIdsJson);
+      request.input('updatedAt', now.toISOString());
+      request.input('id', input.id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET
+          [activeObservations] = @activeObservations,
+          [lastObservedAt] = @lastObservedAt,
+          [pendingMessageTokens] = 0,
+          [observationTokenCount] = @observationTokenCount,
+          [totalTokensObserved] = [totalTokensObserved] + @tokenCount,
+          [observedMessageIds] = @observedMessageIds,
+          [updatedAt] = @updatedAt
+        WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.currentRecord.scope,
+        threadId: input.currentRecord.threadId,
+        resourceId: input.currentRecord.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: input.currentRecord.lastObservedAt,
+        originType: 'reflection',
+        generationCount: input.currentRecord.generationCount + 1,
+        activeObservations: input.reflection,
+        totalTokensObserved: input.currentRecord.totalTokensObserved,
+        observationTokenCount: input.tokenCount,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
+        config: input.currentRecord.config,
+        metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
+      };
+
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const nowStr = now.toISOString();
+      const request = this.pool.request();
+
+      request.input('id', id);
+      request.input('lookupKey', lookupKey);
+      request.input('scope', record.scope);
+      request.input('resourceId', record.resourceId);
+      request.input('threadId', record.threadId || null);
+      request.input('activeObservations', input.reflection);
+      request.input('activeObservationsPendingUpdate', null);
+      request.input('originType', 'reflection');
+      request.input('config', JSON.stringify(record.config));
+      request.input('generationCount', input.currentRecord.generationCount + 1);
+      request.input('lastObservedAt', record.lastObservedAt?.toISOString() || null);
+      request.input('lastReflectionAt', nowStr);
+      request.input('pendingMessageTokens', record.pendingMessageTokens);
+      request.input('totalTokensObserved', record.totalTokensObserved);
+      request.input('observationTokenCount', record.observationTokenCount);
+      request.input('isObserving', false);
+      request.input('isReflecting', false);
+      request.input('isBufferingObservation', false);
+      request.input('isBufferingReflection', false);
+      request.input('lastBufferedAtTokens', 0);
+      request.input('lastBufferedAtTime', null);
+      request.input('observedTimezone', record.observedTimezone || null);
+      request.input('metadata', record.metadata ? JSON.stringify(record.metadata) : null);
+      request.input('createdAt', nowStr);
+      request.input('updatedAt', nowStr);
+
+      await request.query(
+        `INSERT INTO ${tableName} (
+          id, [lookupKey], scope, [resourceId], [threadId],
+          [activeObservations], [activeObservationsPendingUpdate],
+          [originType], config, [generationCount], [lastObservedAt], [lastReflectionAt],
+          [pendingMessageTokens], [totalTokensObserved], [observationTokenCount],
+          [isObserving], [isReflecting], [isBufferingObservation], [isBufferingReflection], [lastBufferedAtTokens], [lastBufferedAtTime],
+          [observedTimezone], metadata, [createdAt], [updatedAt]
+        ) VALUES (
+          @id, @lookupKey, @scope, @resourceId, @threadId,
+          @activeObservations, @activeObservationsPendingUpdate,
+          @originType, @config, @generationCount, @lastObservedAt, @lastReflectionAt,
+          @pendingMessageTokens, @totalTokensObserved, @observationTokenCount,
+          @isObserving, @isReflecting, @isBufferingObservation, @isBufferingReflection, @lastBufferedAtTokens, @lastBufferedAtTime,
+          @observedTimezone, @metadata, @createdAt, @updatedAt
+        )`,
+      );
+
+      return record;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecord.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('isReflecting', isReflecting);
+      request.input('updatedAt', new Date().toISOString());
+      request.input('id', id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET [isReflecting] = @isReflecting, [updatedAt] = @updatedAt WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SET_REFLECTING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SET_REFLECTING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        },
+        error,
+      );
+    }
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('isObserving', isObserving);
+      request.input('updatedAt', new Date().toISOString());
+      request.input('id', id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET [isObserving] = @isObserving, [updatedAt] = @updatedAt WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SET_OBSERVING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SET_OBSERVING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        },
+        error,
+      );
+    }
+  }
+
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('isBufferingObservation', isBuffering);
+      request.input('updatedAt', new Date().toISOString());
+      request.input('id', id);
+
+      let sql = `UPDATE ${tableName} SET [isBufferingObservation] = @isBufferingObservation, [updatedAt] = @updatedAt WHERE id = @id`;
+
+      if (lastBufferedAtTokens !== undefined) {
+        sql = `UPDATE ${tableName} SET [isBufferingObservation] = @isBufferingObservation, [lastBufferedAtTokens] = @lastBufferedAtTokens, [updatedAt] = @updatedAt WHERE id = @id`;
+        request.input('lastBufferedAtTokens', lastBufferedAtTokens);
+      }
+
+      const result = await request.query(sql);
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SET_BUFFERING_OBSERVATION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SET_BUFFERING_OBSERVATION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('isBufferingReflection', isBuffering);
+      request.input('updatedAt', new Date().toISOString());
+      request.input('id', id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET [isBufferingReflection] = @isBufferingReflection, [updatedAt] = @updatedAt WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SET_BUFFERING_REFLECTION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SET_BUFFERING_REFLECTION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
+        },
+        error,
+      );
+    }
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('lookupKey', lookupKey);
+
+      await request.query(`DELETE FROM ${tableName} WHERE [lookupKey] = @lookupKey`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'CLEAR_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('pendingMessageTokens', tokenCount);
+      request.input('updatedAt', new Date().toISOString());
+      request.input('id', id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET [pendingMessageTokens] = @pendingMessageTokens, [updatedAt] = @updatedAt WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('id', input.id);
+      const selectResult = await request.query(`SELECT config FROM ${tableName} WHERE id = @id`);
+
+      if (!selectResult.recordset || selectResult.recordset.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = selectResult.recordset[0] as any;
+      const existing: Record<string, unknown> = row.config ? JSON.parse(row.config) : {};
+      const merged = this.deepMergeConfig(existing, input.config);
+
+      request.input('config', JSON.stringify(merged));
+      request.input('updatedAt', new Date().toISOString());
+
+      await request.query(`UPDATE ${tableName} SET config = @config, [updatedAt] = @updatedAt WHERE id = @id`);
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    try {
+      const nowStr = new Date().toISOString();
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('id', input.id);
+      const currentResult = await request.query(
+        `SELECT [bufferedObservationChunks] FROM ${tableName} WHERE id = @id`,
+      );
+
+      if (!currentResult.recordset || currentResult.recordset.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = currentResult.recordset[0]!;
+      let existingChunks: BufferedObservationChunk[] = [];
+      if (row.bufferedObservationChunks) {
+        try {
+          const parsed =
+            typeof row.bufferedObservationChunks === 'string'
+              ? JSON.parse(row.bufferedObservationChunks)
+              : row.bufferedObservationChunks;
+          existingChunks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          existingChunks = [];
+        }
+      }
+
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
+      };
+
+      const newChunks = [...existingChunks, newChunk];
+      const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
+
+      const updateRequest = this.pool.request();
+      updateRequest.input('bufferedObservationChunks', JSON.stringify(newChunks));
+      updateRequest.input('lastBufferedAtTime', lastBufferedAtTime);
+      updateRequest.input('updatedAt', nowStr);
+      updateRequest.input('id', input.id);
+
+      await updateRequest.query(
+        `UPDATE ${tableName} SET
+          [bufferedObservationChunks] = @bufferedObservationChunks,
+          [lastBufferedAtTime] = COALESCE(@lastBufferedAtTime, [lastBufferedAtTime]),
+          [updatedAt] = @updatedAt
+        WHERE id = @id`,
+      );
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    try {
+      const nowStr = new Date().toISOString();
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('id', input.id);
+      const currentResult = await request.query(`SELECT * FROM ${tableName} WHERE id = @id`);
+
+      if (!currentResult.recordset || currentResult.recordset.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = currentResult.recordset[0]!;
+
+      let chunks: BufferedObservationChunk[] = [];
+      if (row.bufferedObservationChunks) {
+        try {
+          const parsed =
+            typeof row.bufferedObservationChunks === 'string'
+              ? JSON.parse(row.bufferedObservationChunks)
+              : row.bufferedObservationChunks;
+          chunks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          chunks = [];
+        }
+      }
+
+      if (chunks.length === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
+
+      const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+      const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+
+      let cumulativeMessageTokens = 0;
+      let bestOverBoundary = 0;
+      let bestOverTokens = 0;
+      let bestUnderBoundary = 0;
+      let bestUnderTokens = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+        const boundary = i + 1;
+
+        if (cumulativeMessageTokens >= targetMessageTokens) {
+          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+            bestOverBoundary = boundary;
+            bestOverTokens = cumulativeMessageTokens;
+          }
+        } else {
+          if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
+          }
+        }
+      }
+
+      const maxOvershoot = retentionFloor * 0.95;
+      const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      const minRemaining = Math.min(1000, retentionFloor);
+
+      let chunksToActivate: number;
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+        chunksToActivate = bestUnderBoundary;
+      } else if (bestOverBoundary > 0) {
+        chunksToActivate = bestOverBoundary;
+      } else {
+        chunksToActivate = 1;
+      }
+
+      const activatedChunks = chunks.slice(0, chunksToActivate);
+      const remainingChunks = chunks.slice(chunksToActivate);
+
+      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+      const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+      const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+
+      const latestChunk = activatedChunks[activatedChunks.length - 1];
+      const lastObservedAt =
+        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+      const lastObservedAtStr = lastObservedAt.toISOString();
+
+      const existingActive = (row.activeObservations as string) || '';
+      const existingTokenCount = Number(row.observationTokenCount || 0);
+
+      const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+      const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
+      const newTokenCount = existingTokenCount + activatedTokens;
+
+      const existingPending = Number(row.pendingMessageTokens || 0);
+      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+
+      const updateRequest = this.pool.request();
+      updateRequest.input('activeObservations', newActive);
+      updateRequest.input('observationTokenCount', newTokenCount);
+      updateRequest.input('pendingMessageTokens', newPending);
+      updateRequest.input('bufferedObservationChunks', remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null);
+      updateRequest.input('lastObservedAt', lastObservedAtStr);
+      updateRequest.input('updatedAt', nowStr);
+      updateRequest.input('id', input.id);
+
+      const updateResult = await updateRequest.query(
+        `UPDATE ${tableName} SET
+          [activeObservations] = @activeObservations,
+          [observationTokenCount] = @observationTokenCount,
+          [pendingMessageTokens] = @pendingMessageTokens,
+          [bufferedObservationChunks] = @bufferedObservationChunks,
+          [lastObservedAt] = @lastObservedAt,
+          [updatedAt] = @updatedAt
+        WHERE id = @id
+          AND [bufferedObservationChunks] IS NOT NULL
+          AND [bufferedObservationChunks] != '[]'`,
+      );
+
+      if (updateResult.rowsAffected[0] === 0) {
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+      }
+
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
+      return {
+        chunksActivated: activatedChunks.length,
+        messageTokensActivated: activatedMessageTokens,
+        observationTokensActivated: activatedTokens,
+        messagesActivated: activatedMessageCount,
+        activatedCycleIds,
+        activatedMessageIds,
+        observations: activatedContent,
+        perChunk: activatedChunks.map(c => ({
+          cycleId: c.cycleId ?? '',
+          messageTokens: c.messageTokens ?? 0,
+          observationTokens: c.tokenCount,
+          messageCount: c.messageIds.length,
+          observations: c.observations,
+        })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    try {
+      const nowStr = new Date().toISOString();
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('reflection', input.reflection);
+      request.input('tokenCount', input.tokenCount);
+      request.input('inputTokenCount', input.inputTokenCount);
+      request.input('reflectedObservationLineCount', input.reflectedObservationLineCount);
+      request.input('updatedAt', nowStr);
+      request.input('id', input.id);
+
+      const result = await request.query(
+        `UPDATE ${tableName} SET
+          [bufferedReflection] = CASE
+            WHEN [bufferedReflection] IS NOT NULL AND [bufferedReflection] != ''
+            THEN [bufferedReflection] + CHAR(10) + CHAR(10) + @reflection
+            ELSE @reflection
+          END,
+          [bufferedReflectionTokens] = COALESCE([bufferedReflectionTokens], 0) + @tokenCount,
+          [bufferedReflectionInputTokens] = COALESCE([bufferedReflectionInputTokens], 0) + @inputTokenCount,
+          [reflectedObservationLineCount] = @reflectedObservationLineCount,
+          [updatedAt] = @updatedAt
+        WHERE id = @id`,
+      );
+
+      if (result.rowsAffected[0] === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_BUFFERED_REFLECTION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const tableName = getTableName({ indexName: OM_TABLE, schemaName: getSchemaName(this.schema) });
+      const request = this.pool.request();
+
+      request.input('id', input.currentRecord.id);
+      const currentResult = await request.query(`SELECT * FROM ${tableName} WHERE id = @id`);
+
+      if (!currentResult.recordset || currentResult.recordset.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.currentRecord.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      const row = currentResult.recordset[0]!;
+      const bufferedReflection = (row.bufferedReflection as string) || '';
+      const reflectedLineCount = Number(row.reflectedObservationLineCount || 0);
+
+      if (!bufferedReflection) {
+        throw new MastraError({
+          id: createStorageErrorId('MSSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+          text: 'No buffered reflection to swap',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      const currentObservations = (row.activeObservations as string) || '';
+      const allLines = currentObservations.split('\n');
+      const unreflectedLines = allLines.slice(reflectedLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
+
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
+
+      const newRecord = await this.createReflectionGeneration({
+        currentRecord: input.currentRecord,
+        reflection: newObservations,
+        tokenCount: input.tokenCount,
+      });
+
+      const nowStr = new Date().toISOString();
+      const updateRequest = this.pool.request();
+      updateRequest.input('updatedAt', nowStr);
+      updateRequest.input('id', input.currentRecord.id);
+
+      await updateRequest.query(
+        `UPDATE ${tableName} SET
+          [bufferedReflection] = NULL,
+          [bufferedReflectionTokens] = NULL,
+          [bufferedReflectionInputTokens] = NULL,
+          [reflectedObservationLineCount] = NULL,
+          [updatedAt] = @updatedAt
+        WHERE id = @id`,
+      );
+
+      return newRecord;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
+        },
+        error,
+      );
     }
   }
 }
