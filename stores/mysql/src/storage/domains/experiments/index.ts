@@ -223,25 +223,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     );
     if (Array.isArray(indexRows) && indexRows.length > 0) return;
 
-    await this.pool.execute(
-      `UPDATE ${tableName} SET ${quoteIdentifier('attempt', 'column name')} = 0 WHERE ${quoteIdentifier('attempt', 'column name')} IS NULL`,
-    );
-    await this.pool.execute(
-      `DELETE older FROM ${tableName} older
-       INNER JOIN ${tableName} newer
-         ON older.${quoteIdentifier('experimentId', 'column name')} = newer.${quoteIdentifier('experimentId', 'column name')}
-        AND older.${quoteIdentifier('itemId', 'column name')} = newer.${quoteIdentifier('itemId', 'column name')}
-        AND older.${quoteIdentifier('attempt', 'column name')} = newer.${quoteIdentifier('attempt', 'column name')}
-        AND (older.${quoteIdentifier('createdAt', 'column name')} < newer.${quoteIdentifier('createdAt', 'column name')}
-          OR (older.${quoteIdentifier('createdAt', 'column name')} = newer.${quoteIdentifier('createdAt', 'column name')}
-            AND older.${quoteIdentifier('id', 'column name')} < newer.${quoteIdentifier('id', 'column name')}))`,
-    );
-    await this.pool.execute(
-      `ALTER TABLE ${tableName} MODIFY COLUMN ${quoteIdentifier('attempt', 'column name')} INT NOT NULL DEFAULT 0`,
-    );
-    await this.pool.execute(
-      `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ${quoteIdentifier('attempt', 'column name')})`,
-    );
+    try {
+      await this.pool.execute(
+        `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ((COALESCE(${quoteIdentifier('attempt', 'column name')}, 0)))`,
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_EXPERIMENT_RESULT_NATURAL_KEY_MIGRATION_REQUIRED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Could not enforce experiment-result uniqueness. Resolve duplicate experiment, item, and attempt combinations before restarting the MySQL store.',
+        },
+        error,
+      );
+    }
   }
 
   /**

@@ -313,21 +313,45 @@ describe('MySQLStore tool mocks rejection', () => {
     await store.close();
   });
 
-  it('creates the effective experiment-result natural key during init', async () => {
+  it('creates the effective experiment-result natural key without rewriting existing rows', async () => {
     const store = newStore();
     const { pool } = poolInstances[poolInstances.length - 1];
 
     await store.init();
 
     const statements = pool.execute.mock.calls.map(([sql]) => String(sql));
-    expect(statements.some(sql => sql.includes('SET `attempt` = 0 WHERE `attempt` IS NULL'))).toBe(true);
+    expect(statements.some(sql => /^\s*(DELETE|UPDATE)\s/i.test(sql))).toBe(false);
     expect(
       statements.some(sql =>
         sql.includes(
-          'CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt` ON `mastra_experiment_results` (`experimentId`(191), `itemId`(191), `attempt`)',
+          'CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt` ON `mastra_experiment_results` (`experimentId`(191), `itemId`(191), ((COALESCE(`attempt`, 0)))',
         ),
       ),
     ).toBe(true);
+
+    await store.close();
+  });
+
+  it('fails without deleting rows when legacy experiment results violate the natural key', async () => {
+    const store = newStore();
+    const { pool } = poolInstances[poolInstances.length - 1];
+    const duplicateError = new Error('Duplicate entry');
+    pool.execute.mockImplementation(async sql => {
+      if (String(sql).includes('CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt`')) {
+        throw duplicateError;
+      }
+      return [[]];
+    });
+
+    await expect(store.init()).rejects.toMatchObject({
+      id: 'MYSQL_STORE_INIT_FAILED',
+      cause: {
+        id: 'MYSQL_EXPERIMENT_RESULT_NATURAL_KEY_MIGRATION_REQUIRED',
+        cause: duplicateError,
+      },
+    });
+    const statements = pool.execute.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => /^\s*(DELETE|UPDATE)\s/i.test(sql))).toBe(false);
 
     await store.close();
   });
