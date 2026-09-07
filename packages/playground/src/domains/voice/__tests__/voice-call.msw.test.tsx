@@ -75,7 +75,10 @@ const VoiceHarness = ({ onCallStarted }: { onCallStarted?: () => void }) => {
   );
 };
 
-const renderHarness = () => {
+const liveKitAvailabilityResolved = (queryClient: QueryClient) =>
+  waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+const renderHarness = async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
   const onCallStarted = vi.fn();
@@ -90,7 +93,8 @@ const renderHarness = () => {
       </MastraReactProvider>
     </StudioConfigContext.Provider>,
   );
-  return { ...view, invalidateSpy, onCallStarted, queryClient };
+  await liveKitAvailabilityResolved(queryClient);
+  return { ...view, invalidateSpy, onCallStarted };
 };
 
 function textStreamReader(id: string, chunks: string[], attributes: Record<string, string> = {}) {
@@ -120,9 +124,8 @@ describe('voice call', () => {
         http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(liveKitUnavailableSystemPackages)),
       );
 
-      const { queryClient } = renderHarness();
+      await renderHarness();
 
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
       expect(startButton.disabled).toBe(false);
       expect(startButton.getAttribute('aria-disabled')).toBe('true');
@@ -138,9 +141,8 @@ describe('voice call', () => {
         }),
       );
 
-      const { queryClient } = renderHarness();
+      await renderHarness();
       const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
-      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       fireEvent.click(startButton);
 
@@ -155,8 +157,7 @@ describe('voice call', () => {
       http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
     );
 
-    const { queryClient } = renderHarness();
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await renderHarness();
     const startButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Start voice call' });
 
     expect(startButton.getAttribute('aria-disabled')).toBeNull();
@@ -174,8 +175,7 @@ describe('voice call', () => {
       }),
     );
 
-    const { invalidateSpy, onCallStarted, queryClient } = renderHarness();
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    const { invalidateSpy, onCallStarted } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
@@ -202,7 +202,7 @@ describe('voice call', () => {
   it('shows agent state changes and live captions', async () => {
     server.use(http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)));
 
-    const { invalidateSpy } = renderHarness();
+    const { invalidateSpy } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
     const room = fakeRooms[0]!;
@@ -237,7 +237,7 @@ describe('voice call', () => {
   it('hangs up: disconnects the room and refreshes the thread messages', async () => {
     server.use(http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)));
 
-    const { invalidateSpy } = renderHarness();
+    const { invalidateSpy } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
     await waitFor(() => expect(fakeRooms).toHaveLength(1));
     const room = fakeRooms[0]!;
@@ -258,8 +258,7 @@ describe('voice call', () => {
       ),
     );
 
-    const { queryClient } = renderHarness();
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
     await waitFor(() => expect(screen.queryByTestId('voice-call-panel')).toBeNull());
@@ -280,7 +279,7 @@ describe('voice call', () => {
       }),
     );
 
-    const { unmount } = renderHarness();
+    const { unmount } = await renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
     // 'connecting' state is live with the fetch in flight.
     await waitFor(() => expect(screen.getByTestId('voice-call-panel')).not.toBeNull());

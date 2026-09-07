@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Added the default LiveKit connection-route capability to the system packages response.
+`getSystemPackages()` now returns `liveKitConnectionRouteEnabled`, true when the default `@mastra/livekit` connection route is mounted on the server.

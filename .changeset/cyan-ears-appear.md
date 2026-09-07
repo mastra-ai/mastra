@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Disabled Studio voice calls when the default LiveKit connection route is unavailable and added a setup tooltip.
+Studio now disables the voice-call button, with a setup tooltip, when the server has no `@mastra/livekit` connection route, instead of failing after the click.
