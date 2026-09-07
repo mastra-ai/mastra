@@ -7,6 +7,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryAttentionKind,
@@ -15,6 +16,7 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
 import { ActivityAttentionProvider } from './attention-activity.js';
+import { ParkedRunAttentionProvider } from './attention-parked.js';
 import { proposedDecisionAttentionSpec } from './attention-proposed.js';
 import type {
   AttentionLatest,
@@ -41,6 +43,7 @@ const MAX_PAGE_SIZE = 50;
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   comments: WorkItemCommentsStorage;
+  liveSessions: Pick<LiveSessions, 'parked'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
@@ -64,7 +67,8 @@ function isAttentionKind(value: string): value is FactoryAttentionKind {
     value === 'automation-proposed' ||
     value === 'mention' ||
     value === 'activity' ||
-    value === 'supervisor-finding'
+    value === 'supervisor-finding' ||
+    value === 'agent-waiting'
   );
 }
 
@@ -74,6 +78,7 @@ const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set([
   'automation-proposed',
   'mention',
   'supervisor-finding',
+  'agent-waiting',
 ]);
 
 type AttentionTier = 'all' | 'badge' | 'activity';
@@ -228,6 +233,9 @@ function receiptRoute(
       if (!kind || !isAttentionKind(kind) || !sourceId || !validSourceId || occurrence === undefined) {
         return context.json({ error: 'invalid_attention_item' }, 422);
       }
+      const stillParked =
+        kind !== 'agent-waiting' || dependencies.liveSessions.parked(sourceId)?.suspendedAt === occurrence;
+      if (!stillParked) return context.json({ error: 'attention_item_not_current' }, 409);
       await dependencies.workItems.ensureReady();
       const receipt = await dependencies.workItems.setAttentionReceipt({
         orgId: resolved.orgId,
@@ -251,13 +259,14 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems, comments } = dependencies;
+  const { workItems, comments, liveSessions } = dependencies;
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems }, failedDecisionAttentionSpec),
     new DecisionAttentionProvider({ workItems }, proposedDecisionAttentionSpec),
     new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
+    new ParkedRunAttentionProvider({ workItems, liveSessions }),
   ];
 
   return [

@@ -158,8 +158,6 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
-  'plan_awaiting_approval',
-  'run_awaiting_input',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
@@ -233,7 +231,8 @@ export type FactoryAttentionKind =
   | 'automation-proposed'
   | 'mention'
   | 'activity'
-  | 'supervisor-finding';
+  | 'supervisor-finding'
+  | 'agent-waiting';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export interface FactorySupervisorFindingRecord {
@@ -313,6 +312,11 @@ export function factorySupervisorFindingAttentionIdentity(
   occurrence: number,
 ): FactoryAttentionIdentity {
   return { kind: 'supervisor-finding', sourceId: findingKey, occurrence };
+}
+
+/** Dated by the park itself, so an answer and a new park never share a receipt. */
+export function factoryAgentWaitingAttentionIdentity(sessionId: string, suspendedAt: number): FactoryAttentionIdentity {
+  return { kind: 'agent-waiting', sourceId: sessionId, occurrence: suspendedAt };
 }
 
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
@@ -1086,7 +1090,8 @@ function attentionReceiptKind(value: unknown): FactoryAttentionKind {
     value === 'automation-proposed' ||
     value === 'mention' ||
     value === 'activity' ||
-    value === 'supervisor-finding'
+    value === 'supervisor-finding' ||
+    value === 'agent-waiting'
   ) {
     return value;
   }
@@ -2092,6 +2097,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return Boolean(decision) && parked;
     }
+    // A parked session has no row here; the route checks it against the live registry.
+    if (identity.kind === 'agent-waiting') return true;
     if (identity.kind === 'activity') {
       // Occurrence-exact: a bump since the read makes that receipt stale, and
       // the route answers 409. Scoped to this user or every badge would skew.

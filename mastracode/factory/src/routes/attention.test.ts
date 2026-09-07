@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import type { ParkedRun } from '../session/live-sessions.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
@@ -19,6 +20,8 @@ const orgUser = { workosId: 'u1', organizationId: 'org1' };
 
 let seed: FactoryStorageTestSeed;
 let PROJECT_ID = '';
+
+const parkedBySession = new Map<string, ParkedRun>();
 
 function buildApp(user: typeof orgUser | null = orgUser) {
   const app = new Hono();
@@ -36,7 +39,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
-      liveSessions: { isRunning: () => false },
+      liveSessions: { isRunning: () => false, parked: sessionId => parkedBySession.get(sessionId) },
     }).routes(),
   );
   return app;
@@ -178,6 +181,75 @@ describe('supervisor finding attention items', () => {
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       { items: [], openCount: 0 },
     );
+  });
+});
+
+describe('agent waiting attention items', () => {
+  const sessionId = '6f1a2b3c-4d5e-4f60-8a71-92b3c4d5e6f7';
+  const suspendedAt = new Date('2030-01-01T00:00:00.000Z').getTime();
+
+  beforeEach(() => parkedBySession.clear());
+
+  it('lists a parked session in the badge, opens its thread, and leaves once it is answered', async () => {
+    const item = await seedWorkItem('Ship the login fix');
+    await seed.workItems.update({
+      orgId: 'org1',
+      userId: 'u1',
+      id: item.id,
+      patch: { sessions: { work: { sessionId, branch: 'factory/login', threadId: 'thread-1' } } },
+    });
+    parkedBySession.set(sessionId, { toolName: 'submit_plan', suspendedAt });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open).toMatchObject({
+      items: [
+        {
+          kind: 'agent-waiting',
+          sessionId,
+          threadId: 'thread-1',
+          role: 'work',
+          toolName: 'submit_plan',
+          occurrence: suspendedAt,
+          workItemId: item.id,
+          title: 'Ship the login fix',
+          detail: 'Plan waiting for review',
+          occurredAt: '2030-01-01T00:00:00.000Z',
+          read: false,
+          target: { kind: 'thread', sessionId, threadId: 'thread-1' },
+        },
+      ],
+      openCount: 1,
+      badgeCount: 1,
+      unreadCount: 1,
+    });
+
+    const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/agent-waiting/${sessionId}/${suspendedAt}`;
+    expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
+    await expect(
+      (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
+    ).resolves.toMatchObject({ items: [], unreadCount: 0, openCount: 1 });
+
+    parkedBySession.delete(sessionId);
+    await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
+      { items: [], openCount: 0, badgeCount: 0 },
+    );
+    expect((await request('POST', `${receiptPath}/archive`)).status).toBe(409);
+  });
+
+  it('409s a receipt for a park that has since been answered and re-parked', async () => {
+    const item = await seedWorkItem('Answer me');
+    await seed.workItems.update({
+      orgId: 'org1',
+      userId: 'u1',
+      id: item.id,
+      patch: { sessions: { work: { sessionId, branch: 'factory/answer', threadId: 'thread-1' } } },
+    });
+    parkedBySession.set(sessionId, { toolName: 'ask_user', suspendedAt: suspendedAt + 1_000 });
+
+    const stale = `/web/factory/projects/${PROJECT_ID}/attention/agent-waiting/${sessionId}/${suspendedAt}/read`;
+    expect((await request('POST', stale)).status).toBe(409);
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json();
+    expect(open).toMatchObject({ items: [{ detail: 'Agent is waiting for an answer' }], unreadCount: 1 });
   });
 });
 

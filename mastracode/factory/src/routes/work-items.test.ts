@@ -55,6 +55,7 @@ function buildApp(
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
   boardRegistry: BoardRegistry = createBoardRegistry(),
+  parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -78,7 +79,10 @@ function buildApp(
         boards: boardRegistry,
       }),
       startCoordinator,
-      liveSessions: { isRunning: sessionId => running.has(sessionId) },
+      liveSessions: {
+        isRunning: sessionId => running.has(sessionId),
+        parked: sessionId => (parked.has(sessionId) ? { toolName: 'ask_user', suspendedAt: 0 } : undefined),
+      },
     }).routes(),
   );
   return app;
@@ -1916,6 +1920,23 @@ describe('run activity on the work-item listing', () => {
     const body = await res.json();
     expect(body.workItems).toHaveLength(2);
     expect(body.runningSessionIds).toEqual(['session-running']);
+    expect(body.parkedSessionIds).toEqual([]);
+  });
+
+  it('reports the listed cards whose session waits on an answer', async () => {
+    await startRun('session-parked');
+    await startRun('session-idle');
+
+    const res = await buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      undefined,
+      new Set(['session-parked']),
+    ).request(`/web/factory/projects/${PROJECT_ID}/work-items`);
+
+    expect((await res.json()).parkedSessionIds).toEqual(['session-parked']);
   });
 
   it('reports no activity for a session that belongs to no card in the project', async () => {
