@@ -1,9 +1,7 @@
 Scripts (root): `pnpm --filter ./packages/playground <script>` — `build`, `test`,
 `test:e2e`, `test:e2e:setup`, `typecheck`.
 
-NEVER add a changeset for this package (`@internal/playground`). It is private
-and bundled into `mastra`; changesets targeting it are invalid and must be
-removed.
+NEVER add a changeset for `@internal/playground` (private, bundled into `mastra`).
 
 Required skills (NON-OPTIONAL):
 
@@ -19,23 +17,20 @@ Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 After tests pass, mutation testing is mandatory on exactly the production
 `.ts`/`.tsx` files the task changed (none changed = skip):
 `pnpm --filter ./packages/playground test:mutate "src/foo.ts,src/bar.tsx"`.
-No dirs/globs, no unrelated files, no direct `stryker run`, no
-tests/fixtures/generated/config/docs. Strengthen the TDD/BDD tests to kill
-survivors (never weaken assertions); report truly equivalent/unreachable ones.
+No dirs/globs, unrelated files, direct `stryker run`, or non-production files.
+Kill survivors by strengthening tests (never weaken); report equivalent ones.
 
 BDD-style, lint-enforced in `eslint.config.js`; MSW runs with
 `onUnhandledRequest: 'error'`. Outer `describe` = the unit; inner
 `describe('when …')` = ONE precondition via a real MSW fixture; each `it` =
 ONE outcome. Same shape for MSW tests (`src/**`) and Playwright E2E specs
-(`e2e/tests/**`, rule `e2e-bdd/test-needs-when-describe`, `e2e-tests-studio`
-skill).
+(`e2e/tests/**`, rule `e2e-bdd/test-needs-when-describe`).
 
 Fixtures: nearby `__tests__/fixtures/`, typed with @mastra/client-js response
 types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
 
-Use Playwright E2E (`e2e-tests-studio`) only when MSW can't model the journey
+Playwright E2E (`e2e-tests-studio` skill) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).
 
-Include mobile, tablet, and desktop screenshots when handing off UI changes.
-
+Attach mobile/tablet/desktop screenshots when handing off UI changes.
 Coordinate with packages/playground-ui for cross-boundary changes.
