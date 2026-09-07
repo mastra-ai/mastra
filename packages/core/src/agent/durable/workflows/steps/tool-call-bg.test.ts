@@ -67,6 +67,7 @@ function makeMessageList() {
     updateToolInvocation: vi.fn().mockReturnValue(true),
     updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
+    get: { all: { db: vi.fn().mockReturnValue([]) } },
   };
 }
 
@@ -98,13 +99,13 @@ function setupRegistry(overrides: Record<string, any> = {}) {
   return { messageList, saveQueueManager, bgManager, entry };
 }
 
-function executeStep(pubsub: any, initData: any, input?: any) {
+function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     inputData: input ?? baseInput(),
     mastra: { getLogger: () => undefined },
     suspend: vi.fn(),
-    resumeData: undefined,
+    resumeData,
     requestContext: new Map(),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
@@ -487,5 +488,57 @@ describe('durable tool-call activeTools enforcement', () => {
       }),
     );
     expect(hiddenExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe('durable tool-call background resume with falsy payload (#22363 parity)', () => {
+  const setupSuspendedTask = () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+
+    vi.mocked(resolveBackgroundConfig).mockReturnValue({
+      runInBackground: true,
+      timeoutMs: 30_000,
+      maxRetries: 0,
+    } as any);
+
+    const resume = vi.fn().mockResolvedValue({ id: 'resumed-task' });
+    const dispatch = vi.fn().mockResolvedValue({ task: { id: 'brand-new-task' }, fallbackToSync: false });
+    vi.mocked(createBackgroundTask).mockReturnValue({
+      dispatch,
+      resume,
+      checkIfSuspended: vi.fn().mockResolvedValue(true),
+      checkIfRunning: vi.fn().mockResolvedValue(false),
+      restart: vi.fn(),
+      task: { id: 'suspended-task' },
+      cancel: vi.fn(),
+      waitForCompletion: vi.fn(),
+    } as any);
+
+    return { pubsub, initData, resume, dispatch };
+  };
+
+  // A tool with a primitive resumeSchema can be resumed with `false` / `0` / `''`.
+  // Treating those as "no resume data" would dispatch a second task and strand
+  // the suspended one (same bug as #22363 in the regular loop).
+  it.each([false, 0, ''])('resumes the suspended task instead of dispatching when resumeData is %j', async payload => {
+    const { pubsub, initData, resume, dispatch } = setupSuspendedTask();
+
+    const result = await executeStep(pubsub, initData, undefined, payload);
+
+    expect(resume).toHaveBeenCalledWith(payload);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(result.result).toContain('Background task resumed');
+  });
+
+  it('dispatches a fresh task when resumeData is absent', async () => {
+    const { pubsub, initData, resume, dispatch } = setupSuspendedTask();
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(resume).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalled();
+    expect(result.result).toContain('Background task started');
   });
 });

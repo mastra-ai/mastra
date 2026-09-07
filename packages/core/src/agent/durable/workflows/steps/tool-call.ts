@@ -1082,7 +1082,7 @@ export function createDurableToolCallStep() {
                   try {
                     const bgRunId = chunk.payload.runId;
                     // Emit tool-call chunk so UIs can render the invocation inline
-                    if (bgRunId !== runId || (bgRunId === runId && resumeData)) {
+                    if (bgRunId !== runId || (bgRunId === runId && resumeData != null)) {
                       void emitChunkEvent(pubsub, bgRunId, {
                         type: 'tool-call',
                         runId: bgRunId,
@@ -1163,7 +1163,7 @@ export function createDurableToolCallStep() {
                   );
 
                   if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && resumeData)) {
+                    if (params.runId !== runId || (params.runId === runId && resumeData != null)) {
                       messageList.add(
                         [
                           {
@@ -1239,8 +1239,10 @@ export function createDurableToolCallStep() {
             // If the agent is resuming this tool call and a previously-suspended
             // bg task exists for this toolCallId+runId, resume the bg task with
             // the agent-resume payload instead of dispatching a fresh one.
-            const isSuspendedBgResume =
-              isResumingFromSuspension && resumeData && typeof resumeData === 'object' && resumeData !== null;
+            // Nullish, not truthy: a tool with a primitive resumeSchema can be resumed with
+            // `false` / `0` / `''`, and treating those as "no resume data" would fall through to
+            // `dispatch()` below, leaving the suspended task stranded and starting a second one.
+            const isSuspendedBgResume = isResumingFromSuspension && resumeData != null;
             if (isSuspendedBgResume) {
               const isSuspended = await bgTask.checkIfSuspended({
                 toolCallId,
