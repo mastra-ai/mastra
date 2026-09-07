@@ -3,6 +3,7 @@ import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
@@ -11,14 +12,7 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from '@mastra/playground-ui/components/MessageScroller';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
@@ -34,7 +28,6 @@ import { ComposerAttachmentsProvider, useComposerAttachments } from './attachmen
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -95,9 +88,10 @@ const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
   if (turns.length === 0) return null;
 
   return (
+    // Shown once the viewport fits the 48rem column plus a rail-safe gutter on each side.
     <div
       data-testid="thread-rail-layer"
-      className="thread-rail-layer pointer-events-none absolute inset-y-0 left-4 z-20"
+      className="pointer-events-none absolute inset-y-0 left-4 z-20 hidden @min-[58rem]:block"
     >
       <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
     </div>
@@ -163,85 +157,75 @@ export const Thread = ({
 
   return (
     <ComposerAttachmentsProvider>
-      <MessageScrollerProvider defaultScrollPosition="last-anchor">
-        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
-          <MessageScroller>
-            <MessageScrollerViewport className="h-full overflow-y-scroll" style={{ overflowAnchor: 'none' }}>
+      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+        <ChatShell.Stage>
+          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
+            <ThreadRailLayer turns={threadRailTurns} />
+            <ChatShell.Content>
               {isEmpty ? (
                 <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
-                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
-                  <ThreadRailLayer turns={threadRailTurns} />
-                  <div
-                    ref={messagesContainerRef}
-                    data-testid="thread-message-column"
-                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
-                  >
-                    <BracketOverlay containerRef={messagesContainerRef} />
-                    {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
-                    <ArrivalScope>
-                      <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                        {turnGroups.map((group, index) => {
-                          const isLiveTurn = index === turnGroups.length - 1;
-                          return (
-                            // The room a fresh turn scrolls up into is this min-height: pure
-                            // layout, filled by the streaming reply. It stays after the run —
-                            // collapsing it would shift the reader — and moves to the next
-                            // turn with the anchor scroll.
-                            <div
-                              key={group.key}
-                              className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
+                <ChatShell.Column
+                  ref={messagesContainerRef}
+                  data-testid="thread-message-column"
+                  className="relative flex-1 gap-6 py-6"
+                >
+                  <BracketOverlay containerRef={messagesContainerRef} />
+                  {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                  <ArrivalScope>
+                    {turnGroups.map((group, index) => {
+                      const isLiveTurn = index === turnGroups.length - 1;
+                      return (
+                        // The room a fresh turn scrolls up into is this min-height: pure
+                        // layout, filled by the streaming reply. It stays after the run —
+                        // collapsing it would shift the reader — and moves to the next
+                        // turn with the anchor scroll.
+                        <div
+                          key={group.key}
+                          className={cn('flex flex-col gap-6', isLiveTurn && group.opensTurn && 'min-h-[50cqh]')}
+                        >
+                          {group.messages.map(message => (
+                            <MessageScrollerItem
+                              key={getClientMessageKey(message)}
+                              messageId={message.id}
+                              scrollAnchor={threadRailAnchorIds.has(message.id)}
                             >
-                              {group.messages.map(message => (
-                                <MessageScrollerItem
-                                  key={getClientMessageKey(message)}
-                                  messageId={message.id}
-                                  scrollAnchor={threadRailAnchorIds.has(message.id)}
-                                >
-                                  <MessageRow
-                                    message={message}
-                                    hasModelList={hasModelList}
-                                    isSpeaking={isSpeaking}
-                                    onReadAloud={readAloud}
-                                    onStopSpeaking={stopSpeaking}
-                                  />
-                                </MessageScrollerItem>
-                              ))}
-                              {isLiveTurn && delayedPending && <PendingIndicator />}
-                            </div>
-                          );
-                        })}
-                      </MessageScrollerContent>
-                    </ArrivalScope>
-
-                    {!isRunning && <SaveFullConversationAction />}
-                  </div>
-                </div>
+                              <MessageRow
+                                message={message}
+                                hasModelList={hasModelList}
+                                isSpeaking={isSpeaking}
+                                onReadAloud={readAloud}
+                                onStopSpeaking={stopSpeaking}
+                              />
+                            </MessageScrollerItem>
+                          ))}
+                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                        </div>
+                      );
+                    })}
+                  </ArrivalScope>
+                  {!isRunning && <SaveFullConversationAction />}
+                </ChatShell.Column>
               )}
-            </MessageScrollerViewport>
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
-              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
-            </div>
-          </MessageScroller>
-
-          {showThumbnailInChat && agentId && threadId && (
-            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
-              <BrowserThumbnail agentName={agentName} />
-            </div>
-          )}
-
-          <TaskPanel />
-
-          <AgentComposer
-            agentId={agentId}
-            threadId={threadId}
-            hasModelList={hasModelList}
-            hideModelSwitcher={hideModelSwitcher}
-            runOptionsSlot={runOptionsSlot}
-            refreshThreadList={refreshThreadList}
-          />
-        </div>
-      </MessageScrollerProvider>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton />
+              <ChatShell.Column className="gap-2 px-2 md:px-2">
+                {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                <TaskPanel />
+                <AgentComposer
+                  agentId={agentId}
+                  threadId={threadId}
+                  hasModelList={hasModelList}
+                  hideModelSwitcher={hideModelSwitcher}
+                  runOptionsSlot={runOptionsSlot}
+                  refreshThreadList={refreshThreadList}
+                />
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
     </ComposerAttachmentsProvider>
   );
 };
@@ -309,7 +293,7 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       <Composer
-        className="relative px-2 pb-2"
+        className="relative"
         onSubmit={event => {
           event.preventDefault();
           void submit();
