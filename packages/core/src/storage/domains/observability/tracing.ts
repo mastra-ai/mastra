@@ -146,17 +146,18 @@ type StoredSpanRecord = z.infer<typeof spanRecordSchema>;
 
 /**
  * Stored span record narrowed to one span type: `attributes`, `input` and
- * `output` carry the shapes core records for that type.
+ * `output` carry the shapes core records for that type. A union of span types
+ * gives a union of records, so `spanType` keeps discriminating after the
+ * guard.
  */
-export type TypedSpanRecord<TType extends SpanType> = Omit<
-  StoredSpanRecord,
-  'spanType' | 'attributes' | 'input' | 'output'
-> & {
-  spanType: TType;
-  attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
-  input?: SpanInput<TType> | null;
-  output?: SpanOutput<TType> | null;
-};
+export type TypedSpanRecord<TType extends SpanType> = TType extends SpanType
+  ? Omit<StoredSpanRecord, 'spanType' | 'attributes' | 'input' | 'output'> & {
+      spanType: TType;
+      attributes?: (SpanTypeMap[TType] & Record<string, unknown>) | null;
+      input?: SpanInput<TType> | null;
+      output?: SpanOutput<TType> | null;
+    }
+  : never;
 
 /**
  * Complete span record as stored in the database.

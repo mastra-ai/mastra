@@ -36,6 +36,10 @@ describe('isSpanRecordOfType types', () => {
 
     if (isSpanRecordOfType(span, [SpanType.MODEL_GENERATION, SpanType.MODEL_STEP] as const)) {
       expectTypeOf(span.attributes?.finishReason).toEqualTypeOf<string | undefined>();
+      // The narrowed record is a union, so `spanType` keeps discriminating.
+      if (span.spanType === SpanType.MODEL_STEP) {
+        expectTypeOf(span.output).toEqualTypeOf<ModelStepOutput | null | undefined>();
+      }
     }
   });
 });

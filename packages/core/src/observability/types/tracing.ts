@@ -1021,7 +1021,7 @@ export interface ModelStepResult {
   object?: unknown;
 }
 
-/** Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans. */
+/** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
 export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
 
 /**
@@ -1042,7 +1042,7 @@ export interface SpanOutputMap {
   [SpanType.AGENT_RUN]: AgentRunOutput;
   [SpanType.MODEL_GENERATION]: ModelGenerationOutput;
   [SpanType.MODEL_STEP]: ModelStepOutput;
-  [SpanType.MODEL_INFERENCE]: ModelStepOutput;
+  [SpanType.MODEL_INFERENCE]: ModelStepResult;
 }
 
 /** `input` payload of a span: the mapped shape when `SpanInputMap` lists the type, otherwise `any`. */

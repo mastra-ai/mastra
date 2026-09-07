@@ -106,7 +106,7 @@ interface SpanOutputMap {
   AGENT_RUN: AgentRunOutput
   MODEL_GENERATION: ModelGenerationOutput
   MODEL_STEP: ModelStepOutput
-  MODEL_INFERENCE: ModelStepOutput
+  MODEL_INFERENCE: ModelStepResult
 }
 
 /** The mapped shape when the map lists the type, otherwise `any` */
@@ -857,7 +857,7 @@ interface ModelGenerationInput {
 
 ### `ModelGenerationOutput`
 
-Output recorded on `MODEL_GENERATION` spans. Every field is optional: a durable run records only `text`.
+Output recorded on `MODEL_GENERATION` spans: a `ModelGenerationResult` when the generation finishes, or an `InterruptedSpanOutput` when the run stops first. Every field of `ModelGenerationResult` is optional: a durable run records only `text`.
 
 ```typescript
 type ModelGenerationOutput = ModelGenerationResult | InterruptedSpanOutput
@@ -891,7 +891,7 @@ interface ModelStepMessage {
 
 ### `ModelStepOutput`
 
-Output recorded on `MODEL_STEP` and `MODEL_INFERENCE` spans when the step finishes: the step result without `usage`, which lives on the attributes.
+Output recorded on `MODEL_STEP` spans: a `ModelStepResult` when the step finishes, or an `InterruptedSpanOutput` when the run stops first. `MODEL_INFERENCE` spans record a `ModelStepResult` only. The result is the step output without `usage`, which lives on the attributes.
 
 ```typescript
 type ModelStepOutput = ModelStepResult | InterruptedSpanOutput
