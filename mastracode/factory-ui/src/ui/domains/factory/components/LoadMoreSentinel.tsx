@@ -8,6 +8,7 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
   /** Accessible label, e.g. "Load more issues". */
   label: string;
+  autoLoad?: boolean;
 }
 
 /**
@@ -15,12 +16,18 @@ interface LoadMoreSentinelProps {
  * scrolls into view; the visible "Load more" button is both the observed node
  * and a keyboard/no-IntersectionObserver fallback.
  */
-export function LoadMoreSentinel({ hasNextPage, isFetchingNextPage, onLoadMore, label }: LoadMoreSentinelProps) {
+export function LoadMoreSentinel({
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore,
+  label,
+  autoLoad = true,
+}: LoadMoreSentinelProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const node = ref.current;
-    if (!node || !hasNextPage || isFetchingNextPage) return;
+    if (!node || !autoLoad || !hasNextPage || isFetchingNextPage) return;
     if (typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
       entries => {
@@ -31,7 +38,7 @@ export function LoadMoreSentinel({ hasNextPage, isFetchingNextPage, onLoadMore, 
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
+  }, [autoLoad, hasNextPage, isFetchingNextPage, onLoadMore]);
 
   if (!hasNextPage) return null;
 
