@@ -448,7 +448,7 @@ function BoardContent({
                       />
                     )}
                     {columnFeed && <IntakeFeedNotice source={intake.active} feed={columnFeed} />}
-                    {stage.id === 'intake' && <IntakeColumnExtras feed={columnFeed} filtersActive={anyFilterActive} />}
+                    {stage.id === 'intake' && <IntakeColumnExtras feed={columnFeed} />}
                   </BoardColumn>
                 ),
               )}

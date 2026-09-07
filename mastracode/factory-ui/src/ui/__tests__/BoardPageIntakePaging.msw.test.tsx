@@ -1,15 +1,16 @@
 /**
- * Board filters run in the browser over the candidate pages already loaded.
- * The Intake sentinel auto-loads whenever it scrolls into view, so a filter
- * that hid every loaded candidate kept it in view and walked every open pull
- * request of the repository, one page after another. Under a filter, paging
- * is a click.
+ * The Intake sentinel auto-loads the next candidate page when it scrolls into
+ * view. Filters, cards already on the board, and drafts all shorten what a
+ * loaded page adds to the column, so a sentinel that fetched whenever it was
+ * merely in view chained through every open pull request of the repository.
+ * Now only a scroll into view fetches; a sentinel that is already there waits
+ * for a click.
  */
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -35,17 +36,36 @@ function pullRequest(number: number, title: string) {
 
 const pullRequestPages: Record<string, { pullRequests: ReturnType<typeof pullRequest>[]; nextPage: number | null }> = {
   '1': { pullRequests: [pullRequest(7, 'Fix login')], nextPage: 2 },
-  '2': { pullRequests: [pullRequest(8, 'Fix signup')], nextPage: null },
+  '2': { pullRequests: [pullRequest(8, 'Fix signup')], nextPage: 3 },
+  '3': { pullRequests: [pullRequest(9, 'Fix logout')], nextPage: null },
 };
 
-/** The setup file's observer never intersects; this one reports every observed node as in view. */
-class AlwaysInViewObserver {
-  constructor(private readonly callback: (entries: Array<{ isIntersecting: boolean }>) => void) {}
-  observe() {
-    this.callback([{ isIntersecting: true }]);
-  }
-  unobserve() {}
-  disconnect() {}
+/**
+ * The setup file's observer never notifies. This one reports where the sentinel
+ * is as soon as it is observed, like a browser does, and lets the test scroll it.
+ */
+function stubIntersectionObserver(startsInView: boolean) {
+  let inView = startsInView;
+  let notify: (entries: Array<{ isIntersecting: boolean }>) => void = () => {};
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(callback: typeof notify) {
+        notify = callback;
+      }
+      observe() {
+        notify([{ isIntersecting: inView }]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  return {
+    scrollSentinel(nowInView: boolean) {
+      inView = nowInView;
+      act(() => notify([{ isIntersecting: nowInView }]));
+    },
+  };
 }
 
 /** Stubs the review board's endpoints and records which candidate pages were requested. */
@@ -100,36 +120,47 @@ function stubReviewBoard() {
   return requestedPages;
 }
 
-function renderReviewBoard(search = '') {
-  const router = createMemoryRouter(createAppRoutes(), {
-    initialEntries: [`/factories/${FACTORY_ID}/review${search}`],
-  });
+function renderReviewBoard() {
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Intake paging under board filters', () => {
-  beforeEach(() => vi.stubGlobal('IntersectionObserver', AlwaysInViewObserver));
+describe('Intake candidate paging', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('pages on click only while a filter hides the loaded candidates', async () => {
+  it('does not fetch on its own when the sentinel is already in view', async () => {
+    stubIntersectionObserver(true);
     const requestedPages = stubReviewBoard();
-    const { client } = renderReviewBoard('?q=nothing-on-this-board');
+    const { client } = renderReviewBoard();
 
     const intake = await screen.findByTestId('board-column-intake');
-    await waitFor(() => expect(within(intake).getByText('No pull requests match filters')).toBeInTheDocument());
+    await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(requestedPages).toEqual(['1']);
 
     await userEvent.click(within(intake).getByRole('button', { name: 'Load more candidates' }));
-    await waitFor(() => expect(requestedPages).toEqual(['1', '2']));
-  });
-
-  it('keeps auto-loading the next page while nothing is filtered', async () => {
-    const requestedPages = stubReviewBoard();
-    renderReviewBoard();
-
-    const intake = await screen.findByTestId('board-column-intake');
     await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
     expect(requestedPages).toEqual(['1', '2']);
+  });
+
+  it('fetches one page per scroll into view, never chaining into the next', async () => {
+    const { scrollSentinel } = stubIntersectionObserver(false);
+    const requestedPages = stubReviewBoard();
+    const { client } = renderReviewBoard();
+
+    const intake = await screen.findByTestId('board-column-intake');
+    await waitFor(() => expect(within(intake).getByText('Fix login')).toBeInTheDocument());
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(requestedPages).toEqual(['1']);
+
+    scrollSentinel(true);
+    await waitFor(() => expect(within(intake).getByText('Fix signup')).toBeInTheDocument());
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(requestedPages).toEqual(['1', '2']);
+
+    scrollSentinel(false);
+    scrollSentinel(true);
+    await waitFor(() => expect(within(intake).getByText('Fix logout')).toBeInTheDocument());
+    expect(requestedPages).toEqual(['1', '2', '3']);
   });
 });

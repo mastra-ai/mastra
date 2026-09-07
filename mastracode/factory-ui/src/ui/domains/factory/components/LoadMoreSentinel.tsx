@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 
 interface LoadMoreSentinelProps {
   hasNextPage: boolean;
@@ -8,37 +8,38 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
   /** Accessible label, e.g. "Load more issues". */
   label: string;
-  autoLoad?: boolean;
 }
 
 /**
  * Infinite-scroll trigger for the Factory lists. Fetches the next page when it
- * scrolls into view; the visible "Load more" button is both the observed node
- * and a keyboard/no-IntersectionObserver fallback.
+ * is scrolled into view; the visible "Load more" button is both the observed
+ * node and a keyboard/no-IntersectionObserver fallback. A sentinel that is
+ * already in view — a short or filtered list — never fetches on its own, so a
+ * page that adds nothing visible cannot chain into the next one.
  */
-export function LoadMoreSentinel({
-  hasNextPage,
-  isFetchingNextPage,
-  onLoadMore,
-  label,
-  autoLoad = true,
-}: LoadMoreSentinelProps) {
+export function LoadMoreSentinel({ hasNextPage, isFetchingNextPage, onLoadMore, label }: LoadMoreSentinelProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const loadMoreUnlessFetching = useEffectEvent(() => {
+    if (!isFetchingNextPage) onLoadMore();
+  });
 
   useEffect(() => {
     const node = ref.current;
-    if (!node || !autoLoad || !hasNextPage || isFetchingNextPage) return;
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (!node || !hasNextPage || typeof IntersectionObserver === 'undefined') return;
+    // The first notification reports where the node already is, not a scroll.
+    let wasInView = true;
     const observer = new IntersectionObserver(
       entries => {
-        if (entries.some(entry => entry.isIntersecting)) onLoadMore();
+        const inView = entries.some(entry => entry.isIntersecting);
+        if (inView && !wasInView) loadMoreUnlessFetching();
+        wasInView = inView;
       },
       // Start the fetch shortly before the end of the list is reached.
       { rootMargin: '200px' },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [autoLoad, hasNextPage, isFetchingNextPage, onLoadMore]);
+  }, [hasNextPage]);
 
   if (!hasNextPage) return null;
 
