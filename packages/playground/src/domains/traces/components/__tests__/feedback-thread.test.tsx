@@ -33,8 +33,9 @@ describe('FeedbackThread', () => {
 
     expect(screen.getByText('this span looks wrong')).toBeTruthy();
     expect(screen.queryByText('user')).toBeNull();
-    expect(document.querySelector('[data-slot="comment-item-avatar"]')).toBeNull();
     expect(document.querySelector('[data-slot="comment-item-author"]')).toBeNull();
+    // The gutter stays so bodies align, but it is empty.
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')?.childElementCount).toBe(0);
   });
 
   it('renders the author avatar and name when the feedback has an author', () => {
@@ -49,6 +50,20 @@ describe('FeedbackThread', () => {
     const img = screen.getByAltText('Marvin Frachet') as HTMLImageElement;
     expect(img.closest('[data-slot="comment-item-avatar"]')).toBeTruthy();
     expect(img.src).toBe('https://example.com/a.png');
+  });
+
+  it('puts the avatar inline in the header for the embed variant', () => {
+    render(
+      <FeedbackThread
+        variant="embed"
+        feedbackData={withAuthor({ id: 'u1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/a.png' })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const img = screen.getByAltText('Marvin Frachet');
+    expect(img.closest('[data-slot="comment-item-header"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="comment-item-avatar"]')).toBeNull();
   });
 
   it('falls back to email, then id, when the author has no name', () => {
