@@ -214,6 +214,8 @@ import type {
   AgentThreadPeerAdvertisement,
   AgentThreadSubscription,
   DiscoverAgentThreadPeersOptions,
+  CancelQueuedAgentMessagesOptions,
+  CancelQueuedAgentMessagesResult,
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -8482,6 +8484,13 @@ export class Agent<
       target,
       this.getPubSub(),
     );
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
+    return agentThreadStreamRuntime.cancelQueuedMessages(target, this.getPubSub());
   }
 
   /**

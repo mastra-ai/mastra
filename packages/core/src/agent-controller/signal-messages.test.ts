@@ -386,7 +386,11 @@ describe('AgentController signal messages', () => {
     );
     await signal.accepted;
 
-    expect(buildToolsets).toHaveBeenCalledWith(session, requestContext);
+    const toolsetRequestContext = buildToolsets.mock.calls[0]?.[1];
+    expect(toolsetRequestContext).toBeInstanceOf(RequestContext);
+    expect(toolsetRequestContext).not.toBe(requestContext);
+    expect(toolsetRequestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    expect(requestContext.get('controller')).toBeUndefined();
   });
 
   it('sends active text signals without building idle stream options', async () => {
@@ -590,12 +594,11 @@ describe('AgentController signal messages', () => {
 
     await session.followUp({ content: 'queued follow-up' });
 
-    expect(session.followUps.count()).toBe(1);
     expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
   });
 
-  it('uses queueMessage when draining follow-ups for a subscribed thread', async () => {
+  it('uses queueMessage for active follow-ups on a subscribed thread', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({
       id: 'follow-up-queue-agent',
@@ -623,7 +626,6 @@ describe('AgentController signal messages', () => {
     session.run.ensureAbortController();
 
     await session.followUp({ content: 'queued follow-up' });
-    await session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
       { contents: 'queued follow-up' },
@@ -641,10 +643,87 @@ describe('AgentController signal messages', () => {
       }),
     );
     expect(sendSignal).not.toHaveBeenCalled();
-    expect(session.followUps.count()).toBe(0);
-    expect(session.displayState.get().queuedFollowUps).toBe(0);
+    expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
-    expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
+  });
+
+  it('clears queued display bookkeeping when a run starts before queue acceptance resolves', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const accepted = Promise.withResolvers<any>();
+    const signal = createSignal({ type: 'user', contents: 'queued follow-up' });
+    const queueMessage = vi
+      .spyOn(session.machinery.getAgent(), 'queueMessage')
+      .mockReturnValue({ accepted: accepted.promise, signal });
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'queued follow-up' });
+    await waitFor(() => queueMessage.mock.calls.length === 1);
+    expect(session.displayState.get().queuedFollowUps).toBe(1);
+    session.markQueuedFollowUpStarted('queued-run-id');
+    accepted.resolve({ action: 'deliver', runId: 'queued-run-id' });
+    await followUp;
+
+    expect(session.displayState.get().queuedFollowUps).toBe(0);
+  });
+
+  it('does not enqueue a follow-up whose preparation finishes after steering', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    let preparationSignal: AbortSignal | undefined;
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockImplementation(input => {
+      preparationSignal = input.abortSignal;
+      return prepare.promise;
+    });
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    const sendMessage = vi.spyOn(session as any, 'sendMessage').mockResolvedValue(undefined);
+    await session.thread.create();
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    await session.steer({ content: 'replacement input' });
+    expect(preparationSignal?.aborted).toBe(true);
+    prepare.resolve({});
+    await followUp;
+
+    expect(sendMessage).toHaveBeenCalledWith({ content: 'replacement input', requestContext: undefined });
+    expect(queueMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a follow-up whose preparation finishes after switching threads', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockReturnValue(prepare.promise);
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    await session.thread.create({ id: 'first-thread' });
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    await session.thread.create({ id: 'second-thread' });
+    prepare.resolve({});
+    await followUp;
+
+    expect(session.thread.getId()).toBe('second-thread');
+    expect(queueMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not enqueue a follow-up whose preparation finishes after subscription cleanup', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const prepare = Promise.withResolvers<Record<string, unknown>>();
+    const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions').mockReturnValue(prepare.promise);
+    const queueMessage = vi.spyOn(session.machinery.getAgent(), 'queueMessage');
+    await session.thread.create({ id: 'cleanup-thread' });
+    session.run.ensureAbortController();
+
+    const followUp = session.followUp({ content: 'stale follow-up' });
+    await waitFor(() => buildStreamOptions.mock.calls.length === 1);
+    session.thread.cleanupSubscription();
+    prepare.resolve({});
+    await followUp;
+
+    expect(queueMessage).not.toHaveBeenCalled();
   });
 
   it('sends idle follow-ups immediately without marking them queued', async () => {
@@ -659,7 +738,6 @@ describe('AgentController signal messages', () => {
     await session.followUp({ content: 'idle follow-up' });
 
     expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
-    expect(session.followUps.count()).toBe(0);
     expect(session.displayState.get().queuedFollowUps).toBe(0);
     expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
@@ -1032,6 +1110,25 @@ describe('AgentController signal messages', () => {
     releaseInitialCalls.shift()?.();
     await waitFor(() => session.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
+  });
+
+  it('runs Session.queueMessage calls FIFO as later Agent runs', async () => {
+    const releases: Array<() => void> = [];
+    const prompts: unknown[] = [];
+    const { session } = await createController(new InMemoryStore(), createGatedAgent(prompts, releases));
+
+    const initial = session.sendMessage({ content: 'finish the initial task' });
+    await waitFor(() => session.getCurrentRunId() !== null && releases.length === 1);
+
+    await session.queueMessage({ content: 'run the first queued task next' });
+    await session.queueMessage({ content: 'run the second queued task after that' });
+    releases.shift()?.();
+
+    await initial;
+    await waitFor(() => prompts.length === 3 && session.getCurrentRunId() === null);
+
+    expect(JSON.stringify(prompts[1])).toContain('run the first queued task next');
+    expect(JSON.stringify(prompts[2])).toContain('run the second queued task after that');
   });
 
   it('tags a message sent into a live run as a while-active interjection', async () => {

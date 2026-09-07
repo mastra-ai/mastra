@@ -286,6 +286,8 @@ export interface SessionMachinery {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     untilIdle?: boolean | { maxIdleMs?: number };
+    /** Queue preparation owns this signal instead of mutating the active Session run. */
+    abortSignal?: AbortSignal;
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(): Record<string, unknown>;

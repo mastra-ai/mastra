@@ -474,7 +474,6 @@ export class SessionRunEngine {
     );
 
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
 
     return result;
   }
@@ -1210,7 +1209,6 @@ export class SessionRunEngine {
           : 'complete';
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
   }
 
   private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
@@ -1237,7 +1235,6 @@ export class SessionRunEngine {
     }
     this.#session.stream.detach();
     this.#session.run.reset();
-    await this.#session.drainFollowUpQueue();
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
@@ -1262,6 +1259,7 @@ export class SessionRunEngine {
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
           requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
+          if (runId) this.#session.markQueuedFollowUpStarted(runId);
           this.#session.emit({ type: 'agent_start' });
         }
 

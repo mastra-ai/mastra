@@ -333,6 +333,8 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 `queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`.
 
+Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages before execution begins. It returns the signal IDs that were actually cancelled. It does not cancel an already-running message, messages owned by another process, or provide crash-durable delivery.
+
 ### `sendSignal(signal, options)`
 
 Sends a signal to an active run or memory thread.
