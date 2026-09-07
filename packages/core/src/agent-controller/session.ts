@@ -3006,16 +3006,18 @@ export class Session<TState = unknown> {
   /** Await terminal hooks, then emit the terminal event to subscribers. */
   async finishAgentRun(
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
+    isCurrent?: () => boolean,
   ): Promise<void> {
     const event = { type: 'agent_end', reason } as const;
     for (const listener of this.#beforeAgentEndListeners) {
+      if (isCurrent && !isCurrent()) return;
       try {
         await listener(event);
       } catch (error) {
         console.error('Error in before-agent-end listener:', error);
       }
     }
-    this.emit(event);
+    if (!isCurrent || isCurrent()) this.emit(event);
   }
 
   /**
@@ -3146,6 +3148,7 @@ export class Session<TState = unknown> {
     if (this.run.isAbortRequested()) return;
 
     const localRunId = this.getCurrentRunId();
+    const operationId = this.run.getOperationId();
     const threadId = this.thread.getId();
     const resourceId = this.identity.getResourceId();
     const agents = [...new Set(this.machinery.getAgents?.() ?? [this.machinery.getAgent()])];
@@ -3199,7 +3202,7 @@ export class Session<TState = unknown> {
         const cancellations = await Promise.allSettled(
           [...owners].map(async ([runId, owner]) => {
             if (isDurableAgentLike(owner) && owner.__abortRunStreamAndWait) {
-              await owner.__abortRunStreamAndWait(runId);
+              return owner.__abortRunStreamAndWait(runId);
             } else {
               owner.abortRunStream(runId);
             }
@@ -3207,6 +3210,31 @@ export class Session<TState = unknown> {
         );
         const errors = cancellations.flatMap(result => (result.status === 'rejected' ? [result.reason] : []));
         if (errors.length) throw new AggregateError(errors, 'Failed to cancel discovered runs');
+        const completed = cancellations.flatMap(result =>
+          result.status === 'fulfilled' && result.value ? [result.value] : [],
+        );
+        const stillOwnsDisplay = () =>
+          this.thread.getId() === threadId &&
+          this.identity.getResourceId() === resourceId &&
+          this.run.getOperationId() === operationId &&
+          (!this.getCurrentRunId() || owners.has(this.getCurrentRunId()!));
+        // A restored cancellation has no subscribed thread stream to finish it.
+        // Publish only its finalized native output, after persistence, and only
+        // while the captured Session still displays that original operation.
+        if (completed.length && stillOwnsDisplay()) {
+          for (const { messages } of completed) {
+            for (const message of messages) {
+              if (!stillOwnsDisplay()) return;
+              if (message.role === 'assistant' && message.threadId === threadId && message.resourceId === resourceId) {
+                this.emit({ type: 'message_end', message });
+              }
+            }
+          }
+          if (stillOwnsDisplay()) {
+            await this.finishAgentRun('aborted', stillOwnsDisplay);
+            if (stillOwnsDisplay()) this.run.reset();
+          }
+        }
       };
       const mastra = agent.getMastraInstance();
       const cancellation = mastra ? mastra.__runDurableAgentCancellation(cancelDiscoveredRuns) : cancelDiscoveredRuns();

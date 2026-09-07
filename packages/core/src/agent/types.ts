@@ -66,7 +66,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
-import type { MessageList } from './message-list/index';
+import type { MastraDBMessage, MessageList } from './message-list/index';
 import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -1210,7 +1210,7 @@ export interface DurableAgentLike {
    * providing this method guarantee stored cancellation completion to Session.
    * @internal
    */
-  __abortRunStreamAndWait?(runId: string): Promise<void>;
+  __abortRunStreamAndWait?(runId: string): Promise<{ messages: MastraDBMessage[] } | void>;
   /** Agent ID */
   readonly id: string;
   /** Agent name */

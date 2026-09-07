@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import type { OutputResult, ProcessOutputResultArgs } from '../../../../processors';
 import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../../types';
@@ -109,6 +110,42 @@ describe('runDurableFinishSideEffects', () => {
 
     expect(generateThreadTitle).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['abort', 'aborted'])(
+    'preserves final output and persistence without titling a %s result',
+    async finishReason => {
+      const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
+      const flushMessages = vi.fn().mockResolvedValue(undefined);
+      const outputResult: OutputResult = {
+        text: 'hi there',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        finishReason,
+        steps: [],
+      };
+      const processOutputResult = vi.fn(({ messageList }: ProcessOutputResultArgs) => messageList);
+      globalRunRegistry.set('run-1', {
+        isPlaceholder: false,
+        outputProcessors: [{ id: 'final-observer', processOutputResult }],
+        generateThreadTitle,
+        saveQueueManager: { flushMessages },
+        memory: { createThread: vi.fn() },
+      } as unknown as RunRegistryEntry);
+
+      const result = await runDurableFinishSideEffects({
+        runId: 'run-1',
+        initData: makeInitData({ threadId: 'thread-1', resourceId: 'resource-1', threadExists: true }),
+        messageListState: makeMessageListState(),
+        outputResult,
+      });
+
+      expect(processOutputResult).toHaveBeenCalledTimes(1);
+      expect(processOutputResult.mock.calls[0]?.[0].result).toBe(outputResult);
+      expect(flushMessages).toHaveBeenCalledTimes(1);
+      expect(flushMessages.mock.calls[0]?.[0]).toBe(processOutputResult.mock.calls[0]?.[0].messageList);
+      expect(result.outputText).toBe('hi there');
+      expect(generateThreadTitle).not.toHaveBeenCalled();
+    },
+  );
 
   it('deserializes into the run MessageList the stream is already holding', async () => {
     const existing = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });

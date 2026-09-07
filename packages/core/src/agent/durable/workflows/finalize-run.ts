@@ -200,7 +200,10 @@ export async function runDurableFinishSideEffects({
 
   // Same exclusions as the persistence block above: an observational-memory run writes no
   // messages here, and titling it would create a thread row holding a title and nothing else.
+  // Cancellation still finalizes output and memory, but must not start another model call.
   if (
+    outputResult?.finishReason !== 'abort' &&
+    outputResult?.finishReason !== 'aborted' &&
     durableState?.threadId &&
     durableState?.resourceId &&
     !durableState.observationalMemory &&
