@@ -410,18 +410,11 @@ function mapMastraToLangfuseAttributes(
     }
 
     // Root-span metadata: forward the remaining mastra.metadata.* keys (runId,
-    // resourceId, and any user-supplied keys) to langfuse.trace.metadata.* so
-    // they stay first-level, filterable trace metadata, as they were before the
-    // OTLP migration. Langfuse only nests unmapped attributes under
-    // metadata.attributes, which cannot be used in trace filters or evaluator
-    // scopes. Keys that map to dedicated Langfuse fields are skipped by name:
-    // the truthy checks above leave falsy values (empty string, 0, false) in
-    // place, and those must not leak into trace metadata either. Explicit
-    // metadata.langfuse.* values and the identity keys above take precedence.
-    // Child spans are skipped because Langfuse applies langfuse.trace.* from
-    // any span, so a child could overwrite the trace. The mastra.metadata.*
-    // attribute is kept on the observation. A value that cannot be serialized
-    // (e.g. BigInt) skips only its own key so the span still exports.
+    // resourceId, user-supplied keys) to langfuse.trace.metadata.* so they are
+    // filterable trace metadata; Langfuse nests unmapped attributes under
+    // metadata.attributes. Dedicated keys, explicit metadata.langfuse.* values,
+    // and the identity keys above take precedence. Root only: Langfuse applies
+    // langfuse.trace.* from any span, so a child span could overwrite the trace.
     for (const [key, value] of Object.entries(attributes)) {
       if (!key.startsWith(MASTRA_METADATA_PREFIX)) {
         continue;
