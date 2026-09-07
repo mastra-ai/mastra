@@ -84,11 +84,7 @@ export function Combobox(props: ComboboxProps) {
     onInputValueChange,
   } = props;
   const multiple = isMultipleCombobox(props);
-  const [inputValue, setInputValueState] = React.useState('');
-  const setInputValue = (value: string) => {
-    setInputValueState(value);
-    onInputValueChange?.(value);
-  };
+  const [inputValue, setInputValue] = React.useState('');
   const customValue = inputValue.trim();
   const customOption =
     !multiple && allowCustomValue && customValue && !options.some(option => option.value === customValue)
@@ -208,11 +204,15 @@ export function Combobox(props: ComboboxProps) {
         items={displayedOptions}
         value={selectedOption}
         inputValue={inputValue}
-        onInputValueChange={setInputValue}
+        onInputValueChange={value => {
+          setInputValue(value);
+          onInputValueChange?.(value);
+        }}
         onValueChange={item => {
           if (item) {
             props.onValueChange?.(item.value);
             setInputValue('');
+            onInputValueChange?.('');
           }
         }}
         disabled={disabled}
