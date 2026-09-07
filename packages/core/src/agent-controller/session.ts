@@ -21,6 +21,7 @@ import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { createRunScopeKey } from '../mastra/run-scope';
 import type { RunScope } from '../mastra/run-scope';
+import { setThreadTitlePinned } from '../memory/types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -676,8 +677,12 @@ export class SessionThread {
     return thread;
   }
 
-  /** Rename the session's active thread. No-op when unbound or storageless. */
-  async rename({ title }: { title: string }): Promise<void> {
+  /**
+   * Rename and pin the session's active thread so Observational Memory preserves the title.
+   * Pass `pin: false` for programmatic initial titles that the observer may still update.
+   * No-op when unbound or storageless.
+   */
+  async rename({ title, pin = true }: { title: string; pin?: boolean }): Promise<void> {
     const store = this.#store;
     const threadId = this.#threadId;
     if (!threadId || !store?.hasStorage()) return;
@@ -685,7 +690,7 @@ export class SessionThread {
     const thread = await store.getById({ threadId });
     if (thread) {
       await store.saveThread({
-        thread: { ...thread, title, updatedAt: new Date() },
+        thread: { ...thread, title, metadata: setThreadTitlePinned(thread.metadata, pin), updatedAt: new Date() },
       });
       this.#owner.emit({ type: 'thread_title_updated', threadId, title });
     }
