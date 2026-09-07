@@ -1,5 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
@@ -21,7 +23,7 @@ import { SchemaRequestContextProvider } from '@/domains/request-context/context/
 function AgentSession() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
@@ -50,6 +52,10 @@ function AgentSession() {
 
   if (isAgentLoading) {
     return <AgentSessionLoadingSkeleton />;
+  }
+
+  if (error && !is404NotFoundError(error)) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!agent) {
