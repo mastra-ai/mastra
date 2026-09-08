@@ -675,6 +675,82 @@ describe('UnixSocketPubSub', () => {
     });
   });
 
+  it('waits for an in-flight broker registration before completing overlapping subscriptions', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    let acknowledgeSubscribe: (() => void) | undefined;
+    let subscribeReceivedResolve: (() => void) | undefined;
+    const subscribeReceived = new Promise<void>(resolve => {
+      subscribeReceivedResolve = resolve;
+    });
+    const server = net.createServer((socket: net.Socket) => {
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.setEncoding('utf8');
+      let pending = '';
+      socket.on('data', (chunk: string) => {
+        pending += chunk;
+        const lines = pending.split('\n');
+        pending = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type !== 'subscribe') continue;
+          const acknowledge = () => {
+            socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic, group: frame.group })}\n`);
+          };
+          if (frame.topic === 'topic-a') {
+            acknowledgeSubscribe = acknowledge;
+            subscribeReceivedResolve?.();
+          } else {
+            acknowledge();
+          }
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    try {
+      await pubsub.subscribe('bootstrap', vi.fn());
+
+      let firstCompleted = false;
+      const first = pubsub.subscribe('topic-a', vi.fn(), { group: 'workers' }).then(() => {
+        firstCompleted = true;
+      });
+      await subscribeReceived;
+
+      const secondCallback = vi.fn();
+      let secondCompleted = false;
+      const second = pubsub.subscribe('topic-a', secondCallback, { group: 'workers' }).then(() => {
+        secondCompleted = true;
+      });
+      let duplicateCompleted = false;
+      const duplicate = pubsub.subscribe('topic-a', secondCallback, { group: 'workers' }).then(() => {
+        duplicateCompleted = true;
+      });
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(firstCompleted).toBe(false);
+      expect(secondCompleted).toBe(false);
+      expect(duplicateCompleted).toBe(false);
+      expect(acknowledgeSubscribe).toBeTypeOf('function');
+      acknowledgeSubscribe!();
+      await Promise.all([first, second, duplicate]);
+      expect(firstCompleted).toBe(true);
+      expect(secondCompleted).toBe(true);
+      expect(duplicateCompleted).toBe(true);
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('keeps the final callback active until the broker acknowledges unsubscribe', async () => {
     const path = await socketPath();
     const sockets = new Set<net.Socket>();

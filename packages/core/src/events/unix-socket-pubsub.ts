@@ -292,7 +292,16 @@ export class UnixSocketPubSub extends PubSub {
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     const subscriptions = this.#subscriptions.get(topic) ?? new Map<EventCallback, LocalSubscription>();
     const existing = subscriptions.get(cb);
-    if (existing && existing.group === options?.group) return;
+    if (existing && existing.group === options?.group) {
+      await this.#ensureStarted();
+      if (!this.#isBroker) {
+        await this.#waitForPendingMembershipAcknowledgement(
+          this.#subscribeWaiters,
+          membershipKey(topic, existing.group),
+        );
+      }
+      return;
+    }
     if (existing) {
       await this.unsubscribe(topic, cb);
     }
@@ -305,8 +314,12 @@ export class UnixSocketPubSub extends PubSub {
 
     try {
       await this.#ensureStarted();
-      if (!this.#isBroker && !hadMembership && wasConnected) {
-        await this.#sendSubscribeToBroker(topic, group);
+      if (!this.#isBroker && wasConnected) {
+        if (hadMembership) {
+          await this.#waitForPendingMembershipAcknowledgement(this.#subscribeWaiters, membershipKey(topic, group));
+        } else {
+          await this.#sendSubscribeToBroker(topic, group);
+        }
       }
     } catch (error) {
       subscriptions.delete(cb);
@@ -621,36 +634,25 @@ export class UnixSocketPubSub extends PubSub {
     waiterMap: Map<string, MembershipWaiter[]>,
   ): Promise<void> {
     const key = membershipKey(frame.topic, frame.group);
-    let waiter: MembershipWaiter | undefined;
     const acknowledged = new Promise<void>((resolve, reject) => {
-      waiter = { resolve, reject };
       const waiters = waiterMap.get(key) ?? [];
-      waiters.push(waiter);
+      waiters.push({ resolve, reject });
       waiterMap.set(key, waiters);
     });
     try {
       await this.#sendToBroker(frame);
     } catch (error) {
-      this.#removeMembershipWaiter(waiterMap, key, waiter);
-      throw error;
+      this.#settleMembershipWaiters(waiterMap, key, error instanceof Error ? error : new Error(String(error)));
     }
     await acknowledged;
   }
 
-  #removeMembershipWaiter(
-    waiterMap: Map<string, MembershipWaiter[]>,
-    key: string,
-    waiter: MembershipWaiter | undefined,
-  ) {
-    if (!waiter) return;
+  #waitForPendingMembershipAcknowledgement(waiterMap: Map<string, MembershipWaiter[]>, key: string): Promise<void> {
     const waiters = waiterMap.get(key);
-    if (!waiters) return;
-    const nextWaiters = waiters.filter(item => item !== waiter);
-    if (nextWaiters.length === 0) {
-      waiterMap.delete(key);
-      return;
-    }
-    waiterMap.set(key, nextWaiters);
+    if (!waiters) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      waiters.push({ resolve, reject });
+    });
   }
 
   #settleMembershipWaiters(waiterMap: Map<string, MembershipWaiter[]>, key: string, error?: Error) {
