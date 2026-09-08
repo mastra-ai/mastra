@@ -21,6 +21,8 @@ export interface PostHogUsageMetrics {
   $ai_output_tokens?: number;
   $ai_cache_read_input_tokens?: number;
   $ai_cache_creation_input_tokens?: number;
+  $ai_cache_creation_5m_input_tokens?: number;
+  $ai_cache_creation_1h_input_tokens?: number;
 }
 
 /**
@@ -48,6 +50,12 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
 
   if (usage.inputDetails?.cacheWrite !== undefined) {
     props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+  }
+  if (usage.inputDetails?.cacheWrite5m !== undefined) {
+    props.$ai_cache_creation_5m_input_tokens = usage.inputDetails.cacheWrite5m;
+  }
+  if (usage.inputDetails?.cacheWrite1h !== undefined) {
+    props.$ai_cache_creation_1h_input_tokens = usage.inputDetails.cacheWrite1h;
   }
 
   if (usage.outputTokens !== undefined) {
@@ -536,6 +544,18 @@ export class PosthogExporter extends TrackingExporter<
       if (attrs.parameters.maxOutputTokens !== undefined) props.$ai_max_tokens = attrs.parameters.maxOutputTokens;
     }
     if (attrs.streaming !== undefined) props.$ai_stream = attrs.streaming;
+    if (attrs.tools?.length) {
+      // OpenAI-style shape — the format PostHog's own AI SDKs send and its
+      // trace view renders. Provider-defined tools pass through as-is.
+      props.$ai_tools = attrs.tools.map(tool =>
+        tool.type === 'function'
+          ? {
+              type: 'function',
+              function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+            }
+          : tool,
+      );
+    }
 
     return { ...props, ...this.extractErrorProperties(span.errorInfo), ...this.extractCustomMetadata(span.metadata) };
   }

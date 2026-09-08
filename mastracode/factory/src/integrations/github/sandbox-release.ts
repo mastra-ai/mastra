@@ -1,88 +1,44 @@
-import type { SandboxFleet } from '../../sandbox/fleet.js';
-import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { recycleClaimedWorkdir } from './sandbox.js';
+import { evictSessionSandbox, peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 
 /**
- * Scrub a sandbox that is about to enter the reuse pool: force-checkout the
- * default branch and drop the released session's local state, so idle pooled
- * VMs don't sit on stale branches, dirty worktrees, or abandoned work while
- * they wait for the next claim. Best-effort — the VM may already be reaped
- * (the pooled claim then falls back to fresh provisioning) and the claim
- * path recycles the workdir again before reuse, so a failed scrub never
- * blocks the release.
+ * Stop or destroy the sandbox a session holds in this process, dropping it
+ * from the per-process memo first so later opens construct fresh.
+ *
+ * Sandbox identity is the session id, so there is no reuse pool to publish
+ * into — a reopened session resolves the same id through its provider
+ * (reconnect/resume, or a fresh VM whose setup hook re-materializes).
+ * Sessions never opened in this replica have no memo entry; their VMs are
+ * left to the provider's idle lifecycle (pause / idle GC).
  */
-export async function cleanReleasedSandbox(options: {
-  fleet: Pick<SandboxFleet, 'reattachSandbox'>;
-  sourceControl: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>;
-  orgId: string;
-  projectRepositoryId: string;
-  sandboxId: string;
-  sandboxWorkdir: string;
+export async function releaseSessionSandbox(options: {
+  /** The session's storage row id (the sandbox identity). */
+  sessionId: string;
+  /** Destroy instead of stop — for sessions that are gone for good. */
+  destroy?: boolean;
 }): Promise<void> {
-  try {
-    const projectRepository = await options.sourceControl.projectRepositories.get({
-      orgId: options.orgId,
-      id: options.projectRepositoryId,
-    });
-    if (!projectRepository) return;
-    const repository = await options.sourceControl.repositories.get({
-      orgId: options.orgId,
-      id: projectRepository.repositoryId,
-    });
-    if (!repository) return;
-    const sandbox = await options.fleet.reattachSandbox(options.sandboxId);
-    await recycleClaimedWorkdir(sandbox, options.sandboxWorkdir, repository.defaultBranch);
-  } catch {
-    // Reaped, unreachable, or wedged — the claim-side recycle is the
-    // correctness guarantee; this scrub is hygiene for idle VMs.
+  const entry = peekSessionSandbox(options.sessionId);
+  if (!entry) return;
+  evictSessionSandbox(options.sessionId);
+  const sandbox = entry.sandbox as unknown as {
+    _stop?: () => Promise<void>;
+    _destroy?: () => Promise<void>;
+    stop?: () => Promise<void>;
+    destroy?: () => Promise<void>;
+  };
+  if (options.destroy) {
+    await (sandbox._destroy ? sandbox._destroy() : sandbox.destroy?.());
+    return;
   }
+  await (sandbox._stop ? sandbox._stop() : sandbox.stop?.());
 }
 
 /**
- * Release the sandboxes held by a work item's sessions back to the reuse pool.
- *
- * Called when the item commits into a terminal stage (`done` / `canceled`):
- * its branch sessions stop receiving runs, so their VMs — which would
- * otherwise idle until the provider reaps them — can serve the next session
- * for the same repository instead of a fresh provision. Each session
- * keeps its row (a reopened branch simply claims a pooled VM or provisions
- * fresh on next use); it only loses its sandbox binding.
+ * Tear down the sandbox a just-deleted user session was holding. The row is
+ * already gone, so the VM is destroyed rather than stopped — nothing will
+ * ever resolve this session id again.
  */
-export async function releaseWorkItemSandboxes(options: {
-  workItems: Pick<WorkItemsStorage, 'get'>;
-  sourceControl: Pick<SourceControlStorageHandle, 'sessions' | 'sandboxPool' | 'projectRepositories' | 'repositories'>;
-  fleet: Pick<SandboxFleet, 'reattachSandbox'>;
-  orgId: string;
-  workItemId: string;
+export async function reclaimDeletedSessionSandbox(options: {
+  session: Pick<import('../../storage/domains/source-control/base.js').SourceControlSession, 'id'>;
 }): Promise<void> {
-  const { workItems, sourceControl } = options;
-  const item = await workItems.get({ orgId: options.orgId, id: options.workItemId });
-  if (!item) return;
-  const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
-  for (const sessionId of sessionIds) {
-    const session = await sourceControl.sessions.getBySessionId(sessionId);
-    if (!session || session.orgId !== options.orgId) continue;
-    if (!session.sandboxId || !session.sandboxWorkdir) continue;
-    await cleanReleasedSandbox({
-      fleet: options.fleet,
-      sourceControl,
-      orgId: session.orgId,
-      projectRepositoryId: session.projectRepositoryId,
-      sandboxId: session.sandboxId,
-      sandboxWorkdir: session.sandboxWorkdir,
-    });
-    await sourceControl.sandboxPool.release({
-      orgId: session.orgId,
-      projectRepositoryId: session.projectRepositoryId,
-      userId: session.userId,
-      sandboxId: session.sandboxId,
-      sandboxWorkdir: session.sandboxWorkdir,
-    });
-    await sourceControl.sessions.setSandbox({
-      id: session.id,
-      sandboxId: null,
-      sandboxWorkdir: session.sandboxWorkdir,
-    });
-  }
+  await releaseSessionSandbox({ sessionId: options.session.id, destroy: true });
 }

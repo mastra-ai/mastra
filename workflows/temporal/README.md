@@ -7,62 +7,10 @@ Run Mastra workflows on [Temporal](https://temporal.io/) with a workflow authori
 ## Installation
 
 ```bash
-npm install @mastra/temporal @temporalio/client @temporalio/worker @temporalio/envconfig
+npm install @mastra/temporal
 ```
 
-## Define a Temporal-backed workflow
-
-The following example demonstrates the same pattern used in the `temporal-snapshot` app: create a Temporal client, call `init()`, and define workflows with `createWorkflow()` and `createStep()`.
-
-```ts
-import { z } from 'zod';
-import { init } from '@mastra/temporal';
-import { loadClientConnectConfig } from '@temporalio/envconfig';
-import { Client, Connection } from '@temporalio/client';
-
-const config = loadClientConnectConfig();
-const connection = await Connection.connect(config.connectionOptions);
-const client = new Client({ connection });
-
-const { createWorkflow, createStep } = init({
-  client,
-  taskQueue: 'mastra',
-});
-
-const fetchWeather = createStep({
-  id: 'fetch-weather',
-  inputSchema: z.object({ city: z.string() }),
-  outputSchema: z.object({ forecast: z.string() }),
-  execute: async ({ inputData }) => {
-    return {
-      forecast: `Sunny in ${inputData.city}`,
-    };
-  },
-});
-
-export const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow',
-  inputSchema: z.object({ city: z.string() }),
-  outputSchema: z.object({ forecast: z.string() }),
-}).then(fetchWeather);
-```
-
-## Register the workflow in your Mastra entry file
-
-`MastraPlugin` precompiles your Mastra entry file into dedicated workflow and activity modules before Temporal starts. Point the plugin at the file where your `Mastra` instance registers workflows.
-
-```ts
-import { Mastra } from '@mastra/core/mastra';
-import { weatherWorkflow } from './workflows/weather-workflow';
-
-export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-});
-```
-
-## Start a Temporal worker
-
-Create a worker, install `MastraPlugin`, and call `await plugin.init()` before `Worker.create()`. Use the Mastra entry file as `src`.
+## Usage
 
 ```ts
 import { NativeConnection, Worker } from '@temporalio/worker';
@@ -72,11 +20,7 @@ const connection = await NativeConnection.connect({
   address: 'localhost:7233',
 });
 
-const plugin = new MastraPlugin({
-  src: import.meta.resolve('./mastra/index.ts'),
-});
-
-await plugin.init();
+const plugin = new MastraPlugin(import.meta.resolve('./mastra/index.ts'));
 
 const worker = await Worker.create({
   connection,
@@ -88,20 +32,14 @@ const worker = await Worker.create({
 await worker.run();
 ```
 
-## How it works
+## Documentation
 
-- `init({ client, taskQueue })`: Returns `createWorkflow()` and `createStep()` helpers for Temporal-backed Mastra workflows.
-- `MastraPlugin({ src })`: Point it at the Mastra entry file that registers workflows.
-- `await plugin.init()`: Precompiles the Mastra app into `node_modules/.mastra/output/index.mjs`, then generates `node_modules/.mastra/workflow.mjs` for workflow bundling and `node_modules/.mastra/activities.mjs` for activity execution before the Temporal worker starts.
-- Generated activities: The plugin extracts `createStep()` handlers into `node_modules/.mastra/activities.mjs` and wires them into the worker automatically.
-- `debug: true`: Writes emitted workflow bundles to `node_modules/.mastra` for inspection.
+- [Temporal deployment and worker guide](https://mastra.ai/integrations/deploy/temporal)
 
-## Notes
+## Changelog
 
-- Workflow ids must be statically defined so the transformer can derive Temporal export names.
-- The plugin expects `src` to point to the Mastra entry file that registers workflows in `new Mastra({ workflows: ... })`.
-- Call `await plugin.init()` before `Worker.create()` so the compiled workflow entry is ready when Temporal configures the worker and bundler.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workflows/temporal/CHANGELOG.md) for version history and release notes.
 
-## License
+## Support
 
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

@@ -69,6 +69,90 @@ describe('ExperimentsInMemory', () => {
       expect(experiment.datasetVersion).toBeNull();
       expect(experiment.status).toBe('pending');
     });
+
+    it('persists provenance, runner attestation, and grouping identity', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        provenance: {
+          source: 'github',
+          sourceId: 'mastra-ai/mastra',
+          sourceVersion: 'abc123',
+          metadata: { pullRequest: 42 },
+        },
+        runnerAttestation: {
+          runnerId: 'runner-1',
+          invocationId: 'invocation-1',
+          runnerVersion: '1.0.0',
+        },
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+
+      expect(experiment.provenance).toEqual({
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+        metadata: { pullRequest: 42 },
+      });
+      expect(experiment.runnerAttestation).toEqual({
+        runnerId: 'runner-1',
+        invocationId: 'invocation-1',
+        runnerVersion: '1.0.0',
+      });
+      expect(experiment).toMatchObject({
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+    });
+
+    it('isolates stored records from input and returned object mutations', async () => {
+      const metadata = { nested: { value: 'original' } };
+      const provenance = { source: 'github', metadata: { branch: 'main' } };
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+        metadata,
+        provenance,
+      });
+
+      metadata.nested.value = 'mutated-input';
+      provenance.metadata.branch = 'mutated-input';
+      (created.metadata as typeof metadata).nested.value = 'mutated-return';
+      created.provenance!.metadata!.branch = 'mutated-return';
+
+      const fetched = await storage.getExperimentById({ id: created.id });
+      expect(fetched?.metadata).toEqual({ nested: { value: 'original' } });
+      expect(fetched?.provenance).toEqual({ source: 'github', metadata: { branch: 'main' } });
+
+      (fetched!.metadata as typeof metadata).nested.value = 'mutated-fetch';
+      fetched!.provenance!.metadata!.branch = 'mutated-fetch';
+      const listed = await storage.listExperiments({ pagination: { page: 0, perPage: 10 } });
+      (listed.experiments[0]!.metadata as typeof metadata).nested.value = 'mutated-list';
+      listed.experiments[0]!.provenance!.metadata!.branch = 'mutated-list';
+
+      const afterReads = await storage.getExperimentById({ id: created.id });
+      expect(afterReads?.metadata).toEqual({ nested: { value: 'original' } });
+      expect(afterReads?.provenance).toEqual({ source: 'github', metadata: { branch: 'main' } });
+
+      const updateMetadata = { nested: { value: 'updated' } };
+      const updated = await storage.updateExperiment({ id: created.id, metadata: updateMetadata });
+      updateMetadata.nested.value = 'mutated-update-input';
+      (updated.metadata as typeof updateMetadata).nested.value = 'mutated-update-return';
+
+      const afterUpdate = await storage.getExperimentById({ id: created.id });
+      expect(afterUpdate?.metadata).toEqual({ nested: { value: 'updated' } });
+    });
   });
 
   describe('updateExperiment', () => {
@@ -212,6 +296,42 @@ describe('ExperimentsInMemory', () => {
       expect(result.experiments[0].datasetId).toBe('ds-1');
     });
 
+    it('filters conjunctively by grouping fields and preserves trialIndex zero', async () => {
+      await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      });
+      await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-b',
+        trialIndex: 1,
+      });
+
+      const result = await storage.listExperiments({
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+        pagination: { page: 0, perPage: 10 },
+      });
+
+      expect(result.experiments).toHaveLength(1);
+      expect(result.experiments[0]).toMatchObject({ variantId: 'variant-a', trialIndex: 0 });
+    });
+
     it('sorts by createdAt descending', async () => {
       const exp1 = await storage.createExperiment({
         datasetId: 'ds-1',
@@ -299,6 +419,7 @@ describe('ExperimentsInMemory', () => {
         totalItems: 1,
       });
 
+      const metadata = { source: 'dataset-v3', nested: { value: 'original' } };
       const result = await storage.addExperimentResult({
         experimentId: experiment.id,
         itemId: 'item-1',
@@ -306,6 +427,7 @@ describe('ExperimentsInMemory', () => {
         input: { prompt: 'Hello' },
         output: { text: 'Hi there' },
         groundTruth: { text: 'Hello!' },
+        metadata,
         error: null,
         startedAt: new Date(),
         completedAt: new Date(),
@@ -317,6 +439,20 @@ describe('ExperimentsInMemory', () => {
       expect(result.itemDatasetVersion).toBe(3);
       expect(result.input).toEqual({ prompt: 'Hello' });
       expect(result.output).toEqual({ text: 'Hi there' });
+      expect(result.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
+
+      (stored!.metadata!.nested as { value: string }).value = 'mutated-read';
+      const listed = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(listed.results[0]?.metadata).toEqual({ source: 'dataset-v3', nested: { value: 'original' } });
     });
 
     it('stores itemDatasetVersion as integer', async () => {
@@ -395,6 +531,53 @@ describe('ExperimentsInMemory', () => {
       expect(result.error).toEqual({ message: 'Agent timeout' });
       expect(result.output).toBeNull();
       expect(result.retryCount).toBe(2);
+    });
+  });
+
+  describe('upsertExperimentResult', () => {
+    it('isolates updated metadata from caller mutations', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+      });
+
+      await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'initial',
+        groundTruth: null,
+        metadata: { nested: { value: 'initial' } },
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      const metadata = { nested: { value: 'updated' } };
+      const result = await storage.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: 'updated',
+        groundTruth: null,
+        metadata,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      metadata.nested.value = 'mutated-input';
+      (result.metadata!.nested as { value: string }).value = 'mutated-result';
+
+      const stored = await storage.getExperimentResultById({ id: result.id });
+      expect(stored?.metadata).toEqual({ nested: { value: 'updated' } });
     });
   });
 

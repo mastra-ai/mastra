@@ -188,6 +188,8 @@ describe('Composer', () => {
       const pulse = document.querySelector('[data-slot="composer-sending-pulse"]');
       assert(pulse);
       expect(pulse.getAttribute('aria-hidden')).toBe('true');
+      // Three columns of colour sweeping across the composer.
+      expect(pulse.childElementCount).toBe(3);
     });
   });
 

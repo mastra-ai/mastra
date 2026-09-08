@@ -32,6 +32,7 @@ export type {
   InlineSkill,
   SkillInput,
   AgentSkillsInput,
+  AgentSkillsResolver,
   AgentSkillsContext,
   Skill,
   SkillMetadata,

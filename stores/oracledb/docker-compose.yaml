@@ -1,0 +1,28 @@
+services:
+  db:
+    image: gvenzl/oracle-free:23-slim-faststart
+    container_name: 'oracledb-test-db'
+    ports:
+      - '${ORACLE_DATABASE_PORT:-1521}:1521'
+    environment:
+      ORACLE_RANDOM_PASSWORD: 'true'
+      APP_USER: ${ORACLE_DATABASE_USER:?Set ORACLE_DATABASE_USER before starting Oracle}
+      APP_USER_PASSWORD: ${ORACLE_DATABASE_PASSWORD:?Set ORACLE_DATABASE_PASSWORD before starting Oracle}
+    volumes:
+      - oracledbdata:/opt/oracle/oradata
+      # Persists VECTOR_MEMORY_SIZE via SPFILE (see scripts/configure-vector-memory.sql), but that
+      # value only takes effect after a restart. Enable HNSW vector indexes by restarting the
+      # database once after the first `docker compose up` finishes initializing:
+      #   docker compose up -d --wait && docker compose restart db
+      # Without the restart, the Vector Pool stays at 0: exact search (default) and IVF indexes
+      # still work, only HNSW index builds require this step.
+      - ./scripts/configure-vector-memory.sql:/container-entrypoint-initdb.d/01-configure-vector-memory.sql:ro
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  oracledbdata:

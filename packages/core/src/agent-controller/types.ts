@@ -13,6 +13,7 @@ import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
+import type { Session } from './session';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -220,6 +221,24 @@ export type BuiltinToolId =
   | 'task_complete'
   | 'task_check'
   | 'subagent';
+
+/** Process-local listener notified after AgentController materializes a live session. */
+export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+
+/** Options for {@link AgentController.onSessionCreated}. */
+export interface AgentControllerSessionCreatedOptions {
+  /**
+   * Make `createSession()` await this listener before resolving a newly
+   * materialized session. Blocking listeners run sequentially in registration
+   * order, before fire-and-forget listeners are notified. Failures are
+   * isolated and logged, never thrown. Keep the work short — it holds up every
+   * caller awaiting that session's creation.
+   */
+  blocking?: boolean;
+}
+
+/** Process-local listener notified after AgentController tears down a live session. */
+export type AgentControllerSessionDeletedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
 
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
@@ -499,6 +518,8 @@ export interface TokenUsage {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   cacheCreationInputTokens?: number;
+  cacheCreationInputTokens5m?: number;
+  cacheCreationInputTokens1h?: number;
   raw?: unknown;
 }
 
@@ -602,8 +623,8 @@ export type AgentControllerSubagentHistoryEntry = Omit<ActiveSubagentState, 'sta
  * Canonical display state maintained by the AgentController.
  *
  * This is the single source of truth for *what to display*.
- * Any UI (TUI, web, desktop) can subscribe to snapshots of this state
- * instead of interpreting 35+ raw event types.
+ * Any UI (TUI, web, desktop) can subscribe to updates of this state instead
+ * of interpreting 35+ raw event types.
  *
  * The AgentController updates this state alongside every event emission,
  * then emits a `display_state_changed` event so UIs can react.
@@ -614,7 +635,10 @@ export interface AgentControllerDisplayState {
   isRunning: boolean;
 
   // ── Current streaming message ────────────────────────────────────────
-  /** The message currently being streamed (null when idle) */
+  /**
+   * The live message currently being streamed (null when idle). Its content
+   * mutates as deltas arrive; copy it before retaining a point-in-time value.
+   */
   currentMessage: MastraDBMessage | null;
 
   // ── Follow-up queue ──────────────────────────────────────────────────
@@ -745,6 +769,12 @@ export function defaultOMProgressState(): OMProgressState {
 
 /**
  * Events emitted by the controller that UIs can subscribe to.
+ *
+ * Streamed `message_start`, `message_update`, and `message_end` events for one
+ * assistant turn intentionally share a live `MastraDBMessage`. Its content is
+ * updated in place as later deltas arrive. `display_state_changed.currentMessage`
+ * refers to that same live message. Consumers that retain an event across an
+ * asynchronous or storage boundary must copy or serialize the value there.
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
@@ -775,12 +805,21 @@ export type AgentControllerEvent =
       toolCallId: string;
       result: unknown;
       isError: boolean;
+      /**
+       * True when the tool call resolved without ever running because the user
+       * denied its approval gate or the run was aborted while it was parked
+       * waiting for approval. `isError` stays `false` in that case (the tool
+       * did not fail — it simply never executed), so subscribers that gate on
+       * "the tool actually did work" must exclude `denied === true`.
+       */
+      denied?: boolean;
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+  | { type: 'command_exit'; toolCallId: string; exitCode: number; success: boolean }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | {
@@ -887,6 +926,7 @@ export type AgentControllerEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
+  | { type: 'thread_title_updated'; threadId: string; title: string }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {

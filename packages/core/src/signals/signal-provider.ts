@@ -419,7 +419,8 @@ export abstract class SignalProvider<TId extends string = string> {
    * Override to parse the payload, match it to subscriptions,
    * and emit notification signals.
    *
-   * The framework routes `POST /api/signals/:providerId` to this method.
+   * Call this method from an application-defined HTTP endpoint after
+   * performing provider-specific webhook verification.
    */
   handleWebhook?(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }>;
 

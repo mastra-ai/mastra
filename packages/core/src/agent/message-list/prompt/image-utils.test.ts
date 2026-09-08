@@ -273,6 +273,13 @@ describe('categorizeFileData', () => {
     const result = categorizeFileData('rawstuff', 'image/gif');
     expect(result.mimeType).toBe('image/gif');
   });
+
+  it('categorises an OpenAI Files API file ID as "providerFileId" and keeps it untouched', () => {
+    const result = categorizeFileData('file-XkZk6RV6jeACpVewBphWEX', 'application/pdf');
+    expect(result.type).toBe('providerFileId');
+    expect(result.data).toBe('file-XkZk6RV6jeACpVewBphWEX');
+    expect(result.mimeType).toBe('application/pdf');
+  });
 });
 
 // ---------------------------------------------------------------------------

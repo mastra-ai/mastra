@@ -88,7 +88,14 @@ export function getUsageNumber(usage: Record<string, unknown>, key: string): num
 /** Fold an optional usage field into a tally when present. */
 export function addOptionalUsageField(
   usage: TokenUsage,
-  key: keyof Pick<TokenUsage, 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens'>,
+  key: keyof Pick<
+    TokenUsage,
+    | 'reasoningTokens'
+    | 'cachedInputTokens'
+    | 'cacheCreationInputTokens'
+    | 'cacheCreationInputTokens5m'
+    | 'cacheCreationInputTokens1h'
+  >,
   value: number | undefined,
 ): void {
   if (value !== undefined) {

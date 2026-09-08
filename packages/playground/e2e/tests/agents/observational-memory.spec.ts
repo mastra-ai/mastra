@@ -44,7 +44,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Wait for the page to load and OM to initialize
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       // Open the live Memory sidebar to see OM status.
       await openMemorySidebar(page);
@@ -69,7 +69,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       // Open the live Memory sidebar to see OM status.
       await openMemorySidebar(page);
@@ -107,7 +107,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       // ACT: Send a message to trigger the agent
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -211,7 +211,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
@@ -238,7 +238,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.reload();
 
       // Wait for page to reload
-      await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent', { timeout: 10000 });
 
       const urlAfterReload = page.url();
       console.log('URL after reload:', urlAfterReload);
@@ -271,7 +271,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
@@ -309,7 +309,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-adaptive-agent/chat/new');
 
       // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Adaptive Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Adaptive Agent');
 
       // Open the live Memory sidebar to see OM status.
       await openMemorySidebar(page);
@@ -398,7 +398,7 @@ test.describe('Observational Memory - Edge Cases', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // ASSERT: Page should load without stuck loading states
-      await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent', { timeout: 10000 });
 
       // Open the live Memory sidebar to see OM status.
       await openMemorySidebar(page);
@@ -420,7 +420,7 @@ test.describe('Observational Memory - Edge Cases', () => {
 
       // Create first thread
       await page.goto('/agents/om-agent/chat/new');
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
       await chatInput.fill('Message in thread 1');
@@ -432,7 +432,7 @@ test.describe('Observational Memory - Edge Cases', () => {
 
       // ACT: Create second thread
       await page.goto('/agents/om-agent/chat/new');
-      await expect(page.locator('h2')).toContainText('OM Agent');
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent');
 
       // Open the live Memory sidebar to see OM status.
       await openMemorySidebar(page);
@@ -446,7 +446,7 @@ test.describe('Observational Memory - Edge Cases', () => {
       await page.goto(thread1Url);
 
       // First thread should still have its state
-      await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+      await expect(page.getByTestId('thread-sidebar-back')).toContainText('OM Agent', { timeout: 10000 });
     });
   });
 });

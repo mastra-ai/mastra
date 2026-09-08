@@ -29,6 +29,27 @@ describe('InMemoryTaskStore', () => {
     });
   });
 
+  it('rejects a save when the expected version is stale', async () => {
+    const store = new InMemoryTaskStore();
+    const task = createTask();
+
+    await store.save({ agentId: 'agent-1', data: task });
+    await store.save({
+      agentId: 'agent-1',
+      data: createTask({ id: 'task-1', status: { state: 'completed' } }),
+      expectedVersion: 1,
+    });
+
+    await expect(
+      store.save({
+        agentId: 'agent-1',
+        data: createTask({ id: 'task-1', status: { state: 'failed' } }),
+        expectedVersion: 1,
+      }),
+    ).rejects.toMatchObject({ name: 'TaskStoreVersionConflictError' });
+    expect((await store.load({ agentId: 'agent-1', taskId: 'task-1' }))?.status.state).toBe('completed');
+  });
+
   it('waitForNextUpdate resolves immediately when a newer version already exists', async () => {
     const store = new InMemoryTaskStore();
     const task = createTask();
@@ -61,6 +82,45 @@ describe('InMemoryTaskStore', () => {
       }),
       version: 2,
     });
+  });
+
+  it('keeps a canceled task when an opt-in stale save tries to overwrite it', async () => {
+    const store = new InMemoryTaskStore();
+
+    await store.save({
+      agentId: 'agent-1',
+      data: createTask({
+        id: 'task-1',
+        status: {
+          state: 'canceled',
+          timestamp: '2025-05-08T11:48:38.458Z',
+        },
+      }),
+    });
+
+    const storedTask = await store.save({
+      agentId: 'agent-1',
+      skipIfCanceled: true,
+      data: createTask({
+        id: 'task-1',
+        status: {
+          state: 'completed',
+          timestamp: '2025-05-08T11:49:38.458Z',
+        },
+      }),
+    });
+
+    const canceledTask = createTask({
+      id: 'task-1',
+      status: {
+        state: 'canceled',
+        timestamp: '2025-05-08T11:48:38.458Z',
+      },
+    });
+
+    expect(storedTask).toEqual(canceledTask);
+    await expect(store.load({ agentId: 'agent-1', taskId: 'task-1' })).resolves.toEqual(canceledTask);
+    expect(store.getVersion({ agentId: 'agent-1', taskId: 'task-1' })).toBe(1);
   });
 
   it('waitForNextUpdate removes listeners and rejects on abort', async () => {

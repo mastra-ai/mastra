@@ -188,11 +188,13 @@ describe('Dataset', () => {
   });
 
   // 12. getItem — with version
-  it('getItem with version returns DatasetItem at that version', async () => {
-    const added = await ds.addItem({ input: { x: 1 } });
-    const fetched = await ds.getItem({ itemId: added.id, version: added.datasetVersion });
+  it('getItem with version returns the item visible in that dataset snapshot', async () => {
+    const itemA = await ds.addItem({ input: { x: 1 } });
+    const itemB = await ds.addItem({ input: { x: 2 } });
+
+    const fetched = await ds.getItem({ itemId: itemA.id, version: itemB.datasetVersion });
     expect(fetched).not.toBeNull();
-    expect(fetched!.datasetVersion).toBe(added.datasetVersion);
+    expect(fetched!.datasetVersion).toBe(itemA.datasetVersion);
   });
 
   // 13. getItem — nonexistent returns null
@@ -342,6 +344,41 @@ describe('Dataset', () => {
     expect(run).not.toBeNull();
 
     // Wait for fire-and-forget to complete
+    await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('startExperimentAsync persists provenance and grouping before execution', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const { experimentId } = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      grouping: {
+        experimentSetId: 'set-1',
+        comparisonId: 'comparison-1',
+        variantId: 'variant-a',
+        trialIndex: 0,
+      },
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: experimentId });
+    expect(experiment).toMatchObject({
+      provenance: {
+        source: 'github',
+        sourceId: 'mastra-ai/mastra',
+        sourceVersion: 'abc123',
+      },
+      experimentSetId: 'set-1',
+      comparisonId: 'comparison-1',
+      variantId: 'variant-a',
+      trialIndex: 0,
+    });
+
     await new Promise(r => setTimeout(r, 500));
   });
 

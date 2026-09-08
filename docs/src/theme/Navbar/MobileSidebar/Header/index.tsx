@@ -1,12 +1,10 @@
 import { useNavbarMobileSidebar } from '@docusaurus/theme-common/internal'
 import { translate } from '@docusaurus/Translate'
-import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 import { MobileDocsDropdown } from '@site/src/components/mobile-docs-dropdown'
 import { Button } from '@site/src/components/ui/button'
 import { cn } from '@site/src/lib/utils'
 import { type ReactNode } from 'react'
 import { Logo } from '../../logo'
-import VersionControl from '@site/src/components/version-control'
 
 function CloseButton() {
   const mobileSidebar = useNavbarMobileSidebar()
@@ -56,12 +54,10 @@ export default function NavbarMobileSidebarHeader(): ReactNode {
       <div className="navbar-sidebar__brand">
         <div className="flex items-center gap-2">
           <Logo />
-          <ThemeSwitcher />
         </div>
         <CloseButton />
       </div>
       <div className="flex flex-col gap-2 px-4">
-        <VersionControl className="pr-[17px]" />
         <MobileDocsDropdown className="rounded-md" />
       </div>
     </div>

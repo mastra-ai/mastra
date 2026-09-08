@@ -303,13 +303,24 @@ https://mastra.ai/en/docs/memory/overview`,
             values: ['a'],
             ...(this.embedderOptions || {}),
           } as any);
-          return result.embeddings[0]?.length;
+          const dimension = result.embeddings[0]?.length;
+          if (!dimension) {
+            throw new Error('Embedder returned no usable embedding for the dimension probe.');
+          }
+          return dimension;
         } catch (e) {
-          console.warn(
-            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
-              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          throw new MastraError(
+            {
+              id: 'MASTRA_MEMORY_GET_EMBEDDING_DIMENSION_FAILED',
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: 'THIRD_PARTY',
+              text:
+                `Failed to determine the embedder's output dimension. Semantic recall cannot safely select a ` +
+                `vector index until the embedder returns a usable embedding. Check that the embedder is reachable ` +
+                `and correctly configured.`,
+            },
+            e,
           );
-          return undefined;
         }
       })();
     }
@@ -539,8 +550,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig,
   }: {
     id: string;
-    title: string;
-    metadata: Record<string, unknown>;
+    title?: string;
+    metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType>;
 
@@ -549,6 +560,23 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param threadId - the id of the thread to delete
    */
   abstract deleteThread(threadId: string): Promise<void>;
+
+  /**
+   * Resolve once all background work this memory started has finished.
+   *
+   * Some memory work continues after an agent run returns, and it writes to storage.
+   * Callers that own the storage connection should await this before closing it,
+   * otherwise background statements can race the close.
+   *
+   * ```ts
+   * await agent.generate('hello', { memory: { thread, resource } });
+   * await memory.settled();
+   * await store.close();
+   * ```
+   *
+   * Implementations that do no background work can leave this as a no-op.
+   */
+  async settled(): Promise<void> {}
 
   /**
    * Helper method to add a single message to a thread

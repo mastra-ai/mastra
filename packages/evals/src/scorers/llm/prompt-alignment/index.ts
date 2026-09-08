@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import {
   getAssistantMessageFromRunOutput,
   getUserMessageFromRunInput,
+  getConversationHistoryFromRunInput,
   getCombinedSystemPrompt,
   roundToTwoDecimals,
 } from '../../utils';
@@ -14,6 +15,14 @@ import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt 
 export interface PromptAlignmentOptions {
   scale?: number;
   evaluationMode?: 'user' | 'system' | 'both';
+  /**
+   * Include prior conversation turns from the agent's remembered messages in the judge prompt.
+   *
+   * Off by default. Enable it for multi-turn agents so short, referential replies (e.g. "A",
+   * "yes") are judged against what was previously asked instead of in isolation. Only applies
+   * to agent runs that carry `rememberedMessages`.
+   */
+  includeConversationHistory?: boolean | { maxMessages?: number };
 }
 
 // Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
@@ -71,6 +80,13 @@ const SCORING_WEIGHTS = {
   },
 } as const;
 
+function normalizeConversationHistoryOptions(
+  includeConversationHistory: PromptAlignmentOptions['includeConversationHistory'],
+): { maxMessages?: number } | undefined {
+  if (!includeConversationHistory) return undefined;
+  return includeConversationHistory === true ? {} : includeConversationHistory;
+}
+
 export function createPromptAlignmentScorerLLM({
   model,
   options,
@@ -80,6 +96,7 @@ export function createPromptAlignmentScorerLLM({
 }) {
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
+  const historyOptions = normalizeConversationHistoryOptions(options?.includeConversationHistory);
 
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
@@ -117,6 +134,7 @@ export function createPromptAlignmentScorerLLM({
           systemPrompt,
           agentResponse,
           evaluationMode,
+          conversationHistory: historyOptions && getConversationHistoryFromRunInput(run.input, historyOptions),
         });
       },
     })
@@ -191,6 +209,7 @@ export function createPromptAlignmentScorerLLM({
           scale,
           analysis,
           evaluationMode,
+          conversationHistory: historyOptions && getConversationHistoryFromRunInput(run.input, historyOptions),
         });
       },
     });

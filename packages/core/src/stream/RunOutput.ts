@@ -159,8 +159,7 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#finalizeWithError(reason);
       });
   }
 
@@ -212,6 +211,58 @@ export class WorkflowRunOutput<
     totalUsage.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     totalUsage.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
     this.#usageCount = totalUsage;
+  }
+
+  /**
+   * Finalize the run when the underlying stream pipeline rejects.
+   *
+   * When `pipeTo` rejects, the WritableStream's `close()` never runs, so without
+   * this the terminal `workflow-finish` event would never fire, the delayed
+   * `result`/`usage` promises would never settle, and every `fullStream` consumer
+   * would hang forever. Mirror the `close()` path but mark the run as failed.
+   */
+  #finalizeWithError(reason: unknown) {
+    // A clean close already finalized the run; nothing to do.
+    if (this.#streamFinished) {
+      return;
+    }
+
+    const error = reason instanceof Error ? reason : new Error(String(reason));
+    this.#streamError = error;
+    // The run terminated because the stream pipeline rejected, so it failed —
+    // overwrite any earlier non-terminal status (paused/suspended/canceled/tripwire)
+    // so downstream consumers always see a failed terminal status.
+    this.#status = 'failed';
+
+    // Emit a terminal finish so fullStream consumers stop waiting and close.
+    this.#emitter.emit('chunk', {
+      type: 'workflow-finish',
+      runId: this.runId,
+      from: ChunkFrom.WORKFLOW,
+      payload: {
+        workflowStatus: this.#status,
+        metadata: {
+          error: this.#streamError,
+          errorMessage: this.#streamError.message,
+        },
+        output: {
+          usage: this.#usageCount,
+        },
+      },
+    });
+
+    // Reject any still-pending delayed promises so result/usage callers see the
+    // error instead of awaiting forever.
+    Object.entries(this.#delayedPromises).forEach(([_key, promise]) => {
+      if (promise.status.type === 'pending') {
+        promise.reject(error);
+      }
+    });
+
+    this.#streamFinished = true;
+    this.#emitter.emit('finish');
+
+    console.error('[WorkflowRunOutput] workflow stream pipeline error', error);
   }
 
   /**
@@ -333,8 +384,7 @@ export class WorkflowRunOutput<
         }),
       )
       .catch(reason => {
-        // eslint-disable-next-line no-console
-        console.log(' something went wrong', reason);
+        self.#finalizeWithError(reason);
       });
   }
 

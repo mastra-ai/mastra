@@ -2,14 +2,16 @@
  * Emits metrics derived from live spans.
  */
 
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AnySpan,
   CostContext,
   MetricsContext,
   ModelGenerationAttributes,
+  ProcessorPipelineAttributes,
   UsageStats,
 } from '@mastra/core/observability';
+import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';
 import { getTokenMetricSamples } from './usage-metrics';
@@ -78,7 +80,7 @@ function emitUsageMetrics(
   } else {
     try {
       const provider = attrs.provider;
-      const model = attrs.responseModel ?? attrs.model;
+      const model = resolveModelId(attrs.responseModel, attrs.model);
 
       if (provider && model) {
         metricCosts = estimateCosts({
@@ -137,7 +139,7 @@ function getProvidedCostContext(
 
   const carrierMetric = usage.inputTokens !== undefined ? TokenMetrics.TOTAL_INPUT : TokenMetrics.TOTAL_OUTPUT;
   const provider = costContext.provider ?? attrs.provider;
-  const model = costContext.model ?? attrs.responseModel ?? attrs.model;
+  const model = resolveModelId(costContext.model, attrs.responseModel, attrs.model);
   const contexts = new Map<TokenMetrics, CostContext>();
 
   for (const sample of getTokenMetricSamples(usage)) {
@@ -160,7 +162,42 @@ function getProvidedCostContext(
   return contexts;
 }
 
+/**
+ * Entity types the processor runner assigns to the spans it creates, one per
+ * pipeline phase.
+ */
+const PROCESSOR_ENTITY_TYPES = new Set<EntityType>([
+  EntityType.INPUT_PROCESSOR,
+  EntityType.INPUT_STEP_PROCESSOR,
+  EntityType.OUTPUT_PROCESSOR,
+  EntityType.OUTPUT_STEP_PROCESSOR,
+  EntityType.TOOL_RESULT_PROCESSOR,
+]);
+
+/**
+ * Whether this span measures a processor running, for `mastra_processor_duration_ms`.
+ *
+ * A processor may declare a domain span type (e.g. the skills processor emits
+ * `SKILL_ACTION`), so `PROCESSOR_RUN` alone no longer identifies one. A
+ * processor entity type alone is not enough either: spans that are not
+ * processors borrow one — observational memory wraps its observer and reflector
+ * model calls in a `GENERIC` span tagged `OUTPUT_STEP_PROCESSOR`, and counting
+ * those model-call durations would swamp a metric measuring processor overhead.
+ *
+ * So require the pipeline attribute the runner stamps on every processor span
+ * it creates ('legacy' from the runner, 'workflow' from processor workflows),
+ * which spans merely borrowing the entity type do not set.
+ */
+function isProcessorSpan(span: AnySpan): boolean {
+  if (!span.entityType || !PROCESSOR_ENTITY_TYPES.has(span.entityType)) return false;
+  if (span.type === SpanType.PROCESSOR_RUN) return true;
+  return Boolean((span.attributes as ProcessorPipelineAttributes | undefined)?.processorExecutor);
+}
+
 function getDurationMetricName(span: AnySpan): string | null {
+  if (isProcessorSpan(span)) {
+    return 'mastra_processor_duration_ms';
+  }
   switch (span.type) {
     case SpanType.AGENT_RUN:
       return 'mastra_agent_duration_ms';

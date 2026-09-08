@@ -65,6 +65,7 @@ describe('BraintrustExporter', () => {
     mockLogger = {
       id: 'mockLogger',
       startSpan: vi.fn().mockReturnValue(mockSpan),
+      logFeedback: vi.fn(),
     };
 
     mockInitLogger = vi.mocked(initLogger);
@@ -169,7 +170,8 @@ describe('BraintrustExporter', () => {
         spanId: 'root-span-id',
         name: 'root-agent',
         type: 'task', // Default span type mapping for AGENT_RUN
-        // No parentSpanIds for root spans!
+        // Roots pin rootSpanId to the Mastra trace ID with no span parents
+        parentSpanIds: { parentSpanIds: [], rootSpanId: traceId },
         startTime: rootSpan.startTime.getTime() / 1000,
         event: {
           id: 'root-span-id', // Row ID for logFeedback() compatibility
@@ -710,7 +712,8 @@ describe('BraintrustExporter', () => {
         spanId: 'llm-span',
         name: 'gpt-4-call',
         type: 'llm',
-        // No parentSpanIds for root spans!
+        // Roots pin rootSpanId to the Mastra trace ID with no span parents
+        parentSpanIds: { parentSpanIds: [], rootSpanId: traceId },
         startTime: llmSpan.startTime.getTime() / 1000,
         event: {
           id: 'llm-span', // Row ID for logFeedback() compatibility
@@ -764,7 +767,8 @@ describe('BraintrustExporter', () => {
         name: 'simple-llm',
         type: 'llm',
         startTime: llmSpan.startTime.getTime() / 1000,
-        // No parentSpanIds for root spans!
+        // Roots pin rootSpanId to the Mastra trace ID with no span parents
+        parentSpanIds: { parentSpanIds: [], rootSpanId: traceId },
         event: {
           id: 'minimal-llm', // Row ID for logFeedback() compatibility
           metadata: {
@@ -1948,7 +1952,8 @@ describe('BraintrustExporter', () => {
         spanId: 'event-span',
         name: 'user-feedback',
         type: 'task',
-        // No parentSpanIds for root spans!
+        // Roots pin rootSpanId to the Mastra trace ID with no span parents
+        parentSpanIds: { parentSpanIds: [], rootSpanId: traceId },
         startTime: eventSpan.startTime.getTime() / 1000,
         event: {
           id: 'event-span', // Row ID for logFeedback() compatibility
@@ -2362,7 +2367,7 @@ describe('BraintrustExporter', () => {
   });
 
   describe('Span Nesting (SDK handles parent-child relationships)', () => {
-    it('should NOT set parentSpanIds - SDK startSpan() chain handles nesting', async () => {
+    it('should pin root rootSpanId and let the SDK startSpan() chain handle child nesting', async () => {
       // Create root span
       const rootSpan = createMockSpan({
         id: 'root-span-id',
@@ -2377,9 +2382,9 @@ describe('BraintrustExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      // Root span should not have parentSpanIds
+      // Root span pins rootSpanId to the Mastra trace ID with no span parents
       const rootStartSpanCall = mockLogger.startSpan.mock.calls[0][0];
-      expect(rootStartSpanCall.parentSpanIds).toBeUndefined();
+      expect(rootStartSpanCall.parentSpanIds).toEqual({ parentSpanIds: [], rootSpanId: rootSpan.traceId });
 
       vi.clearAllMocks();
 
@@ -2402,6 +2407,55 @@ describe('BraintrustExporter', () => {
       // Child span should also not have parentSpanIds - SDK handles it via startSpan() chain
       const childStartSpanCall = mockSpan.startSpan.mock.calls[0][0];
       expect(childStartSpanCall.parentSpanIds).toBeUndefined();
+    });
+
+    it('should link a resumed root span to its persisted parent', async () => {
+      // A workflow resumed after suspend: core restores the trace ID and
+      // parent span ID from the snapshot and marks it with resumedFromSpanId
+      const resumedRoot = createMockSpan({
+        id: 'resumed-root-id',
+        name: 'workflow-run-resumed',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: {},
+        parentSpanId: 'suspended-span-id',
+        metadata: { resumed: true, resumedFromSpanId: 'suspended-span-id' },
+        traceId: 'persisted-trace-id',
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: resumedRoot,
+      });
+
+      const startSpanCall = mockLogger.startSpan.mock.calls[0][0];
+      expect(startSpanCall.parentSpanIds).toEqual({
+        spanId: 'suspended-span-id',
+        rootSpanId: 'persisted-trace-id',
+      });
+    });
+
+    it('should not link a root span whose parent was never exported to Braintrust', async () => {
+      // A root under an ambient OTEL parent (via the bridge) has a
+      // parentSpanId, but that span only exists in the OTEL backend —
+      // linking to it would leave the Braintrust trace without a root
+      const bridgedRoot = createMockSpan({
+        id: 'bridged-root-id',
+        name: 'agent-run',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        parentSpanId: 'ambient-otel-span-id',
+        traceId: 'otel-trace-id',
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: bridgedRoot,
+      });
+
+      const startSpanCall = mockLogger.startSpan.mock.calls[0][0];
+      expect(startSpanCall.parentSpanIds).toEqual({ parentSpanIds: [], rootSpanId: 'otel-trace-id' });
     });
   });
 
@@ -2574,6 +2628,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     // Set up mock logger
     mockLogger = {
       startSpan: vi.fn(),
+      logFeedback: vi.fn(),
     };
 
     // Set up mock external span (simulating logger.traced() or Eval context)
@@ -2626,7 +2681,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       name: 'root-agent',
       type: 'task',
       startTime: rootSpan.startTime.getTime() / 1000,
-      // No parentSpanIds for root spans!
+      // Roots pin rootSpanId to the Mastra trace ID with no span parents
+      parentSpanIds: { parentSpanIds: [], rootSpanId: rootSpan.traceId },
       event: {
         id: 'root-span-id', // Row ID for logFeedback() compatibility
         metadata: {
@@ -3061,6 +3117,7 @@ function createMockSpan({
   traceId,
   entityName,
   entityId,
+  parentSpanId,
 }: {
   id: string;
   name: string;
@@ -3075,6 +3132,7 @@ function createMockSpan({
   traceId?: string;
   entityName?: string;
   entityId?: string;
+  parentSpanId?: string;
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -3094,7 +3152,7 @@ function createMockSpan({
     get isRootSpan() {
       return isRoot;
     },
-    parentSpanId: isRoot ? undefined : 'parent-id',
+    parentSpanId: parentSpanId ?? (isRoot ? undefined : 'parent-id'),
     isEvent: false,
   } as AnyExportedSpan;
 

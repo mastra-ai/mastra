@@ -3,6 +3,7 @@ import {
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  matchesExpectedWorkflowStatus,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type {
@@ -252,8 +253,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         const previousUpdatedAt = existingRecord.data.updatedAt;
 
+        const { expectedStatus, ...state } = opts;
+        if (!matchesExpectedWorkflowStatus(existingSnapshot.status, expectedStatus)) {
+          return undefined;
+        }
+
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...existingSnapshot, ...opts };
+        const updatedSnapshot = { ...existingSnapshot, ...state };
 
         const now = new Date();
         const data: WorkflowSnapshotEntityData = {

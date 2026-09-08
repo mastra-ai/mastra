@@ -80,6 +80,37 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
     inspectors = [];
   });
 
+  describe('shutdown batch drainage', () => {
+    it.each([true, false])('delivers the acquired batch and preserves ACK ownership (ack=%s)', async shouldAck => {
+      const prefix = `shutdown-${randomUUID()}`;
+      const ps = createPubSub({ keyPrefix: prefix, reclaimIntervalMs: 0 });
+      const inspector = await createInspector();
+      for (let i = 0; i < 10; i++) {
+        await ps.publish('topic', makeEvent({ runId: String(i) }));
+      }
+      const delivered: string[] = [];
+      const acks: Promise<void>[] = [];
+      let stop: Promise<void> | undefined;
+      const cb: EventCallback = (event, ack) => {
+        delivered.push(event.runId);
+        if (shouldAck) acks.push(ack());
+        if (delivered.length === 1) stop = ps.unsubscribe('topic', cb);
+      };
+      try {
+        await ps.subscribe('topic', cb, { group: 'workers' });
+        await expect.poll(() => stop !== undefined).toBe(true);
+        await stop;
+        expect(delivered).toEqual(Array.from({ length: 10 }, (_, i) => String(i)));
+        await Promise.all(acks);
+        const pending = await inspector.xPending(`${prefix}:topic`, 'workers');
+        expect(pending.pending).toBe(shouldAck ? 0 : 10);
+      } finally {
+        await ps.close();
+        await inspector.del(`${prefix}:topic`);
+      }
+    });
+  });
+
   describe('connection drops', () => {
     it('survives a server-side socket close: no unhandled error, publish recovers', async () => {
       const proxy = makeSeverableProxy(REDIS_URL);
@@ -168,6 +199,28 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await ps.publish(topic, makeEvent({ data: { n: 2 } }));
       await expect.poll(() => received, { timeout: 5000 }).toContain('2');
     }, 20_000);
+
+    it('preserves a latest subscriber position when recovering after deletion', async () => {
+      const ps = createPubSub();
+      const topic = `clear-latest-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.publish(topic, makeEvent({ data: { n: 0 } }));
+      await ps.subscribe(
+        topic,
+        (event, ack) => {
+          received.push((event.data as { n: number }).n);
+          void ack?.();
+        },
+        { startFrom: 'latest' },
+      );
+
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      await ps.clearTopic(topic);
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
   });
 
   describe('streamIdleTtlMs', () => {
@@ -204,6 +257,43 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
         expect(() => new RedisStreamsPubSub({ url: REDIS_URL, streamIdleTtlMs: bad })).toThrow(/streamIdleTtlMs/);
       }
     });
+
+    it('stamps a TTL when subscribe() creates the stream and nothing is ever published', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `ttl-subscribe-${randomUUID()}`;
+      const streamKey = `mastra:topic:${topic}`;
+
+      // Subscribe only — no publish. MKSTREAM creates the (empty) stream, and
+      // without a TTL stamped in the same MULTI it would sit in Redis forever
+      // (the NOGROUP recovery path never runs for a successfully created
+      // group, and publish never happens to self-heal it).
+      await ps.subscribe(topic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      const pttl = await inspector.pTTL(streamKey);
+      expect(pttl).toBeGreaterThan(0);
+      expect(pttl).toBeLessThanOrEqual(60_000);
+    }, 15_000);
+
+    it('tolerates a second same-group subscriber (BUSYGROUP in the subscribe MULTI) and refreshes the TTL', async () => {
+      const ps1 = createPubSub({ streamIdleTtlMs: 60_000 });
+      const ps2 = createPubSub({ streamIdleTtlMs: 60_000 });
+      const topic = `ttl-subscribe-race-${randomUUID()}`;
+      const group = 'workers';
+      const streamKey = `mastra:topic:${topic}`;
+      const inspector = await createInspector();
+
+      await ps1.subscribe(topic, (_event, ack) => void ack?.(), { group });
+      // Age the TTL down so the second subscribe's refresh is observable.
+      await inspector.pExpire(streamKey, 1000);
+
+      // The second subscriber's XGROUP CREATE hits BUSYGROUP inside the MULTI
+      // (a MultiErrorReply whose message does not contain "BUSYGROUP" — it
+      // lives in err.replies). subscribe() must treat that as success, and the
+      // PEXPIRE in the same transaction still applies.
+      await expect(ps2.subscribe(topic, (_event, ack) => void ack?.(), { group })).resolves.not.toThrow();
+      expect(await inspector.pTTL(streamKey)).toBeGreaterThan(5000);
+    }, 15_000);
 
     it('refreshes the TTL on a nack retry republish', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000, maxDeliveryAttempts: 3 });

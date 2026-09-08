@@ -144,6 +144,65 @@ describe('generated module evaluation', () => {
     expect(skill.references['checklist.md']).toContain('Checklist');
   });
 
+  it('threads a live instructions.ts export into the assembled entry', async () => {
+    const coreStub = join(dir, 'core-agent.mjs');
+    await writeFile(
+      coreStub,
+      `export function assembleAgentFromFsEntry(entry) {
+         return { id: entry.name, name: entry.name, __entry: entry };
+       }`,
+    );
+
+    const userEntry = join(dir, 'index.mjs');
+    await writeFile(
+      userEntry,
+      `const registered = {};
+       export const mastra = {
+         registered,
+         getLogger() { return { warn() {} }; },
+         __registerFsAgents(map) { Object.assign(registered, map); },
+       };`,
+    );
+
+    // A function export is the point of instructions.ts: it survives codegen as
+    // a live value, which inlining markdown could never do.
+    const agentDir = join(dir, 'agents', 'support');
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(join(agentDir, 'config.mjs'), `export default { model: 'm' };`);
+    await writeFile(
+      join(agentDir, 'instructions.mjs'),
+      `export default ({ requestContext }) => \`tier: \${requestContext.get('tier')}\`;`,
+    );
+
+    const agents: DiscoveredFsAgent[] = [
+      {
+        name: 'support',
+        dir: agentDir,
+        configPath: join(agentDir, 'config.mjs'),
+        instructionsPath: undefined,
+        instructionsModulePath: join(agentDir, 'instructions.mjs'),
+        tools: [],
+        inputProcessors: [],
+        outputProcessors: [],
+        scorers: [],
+        skills: [],
+        subagents: [],
+      },
+    ];
+
+    let source = await generateFsAgentsModule(userEntry, agents);
+    source = source.replace(`'@mastra/core/agent'`, JSON.stringify(coreStub));
+
+    const generated = join(dir, 'wrapper-instructions.mjs');
+    await writeFile(generated, source);
+
+    const mod = await import(pathToFileURL(generated).href);
+
+    const instructions = mod.mastra.registered.support.__entry.instructions;
+    expect(typeof instructions).toBe('function');
+    expect(instructions({ requestContext: new Map([['tier', 'premium']]) })).toBe('tier: premium');
+  });
+
   it('assembles a declared subagent and exposes it under its bare id', async () => {
     // The stub recursively assembles subagents into a `subagents` map keyed by
     // the bare child id, mirroring how real assembly wires `agents`.

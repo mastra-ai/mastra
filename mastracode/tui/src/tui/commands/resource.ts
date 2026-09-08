@@ -1,3 +1,4 @@
+import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -40,6 +41,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
 
   if (latest) {
     await session.thread.switch({ threadId: latest.id, emitEvent: false });
+    disposeAssistantRenderState(state);
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.pendingTaskToolIds?.clear();
@@ -55,6 +57,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
         : `Switched to resource: ${newId} — resumed thread: ${latest.title || latest.id}`,
     );
   } else {
+    disposeAssistantRenderState(state);
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.pendingTaskToolIds?.clear();

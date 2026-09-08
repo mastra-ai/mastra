@@ -84,8 +84,8 @@ const createMockConnectorHandler = (): ConnectorHandler => {
 };
 
 // Run the shared test suite. The default test topology is standalone MongoDB,
-// where identity-aware dataset item writes intentionally fail before mutation.
-createTestSuite(new MongoDBStore(TEST_CONFIG), { datasetItemIdentity: false });
+// where identity-aware item writes and permanent purge require transactions.
+createTestSuite(new MongoDBStore(TEST_CONFIG), { datasetItemIdentity: false, datasetItemPurge: false });
 
 // Configuration validation tests
 createConfigValidationTests({
@@ -180,6 +180,53 @@ createDomainDirectTests({
       uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     }),
+});
+
+describe('MemoryStorageMongoDB error propagation (no empty-on-error)', () => {
+  // These reads used to swallow DB errors and return an empty page, so an outage
+  // looked exactly like "no data". They should throw instead.
+  const createFailingDomain = () => {
+    const mockCollection = {
+      countDocuments: vi.fn().mockRejectedValue(new Error('simulated backend outage')),
+      find: vi.fn(() => {
+        throw new Error('simulated backend outage');
+      }),
+    } as any;
+    return new MemoryStorageMongoDB({
+      connectorHandler: {
+        getCollection: async () => mockCollection,
+        close: async () => {},
+      },
+    });
+  };
+
+  // Also check the cause is the original error, so a broken mock can't pass as
+  // a real outage.
+  const expectOutage = async (promise: Promise<unknown>, idPattern: RegExp) => {
+    const err: any = await promise.then(
+      () => {
+        throw new Error('expected the read to reject, but it resolved');
+      },
+      e => e,
+    );
+    expect(err).toMatchObject({ id: expect.stringMatching(idPattern) });
+    expect(String(err?.cause?.message ?? err?.message)).toContain('simulated backend outage');
+  };
+
+  it('listThreads re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listThreads({}), /LIST_THREADS.*FAILED/);
+  });
+
+  it('listMessages re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(createFailingDomain().listMessages({ threadId: 'thread-err' }), /LIST_MESSAGES.*FAILED/);
+  });
+
+  it('listMessagesByResourceId re-throws backend failures instead of returning empty', async () => {
+    await expectOutage(
+      createFailingDomain().listMessagesByResourceId({ resourceId: 'res-err' }),
+      /LIST_MESSAGES_BY_RESOURCE_ID.*FAILED/,
+    );
+  });
 });
 
 // MongoDB-specific: connectorHandler with real operations

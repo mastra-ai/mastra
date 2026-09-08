@@ -1,14 +1,9 @@
-import type {
-  Message,
-  Task,
-  TaskState,
-  TaskStatus,
-  TaskContext,
-  TaskArtifactUpdateEvent,
-  Artifact,
-} from '@mastra/core/a2a';
+import type { Message, Task, TaskStatus, TaskContext, TaskArtifactUpdateEvent, Artifact } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { InMemoryTaskStore } from './store';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context';
+import { TaskStoreVersionConflictError, type InMemoryTaskStore } from './store';
+import { isTerminalTaskState } from './task-state';
 
 function isTaskStatusUpdate(update: TaskStatus | TaskArtifactUpdateEvent): update is Omit<TaskStatus, 'timestamp'> {
   return 'state' in update && !('parts' in update);
@@ -69,6 +64,43 @@ export function applyUpdateToTask(
   return newTask;
 }
 
+function usableId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+export function resolveTaskMemory({
+  task,
+  agentId,
+  requestContext,
+  metadata,
+  message,
+}: {
+  task?: Task;
+  agentId: string;
+  requestContext?: RequestContext;
+  metadata?: Record<string, unknown>;
+  message?: Message;
+}) {
+  const trustedResource = usableId(requestContext?.get(MASTRA_RESOURCE_ID_KEY));
+  const trustedThread = usableId(requestContext?.get(MASTRA_THREAD_ID_KEY));
+  const storedResource = usableId(task?.metadata?.resourceId);
+
+  if (
+    task &&
+    ((trustedResource && storedResource && trustedResource !== storedResource) ||
+      (trustedThread && trustedThread !== task.contextId))
+  ) {
+    throw MastraA2AError.invalidRequest('Task memory identity conflicts with the authenticated request.');
+  }
+
+  return {
+    thread: task?.contextId ?? trustedThread ?? message?.contextId,
+    resource: task
+      ? (storedResource ?? trustedResource ?? agentId)
+      : (trustedResource ?? usableId(metadata?.resourceId) ?? usableId(message?.metadata?.resourceId) ?? agentId),
+  };
+}
+
 export async function loadOrCreateTask({
   agentId,
   taskId,
@@ -77,6 +109,7 @@ export async function loadOrCreateTask({
   contextId,
   metadata,
   logger,
+  requestContext,
 }: {
   agentId: string;
   taskId: string;
@@ -85,58 +118,74 @@ export async function loadOrCreateTask({
   contextId?: string;
   metadata?: Record<string, unknown>;
   logger?: IMastraLogger;
+  requestContext?: RequestContext;
 }): Promise<Task> {
-  const data = await taskStore.load({ agentId, taskId });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const snapshot = taskStore.loadWithVersion({ agentId, taskId });
+    const data = snapshot?.task;
+    const memory = resolveTaskMemory({ task: data, agentId, requestContext, metadata, message });
 
-  // Create new task if none exists
-  if (!data) {
-    const initialTask: Task = {
-      id: taskId,
-      contextId: contextId || crypto.randomUUID(),
-      status: {
-        state: 'submitted',
-        timestamp: new Date().toISOString(),
-        message: undefined,
-      },
-      artifacts: [],
-      history: [message],
-      metadata: metadata,
-      kind: 'task',
+    if (!data) {
+      const initialTask: Task = {
+        id: taskId,
+        contextId: memory.thread || contextId || crypto.randomUUID(),
+        status: {
+          state: 'submitted',
+          timestamp: new Date().toISOString(),
+          message: undefined,
+        },
+        artifacts: [],
+        history: [message],
+        metadata: { ...metadata, resourceId: memory.resource },
+        kind: 'task',
+      };
+
+      logger?.info(`[Task ${taskId}] Created new task.`);
+      try {
+        await taskStore.save({ agentId, data: initialTask, expectedVersion: 0 });
+        return initialTask;
+      } catch (error) {
+        if (error instanceof TaskStoreVersionConflictError) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    logger?.info(`[Task ${taskId}] Loaded existing task.`);
+
+    const { status } = data;
+    if (isTerminalTaskState(status.state)) {
+      throw MastraA2AError.invalidRequest(
+        `Task ${taskId} is in terminal state ${status.state} and cannot be restarted.`,
+      );
+    }
+
+    let updatedData: Task = {
+      ...data,
+      metadata: { ...data.metadata, resourceId: memory.resource },
+      history: [...(data.history || []), message],
     };
 
-    logger?.info(`[Task ${taskId}] Created new task.`);
-    await taskStore.save({ agentId, data: initialTask });
+    if (status.state === 'input-required' || status.state === 'auth-required') {
+      logger?.info(`[Task ${taskId}] Changing state from '${status.state}' to 'working'.`);
+      updatedData = applyUpdateToTask(updatedData, { state: 'working' });
+    } else if (status.state === 'working') {
+      logger?.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
+    }
 
-    return initialTask;
+    try {
+      await taskStore.save({ agentId, data: updatedData, expectedVersion: snapshot.version });
+      return updatedData;
+    } catch (error) {
+      if (error instanceof TaskStoreVersionConflictError) {
+        continue;
+      }
+      throw error;
+    }
   }
 
-  // Handle existing task
-  logger?.info(`[Task ${taskId}] Loaded existing task.`);
-
-  // Add message to history and prepare updated data
-  let updatedData = data;
-  updatedData.history = [...(data.history || []), message];
-
-  // Handle state transitions
-  const { status } = data;
-  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-
-  if (finalStates.includes(status.state)) {
-    logger?.warn(`[Task ${taskId}] Received message for task in final state ${status.state}. Restarting.`);
-    updatedData = applyUpdateToTask(updatedData, {
-      state: 'submitted',
-      message: undefined,
-    });
-  } else if (status.state === 'input-required') {
-    logger?.info(`[Task ${taskId}] Changing state from 'input-required' to 'working'.`);
-    updatedData = applyUpdateToTask(updatedData, { state: 'working' });
-  } else if (status.state === 'working') {
-    logger?.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
-  }
-
-  await taskStore.save({ agentId, data: updatedData });
-
-  return updatedData;
+  throw MastraA2AError.invalidRequest(`Task ${taskId} was updated concurrently. Retry the request.`);
 }
 
 export function createTaskContext({

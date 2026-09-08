@@ -5,10 +5,11 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { PencilIcon } from 'lucide-react';
+import { PencilIcon, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
 import { ScoresList } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
@@ -22,6 +23,8 @@ export default function Scorer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const navigate = useNavigate();
   const [selectedEntityOption, setSelectedEntityOption] = useState<EntityOptions | undefined>({
     value: 'all',
     label: 'All Entities',
@@ -165,6 +168,15 @@ export default function Scorer() {
       </RouteHeaderActions>
     ) : null;
 
+  const runDialog = scorerId ? (
+    <ExperimentTriggerDialog
+      open={runDialogOpen}
+      onOpenChange={setRunDialogOpen}
+      initialScorerIds={[scorerId]}
+      onSuccess={experimentId => void navigate(`/experiments/${experimentId}`)}
+    />
+  ) : null;
+
   const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
 
   if (showEmptyState) {
@@ -175,7 +187,7 @@ export default function Scorer() {
       'An unexpected error occurred';
 
     return (
-      <PageLayout width="wide" height="full">
+      <PageLayout width="wide" height="full" className="grid-rows-[1fr]">
         {scorerHeaderActions}
         <PageLayout.MainArea isCentered>
           {isUnauthorized ? (
@@ -185,30 +197,37 @@ export default function Scorer() {
           ) : hasOtherError ? (
             <ErrorState title="Failed to load scorer" message={errorMessage} />
           ) : (
-            <NoScoresInfo />
+            <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}
         </PageLayout.MainArea>
+        {runDialog}
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide">
+    <PageLayout width="wide" height="full">
       {scorerHeaderActions}
       <PageLayout.TopArea>
-        <ScoresTools
-          selectedEntity={selectedEntityOption}
-          entityOptions={entityOptions}
-          onEntityChange={handleSelectedEntityChange}
-          onReset={() => {
-            setSearchParams(prev => {
-              const next = new URLSearchParams(prev);
-              next.set('entity', 'all');
-              return next;
-            });
-          }}
-          isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-        />
+        <div className="flex items-center justify-between gap-3">
+          <ScoresTools
+            selectedEntity={selectedEntityOption}
+            entityOptions={entityOptions}
+            onEntityChange={handleSelectedEntityChange}
+            onReset={() => {
+              setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.set('entity', 'all');
+                return next;
+              });
+            }}
+            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+          />
+          <Button variant="primary" onClick={() => setRunDialogOpen(true)}>
+            <Play />
+            Run Experiment
+          </Button>
+        </div>
       </PageLayout.TopArea>
 
       <ScoresList
@@ -221,6 +240,7 @@ export default function Scorer() {
         onScoreClick={handleScoreClick}
         errorMsg={scoresError?.message}
       />
+      {runDialog}
     </PageLayout>
   );
 }

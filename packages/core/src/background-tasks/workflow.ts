@@ -57,7 +57,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
     id: 'run-attempt',
     inputSchema: bodyIOSchema,
     outputSchema: attemptOutputSchema,
-    execute: async ({ inputData, abortSignal: workflowAbortSignal, suspend, resumeData }) => {
+    execute: async ({ inputData, abortSignal: workflowAbortSignal, suspend, resumeData, suspendData }) => {
       const { taskId } = inputData;
       const storage = await manager.getStorage();
       const task = await storage.getTask(taskId);
@@ -112,7 +112,10 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       };
 
       const abortController = new AbortController();
-      manager.activeAbortControllers.set(taskId, abortController);
+      if (!manager.registerActiveAbortController(taskId, abortController)) {
+        manager.deregisterTaskContext(taskId);
+        return { taskId, outcome: 'cancelled' as const };
+      }
       // Wire the workflow's run-level abort signal into our local controller
       // so `workflow.getRun(taskId).cancel()` propagates to the executor.
       const onWorkflowAbort = () => abortController.abort(new Error('Task cancelled'));
@@ -155,7 +158,13 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       };
 
       try {
-        const result = await executor.execute(task.args, {
+        const args = { ...task.args };
+        const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+        if (resumeData !== undefined && !args.suspendedToolRunId && typeof suspendedToolRunId === 'string') {
+          args.suspendedToolRunId = suspendedToolRunId;
+        }
+
+        const result = await executor.execute(args, {
           abortSignal: abortController.signal,
           onProgress,
           suspend: wrappedSuspend,
@@ -172,6 +181,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       } catch (error: any) {
         const currentTask = await storage.getTask(taskId);
         if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
+          manager.deregisterTaskContext(taskId);
+          return { taskId, outcome: 'cancelled' as const };
+        }
+
+        // Graceful process shutdown is not a task failure. Leave storage at
+        // `running` so retryable tasks can be recovered by the next process;
+        // non-retryable tasks are persisted as cancelled by manager.shutdown().
+        if (manager.isShuttingDown()) {
           manager.deregisterTaskContext(taskId);
           return { taskId, outcome: 'cancelled' as const };
         }

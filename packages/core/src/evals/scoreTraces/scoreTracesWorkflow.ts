@@ -1,8 +1,8 @@
-import pMap from 'p-map';
 import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getEntityTypeForSpan, InternalSpans } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
+import { pMap } from '../../utils/p-map';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
 import type { ScoreRowData } from '../types';

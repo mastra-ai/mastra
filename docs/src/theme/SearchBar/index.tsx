@@ -54,11 +54,11 @@ export default function SearchBar() {
           onClick={() => setIsOpen(true)}
           size="sm"
           variant="ghost"
-          className="w-9 cursor-pointer items-center gap-2 border-[0.5px] border-transparent text-sm font-normal lg:w-46 lg:border-(--border) lg:bg-(--mastra-surface-4) xl:w-64"
+          className="w-9 cursor-pointer items-center gap-2 border-[0.5px] border-transparent text-sm font-normal lg:w-26 lg:justify-start lg:border-(--border) lg:bg-(--mastra-surface-4) xl:w-40"
           aria-label="Search documentation (Meta + K)"
         >
           <SearchIcon className="text-(--mastra-icons-1)" />
-          <span className="hidden text-sm text-(--mastra-icons-2) lg:block">Search documentation</span>
+          <span className="hidden text-sm text-(--mastra-icons-2) lg:block">Search</span>
           <div className="ml-auto hidden xl:block">
             <Shortcut shortcut="K" />
           </div>

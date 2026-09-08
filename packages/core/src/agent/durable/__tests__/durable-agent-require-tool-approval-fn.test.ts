@@ -11,6 +11,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { RequestContext } from '../../../request-context';
+import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { delay } from '../../../utils';
 import { Agent } from '../../agent';
@@ -42,6 +45,52 @@ function createMultipleToolCallsModel(tools: Array<{ name: string; args: object 
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
+  });
+}
+
+/** Creates a model that requests one tool call, then completes after the tool resumes. */
+function createToolCallThenTextModel(tool: { name: string; args: object }) {
+  let callCount = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      callCount++;
+      return {
+        stream: convertArrayToReadableStream(
+          callCount === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: tool.name,
+                  input: JSON.stringify(tool.args),
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'done' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
   });
 }
 
@@ -156,6 +205,72 @@ describe('DurableAgent function-form requireToolApproval', () => {
     expect(approvalNames).not.toContain('readTool');
 
     cleanup();
+  });
+
+  it('evaluates a warm-resumed policy with the resumed caller context', async () => {
+    const mockModel = createToolCallThenTextModel({ name: 'tenantTool', args: { value: 'test' } });
+    const tenantTool = createTool({
+      id: 'tenantTool',
+      description: 'tenant-aware tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'warm-resume-policy-agent',
+      name: 'Warm Resume Policy Agent',
+      instructions: 'Use the tenant tool.',
+      model: mockModel as LanguageModelV2,
+      tools: { tenantTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { warmResumePolicyAgent: durableAgent },
+    });
+
+    const policy = vi.fn(() => true);
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the tenant tool', {
+      requireToolApproval: policy,
+      requestContext: new RequestContext([
+        ['tenantId', 'initial-tenant'],
+        ['authToken', 'initial-auth'],
+      ]),
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+
+    policy.mockClear();
+    let finishData: unknown;
+    const resumed = await durableAgent.resume(
+      initial.runId,
+      { approved: true },
+      {
+        requestContext: new RequestContext([
+          ['tenantId', 'resume-tenant'],
+          ['authToken', 'resume-auth'],
+        ]),
+        onFinish: data => {
+          finishData = data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finishData).toBeDefined());
+
+    expect(policy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext: expect.objectContaining({
+          tenantId: 'resume-tenant',
+          authToken: 'resume-auth',
+        }),
+      }),
+    );
+
+    resumed.cleanup();
+    initial.cleanup();
   });
 
   it('defaults to "require approval" when the function policy throws (safe default)', async () => {

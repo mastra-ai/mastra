@@ -299,10 +299,20 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
-  const extractorSections = buildExtractorOutputSections(extractors);
+/**
+ * Build the Observer's output format.
+ *
+ * `extractors` distinguishes two cases that both look empty:
+ * - `undefined` — the no-arg call behind the exported defaults (OBSERVER_OUTPUT_FORMAT_BASE,
+ *   OBSERVER_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT), which keep describing both built-in
+ *   sections with their historical text. Runtime callers always pass the composed list.
+ * - `[]` — the caller composed extractors and every section was disabled, so no continuation
+ *   sections are described at all.
+ */
+export function buildObserverOutputFormat(extractors?: readonly Extractor<any>[]): string {
+  const extractorSections = buildExtractorOutputSections(extractors ?? []);
   const legacyContinuationSections =
-    extractors.length === 0
+    extractors === undefined
       ? `
 <current-task>
 State the current task(s) explicitly:
@@ -371,17 +381,36 @@ export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to ac
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  * @param instruction - Optional custom instructions to append to the prompt
+ * @param includeThreadTitle - Whether the Observer should also produce a thread title
+ * @param extractors - Active extractors, used to decide which sections the prompt describes.
+ *   Omitted only by the exported no-arg defaults; pass `[]` to describe no continuation sections at all.
  */
 export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
-  extractors: readonly Extractor<any>[] = [],
+  extractors?: readonly Extractor<any>[],
 ): string {
   const outputFormat = buildObserverOutputFormat(extractors);
-  const multiThreadTitleInstruction = includeThreadTitle
-    ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
-    : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
+  const customInstructions = instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : '';
+  // Runtime callers always pass the composed extractor list; `undefined` only occurs through
+  // the exported no-arg defaults (e.g. OBSERVER_SYSTEM_PROMPT), which keep both built-in sections.
+  const currentTaskEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'current-task');
+  const suggestedResponseEnabled =
+    extractors === undefined || extractors.some(extractor => extractor.slug === 'suggested-response');
+  const multiThreadSections = [
+    'observations',
+    ...(currentTaskEnabled ? ['current-task'] : []),
+    ...(suggestedResponseEnabled ? ['suggested-response'] : []),
+    ...(includeThreadTitle ? ['thread-title'] : []),
+  ];
+  // Grammatical list for any combination: "a", "a and b", "a, b, and c".
+  const multiThreadSectionList =
+    multiThreadSections.length <= 2
+      ? multiThreadSections.join(' and ')
+      : `${multiThreadSections.slice(0, -1).join(', ')}, and ${multiThreadSections[multiThreadSections.length - 1]}`;
+  const multiThreadTitleInstruction = ` Each thread's ${multiThreadSectionList} should be nested inside a <thread id="..."> block within <observations>.`;
   const multiThreadTitleExample = includeThreadTitle
     ? `
 <thread-title>Feature X implementation</thread-title>`
@@ -390,7 +419,6 @@ export function buildObserverSystemPrompt(
     ? `
 <thread-title>Deployment setup</thread-title>`
     : '';
-
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
 
@@ -417,28 +445,44 @@ For multi-thread output, wrap each thread's observations like this:
 <thread id="thread_id_1">
 Date: Dec 4, 2025
 * 🔴 (14:30) User prefers direct answers
-* 🔴 (14:31) Working on feature X
+* 🔴 (14:31) Working on feature X${
+      currentTaskEnabled
+        ? `
 
 <current-task>
 What the agent is currently working on in this thread
-</current-task>
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
 
 <suggested-response>
 Hint for the agent's next message in this thread
-</suggested-response>${multiThreadTitleExample}
+</suggested-response>`
+        : ''
+    }${multiThreadTitleExample}
 </thread>
 
 <thread id="thread_id_2">
 Date: Dec 5, 2025
-* 🔴 (09:15) User asked about deployment
+* 🔴 (09:15) User asked about deployment${
+      currentTaskEnabled
+        ? `
 
 <current-task>
 Current task for this thread
-</current-task>
+</current-task>`
+        : ''
+    }${
+      suggestedResponseEnabled
+        ? `
 
 <suggested-response>
 Suggested response for this thread
-</suggested-response>${multiThreadSecondTitleExample}
+</suggested-response>`
+        : ''
+    }${multiThreadSecondTitleExample}
 </thread>
 </observations>
 
@@ -448,7 +492,11 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important.${
+      currentTaskEnabled
+        ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+        : ''
+    }${customInstructions}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -475,7 +523,15 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
+User messages are extremely important.${
+    currentTaskEnabled
+      ? ' If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.'
+      : ''
+  }${
+    suggestedResponseEnabled
+      ? ' If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.'
+      : ''
+  }${customInstructions}`;
 }
 
 /**
@@ -1564,6 +1620,13 @@ function extractListItemsOnly(content: string): string {
 const MAX_OBSERVATION_LINE_CHARS = 10_000;
 
 /**
+ * Minimum trimmed line length considered by the duplicate-line degenerate
+ * check. Short lines (blank lines, separators, terse bullets) legitimately
+ * repeat; long identical lines almost never do.
+ */
+const MIN_DUPLICATE_LINE_CHARS = 24;
+
+/**
  * Truncate individual observation lines that exceed the maximum length.
  */
 export function sanitizeObservationLines(observations: string): string {
@@ -1618,7 +1681,96 @@ export function detectDegenerateRepetition(text: string): boolean {
     if (line.length > 50_000) return true;
   }
 
+  // Strategy 3: Exact-duplicate line ratio. The window sampling above has an
+  // aliasing blind spot: for a repeating block with period P chars, sampled
+  // windows only collide when two sample positions are congruent mod P, so a
+  // long-period multi-line loop (e.g. a 21-line block repeated 62 times,
+  // observed in production) can dominate the output while producing zero
+  // duplicate windows. Observations are line-oriented, so count exact
+  // duplicates among substantial lines instead — legitimate output almost
+  // never repeats long identical lines.
+  const seenLines = new Map<string, number>();
+  let duplicateLines = 0;
+  let totalCountedLines = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length < MIN_DUPLICATE_LINE_CHARS) continue;
+    totalCountedLines++;
+    const count = (seenLines.get(trimmed) ?? 0) + 1;
+    seenLines.set(trimmed, count);
+    if (count > 1) duplicateLines++;
+  }
+  if (totalCountedLines >= 20 && duplicateLines / totalCountedLines > 0.5) {
+    return true;
+  }
+
   return false;
+}
+
+/**
+ * Build a single-line diagnostic description of output flagged by
+ * {@link detectDegenerateRepetition}. Used when logging or surfacing a
+ * degenerate-output failure so the discarded model output can be inspected —
+ * without it there is no way to tell a real repetition loop apart from a
+ * detector false-positive on legitimately repetitive content.
+ *
+ * Reuses the detector's sampling parameters (200-char windows, ~50 samples)
+ * so the reported duplicate ratio and most-repeated window match what
+ * triggered the detection. Snippets are JSON-escaped so the result stays on
+ * one line.
+ */
+export function describeDegenerateOutput(text: string, snippetChars = 400): string {
+  const windowSize = 200;
+  const step = Math.max(1, Math.floor(text.length / 50));
+  const seen = new Map<string, number>();
+  let duplicateWindows = 0;
+  let totalWindows = 0;
+  for (let i = 0; i + windowSize <= text.length; i += step) {
+    const window = text.slice(i, i + windowSize);
+    totalWindows++;
+    const count = (seen.get(window) ?? 0) + 1;
+    seen.set(window, count);
+    if (count > 1) duplicateWindows++;
+  }
+
+  let topWindow = '';
+  let topCount = 0;
+  for (const [window, count] of seen) {
+    if (count > topCount) {
+      topCount = count;
+      topWindow = window;
+    }
+  }
+
+  let longestLine = 0;
+  const seenLines = new Map<string, number>();
+  let duplicateLines = 0;
+  let totalCountedLines = 0;
+  for (const line of text.split('\n')) {
+    if (line.length > longestLine) longestLine = line.length;
+    const trimmed = line.trim();
+    if (trimmed.length < MIN_DUPLICATE_LINE_CHARS) continue;
+    totalCountedLines++;
+    const count = (seenLines.get(trimmed) ?? 0) + 1;
+    seenLines.set(trimmed, count);
+    if (count > 1) duplicateLines++;
+  }
+
+  const duplicateRatio = totalWindows > 0 ? (duplicateWindows / totalWindows).toFixed(2) : 'n/a';
+  const duplicateLineRatio = totalCountedLines > 0 ? (duplicateLines / totalCountedLines).toFixed(2) : 'n/a';
+  const parts = [
+    `length=${text.length}`,
+    `sampledWindows=${totalWindows}`,
+    `duplicateRatio=${duplicateRatio}`,
+    `duplicateLineRatio=${duplicateLineRatio}`,
+    `countedLines=${totalCountedLines}`,
+    `longestLine=${longestLine}`,
+    `topWindowCount=${topCount}`,
+  ];
+  if (topCount > 1) parts.push(`topWindow=${JSON.stringify(topWindow)}`);
+  parts.push(`head=${JSON.stringify(text.slice(0, snippetChars))}`);
+  if (text.length > snippetChars * 2) parts.push(`tail=${JSON.stringify(text.slice(-snippetChars))}`);
+  return parts.join(' ');
 }
 
 /**
@@ -1676,7 +1828,9 @@ export function optimizeObservationsForContext(observations: string): string {
   optimized = optimized.replace(/🟢\s*/g, '');
 
   // Remove semantic tags like [label, label] but keep collapsed markers like [72 items collapsed - ID: b1fa]
-  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\]/g, '');
+  // and markdown link text like [label](url) — the trailing `(?!\()` lookahead keeps the label so the
+  // link survives intact instead of collapsing to a bare, unlabelled URL.
+  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\](?!\()/g, '');
 
   // Remove arrow indicators
   optimized = optimized.replace(/\s*->\s*/g, ' ');

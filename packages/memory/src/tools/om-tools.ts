@@ -4,6 +4,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 
+import { safeSlice } from '../processors/observational-memory/string-utils';
 import {
   formatToolResultForObserver,
   resolveToolResultValue,
@@ -297,6 +298,9 @@ export async function listThreadsForResource({
 
 // ── Cross-thread search ─────────────────────────────────────────────
 
+export const SEARCH_NOT_CONFIGURED_MESSAGE =
+  'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.';
+
 export async function searchMessagesForResource({
   memory,
   resourceId,
@@ -324,8 +328,7 @@ export async function searchMessagesForResource({
 }> {
   if (!memory.searchMessages) {
     return {
-      results:
-        'Search is not configured. Enable it with `retrieval: { vector: true }` and configure a vector store and embedder on your Memory instance.',
+      results: SEARCH_NOT_CONFIGURED_MESSAGE,
       count: 0,
     };
   }
@@ -456,6 +459,48 @@ function truncateByTokens(text: string, maxTokens: number, hint?: string): { tex
   const truncated = truncateStringByTokens(text, maxTokens);
   const suffix = hint ? ` [${hint} for more]` : '';
   return { text: truncated + suffix, wasTruncated: true };
+}
+
+function chunkTextByTokens(
+  text: string,
+  maxTokens: number,
+  charOffset = 0,
+): { text: string; nextCharOffset?: number; charOffset: number; truncated: boolean } {
+  let startOffset = Math.max(0, Math.min(Math.floor(charOffset), text.length));
+  // Caller-provided offsets can land between the two halves of a surrogate
+  // pair; skip the lone low surrogate so the chunk stays valid JSON text.
+  const startCode = text.charCodeAt(startOffset);
+  if (startCode >= 0xdc00 && startCode <= 0xdfff) startOffset += 1;
+  const remaining = text.slice(startOffset);
+
+  if (!remaining || estimateTokenCount(remaining) <= maxTokens) {
+    return { text: remaining, charOffset: startOffset, truncated: false };
+  }
+
+  let low = 0;
+  let high = remaining.length;
+  let best = '';
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = safeSlice(remaining, mid);
+    const candidateTokens = estimateTokenCount(candidate);
+
+    if (candidate && candidateTokens <= maxTokens) {
+      best = candidate;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  const nextCharOffset = startOffset + best.length;
+  return {
+    text: best,
+    charOffset: startOffset,
+    nextCharOffset,
+    truncated: nextCharOffset < text.length,
+  };
 }
 
 function lowDetailPartLimit(type: string): number {
@@ -719,6 +764,7 @@ export async function recallPart({
   resourceId,
   cursor,
   partIndex,
+  charOffset,
   threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
@@ -727,9 +773,20 @@ export async function recallPart({
   resourceId?: string;
   cursor: string;
   partIndex: number;
+  charOffset?: number;
   threadScope?: string;
   maxTokens?: number;
-}): Promise<{ text: string; messageId: string; partIndex: number; role: string; type: string; truncated: boolean }> {
+}): Promise<{
+  text: string;
+  messageId: string;
+  partIndex: number;
+  role: string;
+  type: string;
+  truncated: boolean;
+  charOffset: number;
+  nextCharOffset?: number;
+  note?: string;
+}> {
   if (!memory || typeof memory.getMemoryStore !== 'function') {
     throw new Error('Memory instance is required for recall');
   }
@@ -777,16 +834,21 @@ export async function recallPart({
         if (firstNextPart) {
           const fallbackNote = `Part index ${partIndex} not found in message ${cursor}; showing partIndex ${firstNextPart.partIndex} from next message ${firstNextPart.messageId}.\n\n`;
           const fallbackText = `${fallbackNote}${firstNextPart.text}`;
-          const truncatedText = truncateStringByTokens(fallbackText, maxTokens);
-          const wasTruncated = truncatedText !== fallbackText;
+          const fallbackChunk = chunkTextByTokens(fallbackText, maxTokens, charOffset);
+          const fallbackContinuation = fallbackChunk.nextCharOffset
+            ? `To continue this part, call recall cursor="${cursor}" partIndex=${partIndex} detail="high" charOffset=${fallbackChunk.nextCharOffset}.`
+            : undefined;
 
           return {
-            text: truncatedText,
+            text: fallbackChunk.text,
             messageId: firstNextPart.messageId,
             partIndex: firstNextPart.partIndex,
             role: firstNextPart.role,
             type: firstNextPart.type,
-            truncated: wasTruncated,
+            truncated: fallbackChunk.truncated,
+            charOffset: fallbackChunk.charOffset,
+            nextCharOffset: fallbackChunk.nextCharOffset,
+            note: fallbackContinuation,
           };
         }
       }
@@ -795,16 +857,21 @@ export async function recallPart({
     throw new Error(`Part index ${partIndex} not found in message ${cursor}. Available indices: ${availableIndices}`);
   }
 
-  const truncatedText = truncateStringByTokens(target.text, maxTokens);
-  const wasTruncated = truncatedText !== target.text;
+  const chunk = chunkTextByTokens(target.text, maxTokens, charOffset);
+  const note = chunk.nextCharOffset
+    ? `To continue this part, call recall cursor="${target.messageId}" partIndex=${target.partIndex} detail="high" charOffset=${chunk.nextCharOffset}.`
+    : undefined;
 
   return {
-    text: truncatedText,
+    text: chunk.text,
     messageId: target.messageId,
     partIndex: target.partIndex,
     role: target.role,
     type: target.type,
-    truncated: wasTruncated,
+    truncated: chunk.truncated,
+    charOffset: chunk.charOffset,
+    nextCharOffset: chunk.nextCharOffset,
+    note,
   };
 }
 
@@ -1146,14 +1213,17 @@ export async function recallThreadFromStart({
 
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
-  options?: { retrievalScope?: 'thread' | 'resource' },
+  options?: { retrievalScope?: 'thread' | 'resource'; searchEnabled?: boolean },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
+  const searchEnabled = options?.searchEnabled ?? true;
 
   const description = isResourceScope
-    ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
-    : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
+    ? `Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread.${searchEnabled ? ' Use mode="search" to find messages by content across all threads.' : ''}`
+    : `Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor.${searchEnabled ? ' Use mode="search" to find messages by content in this thread.' : ''} Use mode="threads" to get the current thread's ID and title.`;
+
+  const modeEnum = searchEnabled ? ['messages', 'threads', 'search'] : ['messages', 'threads'];
 
   return createTool({
     id: 'recall',
@@ -1166,9 +1236,8 @@ export const recallTool = (
           ? {
               mode: {
                 type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user. "search" finds messages by semantic similarity across all threads.',
+                enum: modeEnum,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" lists all threads for the current user.${searchEnabled ? ' "search" finds messages by semantic similarity across all threads.' : ''}`,
               },
               threadId: {
                 type: 'string',
@@ -1190,16 +1259,19 @@ export const recallTool = (
           : {
               mode: {
                 type: 'string',
-                enum: ['messages', 'threads', 'search'],
-                description:
-                  'What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread. "search" finds messages by semantic similarity in this thread.',
+                enum: modeEnum,
+                description: `What to retrieve. "messages" (default) pages through message history. "threads" returns info about the current thread.${searchEnabled ? ' "search" finds messages by semantic similarity in this thread.' : ''}`,
               },
             }),
-        query: {
-          type: 'string',
-          minLength: 1,
-          description: 'Search query for mode="search". Finds messages semantically similar to this text.',
-        },
+        ...(searchEnabled
+          ? {
+              query: {
+                type: 'string',
+                minLength: 1,
+                description: 'Search query for mode="search". Finds messages semantically similar to this text.',
+              },
+            }
+          : {}),
         cursor: {
           type: 'string',
           minLength: 1,
@@ -1248,6 +1320,12 @@ export const recallTool = (
           description:
             'Fetch a single part from the cursor message by its positional index. When provided, returns only that part at high detail. Indices are shown as [p0], [p1], etc. in recall results.',
         },
+        charOffset: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Continue reading a truncated single part from this position. Pass the exact nextCharOffset value returned by a previous call; do not compute it yourself. Only applies with cursor and partIndex in mode="messages".',
+        },
       },
     } satisfies JSONSchema7,
     execute: async (inputData, context) => {
@@ -1263,6 +1341,7 @@ export const recallTool = (
         partType,
         toolName,
         partIndex,
+        charOffset,
         before,
         after,
       } = inputData as {
@@ -1277,6 +1356,7 @@ export const recallTool = (
         partType?: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file';
         toolName?: string;
         partIndex?: number;
+        charOffset?: number;
         before?: string;
         after?: string;
       };
@@ -1295,6 +1375,13 @@ export const recallTool = (
 
       // Search mode
       if (mode === 'search') {
+        // Schema validation rejects mode="search" when search is disabled, but
+        // validation is skipped for resumed runs and builder-validated input —
+        // a stale search call on those paths would otherwise reach
+        // Memory.searchMessages and throw. Return guidance instead.
+        if (!searchEnabled) {
+          return { results: SEARCH_NOT_CONFIGURED_MESSAGE, count: 0 };
+        }
         if (!query) {
           throw new Error('query is required for mode="search"');
         }
@@ -1450,6 +1537,7 @@ export const recallTool = (
           resourceId: isResourceScope ? resourceId : undefined,
           cursor,
           partIndex,
+          charOffset,
           threadScope,
         });
       }

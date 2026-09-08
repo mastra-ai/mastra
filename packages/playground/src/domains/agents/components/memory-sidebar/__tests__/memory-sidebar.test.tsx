@@ -60,8 +60,8 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
@@ -90,8 +90,8 @@ const paths = {
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/datasets/${datasetId}/experiments/${experimentId}`,
+  datasetItemCompareLink: (datasetId: string, itemId: string, secondItemId: string) =>
+    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 
@@ -226,8 +226,8 @@ describe('MemorySidebar', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // The sidebar is still a single standalone block (rounded + bordered) with no nested container.
-    const blocks = container.querySelectorAll('.rounded-tr-studio-panel.border-border1\\/50');
+    // The sidebar is still a single standalone bordered block with no nested container.
+    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
     expect(blocks.length).toBe(1);
   });
 
@@ -318,12 +318,13 @@ describe('MemorySidebar', () => {
     });
 
     // Given the Memory view is open: the regular memory content ("Clone Thread")
-    // is visible, the OM subpanel is absent, and no OM/message data is fetched.
+    // is visible, the OM subpanel is absent, and the expensive thread-messages
+    // query stays gated. The OM record itself is fetched because the collapsed
+    // memory bar reads its token counts from the record.
     await screen.findByText('Clone Thread');
     expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Back to memory' })).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(onOM).not.toHaveBeenCalled();
     expect(onMessages).not.toHaveBeenCalled();
 
     // When the OM detail is opened (as the "Analyze Observations" CTA does): the
@@ -497,6 +498,22 @@ describe('MemorySidebar', () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     expect(await screen.findByText('Clone Thread')).not.toBeNull();
+  });
+
+  it('fills the collapsed memory bar from the OM record when no status part was streamed', async () => {
+    // Status parts stream but are no longer persisted, so a reload starts with no live
+    // progress. The bar must come from the durable record instead of staying empty.
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
+    );
+
+    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    // pendingMessageTokens 14200 / messageTokens threshold 30000 => 47%
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-card-observation-bar').getAttribute('data-percent')).toBe('47');
+    });
   });
 
   it('ignores the stale v1 sessionStorage key pointing at the removed configuration tab', async () => {

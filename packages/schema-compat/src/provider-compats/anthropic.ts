@@ -1,4 +1,4 @@
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
@@ -18,6 +18,7 @@ import type { PublicSchema, ZodType } from '../schema.types';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
 import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.types';
 import type { ModelInformation } from '../types';
+import { isZodType } from '../utils';
 import { isIntersection, isNull } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
@@ -27,6 +28,54 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   getSchemaTarget(): Targets | undefined {
     return 'jsonSchema7';
+  }
+
+  override processToJSONSchema(schema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(schema, io);
+    const union = jsonSchema.anyOf ?? jsonSchema.oneOf;
+
+    if (io !== 'input' || !Array.isArray(union)) {
+      return jsonSchema;
+    }
+
+    const objectSchemas = union.filter(
+      (subSchema): subSchema is JSONSchema7 =>
+        typeof subSchema === 'object' && subSchema !== null && subSchema.type === 'object',
+    );
+
+    if (objectSchemas.length === 0 || objectSchemas.length !== union.length) {
+      return jsonSchema;
+    }
+
+    delete jsonSchema.anyOf;
+    delete jsonSchema.oneOf;
+    jsonSchema.type = 'object';
+
+    // Merge branch properties. When the same key appears in multiple branches with
+    // differing schemas, preserve every variant via a property-level anyOf instead
+    // of letting later branches overwrite earlier ones.
+    const mergedProperties: Record<string, JSONSchema7Definition[]> = {};
+    for (const subSchema of objectSchemas) {
+      for (const [key, propSchema] of Object.entries(subSchema.properties ?? {})) {
+        const variants = (mergedProperties[key] ??= []);
+        if (!variants.some(existing => JSON.stringify(existing) === JSON.stringify(propSchema))) {
+          variants.push(propSchema);
+        }
+      }
+    }
+    jsonSchema.properties = Object.fromEntries(
+      Object.entries(mergedProperties).map(([key, variants]) => [
+        key,
+        variants.length === 1 ? variants[0]! : { anyOf: variants },
+      ]),
+    );
+
+    jsonSchema.required = objectSchemas
+      .map(subSchema => subSchema.required ?? [])
+      .reduce((required, branchRequired) => required.filter(key => branchRequired.includes(key)));
+    jsonSchema.additionalProperties = false;
+
+    return jsonSchema;
   }
 
   shouldApply(): boolean {
@@ -71,15 +120,20 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
     return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
-        const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
-        const result = zodSchema.safeParse(transformed);
-        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
+        const result = compat['~standard'].validate(value);
+        if (result instanceof Promise) {
+          throw new Error('Async validation is not supported');
+        }
+        return 'issues' in result && result.issues
+          ? { success: false as const, error: new Error(result.issues.map(i => i.message).join(', ')) }
+          : { success: true as const, value: (result as { value: unknown }).value };
       },
     });
   }
 
   public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
     const originalStandardSchema = toStandardSchema(schema);
+    const validationStandardSchema = this.#getCompatValidationStandardSchema(schema, originalStandardSchema);
 
     return {
       '~standard': {
@@ -88,7 +142,7 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
         validate: (value: unknown) => {
           const transformedJsonSchema = this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
           const transformed = this.#traverse(value, transformedJsonSchema);
-          return originalStandardSchema['~standard'].validate(transformed);
+          return validationStandardSchema['~standard'].validate(transformed);
         },
         jsonSchema: {
           input: () => {
@@ -172,6 +226,261 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   //   return schema;
   // }
+
+  #isHaikuModel(): boolean {
+    return this.getModel().modelId.includes('claude-3.5-haiku');
+  }
+
+  #getCompatValidationStandardSchema<T>(
+    schema: PublicSchema<T>,
+    originalStandardSchema: StandardSchemaWithJSON<T>,
+  ): StandardSchemaWithJSON<T> {
+    if (!this.#isHaikuModel() || !isZodType(schema)) {
+      return originalStandardSchema;
+    }
+
+    return toStandardSchema(this.#stripHaikuStringLengthConstraints(schema as ZodType)) as StandardSchemaWithJSON<T>;
+  }
+
+  /**
+   * Strip Haiku-ignored string min/max from a Zod schema for execute-time validation.
+   * Preserves object-level refinements and wrapper semantics unlike full-tree processZodType.
+   */
+  #stripHaikuStringLengthConstraints(value: ZodType): ZodType {
+    const schemas = new WeakMap<object, ZodType>();
+    if ('_zod' in value) {
+      return this.#stripHaikuStringLengthConstraintsV4(value, schemas);
+    }
+
+    return this.#stripHaikuStringLengthConstraintsV3(value, schemas);
+  }
+
+  #stripHaikuStringLengthConstraintsV4(value: ZodType, schemas: WeakMap<object, ZodType>): ZodType {
+    const cached = schemas.get(value as object);
+    if (cached) {
+      return cached;
+    }
+
+    const schema = value as any;
+    const def = schema._zod.def;
+    const strip = (child: ZodType) => this.#stripHaikuStringLengthConstraintsV4(child, schemas);
+    let nextDef = def;
+
+    const replace = (key: string) => {
+      const current = def[key] as ZodType | undefined;
+      if (!current) {
+        return;
+      }
+      const stripped = strip(current);
+      if (stripped !== current) {
+        nextDef = { ...nextDef, [key]: stripped };
+      }
+    };
+
+    switch (def.type) {
+      case 'string': {
+        const checks = (def.checks ?? []).filter(
+          (check: any) => check._zod.def.check !== 'min_length' && check._zod.def.check !== 'max_length',
+        );
+        if (checks.length !== (def.checks?.length ?? 0)) {
+          nextDef = { ...def, checks };
+        }
+        break;
+      }
+      case 'object': {
+        const shape = def.shape as Record<string, ZodType>;
+        const nextShape = Object.fromEntries(Object.entries(shape).map(([key, child]) => [key, strip(child)]));
+        if (Object.keys(shape).some(key => nextShape[key] !== shape[key])) {
+          nextDef = { ...nextDef, shape: nextShape };
+        }
+        replace('catchall');
+        break;
+      }
+      case 'array':
+        replace('element');
+        break;
+      case 'union': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          nextDef = { ...nextDef, options: nextOptions };
+        }
+        break;
+      }
+      case 'intersection':
+        replace('left');
+        replace('right');
+        break;
+      case 'tuple': {
+        const items = def.items as ZodType[];
+        const nextItems = items.map(strip);
+        if (nextItems.some((item, index) => item !== items[index])) {
+          nextDef = { ...nextDef, items: nextItems };
+        }
+        replace('rest');
+        break;
+      }
+      case 'record':
+      case 'map':
+        replace('keyType');
+        replace('valueType');
+        break;
+      case 'set':
+        replace('valueType');
+        break;
+      case 'optional':
+      case 'nullable':
+      case 'default':
+      case 'prefault':
+      case 'nonoptional':
+      case 'success':
+      case 'catch':
+      case 'readonly':
+        replace('innerType');
+        break;
+      case 'pipe':
+        replace('in');
+        replace('out');
+        break;
+      case 'promise':
+        replace('innerType');
+        break;
+      case 'lazy': {
+        nextDef = { ...def, getter: () => strip(def.getter()) };
+        break;
+      }
+    }
+
+    if (nextDef === def) {
+      schemas.set(value as object, value);
+      return value;
+    }
+
+    let stripped = schema.clone(nextDef) as ZodType;
+    const metadata = schema.meta();
+    if (metadata) {
+      stripped = (stripped as any).meta(metadata);
+    }
+    schemas.set(value as object, stripped);
+    return stripped;
+  }
+
+  #stripHaikuStringLengthConstraintsV3(value: ZodType, schemas: WeakMap<object, ZodType>): ZodType {
+    const cached = schemas.get(value as object);
+    if (cached) {
+      return cached;
+    }
+
+    const schema = value as any;
+    const def = schema._def;
+    const strip = (child: ZodType) => this.#stripHaikuStringLengthConstraintsV3(child, schemas);
+    let nextDef = def;
+
+    const replace = (key: string) => {
+      const current = def[key] as ZodType | undefined;
+      if (!current) {
+        return;
+      }
+      const stripped = strip(current);
+      if (stripped !== current) {
+        nextDef = { ...nextDef, [key]: stripped };
+      }
+    };
+
+    switch (def.typeName) {
+      case 'ZodString': {
+        const checks = (def.checks ?? []).filter((check: any) => check.kind !== 'min' && check.kind !== 'max');
+        if (checks.length !== (def.checks?.length ?? 0)) {
+          nextDef = { ...def, checks };
+        }
+        break;
+      }
+      case 'ZodObject': {
+        const shape = def.shape() as Record<string, ZodType>;
+        const nextShape = Object.fromEntries(Object.entries(shape).map(([key, child]) => [key, strip(child)]));
+        if (Object.keys(shape).some(key => nextShape[key] !== shape[key])) {
+          nextDef = { ...nextDef, shape: () => nextShape };
+        }
+        replace('catchall');
+        break;
+      }
+      case 'ZodArray':
+      case 'ZodPromise':
+      case 'ZodBranded':
+        replace('type');
+        break;
+      case 'ZodUnion': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          nextDef = { ...nextDef, options: nextOptions };
+        }
+        break;
+      }
+      case 'ZodDiscriminatedUnion': {
+        const options = def.options as ZodType[];
+        const nextOptions = options.map(strip);
+        if (nextOptions.some((option, index) => option !== options[index])) {
+          const optionsMap = new Map(def.optionsMap as Map<unknown, ZodType>);
+          for (const [key, option] of optionsMap) {
+            const index = options.indexOf(option);
+            if (index !== -1) {
+              optionsMap.set(key, nextOptions[index]!);
+            }
+          }
+          nextDef = { ...nextDef, options: nextOptions, optionsMap };
+        }
+        break;
+      }
+      case 'ZodIntersection':
+        replace('left');
+        replace('right');
+        break;
+      case 'ZodTuple': {
+        const items = def.items as ZodType[];
+        const nextItems = items.map(strip);
+        if (nextItems.some((item, index) => item !== items[index])) {
+          nextDef = { ...nextDef, items: nextItems };
+        }
+        replace('rest');
+        break;
+      }
+      case 'ZodRecord':
+      case 'ZodMap':
+        replace('keyType');
+        replace('valueType');
+        break;
+      case 'ZodSet':
+        replace('valueType');
+        break;
+      case 'ZodOptional':
+      case 'ZodNullable':
+      case 'ZodDefault':
+      case 'ZodCatch':
+      case 'ZodReadonly':
+        replace('innerType');
+        break;
+      case 'ZodEffects':
+        replace('schema');
+        break;
+      case 'ZodPipeline':
+        replace('in');
+        replace('out');
+        break;
+      case 'ZodLazy':
+        nextDef = { ...def, getter: () => strip(def.getter()) };
+        break;
+    }
+
+    if (nextDef === def) {
+      schemas.set(value as object, value);
+      return value;
+    }
+
+    const stripped = new schema.constructor(nextDef) as ZodType;
+    schemas.set(value as object, stripped);
+    return stripped;
+  }
 
   #resolveSchemaForValue(schema: Record<string, unknown>, value: unknown): Record<string, unknown> {
     if (!Array.isArray(schema.anyOf)) {

@@ -5,7 +5,7 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
-import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { ResourceTemplateType } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler, LogMessage } from './client';
@@ -50,9 +50,13 @@ async function getAvailablePort(): Promise<number> {
 
 async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
   const port = await getAvailablePort();
-  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-    env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
-  });
+  const childProcess = spawn(
+    process.execPath,
+    ['--import', import.meta.resolve('tsx'), path.join(__dirname, '..', '__fixtures__/weather.ts')],
+    {
+      env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
+    },
+  );
 
   let resolved = false;
   await new Promise<void>((resolve, reject) => {
@@ -221,7 +225,7 @@ describe('MCPClient', () => {
       expect(templates.weather).toBeDefined();
       expect(templates.weather.length).toBeGreaterThan(0);
       const customForecastTemplate = templates.weather.find(
-        (t: ResourceTemplate) => t.uriTemplate === 'weather://custom/{city}/{days}',
+        (t: ResourceTemplateType) => t.uriTemplate === 'weather://custom/{city}/{days}',
       );
       expect(customForecastTemplate).toBeDefined();
       expect(customForecastTemplate).toMatchObject({
@@ -529,7 +533,7 @@ describe('MCPClient', () => {
             args: [
               '-e',
               `
-            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const { Server } = require('@modelcontextprotocol/server');
             const server = new Server({ name: 'test', version: '1.0.0' });
             setTimeout(() => process.exit(0), 2000); // 2 second delay
           `,
@@ -554,7 +558,7 @@ describe('MCPClient', () => {
             args: [
               '-e',
               `
-            const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+            const { Server } = require('@modelcontextprotocol/server');
             const server = new Server({ name: 'test', version: '1.0.0' });
             setTimeout(() => process.exit(0), 2000); // 2 second delay
           `,

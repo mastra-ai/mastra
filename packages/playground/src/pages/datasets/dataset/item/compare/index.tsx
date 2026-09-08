@@ -1,19 +1,21 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
-import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { Columns } from '@mastra/playground-ui/components/Columns';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router';
-import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
+import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
+import { DatasetItemHeader, DatasetItemDetails } from '@/domains/datasets';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { useLinkComponent } from '@/lib/framework';
@@ -25,6 +27,10 @@ function itemToText(item: DatasetItem): string {
     {
       input: item.input ?? null,
       groundTruth: item.groundTruth ?? null,
+      expectedTrajectory: item.expectedTrajectory ?? null,
+      toolMocks: item.toolMocks ?? null,
+      scorerIds: item.scorerIds ?? null,
+      requestContext: item.requestContext ?? null,
       metadata: item.metadata ?? null,
     },
     null,
@@ -33,11 +39,15 @@ function itemToText(item: DatasetItem): string {
 }
 
 function DatasetItemsComparePage() {
-  const { datasetId } = useParams<{ datasetId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const itemIds = searchParams.get('items')?.split(',').filter(Boolean) ?? [];
+  const { datasetId, itemId, secondItemId } = useParams<{
+    datasetId: string;
+    itemId: string;
+    secondItemId: string;
+  }>();
+  const navigate = useNavigate();
+  const itemIds = [itemId, secondItemId].filter((id): id is string => Boolean(id));
   const { data: dataset, error } = useDataset(datasetId ?? '');
-  const { Link: FrameworkLink } = useLinkComponent();
+  const { Link: FrameworkLink, paths } = useLinkComponent();
   const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
@@ -84,15 +94,11 @@ function DatasetItemsComparePage() {
         </Button>
       </RouteHeaderActions>
 
-      <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div
-          className={cn('grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full', {
-            'grid-rows-[auto_auto_1fr]': isDiffView,
-          })}
-        >
-          <MainHeader>
+      <PageLayout height="full" className={cn({ 'grid-rows-[auto_auto_minmax(0,1fr)]': isDiffView })}>
+        <PageLayout.TopArea>
+          <MainHeader withMargins={false}>
             <MainHeader.Column>
-              <MainHeader.Title>
+              <MainHeader.Title size="smaller">
                 <GitCompareIcon />
                 Compare Dataset Items
               </MainHeader.Title>
@@ -121,30 +127,32 @@ function DatasetItemsComparePage() {
               </ButtonsGroup>
             </MainHeader.Column>
           </MainHeader>
+        </PageLayout.TopArea>
 
-          <Columns className="grid-cols-[1fr_3vw_1fr]">
-            {itemIds.map((itemId, idx) => (
-              <Fragment key={itemId}>
-                <CompareItemColumn
-                  datasetId={datasetId}
-                  itemId={itemId}
-                  Link={FrameworkLink}
-                  idx={idx}
-                  itemIds={itemIds}
-                  showContent={!isDiffView}
-                  onItemChange={(newItemId: string) => {
-                    const newIds = [...itemIds];
-                    newIds[idx] = newItemId;
-                    setSearchParams({ items: newIds.join(',') });
-                  }}
-                />
-                {idx == 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')}></div>}
-              </Fragment>
-            ))}
-          </Columns>
-          {isDiffView && itemA && itemB && <CodeDiff codeA={itemToText(itemA)} codeB={itemToText(itemB)} />}
-        </div>
-      </div>
+        <Columns className="grid-cols-2 gap-6">
+          {itemIds.map((itemId, idx) => (
+            <CompareItemColumn
+              key={itemId}
+              datasetId={datasetId}
+              itemId={itemId}
+              Link={FrameworkLink}
+              idx={idx}
+              itemIds={itemIds}
+              showContent={!isDiffView}
+              onItemChange={(newItemId: string) => {
+                const newIds = [...itemIds];
+                newIds[idx] = newItemId;
+                void navigate(paths.datasetItemCompareLink(datasetId, newIds[0]!, newIds[1]!));
+              }}
+            />
+          ))}
+        </Columns>
+        {isDiffView && itemA && itemB && (
+          <div className="mt-6 min-h-0 overflow-y-auto">
+            <CodeDiff codeA={itemToText(itemA)} codeB={itemToText(itemB)} />
+          </div>
+        )}
+      </PageLayout>
     </MainContentLayout>
   );
 }
@@ -177,10 +185,10 @@ function CompareItemColumn({
   }));
 
   return (
-    <Column>
-      <Column.Toolbar className="flex gap-4">
+    <Card className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden">
+      <CardHeader className="flex items-center gap-4">
         <Select name={`compare-item-${idx}`} value={itemId} onValueChange={onItemChange}>
-          <SelectTrigger aria-label="Item">
+          <SelectTrigger aria-label="Item" className="w-full">
             <SelectValue placeholder="Select item" />
           </SelectTrigger>
           <SelectContent>
@@ -195,10 +203,10 @@ function CompareItemColumn({
           <History />
           Versions
         </Button>
-      </Column.Toolbar>
+      </CardHeader>
 
       {showContent && (
-        <Column.Content>
+        <CardContent className="grid content-start gap-8 overflow-y-auto">
           {isLoading ? (
             <div className="text-neutral4 text-sm">Loading...</div>
           ) : !item ? (
@@ -206,12 +214,12 @@ function CompareItemColumn({
           ) : (
             <>
               <DatasetItemHeader item={item} />
-              <DatasetItemContent item={item} Link={Link} />
+              <DatasetItemDetails item={item} />
             </>
           )}
-        </Column.Content>
+        </CardContent>
       )}
-    </Column>
+    </Card>
   );
 }
 

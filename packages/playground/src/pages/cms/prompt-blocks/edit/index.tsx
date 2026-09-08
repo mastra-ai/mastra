@@ -273,7 +273,7 @@ function CmsPromptBlocksEditPage() {
     <MainContentLayout className="grid-rows-[1fr]">
       <RouteHeaderActions owner="cms-prompt-block-edit">
         <div className="flex items-center gap-2">
-          {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+          {hasDraft && <Badge variant="blue">Unpublished changes</Badge>}
           <PromptBlockVersionCombobox
             blockId={blockId}
             value={selectedVersionId ?? ''}

@@ -1,9 +1,10 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { getItemListColumnTemplate } from './shared';
 import type { ItemListColumn } from './types';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type ItemListRowButtonProps = {
+export type ItemListRowButtonProps = React.ComponentPropsWithoutRef<'button'> & {
   item?: any;
   isFeatured?: boolean;
   children?: React.ReactNode;
@@ -11,6 +12,7 @@ export type ItemListRowButtonProps = {
   columns?: ItemListColumn[];
   className?: string;
   disabled?: boolean;
+  tooltip?: React.ReactNode;
 };
 
 export function ItemListRowButton({
@@ -21,13 +23,16 @@ export function ItemListRowButton({
   columns,
   className,
   disabled,
+  tooltip,
+  ...props
 }: ItemListRowButtonProps) {
   const handleClick = () => {
     onClick?.(item?.id);
   };
 
-  return (
+  const button = (
     <button
+      {...props}
       onClick={handleClick}
       className={cn(
         'grid w-full items-center gap-4 rounded-lg px-4 text-left',
@@ -35,7 +40,6 @@ export function ItemListRowButton({
         focusRing.visible,
         {
           'bg-surface4': isFeatured,
-          // hover effect only not for skeleton and featured
           'hover:bg-surface4': item && !isFeatured && !disabled,
         },
         className,
@@ -45,5 +49,14 @@ export function ItemListRowButton({
     >
       {children}
     </button>
+  );
+
+  if (tooltip == null) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }

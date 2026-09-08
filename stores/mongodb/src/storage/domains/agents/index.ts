@@ -49,6 +49,7 @@ const SNAPSHOT_FIELDS = [
   'workspace',
   'skills',
   'skillsFormat',
+  'durable',
   'browser',
 ] as const;
 

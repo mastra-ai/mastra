@@ -38,8 +38,10 @@ import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { JSONValue, MastraOnFinishCallback } from '../stream';
 import type { MastraOnStepFinishCallback } from '../stream/types';
+import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
+import type { ScoringFilter } from './predicate';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -187,6 +189,22 @@ interface ScorerRun<TInput = any, TOutput = any> {
 
   /** Optional request context forwarded to scorers and judge prompts. */
   requestContext?: Record<string, any> | RequestContext;
+
+  /**
+   * RequestContext keys to persist onto the scorer-run span input, so the run
+   * can be reproduced later (datasets, experiments). Supports dot notation for
+   * nested values (e.g. `'user.id'`).
+   *
+   * This is independent of the observability config's `requestContextKeys`,
+   * which controls live span metadata — recording a run for repeatability and
+   * surfacing keys on every span are different concerns.
+   *
+   * - Omitted or `[]`: nothing from the request context is persisted (default).
+   * - `['*']`: the entire request context is persisted (the framework-managed
+   *   auth token is still redacted).
+   * - Specific keys: only those keys are persisted.
+   */
+  requestContextKeys?: string[];
 
   /** What kind of scoring flow produced this score, such as live runs, trace scoring, or experiments. */
   scoreSource?: ScorerScoreSource;
@@ -906,6 +924,31 @@ class MastraScorer<
     return new RequestContext(Object.entries(requestContext));
   }
 
+  /**
+   * Projects the run's RequestContext down to the keys that should be persisted
+   * on the scorer-run span input for repeatability.
+   *
+   * `serializeForSpan()` provides the safe base projection — the framework auth
+   * token is redacted and values are shaped for the trace serializer to bound.
+   * `requestContextKeys` then selects from it:
+   * - omitted / empty → nothing is persisted (secure default)
+   * - `['*']`         → the full (safe) context
+   * - specific keys   → only those keys (dot notation for nested values)
+   */
+  private selectRecordedRequestContext(
+    requestContext: RequestContext | undefined,
+    keys: string[] | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!requestContext || !keys || keys.length === 0) {
+      return undefined;
+    }
+
+    const safe = requestContext.serializeForSpan();
+    const selected = keys.includes('*') ? safe : selectFields(safe, keys);
+
+    return Object.keys(selected).length > 0 ? selected : undefined;
+  }
+
   async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
     const { _internal, ...scorerInput } = input;
 
@@ -933,6 +976,10 @@ class MastraScorer<
     }
 
     const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
+    const recordedRequestContext = this.selectRecordedRequestContext(
+      normalizedRequestContext,
+      prepared.requestContextKeys,
+    );
     const evalSpan = getOrCreateSpan({
       type: SpanType.SCORER_RUN,
       name: `scorer run: '${this.id}'`,
@@ -943,7 +990,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext?.serializeForSpan(),
+        ...(recordedRequestContext ? { requestContext: recordedRequestContext } : {}),
       },
       attributes: {
         scorerId: this.id,
@@ -1852,6 +1899,12 @@ export function createScorer(config: any): any {
 export type MastraScorerEntry = {
   scorer: MastraScorer<any, any, any, any>;
   sampling?: ScoringSamplingConfig;
+  /**
+   * Declarative eligibility filter, evaluated before sampling (filter →
+   * sample): the sampling rate applies to qualifying traffic only. JSON-safe,
+   * so it survives durable-agent serialization. See `evals/predicate.ts`.
+   */
+  filter?: ScoringFilter;
 };
 
 export type MastraScorers = Record<string, MastraScorerEntry>;

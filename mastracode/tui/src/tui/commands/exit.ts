@@ -2,5 +2,6 @@ import type { SlashCommandContext } from './types.js';
 
 export function handleExitCommand(ctx: SlashCommandContext): void {
   ctx.stop();
-  process.exit(0);
+  if (ctx.exit) ctx.exit(0);
+  else process.exit(0);
 }

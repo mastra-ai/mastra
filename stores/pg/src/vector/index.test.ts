@@ -47,6 +47,346 @@ describe('PgVector', () => {
     });
   });
 
+  describe('Namespace isolation', () => {
+    const namespaceIndex = 'test_namespace_isolation';
+    const legacyIndex = 'test_namespace_legacy_migration';
+
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: namespaceIndex, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex({ indexName: namespaceIndex });
+      await vectorDB.deleteIndex({ indexName: legacyIndex });
+    });
+
+    it('isolates upsert and query results by namespace while preserving the default namespace', async () => {
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[1, 0, 0]],
+        ids: ['shared-id'],
+        metadata: [{ tenant: 'default' }],
+      });
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 1, 0]],
+        ids: ['shared-id'],
+        metadata: [{ tenant: 'acme' }],
+        namespace: 'acme',
+      });
+
+      const defaultResults = await vectorDB.query({
+        indexName: namespaceIndex,
+        queryVector: [1, 0, 0],
+        topK: 10,
+      });
+      const acmeResults = await vectorDB.query({
+        indexName: namespaceIndex,
+        queryVector: [0, 1, 0],
+        topK: 10,
+        namespace: 'acme',
+      });
+
+      expect(defaultResults).toHaveLength(1);
+      expect(defaultResults[0]?.metadata).toEqual({ tenant: 'default' });
+      expect(acmeResults).toHaveLength(1);
+      expect(acmeResults[0]?.metadata).toEqual({ tenant: 'acme' });
+    });
+
+    it('scopes update, deleteFilter, deleteVector, and namespace-only deletion', async () => {
+      await vectorDB.updateVector({
+        indexName: namespaceIndex,
+        id: 'shared-id',
+        namespace: 'acme',
+        update: { metadata: { tenant: 'acme', updated: true } },
+      });
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 0, 1]],
+        ids: ['replacement'],
+        metadata: [{ tenant: 'acme' }],
+        namespace: 'acme',
+        deleteFilter: { updated: true },
+      });
+
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'default' }, namespace: 'acme' }),
+      ).toHaveLength(0);
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'acme' }, namespace: 'acme' }),
+      ).toHaveLength(1);
+
+      await vectorDB.deleteVector({ indexName: namespaceIndex, id: 'replacement', namespace: 'acme' });
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'acme' }, namespace: 'acme' }),
+      ).toHaveLength(0);
+      expect(await vectorDB.query({ indexName: namespaceIndex, filter: { tenant: 'default' } })).toHaveLength(1);
+
+      await vectorDB.upsert({
+        indexName: namespaceIndex,
+        vectors: [[0, 0, 1]],
+        ids: ['namespace-delete'],
+        namespace: 'acme',
+      });
+      await vectorDB.deleteVectors({ indexName: namespaceIndex, namespace: 'acme' });
+      expect(
+        await vectorDB.query({ indexName: namespaceIndex, queryVector: [0, 0, 1], namespace: 'acme' }),
+      ).toHaveLength(0);
+    });
+
+    it('migrates legacy indexes into the default namespace', async () => {
+      const client = await vectorDB.pool.connect();
+      try {
+        await client.query(`
+          CREATE TABLE ${legacyIndex} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(3),
+            metadata JSONB DEFAULT '{}'::jsonb
+          )
+        `);
+        await client.query(
+          `INSERT INTO ${legacyIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+          ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+        );
+      } finally {
+        client.release();
+      }
+
+      await vectorDB.createIndex({ indexName: legacyIndex, dimension: 3 });
+      await vectorDB.upsert({
+        indexName: legacyIndex,
+        vectors: [[0, 1, 0]],
+        ids: ['legacy-id'],
+        namespace: 'acme',
+      });
+
+      const defaultResults = await vectorDB.query({ indexName: legacyIndex, filter: { source: 'legacy' } });
+      const acmeResults = await vectorDB.query({
+        indexName: legacyIndex,
+        queryVector: [0, 1, 0],
+        namespace: 'acme',
+      });
+      expect(defaultResults.map(result => result.id)).toEqual(['legacy-id']);
+      expect(acmeResults.map(result => result.id)).toEqual(['legacy-id']);
+    });
+
+    describe('long table names (issue #23273)', () => {
+      // 63 chars: the Postgres identifier limit. `${name}_namespace_vector_id_idx` would be 87 chars.
+      const legacyIndexes = [39, 40, 63].map(length => 'test_ns_legacy_'.padEnd(length, 'x'));
+      legacyIndexes.push(`${legacyIndexes[2]!.slice(0, -1)}y`);
+      const longFreshIndex = 'test_ns_fresh_00123456789abcdef0123456789abcdef0123456789abcdef';
+      const longHalfIndex = 'test_ns_half_000123456789abcdef0123456789abcdef0123456789abcdef';
+
+      const uniqueIndexDefs = async (table: string) => {
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query<{ indexdef: string }>(
+            `SELECT indexdef FROM pg_indexes
+             WHERE schemaname = 'public' AND tablename = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexdef NOT LIKE '%_pkey%'`,
+            [table],
+          );
+          return result.rows.map(row => row.indexdef);
+        } finally {
+          client.release();
+        }
+      };
+
+      afterAll(async () => {
+        for (const indexName of [...legacyIndexes, longFreshIndex, longHalfIndex]) {
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it.each(legacyIndexes)('migrates a legacy table named %s', async longLegacyIndex => {
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longLegacyIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+        } finally {
+          client.release();
+        }
+
+        await vectorDB.pool.query(`INSERT INTO ${longLegacyIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        await vectorDB.createIndex({ indexName: longLegacyIndex, dimension: 3 });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+
+        const defs = await uniqueIndexDefs(longLegacyIndex);
+        expect(defs).toHaveLength(1);
+        const indexName = defs[0]!.split(' ')[3]!;
+        expect(indexName.length).toBeLessThanOrEqual(63);
+        if (longLegacyIndex.length === 39) {
+          expect(indexName).toBe(`${longLegacyIndex}_namespace_vector_id_idx`);
+        }
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+        expect(
+          await vectorDB.query({ indexName: longLegacyIndex, queryVector: [0, 1, 0], namespace: 'acme' }),
+        ).toHaveLength(1);
+      });
+
+      it('migrates both legacy tables when their old 32-bit namespace hashes collide', async () => {
+        // Both names hash to 6d75b957 with xxhash h32 and share the retained prefix.
+        const tables = [
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx0000000000009nsg',
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx000000000000bfc0',
+        ];
+        try {
+          for (const indexName of tables) {
+            await vectorDB.pool.query(`CREATE TABLE ${indexName} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )`);
+            await vectorDB.createIndex({ indexName, dimension: 3 });
+            const defs = await uniqueIndexDefs(indexName);
+            expect(defs).toHaveLength(1);
+            expect(defs[0]).toContain('(namespace, vector_id)');
+            expect(defs[0]!.split(' ')[3]!.length).toBeLessThanOrEqual(63);
+            await vectorDB.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+            await vectorDB.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+            expect(await vectorDB.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+            expect(await vectorDB.query({ indexName, queryVector: [0, 1, 0], namespace: 'acme' })).toHaveLength(1);
+          }
+        } finally {
+          for (const indexName of tables) {
+            await vectorDB.deleteIndex({ indexName });
+          }
+        }
+      });
+
+      it('creates a fresh index whose name is at the identifier limit', async () => {
+        expect(longFreshIndex).toHaveLength(63);
+        await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        const reopened = new PgVector({ connectionString, id: 'pg-namespace-reopened' });
+        try {
+          await reopened.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        } finally {
+          await reopened.disconnect();
+        }
+
+        const defs = await uniqueIndexDefs(longFreshIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[0, 1, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longFreshIndex, queryVector: [0, 1, 0] })).toHaveLength(1);
+      });
+
+      it('repairs a table left half-migrated by the previous implementation', async () => {
+        expect(longHalfIndex).toHaveLength(63);
+        // Reproduce the broken state: namespace column added, legacy UNIQUE dropped, no new index.
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longHalfIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb,
+              namespace VARCHAR(255) NOT NULL DEFAULT ''
+            )
+          `);
+        } finally {
+          client.release();
+        }
+        await vectorDB.pool.query(`INSERT INTO ${longHalfIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        expect(await uniqueIndexDefs(longHalfIndex)).toHaveLength(0);
+
+        await vectorDB.createIndex({ indexName: longHalfIndex, dimension: 3 });
+
+        const defs = await uniqueIndexDefs(longHalfIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+        await vectorDB.upsert({ indexName: longHalfIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longHalfIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+      });
+
+      it('preserves legacy uniqueness when replacement creation fails and allows retry', async () => {
+        const indexName = 'test_ns_failure'.padEnd(63, 'x');
+        await vectorDB.pool.query(`
+          CREATE TABLE ${indexName} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(3),
+            metadata JSONB DEFAULT '{}'::jsonb
+          )
+        `);
+        await vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        const originalQuery = pg.Client.prototype.query;
+        const querySpy = vi.spyOn(pg.Client.prototype, 'query').mockImplementation(function (query, ...args) {
+          if (typeof query === 'string' && query.startsWith('CREATE UNIQUE INDEX') && query.includes(indexName)) {
+            throw new Error('Injected namespace index failure');
+          }
+          return originalQuery.call(this, query, ...args);
+        });
+        try {
+          await expect(vectorDB.createIndex({ indexName, dimension: 3 })).rejects.toThrow();
+          querySpy.mockRestore();
+          const legacyDefs = await uniqueIndexDefs(indexName);
+          expect(legacyDefs).toHaveLength(1);
+          expect(legacyDefs[0]).toContain('(vector_id)');
+          await expect(vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id) VALUES ('a')`)).rejects.toMatchObject({
+            code: '23505',
+          });
+          await vectorDB.createIndex({ indexName, dimension: 3 });
+          const reopened = new PgVector({ connectionString, id: 'pg-namespace-retry' });
+          try {
+            await reopened.createIndex({ indexName, dimension: 3 });
+            await reopened.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          } finally {
+            await reopened.disconnect();
+          }
+          const defs = await uniqueIndexDefs(indexName);
+          expect(defs).toHaveLength(1);
+          expect(defs[0]).toContain('(namespace, vector_id)');
+        } finally {
+          querySpy.mockRestore();
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it('creates a long-named index in an explicit schema', async () => {
+        const schemaName = 'test_ns_long_schema';
+        const indexName = 'test_ns_schema'.padEnd(63, 'x');
+        const scoped = new PgVector({ connectionString, schemaName, id: 'pg-namespace-schema' });
+        try {
+          await scoped.createIndex({ indexName, dimension: 3 });
+          await scoped.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+          await scoped.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          expect(await scoped.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+          const indexes = await scoped.pool.query<{ indexname: string; indexdef: string }>(
+            "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2 AND indexdef LIKE '%(namespace, vector_id)'",
+            [schemaName, indexName],
+          );
+          expect(indexes.rows).toHaveLength(1);
+          expect(indexes.rows[0]!.indexname.length).toBeLessThanOrEqual(63);
+          expect(indexes.rows[0]!.indexdef).toContain('CREATE UNIQUE INDEX');
+        } finally {
+          await scoped.disconnect();
+          await vectorDB.pool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+        }
+      });
+
+      it('keeps the unhashed index name for short table names', async () => {
+        const defs = await uniqueIndexDefs(legacyIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain(`${legacyIndex}_namespace_vector_id_idx`);
+      });
+    });
+  });
+
   describe('Metadata-Only Query', () => {
     const metadataQueryIndex = 'test_metadata_only_query';
 
@@ -814,6 +1154,14 @@ describe('PgVector', () => {
             metric: 'cosine',
             vectorType: 'vector',
           });
+        });
+
+        it('should report the current row count, not a cached one', async () => {
+          const before = await vectorDB.describeIndex({ indexName });
+          await vectorDB.upsert({ indexName, vectors: [[7, 8, 9]] });
+
+          const after = await vectorDB.describeIndex({ indexName });
+          expect(after.count).toBe(before.count + 1);
         });
 
         it('should throw error for non-existent index', async () => {
@@ -3315,6 +3663,162 @@ describe('PgVector', () => {
           await db.disconnect();
         }
       });
+    });
+  });
+
+  // Batched multi-row upsert (Issue #17393)
+  describe('Batched upsert', () => {
+    const batchIndexName = 'test_batched_upsert';
+    const dimension = 8;
+
+    const makeVector = (seed: number) =>
+      Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : i === 1 ? seed / 128 : 0));
+
+    beforeEach(async () => {
+      await vectorDB.createIndex({ indexName: batchIndexName, dimension });
+    });
+
+    afterEach(async () => {
+      await vectorDB.deleteIndex({ indexName: batchIndexName });
+    });
+
+    it('should insert a multi-vector batch in a single statement and preserve id order', async () => {
+      const count = 100;
+      const vectors = Array.from({ length: count }, (_, i) => makeVector(i));
+      const metadata = Array.from({ length: count }, (_, i) => ({ idx: i }));
+      const ids = Array.from({ length: count }, (_, i) => `batch-${i}`);
+
+      const executed: string[] = [];
+      const patched: Array<{ client: any; originalQuery: any }> = [];
+      const originalConnect = vectorDB.pool.connect.bind(vectorDB.pool);
+      const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
+        const client: any = await originalConnect();
+        // Metadata and data queries can reuse the same pooled client on separate checkouts.
+        if (patched.some(entry => entry.client === client)) return client;
+        const originalQuery = client.query.bind(client);
+        patched.push({ client, originalQuery });
+        client.query = (...args: any[]) => {
+          if (typeof args[0] === 'string') executed.push(args[0]);
+          return originalQuery(...args);
+        };
+        return client;
+      });
+
+      let returnedIds: string[];
+      try {
+        returnedIds = await vectorDB.upsert({ indexName: batchIndexName, vectors, metadata, ids });
+      } finally {
+        connectSpy.mockRestore();
+        for (const { client, originalQuery } of patched) {
+          client.query = originalQuery;
+        }
+      }
+
+      expect(returnedIds).toEqual(ids);
+      expect(executed.filter(sql => sql.includes('INSERT INTO'))).toHaveLength(1);
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(3),
+        topK: 1,
+        includeVector: true,
+      });
+      expect(results[0]?.id).toBe('batch-3');
+      expect(results[0]?.metadata).toEqual({ idx: 3 });
+      expect(results[0]?.vector).toEqual(makeVector(3));
+    });
+
+    it('should default metadata to an empty object for batched vectors', async () => {
+      const ids = await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+      });
+
+      expect(ids).toHaveLength(2);
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(1), topK: 1 });
+      expect(results[0]?.metadata).toEqual({});
+    });
+
+    it('should update existing rows when a batch conflicts with stored ids', async () => {
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ v: 'old' }, { v: 'old' }],
+        ids: ['a', 'b'],
+      });
+
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(2), makeVector(3)],
+        metadata: [{ v: 'new' }, { v: 'new' }],
+        ids: ['a', 'b'],
+      });
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(2),
+        topK: 2,
+        includeVector: true,
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.metadata?.v === 'new')).toBe(true);
+      expect(results[0]?.id).toBe('a');
+      expect(results[0]?.vector).toEqual(makeVector(2));
+    });
+
+    it('should keep last-write-wins semantics for duplicate ids within one call', async () => {
+      const ids = await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ v: 'first' }, { v: 'second' }],
+        ids: ['dup', 'dup'],
+      });
+
+      expect(ids).toEqual(['dup', 'dup']);
+
+      const results = await vectorDB.query({
+        indexName: batchIndexName,
+        queryVector: makeVector(1),
+        topK: 5,
+        includeVector: true,
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]?.metadata).toEqual({ v: 'second' });
+      expect(results[0]?.vector).toEqual(makeVector(1));
+    });
+
+    it('should delete matching vectors and insert the batch atomically with deleteFilter', async () => {
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(0), makeVector(1)],
+        metadata: [{ doc: 'old' }, { doc: 'keep' }],
+        ids: ['old-1', 'keep-1'],
+      });
+
+      await vectorDB.upsert({
+        indexName: batchIndexName,
+        vectors: [makeVector(2), makeVector(3)],
+        metadata: [{ doc: 'new' }, { doc: 'new' }],
+        ids: ['new-1', 'new-2'],
+        deleteFilter: { doc: 'old' },
+      });
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(2), topK: 10 });
+      expect(results.map(r => r.id).sort()).toEqual(['keep-1', 'new-1', 'new-2']);
+    });
+
+    it('should roll back the whole batch when one vector has the wrong dimension', async () => {
+      await expect(
+        vectorDB.upsert({
+          indexName: batchIndexName,
+          vectors: [makeVector(0), [1, 2, 3]],
+          ids: ['good', 'bad'],
+        }),
+      ).rejects.toThrow(/dimension/i);
+
+      const results = await vectorDB.query({ indexName: batchIndexName, queryVector: makeVector(0), topK: 10 });
+      expect(results).toHaveLength(0);
     });
   });
 });

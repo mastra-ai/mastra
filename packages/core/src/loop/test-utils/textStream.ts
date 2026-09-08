@@ -22,7 +22,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                 expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
-                    content: [{ type: 'text', text: 'test-input', providerOptions: undefined }],
+                    content: [{ type: 'text', text: 'test-input' }],
                   },
                 ]);
 

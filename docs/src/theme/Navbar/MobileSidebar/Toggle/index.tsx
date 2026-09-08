@@ -5,7 +5,13 @@ import { cn } from '@site/src/lib/utils'
 import { type ReactNode } from 'react'
 
 export default function MobileSidebarToggle(): ReactNode {
-  const { toggle, shown } = useNavbarMobileSidebar()
+  const { toggle, shown, disabled } = useNavbarMobileSidebar()
+
+  // Pages without a sidebar (404, standalone pages) have no menu to show
+  if (disabled) {
+    return null
+  }
+
   return (
     <Button
       variant="ghost"

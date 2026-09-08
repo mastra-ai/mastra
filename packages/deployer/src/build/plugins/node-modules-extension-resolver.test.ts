@@ -59,6 +59,12 @@ describe('nodeModulesExtensionResolver', () => {
       expect(result).toBeNull();
     });
 
+    it('virtual importers', async () => {
+      const result = await resolveId('lodash/get', '\0virtual:#entry');
+      expect(result).toBeNull();
+      expect(getPackageInfo).not.toHaveBeenCalled();
+    });
+
     it('builtin modules', async () => {
       const result = await resolveId('fs', '/project/src/index.ts');
       expect(result).toBeNull();

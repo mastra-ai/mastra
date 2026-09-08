@@ -14,7 +14,6 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
@@ -35,7 +34,6 @@ export interface Env {
   [TABLE_RESOURCES]: KVNamespace;
   [TABLE_SPANS]: KVNamespace;
   [TABLE_AGENTS]: KVNamespace;
-  [TABLE_BACKGROUND_TASKS]: KVNamespace;
 }
 
 dotenv.config();
@@ -56,7 +54,6 @@ const mf = new Miniflare({
     TABLE_SCORERS,
     TABLE_SPANS,
     TABLE_AGENTS,
-    TABLE_BACKGROUND_TASKS,
   ],
 });
 
@@ -70,7 +67,6 @@ const kvBindings = {
   [TABLE_SCORERS]: (await mf.getKVNamespace(TABLE_SCORERS)) as KVNamespace,
   [TABLE_SPANS]: (await mf.getKVNamespace(TABLE_SPANS)) as KVNamespace,
   [TABLE_AGENTS]: (await mf.getKVNamespace(TABLE_AGENTS)) as KVNamespace,
-  [TABLE_BACKGROUND_TASKS]: (await mf.getKVNamespace(TABLE_BACKGROUND_TASKS)) as KVNamespace,
 };
 
 const TEST_CONFIG: CloudflareWorkersConfig = {

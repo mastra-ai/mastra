@@ -48,6 +48,17 @@ function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> 
   return sanitizedObject;
 }
 
+/**
+ * Serializes a tool result without truncating it.
+ *
+ * Token accounting must see the full result: the truncation applied by
+ * {@link formatToolResultForObserver} exists to bound what the Observer LLM reads,
+ * not to describe what the agent's provider context actually holds.
+ */
+export function serializeToolResultForTokenCounting(value: unknown): string {
+  return stringifyToolResult(value);
+}
+
 function stringifyToolResult(value: unknown): string {
   if (typeof value === 'string') {
     return value;

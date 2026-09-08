@@ -12,13 +12,7 @@ export function ProcessStepList({ currentStep, steps = [], className }: ProcessS
   return (
     <div className={cn(className)}>
       {steps.map((step: ProcessStep, idx: number) => (
-        <ProcessStepListItem
-          key={step.id}
-          stepId={step.id}
-          step={step}
-          isActive={currentStep?.id === step.id}
-          position={idx + 1}
-        />
+        <ProcessStepListItem key={step.id} step={step} isActive={currentStep?.id === step.id} position={idx + 1} />
       ))}
     </div>
   );

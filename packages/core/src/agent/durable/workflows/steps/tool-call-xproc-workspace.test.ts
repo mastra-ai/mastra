@@ -21,7 +21,10 @@ import { globalRunRegistry } from '../../run-registry';
 import * as resolveRuntime from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
 
-vi.mock('../../utils/resolve-runtime', () => ({
+vi.mock('../../utils/resolve-runtime', async () => ({
+  restoreRequestContext: (
+    await vi.importActual<typeof import('../../utils/resolve-runtime')>('../../utils/resolve-runtime')
+  ).restoreRequestContext,
   resolveTool: vi.fn().mockReturnValue(undefined),
   toolRequiresApproval: vi.fn().mockResolvedValue(false),
   rebuildRunToolsFromMastra: vi.fn(),
@@ -112,6 +115,10 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     globalRunRegistry.set(RUN_ID, {
       tools: { skill: { id: 'skill', execute: executeMock } as any },
       model: {} as any,
+      // A registry entry produced by a real `stream()` call carries a SaveQueueManager;
+      // without one the flush-gating rebuild (needsSaveQueueForFlush) would fire and
+      // defeat what this test asserts — that a registry hit avoids the Mastra rebuild.
+      saveQueueManager: {} as any,
     } as any);
 
     const step = createDurableToolCallStep();

@@ -38,6 +38,18 @@ function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLi
   return error instanceof Error && (error as { code?: unknown }).code === MODEL_NOT_ALLOWED_CODE;
 }
 
+const WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE = 'WORKFLOW_SCHEMA_VALIDATION_FAILED';
+
+function isWorkflowSchemaValidationError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
+}
+
+const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
+
+function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
+}
+
 /**
  * Structural check for ZodError instances.
  *
@@ -95,6 +107,24 @@ export function handleError(error: unknown, defaultMessage: string): never {
     throw new HTTPException(422, {
       res,
       message: error.message,
+      cause: error,
+    });
+  }
+
+  // A losing concurrent resume is a conflict on run state, not a malformed request, so it maps
+  // to 409 and clients can distinguish it from a 400/500 and re-read the run.
+  if (isWorkflowResumeAlreadyClaimedError(error)) {
+    throw new HTTPException(409, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  if (isWorkflowSchemaValidationError(error)) {
+    throw new HTTPException(400, {
+      message: error.message,
+      stack: error.stack,
       cause: error,
     });
   }

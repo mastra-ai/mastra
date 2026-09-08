@@ -58,14 +58,47 @@ export function estimateCosts(
     inputDetailResults.push(result);
   }
 
-  if (usage.inputDetails?.cacheWrite) {
+  const cacheWriteDetailResults: Array<{ success: boolean; costContext: CostContext }> = [];
+  const cacheWrite5m = usage.inputDetails?.cacheWrite5m ?? 0;
+  const cacheWrite1h = usage.inputDetails?.cacheWrite1h ?? 0;
+  if (cacheWrite5m > 0) {
     const result = estimateCostForMeter({
-      meter: PricingMeter.INPUT_CACHE_WRITE_TOKENS,
-      tokenCount: usage.inputDetails.cacheWrite,
+      meter: PricingMeter.INPUT_CACHE_WRITE_5M_TOKENS,
+      tokenCount: cacheWrite5m,
       ...estimateFields,
     });
-    results.set(TokenMetrics.INPUT_CACHE_WRITE, result.costContext);
+    results.set(TokenMetrics.INPUT_CACHE_WRITE_5M, result.costContext);
+    cacheWriteDetailResults.push(result);
     inputDetailResults.push(result);
+  }
+  if (cacheWrite1h > 0) {
+    const result = estimateCostForMeter({
+      meter: PricingMeter.INPUT_CACHE_WRITE_1H_TOKENS,
+      tokenCount: cacheWrite1h,
+      ...estimateFields,
+    });
+    results.set(TokenMetrics.INPUT_CACHE_WRITE_1H, result.costContext);
+    cacheWriteDetailResults.push(result);
+    inputDetailResults.push(result);
+  }
+  const unclassifiedCacheWrite = Math.max(0, (usage.inputDetails?.cacheWrite ?? 0) - cacheWrite5m - cacheWrite1h);
+  if (unclassifiedCacheWrite > 0) {
+    const result = estimateCostForMeter({
+      meter: PricingMeter.INPUT_CACHE_WRITE_TOKENS,
+      tokenCount: unclassifiedCacheWrite,
+      ...estimateFields,
+    });
+    cacheWriteDetailResults.push(result);
+    inputDetailResults.push(result);
+  }
+  if (cacheWriteDetailResults.length > 0) {
+    setCombinedCostContext(
+      results,
+      TokenMetrics.INPUT_CACHE_WRITE,
+      cacheWriteDetailResults,
+      pricingModel,
+      costMetadata,
+    );
   }
 
   if (usage.inputDetails?.image) {
@@ -158,6 +191,26 @@ function applyErrorContextForUsage(
   for (const sample of getTokenMetricSamples(usage)) {
     results.set(sample.name, errorContext);
   }
+}
+
+function setCombinedCostContext(
+  results: Map<TokenMetrics, CostContext>,
+  metric: TokenMetrics,
+  detailResults: Array<{ success: boolean; costContext: CostContext }>,
+  pricingModel: PricingModel,
+  costMetadata: Record<string, unknown>,
+): void {
+  const estimatedCosts = detailResults
+    .map(result => result.costContext.estimatedCost)
+    .filter((value): value is number => typeof value === 'number');
+  const hasFailedCost = detailResults.some(result => !result.success);
+  results.set(metric, {
+    provider: pricingModel.provider,
+    model: pricingModel.model,
+    ...(estimatedCosts.length > 0 && { estimatedCost: estimatedCosts.reduce((sum, value) => sum + value, 0) }),
+    ...(estimatedCosts.length > 0 && { costUnit: pricingModel.currency }),
+    costMetadata: hasFailedCost ? { ...costMetadata, error: 'partial_cost' } : { ...costMetadata },
+  });
 }
 
 function setAggregateCostContext(args: {

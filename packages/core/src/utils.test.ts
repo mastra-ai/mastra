@@ -9,7 +9,6 @@ import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
   boundedStringify,
-  deepEqual,
   deepMerge,
   ensureSerializable,
   isBoundedSerializable,
@@ -18,6 +17,7 @@ import {
   makeCoreTool,
   maskStreamTags,
   omitKeys,
+  readPositiveIntEnv,
   removeUndefinedValues,
   resolveSerializedZodOutput,
   safeStringify,
@@ -1033,77 +1033,6 @@ describe('deepMerge', () => {
   });
 });
 
-describe('deepEqual', () => {
-  it('returns true for identical primitives', () => {
-    expect(deepEqual(1, 1)).toBe(true);
-    expect(deepEqual('hello', 'hello')).toBe(true);
-    expect(deepEqual(true, true)).toBe(true);
-  });
-
-  it('returns false for different primitives', () => {
-    expect(deepEqual(1, 2)).toBe(false);
-    expect(deepEqual('a', 'b')).toBe(false);
-  });
-
-  it('returns true for the same object reference', () => {
-    const obj = { a: 1 };
-    expect(deepEqual(obj, obj)).toBe(true);
-  });
-
-  it('returns true for deeply equal plain objects', () => {
-    expect(deepEqual({ a: 1, b: { c: 2 } }, { a: 1, b: { c: 2 } })).toBe(true);
-  });
-
-  it('returns false when object keys differ', () => {
-    expect(deepEqual({ a: 1 }, { b: 1 })).toBe(false);
-  });
-
-  it('returns false when object values differ', () => {
-    expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
-  });
-
-  it('returns false when objects have different key counts', () => {
-    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);
-  });
-
-  it('returns true for equal arrays', () => {
-    expect(deepEqual([1, 2, 3], [1, 2, 3])).toBe(true);
-  });
-
-  it('returns false for arrays of different length', () => {
-    expect(deepEqual([1, 2], [1, 2, 3])).toBe(false);
-  });
-
-  it('returns false for arrays with different elements', () => {
-    expect(deepEqual([1, 2, 3], [1, 2, 4])).toBe(false);
-  });
-
-  it('returns true for equal Date instances', () => {
-    const d1 = new Date('2024-01-01');
-    const d2 = new Date('2024-01-01');
-    expect(deepEqual(d1, d2)).toBe(true);
-  });
-
-  it('returns false for different Date instances', () => {
-    const d1 = new Date('2024-01-01');
-    const d2 = new Date('2025-06-01');
-    expect(deepEqual(d1, d2)).toBe(false);
-  });
-
-  it('returns true for both null values', () => {
-    expect(deepEqual(null, null)).toBe(true);
-  });
-
-  it('returns false when only one side is null', () => {
-    expect(deepEqual(null, {})).toBe(false);
-    expect(deepEqual({}, null)).toBe(false);
-  });
-
-  it('returns false for values of different types', () => {
-    expect(deepEqual(1, '1')).toBe(false);
-  });
-});
-
 describe('omitKeys', () => {
   it('removes specified keys from an object', () => {
     const obj = { a: 1, b: 2, c: 3 };
@@ -1156,5 +1085,47 @@ describe('removeUndefinedValues', () => {
   it('returns the same entries when no values are undefined', () => {
     const obj = { a: 1, b: 'x', c: true };
     expect(removeUndefinedValues(obj)).toEqual({ a: 1, b: 'x', c: true });
+  });
+});
+
+describe('readPositiveIntEnv', () => {
+  const ENV_NAME = 'MASTRA_TEST_POSITIVE_INT';
+  const FALLBACK = 30_000;
+
+  afterEach(() => {
+    delete process.env[ENV_NAME];
+  });
+
+  it('reads a positive integer', () => {
+    process.env[ENV_NAME] = '5000';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(5000);
+  });
+
+  it('reads exponent notation that lands on an integer', () => {
+    process.env[ENV_NAME] = '6e4';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(60_000);
+  });
+
+  it('falls back when unset or empty', () => {
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+    process.env[ENV_NAME] = '';
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['abc', '10s', '30 minutes', 'Infinity', 'NaN'])('falls back on non-numeric %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['0', '-1', '-5000'])('falls back on non-positive %s', raw => {
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
+  });
+
+  it.each(['1.5', '0.5'])('falls back on fractional %s, since callers use these as ms counts', raw => {
+    // A fractional TTL would be compared against integer `Date.now()` deltas and
+    // would land in a setInterval period, so it is rejected rather than rounded.
+    process.env[ENV_NAME] = raw;
+    expect(readPositiveIntEnv(ENV_NAME, FALLBACK)).toBe(FALLBACK);
   });
 });

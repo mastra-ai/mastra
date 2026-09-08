@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
 import type {
   ProjectRepository,
   ProjectSourceControlConnection,
@@ -16,28 +17,48 @@ import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.j
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
 /**
- * Minimal shape of the host-authenticated user placed on the request context
- * under the `user` key. Mirrors the host's auth user without importing it:
- * `workosId` (stable external id) wins over the row `id`, and `organizationId`
- * scopes org tenancy.
+ * The host-authenticated user placed on the request context under the `user`
+ * key, read through the host's own normalizer. A local mirror of that shape
+ * used to live here; it silently missed the provider shapes the normalizer
+ * knows about, which turned every subscription tool into a no-op for those
+ * users instead of an error anybody could see.
  */
-interface SessionAuthUser {
-  workosId?: string;
-  id?: string;
-  organizationId?: string;
+function sessionUserId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
 }
 
-function sessionUserId(user: SessionAuthUser | undefined): string | undefined {
-  return user?.workosId ?? user?.id;
-}
-
-function sessionOrgId(user: SessionAuthUser | undefined): string | undefined {
-  return user?.organizationId;
+function sessionOrgId(requestContext: RequestContext): string | undefined {
+  return getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
 }
 
 const pullRequestInputSchema = z.object({
   pullRequest: z.union([z.number().int().positive(), z.string().min(1)]),
 });
+
+const TRIAGE_COMMENT_MARKER = '<!-- mastra-factory-triage -->';
+const triageCommentInputSchema = z.object({
+  issueNumber: z.number().int().positive(),
+  body: z.string().startsWith(TRIAGE_COMMENT_MARKER),
+});
+
+const triageCommentLocks = new Map<string, Promise<void>>();
+
+async function serializeTriageComment<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = triageCommentLocks.get(key) ?? Promise.resolve();
+  let release: (() => void) | undefined;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const queued = previous.then(() => current);
+  triageCommentLocks.set(key, queued);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release!();
+    if (triageCommentLocks.get(key) === queued) triageCommentLocks.delete(key);
+  }
+}
 
 interface SessionTarget {
   context: AgentControllerRequestContext<RepositorySessionState>;
@@ -67,17 +88,18 @@ function parsePullRequest(value: number | string, expectedRepo: string): number 
  */
 function isGithubProjectSession(requestContext: RequestContext): boolean {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
   return Boolean(
-    context?.threadId && context.getState().projectRepositoryId && sessionOrgId(user) && sessionUserId(user),
+    context?.threadId &&
+    context.getState().projectRepositoryId &&
+    sessionOrgId(requestContext) &&
+    sessionUserId(requestContext),
   );
 }
 
 async function resolveSessionTarget(requestContext: RequestContext, github: GithubIntegration): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
-  const orgId = sessionOrgId(user);
-  const userId = sessionUserId(user);
+  const orgId = sessionOrgId(requestContext);
+  const userId = sessionUserId(requestContext);
   const projectRepositoryId = context?.getState().projectRepositoryId;
   if (!context || !context.threadId || !projectRepositoryId || !orgId || !userId) {
     throw new Error('GitHub subscriptions require an authenticated repository session with an active thread.');
@@ -153,6 +175,24 @@ export async function unsubscribeCurrentSessionFromPullRequest(
   return number;
 }
 
+export async function upsertFactoryTriageComment(
+  requestContext: RequestContext,
+  input: { issueNumber: number; body: string },
+  github: GithubIntegration,
+) {
+  const target = await resolveSessionTarget(requestContext, github);
+  const installationId = Number(target.installation.externalId);
+  if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error('GitHub installation is invalid.');
+  return serializeTriageComment(`${installationId}:${target.repository.externalId}:${input.issueNumber}`, () =>
+    github.upsertFactoryTriageComment({
+      installationId,
+      repository: target.repository.slug,
+      issueNumber: input.issueNumber,
+      body: input.body,
+    }),
+  );
+}
+
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
   const target = await resolveSessionTarget(requestContext, github);
   // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
@@ -178,9 +218,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
-  const user = requestContext.get('user') as SessionAuthUser | undefined;
-  if (!context?.getState().projectRepositoryId || !sessionOrgId(user) || !sessionUserId(user)) return {};
+  if (!isGithubProjectSession(requestContext)) return {};
 
   return {
     github_refresh_token: createTool({
@@ -192,6 +230,13 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         await refreshGithubToken(requestContext, github);
         return { refreshed: true };
       },
+    }),
+    github_upsert_factory_triage_comment: createTool({
+      id: 'github_upsert_factory_triage_comment',
+      description:
+        'Create or update this Factory App’s canonical triage handoff comment on an issue in the active repository. Use this for every marked pending or final Factory triage handoff; never use gh to create or edit that handoff.',
+      inputSchema: triageCommentInputSchema,
+      execute: async input => upsertFactoryTriageComment(requestContext, input, github),
     }),
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',

@@ -183,6 +183,37 @@ describe('smoothStream', () => {
     expect(output.map(chunk => (chunk.type === 'text-delta' ? chunk.payload.text : '')).join('')).toBe('one two ');
   });
 
+  it('flushes a trailing metadata-only delta instead of dropping its providerMetadata (#20469)', async () => {
+    const meta = { google: { thoughtSignature: 'sig-abc' } };
+    const output = await collect(
+      [
+        controlChunk('text-start', { id: 'text-1' }),
+        textDelta('', 'text-1', { payload: { providerMetadata: meta } }),
+        controlChunk('text-end', { id: 'text-1' }),
+      ],
+      { delayInMs: null },
+    );
+
+    expect(output.map(chunk => chunk.type)).toEqual(['text-start', 'text-delta', 'text-end']);
+    expect(output[1]).toMatchObject({
+      type: 'text-delta',
+      payload: { id: 'text-1', text: '', providerMetadata: meta },
+    });
+  });
+
+  it('drops a trailing empty delta without metadata', async () => {
+    const output = await collect(
+      [
+        controlChunk('text-start', { id: 'text-1' }),
+        textDelta('', 'text-1'),
+        controlChunk('text-end', { id: 'text-1' }),
+      ],
+      { delayInMs: null },
+    );
+
+    expect(output.map(chunk => chunk.type)).toEqual(['text-start', 'text-end']);
+  });
+
   it.each([
     ['empty', () => ''],
     ['non-prefix', () => 'different'],

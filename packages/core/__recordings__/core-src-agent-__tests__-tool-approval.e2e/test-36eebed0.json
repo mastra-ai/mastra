@@ -5,7 +5,7 @@
     "testName": "tool approval and suspension > requireToolApproval > should call findUserTool with requireToolApproval and approve via generate",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:51:20.412Z",
-    "updatedAt": "2026-06-17T13:35:10.272Z"
+    "updatedAt": "2026-08-12T23:59:13.803Z"
   },
   "recordings": [
     {
@@ -53,7 +53,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781703307250
+        "timestamp": 1786579150247
       },
       "response": {
         "status": 200,
@@ -62,13 +62,13 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0d26f8818532953-SJC",
+          "cf-ray": "a2a36ea93af98b9e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 17 Jun 2026 13:35:08 GMT",
-          "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "859",
-          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
+          "date": "Wed, 12 Aug 2026 23:59:11 GMT",
+          "openai-organization": "redacted",
+          "openai-processing-ms": "817",
+          "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -79,18 +79,18 @@
           "x-ratelimit-remaining-tokens": "1999711",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "8ms",
-          "x-request-id": "req_95cfa439ecf346ca839898de202b84d9"
+          "x-request-id": "req_00f0e958011d48c38abbef51a6a7ed10"
         },
         "body": {
-          "id": "resp_0c724b8fcb126f85006a32a28b8ffc8199a53cbf9c828ca6f2",
+          "id": "resp_0cdd9a49a3323a78006a7d08ce6ea0819bb1408bb32f88ba94",
           "object": "response",
-          "created_at": 1781703307,
+          "created_at": 1786579150,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781703308,
+          "completed_at": 1786579151,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -101,11 +101,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0c724b8fcb126f85006a32a28c2b008199876631e5f7c9fa23",
+              "id": "fc_0cdd9a49a3323a78006a7d08cf0548819b8d60058a3a9a6561",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\"}",
-              "call_id": "call_5sGSK7g7MCpKfJN1rwBHTKXL",
+              "call_id": "call_e5kumudWCMNHVPrKNFtOrNYQ",
               "name": "findUserTool"
             }
           ],
@@ -130,11 +130,30 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "This is a test tool that returns the name and email",
               "name": "findUserTool",
+              "output_schema": null,
               "parameters": {
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
@@ -157,6 +176,7 @@
           "usage": {
             "input_tokens": 72,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
             "output_tokens": 18,
@@ -172,7 +192,7 @@
       }
     },
     {
-      "hash": "dfcb5ead498cc032",
+      "hash": "bd961f10698201b9",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -194,11 +214,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0c724b8fcb126f85006a32a28c2b008199876631e5f7c9fa23"
+              "id": "fc_0cdd9a49a3323a78006a7d08cf0548819b8d60058a3a9a6561"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_5sGSK7g7MCpKfJN1rwBHTKXL",
+              "call_id": "call_e5kumudWCMNHVPrKNFtOrNYQ",
               "output": "{\"name\":\"Dero Israel\",\"email\":\"dero@mail.com\"}"
             }
           ],
@@ -225,7 +245,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781703309235
+        "timestamp": 1786579152355
       },
       "response": {
         "status": 200,
@@ -234,13 +254,13 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0d26f948b3e2953-SJC",
+          "cf-ray": "a2a36eb66e79cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 17 Jun 2026 13:35:10 GMT",
-          "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "911",
-          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
+          "date": "Wed, 12 Aug 2026 23:59:13 GMT",
+          "openai-organization": "redacted",
+          "openai-processing-ms": "1163",
+          "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
@@ -251,18 +271,18 @@
           "x-ratelimit-remaining-tokens": "1999670",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "9ms",
-          "x-request-id": "req_c7a3c70582794dea99298dc1cd91b74a"
+          "x-request-id": "req_2705341ea28d497f8295ebee027ad234"
         },
         "body": {
-          "id": "resp_0c724b8fcb126f85006a32a28d91048199bb9134f73825d880",
+          "id": "resp_0cdd9a49a3323a78006a7d08d078a8819b8176378e8de6b952",
           "object": "response",
-          "created_at": 1781703309,
+          "created_at": 1786579152,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781703310,
+          "completed_at": 1786579153,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -273,7 +293,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0c724b8fcb126f85006a32a28e15608199bbcf074fa9c305e2",
+              "id": "msg_0cdd9a49a3323a78006a7d08d15be0819b9c85e0a844a9c8cf",
               "type": "message",
               "status": "completed",
               "content": [
@@ -281,7 +301,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The user Dero Israel has the email address: **dero@mail.com**."
+                  "text": "The user Dero Israel can be reached at the email address: **dero@mail.com**."
                 }
               ],
               "role": "assistant"
@@ -308,11 +328,30 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "This is a test tool that returns the name and email",
               "name": "findUserTool",
+              "output_schema": null,
               "parameters": {
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
@@ -335,13 +374,14 @@
           "usage": {
             "input_tokens": 113,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 19,
+            "output_tokens": 22,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 132
+            "total_tokens": 135
           },
           "user": null,
           "metadata": {}

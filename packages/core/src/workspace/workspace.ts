@@ -31,13 +31,13 @@
  */
 
 import * as path from 'node:path';
-import pMap, { pMapSkip } from 'p-map';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import { RequestContext } from '../request-context';
+import { pMap, pMapSkip } from '../utils/p-map';
 import type { MastraVector } from '../vector';
 
-import { WorkspaceError, SearchNotAvailableError } from './errors';
+import { WorkspaceError, SearchNotAvailableError, WorkspaceNotReadyError } from './errors';
 import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -569,6 +569,7 @@ export class Workspace<
 
   private _status: WorkspaceStatus = 'pending';
   private _destroyPromise?: Promise<void>;
+  private _stopPromise?: Promise<void>;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
@@ -584,6 +585,8 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  /** Set as soon as `destroy()` begins, and never cleared. */
+  private _teardownStarted = false;
   private _lsp?: LSPManager;
   private _logger?: IMastraLogger;
 
@@ -945,6 +948,8 @@ export class Workspace<
       return undefined;
     }
 
+    this.assertSearchWritable();
+
     // Lazy initialization
     if (!this._skills) {
       // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
@@ -955,6 +960,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        assertAvailable: () => this.assertSearchWritable(),
         checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
@@ -1010,6 +1016,7 @@ export class Workspace<
       startLineOffset?: number;
     },
   ): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine) {
       throw new SearchNotAvailableError();
     }
@@ -1046,14 +1053,16 @@ export class Workspace<
   }
 
   /**
-   * Rebuild the search index from filesystem paths.
-   * Used internally for auto-indexing on init.
+   * Rebuild the search index from filesystem paths without starting the sandbox.
    *
-   * Paths can be plain directories, single files, or glob patterns.
-   * Uses resolvePathPattern for unified resolution: file matches are
-   * indexed directly, directory matches are recursed.
+   * Defaults to the configured `autoIndexPaths`, or accepts explicit paths for a
+   * one-off rebuild. Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are indexed directly,
+   * and directory matches are recursed. Does nothing when search is not configured,
+   * the workspace has no static filesystem, or no paths are provided.
    */
-  private async rebuildSearchIndex(paths: string[]): Promise<void> {
+  async rebuildSearchIndex(paths: string[] = this._config.autoIndexPaths ?? []): Promise<void> {
+    this.assertSearchWritable();
     if (!this._searchEngine || !this._fs || paths.length === 0) {
       return;
     }
@@ -1281,6 +1290,78 @@ export class Workspace<
   }
 
   /**
+   * Reject search writes once teardown has begun, so that a late caller cannot
+   * repopulate an index that `destroy()` has already released.
+   *
+   * Keyed off `_teardownStarted` rather than `_status`: a failed teardown ends
+   * in `'error'`, which is also the status of a failed `init()`, and the index
+   * has been released either way once `destroy()` has run.
+   */
+  private assertSearchWritable(): void {
+    if (this._teardownStarted) {
+      throw new WorkspaceNotReadyError(this.id, this._status);
+    }
+  }
+
+  /**
+   * Stop the workspace's live resources without destroying them.
+   *
+   * Shuts down LSP clients, closes the browser, and stops the sandbox
+   * (`stop`, not `destroy` — remote providers pause/suspend so the sandbox
+   * can be resumed later; {@link LocalSandbox} kills its background
+   * processes). The workspace itself stays usable: filesystem, search index,
+   * and skills are untouched, and a later sandbox operation may start the
+   * sandbox again.
+   *
+   * This is what `Mastra.shutdown()` calls for registered workspaces, so a
+   * process restart suspends remote sandboxes instead of deleting them.
+   */
+  async stop(): Promise<void> {
+    if (this._teardownStarted || this._status === 'destroyed') {
+      return;
+    }
+    // Coalesce concurrent stop() calls onto one in-flight teardown, same as
+    // destroy() does with _destroyPromise.
+    if (this._stopPromise) {
+      return await this._stopPromise;
+    }
+
+    this._stopPromise = this._performStop();
+    try {
+      await this._stopPromise;
+    } finally {
+      this._stopPromise = undefined;
+    }
+  }
+
+  private async _performStop(): Promise<void> {
+    // Shutdown LSP before the sandbox — LSP clients need running processes
+    // to send shutdown/exit. The manager is kept: shutdownAll() drains its
+    // clients and resets it, so it spawns clients again on the next
+    // diagnostics request.
+    if (this._lsp) {
+      try {
+        await this._lsp.shutdownAll();
+      } catch {
+        // LSP shutdown errors are non-blocking
+      }
+    }
+
+    // Close browser before the sandbox
+    if (this._browser) {
+      try {
+        await this._browser.close();
+      } catch {
+        // Browser close errors are non-blocking
+      }
+    }
+
+    if (this._sandbox) {
+      await callLifecycle(this._sandbox, 'stop');
+    }
+  }
+
+  /**
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
@@ -1291,8 +1372,20 @@ export class Workspace<
       return await this._destroyPromise;
     }
 
+    this._teardownStarted = true;
     this._status = 'destroying';
-    this._destroyPromise = this._performDestroy();
+    // Assigned before any await so a concurrent destroy() during the
+    // stop-drain below joins this promise instead of starting a second
+    // destroy path.
+    this._destroyPromise = (async () => {
+      // Let an in-flight stop() settle before destructive cleanup so the two
+      // teardowns never interleave on the same LSP manager, browser, and
+      // sandbox.
+      if (this._stopPromise) {
+        await this._stopPromise.catch(() => {});
+      }
+      await this._performDestroy();
+    })();
 
     try {
       await this._destroyPromise;
@@ -1336,6 +1429,14 @@ export class Workspace<
     } catch (error) {
       this._status = 'error';
       throw error;
+    } finally {
+      // Release indexed content. The search engine holds the full text of every
+      // indexed document, and the skills registry holds the source of every
+      // loaded skill version; without this a destroyed workspace keeps them
+      // alive for the lifetime of the process. Done in `finally` so a failed
+      // resource shutdown above cannot pin the index either.
+      this._searchEngine?.clear();
+      this._skills = undefined;
     }
   }
 

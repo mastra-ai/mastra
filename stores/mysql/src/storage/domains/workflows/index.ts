@@ -1,5 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorage,
+  normalizePerPage,
+  matchesExpectedWorkflowStatus,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   StorageListWorkflowRunsInput,
@@ -248,8 +254,14 @@ export class WorkflowsMySQL extends WorkflowsStorage {
 
       const existing = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
 
+      const { expectedStatus, ...state } = opts;
+      if (!matchesExpectedWorkflowStatus(existing.status, expectedStatus)) {
+        await connection.rollback();
+        return undefined;
+      }
+
       // Merge opts into the snapshot
-      const updatedSnapshot = { ...existing, ...opts };
+      const updatedSnapshot = { ...existing, ...state };
 
       await connection.execute(
         `UPDATE ${formatTableName(TABLE_WORKFLOW_SNAPSHOT)} SET ${quoteIdentifier('snapshot', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,

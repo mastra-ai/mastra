@@ -6,7 +6,7 @@ import type { CoreTool, ToolPayloadTransformPolicy } from '../../../tools/types'
  * Apply the in-process tool payload transform policy to a chunk before the
  * durable layer publishes it. Mirrors `addToolPayloadTransformToChunk` in the
  * non-durable agentic-execution layer, restricted to the chunk types that the
- * durable loop emits (`tool-call`, `tool-result`, `tool-error`).
+ * durable loop emits (`tool-call`, `tool-result`, `tool-error`, `tool-output-denied`).
  *
  * The transform policy is only available for in-process durable runs (it
  * carries a closure that cannot be serialized into the workflow input). When
@@ -107,6 +107,32 @@ export async function applyToolPayloadTransformToChunk<TChunk extends { type: st
         toolCallId,
         input: (payload as { args?: unknown }).args,
         error: (payload as { error?: unknown }).error,
+        providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+      },
+      source,
+      logger,
+    );
+  } else if (chunk.type === 'tool-output-denied') {
+    transformedChunk = withToolPayloadTransformMetadata(
+      transformedChunk as any,
+      await transformToolPayloadForTargets(
+        {
+          phase: 'input-available',
+          toolName,
+          toolCallId,
+          input: (payload as { args?: unknown }).args,
+          providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
+        },
+        source,
+        logger,
+      ),
+    ) as TChunk;
+    transform = await transformToolPayloadForTargets(
+      {
+        phase: 'approval',
+        toolName,
+        toolCallId,
+        input: (payload as { args?: unknown }).args,
         providerMetadata: (payload as { providerMetadata?: Record<string, unknown> }).providerMetadata,
       },
       source,

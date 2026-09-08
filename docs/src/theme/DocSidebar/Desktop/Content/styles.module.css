@@ -1,16 +1,91 @@
 @media (min-width: 62.25rem) {
-  .menu {
+  .scrollContainer {
+    position: relative;
+    display: flex;
     flex-grow: 1;
-    padding: 0.5rem;
+    min-height: 0;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
   }
-  @supports (scrollbar-gutter: stable) {
-    .menu {
-      padding: 0.5rem 0 0.5rem 0.5rem;
-      scrollbar-gutter: stable;
-    }
+
+  .menu {
+    --sidebar-pane-duration: 180ms;
+    --sidebar-pane-easing: cubic-bezier(0.65, 0, 0.35, 1);
+    --sidebar-pane-shift: 1.25rem;
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 0;
+    padding: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem !important;
+    scrollbar-gutter: stable;
+  }
+
+  .pane {
+    flex-shrink: 0;
+    transition:
+      transform var(--sidebar-pane-duration) var(--sidebar-pane-easing),
+      opacity var(--sidebar-pane-duration) var(--sidebar-pane-easing);
+  }
+
+  .root-pane-inactive {
+    position: absolute;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(calc(-1 * var(--sidebar-pane-shift)), 0, 0);
+  }
+
+  .contextual-pane-enter {
+    animation: contextual-pane-enter var(--sidebar-pane-duration) var(--sidebar-pane-easing);
+  }
+
+  .contextual-pane-exit {
+    position: absolute;
+    inset: 0 max(0px, calc(1rem - var(--sidebar-scrollbar-gutter, 0px))) 0 1rem;
+    overflow: hidden;
+    pointer-events: none;
+    animation: contextual-pane-exit var(--sidebar-pane-duration) var(--sidebar-pane-easing) forwards;
   }
 
   .menuWithAnnouncementBar {
     margin-bottom: var(--docusaurus-announcement-bar-height);
+  }
+}
+
+@keyframes contextual-pane-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes contextual-pane-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--sidebar-pane-shift), 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane {
+    transition: none;
+  }
+
+  .contextual-pane-enter,
+  .contextual-pane-exit {
+    animation: none;
   }
 }

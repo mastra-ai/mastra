@@ -132,6 +132,7 @@ describe('MessageRow dynamic-tool rendering', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it('renders persisted signal user text as a user message', () => {
@@ -228,6 +229,44 @@ describe('MessageRow dynamic-tool rendering', () => {
     const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
 
     expect(container.querySelector('strong')?.textContent).toBe('bold');
+  });
+
+  describe('when assistant text contains an external authorization link', () => {
+    it('requests a separate browser window', () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(window);
+      const part: MastraMessagePart = {
+        type: 'text',
+        text: '[Authorize Gmail](https://connect.composio.dev/link)',
+      };
+
+      const { getByRole } = renderMessage(buildMessage([part]));
+      fireEvent.click(getByRole('link', { name: 'Authorize Gmail' }));
+
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://connect.composio.dev/link',
+        '_blank',
+        expect.stringContaining('popup=yes'),
+      );
+    });
+  });
+
+  describe('when system text contains an external link', () => {
+    it('keeps the default new-tab target', () => {
+      const { getByRole } = renderMessage({
+        id: 'system-link-1',
+        role: 'system',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: '[System reference](https://example.com/reference)' }],
+        },
+      } as unknown as MastraDBMessage);
+
+      const link = getByRole('link', { name: 'System reference' });
+
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    });
   });
 
   it('routes assistant text through the shared MessageText error-prefix handling', () => {

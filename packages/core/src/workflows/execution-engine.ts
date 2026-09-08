@@ -14,6 +14,7 @@ import type {
   WorkflowRunState,
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
+  WorkflowStartCallbackInfo,
 } from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
@@ -29,16 +30,29 @@ export interface ExecutionGraph<TEngineType = any> {
 export interface ExecutionEngineOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs: boolean;
+  emitStepEvents?: boolean;
   shouldPersistSnapshot: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
 
   /**
+   * Acknowledges that `resume()` calls cannot be de-duplicated via the persisted
+   * resume claim, suppressing the per-resume warning. See `WorkflowOptions.allowUnclaimedResumes`.
+   */
+  allowUnclaimedResumes?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Called and awaited before a run starts executing. Errors are propagated, which
+   * aborts the run before any step executes.
+   */
+  onStart?: (info: WorkflowStartCallbackInfo) => Promise<void> | void;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
@@ -59,10 +73,40 @@ export interface ExecutionEngineOptions {
 export abstract class ExecutionEngine extends MastraBase {
   public mastra?: Mastra;
   public options: ExecutionEngineOptions;
+
+  /**
+   * Per-run overrides of `options.shouldPersistSnapshot`, keyed by runId.
+   *
+   * `options` is shared by every run of a workflow, so persistence is otherwise a
+   * per-workflow decision. Some callers need it per run: an agent output processor
+   * executes its workflow once per streamed chunk, and those runs must never write
+   * snapshots even when the same workflow instance persists normally when the user
+   * starts it directly (#19605).
+   */
+  private runPersistenceOverrides = new Map<string, ExecutionEngineOptions['shouldPersistSnapshot']>();
+
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
     this.options = options;
+  }
+
+  /** Registers a run-scoped `shouldPersistSnapshot` predicate. */
+  setRunPersistenceOverride(
+    runId: string,
+    shouldPersistSnapshot: ExecutionEngineOptions['shouldPersistSnapshot'],
+  ): void {
+    this.runPersistenceOverrides.set(runId, shouldPersistSnapshot);
+  }
+
+  /** Returns the run-scoped `shouldPersistSnapshot` predicate, if one was registered. */
+  getRunPersistenceOverride(runId: string): ExecutionEngineOptions['shouldPersistSnapshot'] | undefined {
+    return this.runPersistenceOverrides.get(runId);
+  }
+
+  /** Clears the run-scoped predicate (called on run cleanup). */
+  clearRunPersistenceOverride(runId: string): void {
+    this.runPersistenceOverrides.delete(runId);
   }
 
   __registerMastra(mastra: Mastra) {
@@ -75,6 +119,20 @@ export abstract class ExecutionEngine extends MastraBase {
 
   public getLogger(): IMastraLogger {
     return this.logger;
+  }
+
+  /**
+   * Invokes the onStart lifecycle callback if it is defined, before any step runs.
+   * Errors are intentionally propagated so the hook can gate the run (for example a
+   * quota check): the caller rejects and the run never executes.
+   */
+  public async invokeStartCallback(info: Omit<WorkflowStartCallbackInfo, 'mastra' | 'logger'>): Promise<void> {
+    const { onStart } = this.options;
+    if (!onStart) {
+      return;
+    }
+
+    await onStart({ ...info, mastra: this.mastra, logger: this.logger });
   }
 
   /**

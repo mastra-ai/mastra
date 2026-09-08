@@ -4,6 +4,8 @@ import rootConfig from '../oxlint.config.ts';
 export default defineConfig({
   extends: [rootConfig],
   ignorePatterns: [
+    'elysia/**/vitest.perf.config.ts',
+    'elysia/**/performance-test.ts',
     'express/**/vitest.perf.config.ts',
     'express/**/performance-test.ts',
     'fastify/**/vitest.perf.config.ts',

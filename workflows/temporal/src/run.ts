@@ -84,6 +84,11 @@ export class TemporalRun<
     }
   }
 
+  async cancel() {
+    await this.client.workflow.getHandle(this.runId).cancel();
+    await super.cancel();
+  }
+
   async startAsync(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);

@@ -3,7 +3,6 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
-import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
@@ -11,7 +10,7 @@ import { McpAppViewer } from './mcp-app-viewer';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { resolveSerializedZodOutput } from '@/lib/form/utils';
+import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -103,7 +102,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
 
   let zodInputSchema;
   try {
-    zodInputSchema = resolveSerializedZodOutput(jsonSchemaToZod(tool.inputSchema as unknown as JsonSchema));
+    zodInputSchema = jsonSchemaToZodRuntime(tool.inputSchema as unknown as JsonSchema);
   } catch (e) {
     console.error('Error processing input schema:', e);
     toast.error('Failed to process tool input schema.');

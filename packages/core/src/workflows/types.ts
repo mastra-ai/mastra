@@ -408,6 +408,28 @@ export interface WorkflowRunState {
 }
 
 /**
+ * Info object passed to the onStart callback before a workflow run begins.
+ */
+export interface WorkflowStartCallbackInfo {
+  /** The unique workflow run ID */
+  runId: string;
+  /** The workflow identifier */
+  workflowId: string;
+  /** Resource/user identifier for multi-tenant scenarios (optional) */
+  resourceId?: string;
+  /** Function to get the initial workflow input data */
+  getInitData: () => any;
+  /** The Mastra instance (if registered) */
+  mastra?: Mastra;
+  /** The request context */
+  requestContext: RequestContext;
+  /** The Mastra logger for structured logging */
+  logger: IMastraLogger;
+  /** The initial workflow state */
+  state: Record<string, any>;
+}
+
+/**
  * Result object passed to the onFinish callback when a workflow completes.
  */
 export interface WorkflowFinishCallbackResult {
@@ -475,15 +497,39 @@ export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**
+   * Whether workflow step lifecycle events are emitted. Defaults to true.
+   * Internal workflows may disable these events when no consumer observes them.
+   */
+  emitStepEvents?: boolean;
+  /**
    * When true, nested runs created by execute() share the parent's pubsub
    * instance instead of creating an isolated one. Used by durable agent
    * workflows so inner step events reach the outer subscriber.
    */
   sharePubsub?: boolean;
+  /**
+   * Whether `Mastra.restartAllActiveWorkflowRuns()` (boot-time generic
+   * recovery) automatically restarts this workflow's active runs. Defaults to
+   * true. Set to false for workflows whose recovery is owned elsewhere or
+   * whose side effects must not be re-driven by a blanket restart — durable
+   * agent workflows set this to false because their recovery is owned by the
+   * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   */
+  autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Acknowledges that `resume()` calls for this workflow cannot be de-duplicated
+   * via the persisted resume claim (for example because `shouldPersistSnapshot`
+   * excludes the `running` status), and suppresses the per-resume warning.
+   *
+   * Set by internal workflows that intentionally trade resume de-duplication
+   * for reduced snapshot writes and serialize their own resumes.
+   */
+  allowUnclaimedResumes?: boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -495,6 +541,20 @@ export interface WorkflowOptions {
    * read on resume (stale suspend payloads, duplicated message arrays).
    */
   pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
+   * Called before a workflow run starts executing, and awaited.
+   * This callback is invoked server-side without requiring client-side .watch().
+   *
+   * Unlike `onFinish`/`onError`, errors thrown here are NOT swallowed: they reject
+   * the `start()`/`stream()` call and the run never executes, so the hook can act as
+   * a pre-flight gate (quota checks, entitlement checks). This mirrors how input
+   * schema validation failures behave: no step executes. The pending run record that
+   * `createRun()` already wrote is left as-is, so a gated run stays at `pending`.
+   *
+   * Fires only when a run first starts, not on resume, restart, or time travel.
+   */
+  onStart?: (info: WorkflowStartCallbackInfo) => Promise<void> | void;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
@@ -528,14 +588,14 @@ export type WorkflowInfo = {
   isProcessorWorkflow?: boolean;
   /**
    * How this workflow got into the live registry. `'code'` for statically
-   * authored / `addWorkflow()`-added workflows, `'stored'` for anything
-   * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
+   * authored / `addWorkflow()`-added workflows, `'dynamic'` for anything
+   * hydrated or added via `addDynamicWorkflow()` (HTTP or SDK).
    *
    * Optional so external consumers of `WorkflowInfo` don't break; the server
    * reads it from `workflow.origin`, which `rehydrateWorkflow` sets to
-   * `'stored'` at construction time (defaults to `'code'`).
+   * `'dynamic'` at construction time (defaults to `'code'`).
    */
-  origin?: 'code' | 'stored';
+  origin?: 'code' | 'dynamic';
 };
 
 export type DefaultEngineType = {};
@@ -546,6 +606,22 @@ export type DefaultEngineType = {};
  * Kept loose here because the precise per-key union lives in the `.map()` overload.
  */
 export type MappingConfig = Record<string, any>;
+
+/**
+ * Optional identity and display metadata accepted by the control-flow builder
+ * methods (`.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`,
+ * `.sleep()`, `.sleepUntil()`, `.map()`). Mirrors the `id` / `description` /
+ * `metadata` model that executable steps already have: `id` is a stable machine
+ * identity for addressing the entry across edits and serialization,
+ * `description` explains the intent of the control-flow operation, and
+ * `metadata` carries arbitrary JSON-serializable data (e.g. a display title
+ * for visual editors). None of these affect execution.
+ */
+export type StepFlowEntryOptions = {
+  id?: string;
+  description?: string;
+  metadata?: StepMetadata;
+};
 
 /**
  * The "single step-like" graph entries: a plain user step plus the declarative
@@ -561,7 +637,13 @@ export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
-  | { type: 'mapping'; id: string; mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType> };
+  | {
+      type: 'mapping';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType>;
+    };
 
 /** The `{ type: 'step' }` variant of {@link SingleStepEntry}: a plain live step. */
 export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
@@ -577,14 +659,34 @@ export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | SingleStepEntry<TEngineType>
-  | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
-  | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
+  | {
+      type: 'sleep';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      duration?: number;
+      fn?: ExecuteFunction<any, any, any, any, any, TEngineType>;
+    }
+  | {
+      type: 'sleepUntil';
+      id: string;
+      description?: string;
+      metadata?: StepMetadata;
+      date?: Date;
+      fn?: ExecuteFunction<any, any, any, any, any, TEngineType>;
+    }
   | {
       type: 'parallel';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SingleStepEntry<TEngineType>[];
     }
   | {
       type: 'conditional';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SingleStepEntry<TEngineType>[];
       conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
@@ -602,6 +704,9 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
       // storable). The live step shape is aligned with `parallel` / `foreach`
       // so the builder can accept an Agent / Tool directly.
       type: 'loop';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SingleStepEntry<TEngineType>;
       condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
@@ -615,6 +720,9 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
     }
   | {
       type: 'foreach';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SingleStepEntry<TEngineType>;
       opts: ForeachOptions;
     };
@@ -695,10 +803,10 @@ export type SerializedSingleStepEntry =
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
     }
-  | { type: 'mapping'; id: string; mapConfig: string }
+  | { type: 'mapping'; id: string; description?: string; metadata?: StepMetadata; mapConfig: string }
   /**
    * A nested workflow referenced by its registered id (code-defined or
-   * another stored workflow). The referenced workflow must resolve on the
+   * another dynamic workflow). The referenced workflow must resolve on the
    * live Mastra registry at rehydration time; missing refs fail loudly.
    *
    * `serializedStepFlow` is the nested workflow's full graph, inlined for
@@ -720,21 +828,31 @@ export type SerializedStepFlowEntry =
   | {
       type: 'sleep';
       id: string;
+      description?: string;
+      metadata?: StepMetadata;
       duration?: number;
       fn?: string;
     }
   | {
       type: 'sleepUntil';
       id: string;
+      description?: string;
+      metadata?: StepMetadata;
       date?: Date;
       fn?: string;
     }
   | {
       type: 'parallel';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SerializedSingleStepEntry[];
     }
   | {
       type: 'conditional';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       steps: SerializedSingleStepEntry[];
       serializedConditions: { id: string; fn: string }[];
       /**
@@ -750,6 +868,9 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'loop';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SerializedSingleStepEntry;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
@@ -762,6 +883,9 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'foreach';
+      id?: string;
+      description?: string;
+      metadata?: StepMetadata;
       step: SerializedSingleStepEntry;
       /**
        * Optional. When omitted, the engine defaults to `concurrency: 1`. Present

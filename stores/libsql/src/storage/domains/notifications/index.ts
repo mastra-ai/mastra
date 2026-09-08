@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Client, InValue } from '@libsql/client';
 import { NotificationsStorage, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   CreateNotificationInput,
@@ -19,6 +18,7 @@ import type {
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
 import { runPrune, resolveTargets } from '../../retention';
 

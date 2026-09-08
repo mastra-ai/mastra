@@ -243,7 +243,10 @@ export class ScoresMySQL extends ScoresStorage {
 
   async saveScore(score: SaveScoreInput): Promise<{ score: ScoreRowData }> {
     try {
-      const id = crypto.randomUUID();
+      // Caller-supplied ids give scores a stable identity: operations.insert
+      // is INSERT ... ON DUPLICATE KEY UPDATE, so retried writes for the same
+      // id converge on one row (latest wins).
+      const id = (score as { id?: string }).id ?? crypto.randomUUID();
       const now = new Date();
 
       await this.operations.insert({

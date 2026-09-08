@@ -10,6 +10,16 @@ const secondEnvVar = 'ANTHROPIC_API_KEY';
 const firstStoredKey = 'mc-e2e-302ai-delete-isolation-key';
 const secondStoredKey = 'mc-e2e-anthropic-preserved-key';
 
+function getProviderPosition(view: string) {
+  const match = view.match(/\((\d+)\/(\d+)\)/);
+  if (!match) throw new Error('Expected /api-keys to show the provider position');
+
+  return {
+    selected: Number(match[1]),
+    total: Number(match[2]),
+  };
+}
+
 export const apiKeyMultiProviderDeleteScenario = {
   name: 'api-key-multi-provider-delete',
   description: 'Keeps API key provider ordering stable and deletes only the selected stored provider key.',
@@ -57,19 +67,38 @@ export const apiKeyMultiProviderDeleteScenario = {
 
     terminal.submit('/api-keys');
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
-    await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/anthropic\s+✓ \(stored\)/i, terminal, 8_000);
+    const firstProviderStatus = /→\s+302ai\s+✓ \(stored\)/i;
+    const secondProviderStatus = /→\s+anthropic\s+✓ \(stored\)/i;
+    await runtime.waitForScreenText(firstProviderStatus, terminal, 8_000);
 
-    const initialView = terminal.serialize().view;
-    const firstIndex = initialView.indexOf('302ai');
-    const secondIndex = initialView.indexOf('anthropic');
-    if (firstIndex < 0 || secondIndex < 0 || firstIndex >= secondIndex) {
-      throw new Error(`Expected /api-keys provider list to show 302ai before anthropic. Screen:\n${initialView}`);
+    const firstProviderPosition = getProviderPosition(terminal.serialize().view);
+    let navigationSteps = 0;
+    while (navigationSteps < firstProviderPosition.total && !secondProviderStatus.test(terminal.serialize().view)) {
+      terminal.write('\x1b[B');
+      await terminal.flushInput?.();
+      navigationSteps += 1;
+    }
+    await runtime.waitForScreenText(secondProviderStatus, terminal, 8_000);
+
+    const secondProviderPosition = getProviderPosition(terminal.serialize().view);
+    if (secondProviderPosition.selected <= firstProviderPosition.selected) {
+      throw new Error('Expected /api-keys to sort 302ai before anthropic');
     }
 
+    for (let index = 0; index < navigationSteps; index += 1) {
+      terminal.write('\x1b[A');
+      await terminal.flushInput?.();
+    }
+    await runtime.waitForScreenText(firstProviderStatus, terminal, 8_000);
+
     terminal.write('\x7f');
-    await runtime.waitForScreenText(/302ai\s+✗ \(not set\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/anthropic\s+✓ \(stored\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/→\s+302ai\s+✗ \(not set\)/i, terminal, 8_000);
+
+    for (let index = 0; index < navigationSteps; index += 1) {
+      terminal.write('\x1b[B');
+      await terminal.flushInput?.();
+    }
+    await runtime.waitForScreenText(secondProviderStatus, terminal, 8_000);
 
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);

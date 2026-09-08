@@ -1,3 +1,4 @@
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -124,16 +125,54 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.text()).toBe('ok');
   });
 
+  it('forwards the platform deploy-auth /login landing to /signin with its query intact', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/login?error=access_denied&error_description=You%20do%20not%20have%20access', {
+      headers: { Accept: 'text/html' },
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You%20do%20not%20have%20access',
+    );
+  });
+
   it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    for (const path of ['/assets/app.js', '/manifest.webmanifest', '/mastra.svg']) {
+    for (const path of [
+      '/assets/app.js',
+      '/manifest.webmanifest',
+      '/mastra.svg',
+      '/pwa-192.png',
+      '/pwa-512.png',
+      '/apple-touch-icon.png',
+      '/favicon-session-initializing.svg',
+      '/favicon-session-working.svg',
+      '/favicon-session-awaiting.svg',
+      '/favicon-session-error.svg',
+    ]) {
       const res = await app.request(path, { headers: { Accept: '*/*' } });
       expect(res.status).toBe(200);
       expect(await res.text()).toBe('ok');
     }
     expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('keeps auth on other /favicon-session- paths and on non-GET favicon requests', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const unknownAsset = await app.request('/favicon-session-admin/config.json', { headers: { Accept: '*/*' } });
+    expect(unknownAsset.status).toBe(401);
+
+    const written = await app.request('/favicon-session-working.svg', {
+      method: 'POST',
+      headers: { Accept: '*/*' },
+    });
+    expect(written.status).toBe(401);
   });
 
   it('returns 401 JSON for unauthenticated /api requests', async () => {
@@ -262,18 +301,160 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('stashes the authenticated user on the context for downstream routes', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_123', email: 'user@example.com', name: 'User' });
+  it('stashes flat-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      email: 'user@example.com',
+      name: 'User',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
     const app = new Hono();
     mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
     app.get('/web/whoami', c => {
       const user = getFactoryAuthUser(c);
-      return c.json({ userId: getFactoryAuthUserId(user) });
+      return c.json({ userId: getFactoryAuthUserId(user), avatarUrl: user?.avatarUrl });
     });
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ userId: 'user_123' });
+    expect(await res.json()).toEqual({ userId: 'user_123', avatarUrl: 'https://avatars.example/user.png' });
+  });
+
+  it('stashes session-provider avatar URLs on the context for downstream routes', async () => {
+    mockAuthenticate.mockResolvedValue({
+      session: { activeOrganizationId: 'org_123' },
+      user: {
+        id: 'user_123',
+        email: 'user@example.com',
+        name: 'User',
+        avatarUrl: 'https://avatars.example/user.png',
+      },
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => {
+      const user = getFactoryAuthUser(c);
+      return c.json({
+        userId: getFactoryAuthUserId(user),
+        organizationId: getFactoryAuthOrgId(user),
+        avatarUrl: user?.avatarUrl,
+      });
+    });
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      userId: 'user_123',
+      organizationId: 'org_123',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
+  });
+
+  it('names the signed-in user as the author of messages sent on this request', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      email: 'user@example.com',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('requestContext' as never, new RequestContext() as never);
+      await next();
+    });
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c =>
+      c.json((c.get('requestContext' as never) as RequestContext).get(MASTRA_MESSAGE_AUTHOR_KEY)),
+    );
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: 'user_123',
+      name: 'user@example.com',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
+  });
+
+  it('selects a requested bearer organization proven by provider memberships', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      memberships: [
+        { id: 'membership_1', organizationId: 'org_1' },
+        { id: 'membership_2', organizationId: 'org_2' },
+      ],
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('selects a requested bearer organization proven by Studio membership ids', async () => {
+    mockAuthenticate.mockResolvedValue({
+      id: 'user_123',
+      organizationId: 'org_1',
+      memberOrgIds: ['org_1', 'org_2'],
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('rejects a requested bearer organization not present in provider memberships', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      memberships: [{ id: 'membership_1', organizationId: 'org_1' }],
+    });
+    const { app } = buildApp();
+
+    const res = await app.request('/web/projects', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_other',
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('does not let an organization header change cookie-authenticated tenancy', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_123', organizationId: 'org_cookie' });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: { Accept: 'application/json', 'X-Mastra-Organization-Id': 'org_other' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
   });
 });
 
@@ -357,6 +538,19 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(mockHandleCallback).not.toHaveBeenCalled();
   });
 
+  it('surfaces an IdP denial on /signin, keeping the intended destination for a retry', async () => {
+    const { app } = buildApp();
+    const state = `uuid-1|${encodeURIComponent('/dashboard')}`;
+    const res = await app.request(
+      `/auth/callback?error=access_denied&error_description=You%20do%20not%20have%20access&state=${state}`,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(
+      '/signin?error=access_denied&error_description=You+do+not+have+access&returnTo=%2Fdashboard',
+    );
+    expect(mockHandleCallback).not.toHaveBeenCalled();
+  });
+
   it('redirects callback back to login when the code exchange fails', async () => {
     mockHandleCallback.mockRejectedValue(new Error('expired code'));
     const { app } = buildApp();
@@ -392,14 +586,26 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
   });
 
   it('/auth/me reports the user when authenticated', async () => {
-    mockAuthenticate.mockResolvedValue({ workosId: 'user_me', email: 'user@example.com', name: 'User' });
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_me',
+      email: 'user@example.com',
+      name: 'User',
+      avatarUrl: 'https://avatars.example/user.png',
+    });
     const { app } = buildApp();
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       // No-org accounts are bootstrapped into a personal org during /auth/me.
-      user: { userId: 'user_me', email: 'user@example.com', name: 'User', organizationId: 'org_new' },
+      user: {
+        userId: 'user_me',
+        email: 'user@example.com',
+        name: 'User',
+        avatarUrl: 'https://avatars.example/user.png',
+        organizationId: 'org_new',
+      },
       provider: 'workos',
     });
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_me');
@@ -417,6 +623,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
       provider: 'workos',
     });

@@ -9,24 +9,18 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
 import type { GoogleUser, MastraAuthGoogleOptions } from './types';
 import { mapGoogleClaimsToUser } from './types';
-
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
 
 const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -49,14 +43,6 @@ interface StatePayload {
   e: number;
   /** OIDC nonce tied to the ID token. */
   n: string;
-}
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
 }
 
 function normalizeDomain(domain: string | undefined | null): string | undefined {

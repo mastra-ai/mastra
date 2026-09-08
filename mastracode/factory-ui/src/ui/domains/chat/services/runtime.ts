@@ -1,14 +1,28 @@
-import type { AgentControllerEvent, AgentControllerOMProgress, KnownAgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerOMProgress } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { TokenUsage } from '@mastra/core/agent-controller';
 
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
+/**
+ * The memory budgets the status line reads. Two sources feed them and only
+ * agree on these fields: the session-state route (which also derives projected
+ * savings) and the `display_state_changed` snapshot (which also carries the
+ * buffering internals).
+ */
+export type OMBudgets = Pick<
+  AgentControllerOMProgress,
+  | 'status'
+  | 'pendingTokens'
+  | 'threshold'
+  | 'thresholdPercent'
+  | 'observationTokens'
+  | 'reflectionThreshold'
+  | 'reflectionThresholdPercent'
+>;
 
-export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+export type OMPhase = 'idle' | 'observing' | 'reflecting';
+
+/** Memory work on one budget: none, in the background, or with the turn on hold. */
+export type OMWork = 'idle' | 'background' | 'blocking';
 
 export interface GoalSnapshot {
   objective: string;
@@ -20,10 +34,12 @@ export interface GoalSnapshot {
 }
 
 export interface ChatRuntimeState {
-  usage?: UsageSnapshot;
+  usage?: TokenUsage;
   followUpCount: number;
-  omProgress?: AgentControllerOMProgress;
+  omProgress?: OMBudgets;
   omPhase: OMPhase;
+  bufferingMessages: boolean;
+  bufferingObservations: boolean;
   goal?: GoalSnapshot;
   tokensPerSec: number;
   _decodeStartedAt: number;
@@ -32,25 +48,47 @@ export interface ChatRuntimeState {
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
   omPhase: 'idle',
+  bufferingMessages: false,
+  bufferingObservations: false,
   tokensPerSec: 0,
   _decodeStartedAt: 0,
 };
 
-export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEvent): ChatRuntimeState {
-  const knownEvent = event as KnownAgentControllerEvent;
+export interface OMWorkByBudget {
+  messages: OMWork;
+  observations: OMWork;
+}
 
-  switch (knownEvent.type) {
+function budgetWork(buffering: boolean, blocking: boolean): OMWork {
+  if (buffering) return 'background';
+  return blocking ? 'blocking' : 'idle';
+}
+
+/** Buffering is level-triggered from the display state, so it outranks the start events a background retry also emits. */
+export function omWork(
+  state: Pick<ChatRuntimeState, 'omPhase' | 'bufferingMessages' | 'bufferingObservations'>,
+): OMWorkByBudget {
+  return {
+    messages: budgetWork(state.bufferingMessages, state.omPhase === 'observing'),
+    observations: budgetWork(state.bufferingObservations, state.omPhase === 'reflecting'),
+  };
+}
+
+export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEvent): ChatRuntimeState {
+  if (!isKnownAgentControllerEvent(event)) return state;
+
+  switch (event.type) {
     case 'agent_start':
       return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
       return { ...state, _decodeStartedAt: 0 };
     case 'message_start':
     case 'message_update':
-      if (!hasAssistantText(knownEvent.message) || state._decodeStartedAt > 0) return state;
+      if (!hasAssistantText(event.message) || state._decodeStartedAt > 0) return state;
       return { ...state, _decodeStartedAt: Date.now() };
     case 'usage_update': {
-      const usage = knownEvent.usage as UsageSnapshot;
-      const stepTokens = (usage.completionTokens ?? 0) + (usage.reasoningTokens ?? 0);
+      const usage = event.usage;
+      const stepTokens = usage.completionTokens + (usage.reasoningTokens ?? 0);
       let tokensPerSec = state.tokensPerSec;
       if (state._decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSeconds = Math.max((Date.now() - state._decodeStartedAt) / 1000, 0.001);
@@ -65,38 +103,35 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
     case 'display_state_changed':
       return {
         ...state,
-        omProgress: knownEvent.displayState.omProgress ?? state.omProgress,
-        usage: (knownEvent.displayState.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        omProgress: event.displayState.omProgress,
+        usage: event.displayState.tokenUsage,
+        bufferingMessages: event.displayState.bufferingMessages ?? false,
+        bufferingObservations: event.displayState.bufferingObservations ?? false,
       };
     case 'goal_evaluation':
       return {
         ...state,
         goal: {
-          objective: knownEvent.payload.objective,
-          status: knownEvent.payload.status,
-          iteration: knownEvent.payload.iteration,
-          maxRuns: knownEvent.payload.maxRuns,
-          passed: knownEvent.payload.passed,
-          reason: knownEvent.payload.reason,
+          objective: event.payload.objective,
+          status: event.payload.status,
+          iteration: event.payload.iteration,
+          maxRuns: event.payload.maxRuns,
+          passed: event.payload.passed,
+          reason: event.payload.reason,
         },
       };
     case 'follow_up_queued':
-      return { ...state, followUpCount: knownEvent.count };
+      return { ...state, followUpCount: event.count };
     case 'om_observation_start':
       return { ...state, omPhase: 'observing' };
     case 'om_observation_end':
     case 'om_observation_failed':
     case 'om_reflection_end':
     case 'om_reflection_failed':
-    case 'om_buffering_end':
-    case 'om_buffering_failed':
+    case 'om_activation':
       return { ...state, omPhase: 'idle' };
     case 'om_reflection_start':
       return { ...state, omPhase: 'reflecting' };
-    case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
-    case 'om_activation':
-      return knownEvent.enabled ? state : { ...state, omPhase: 'idle' };
     default:
       return state;
   }

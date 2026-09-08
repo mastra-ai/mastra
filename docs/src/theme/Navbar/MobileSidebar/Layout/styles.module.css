@@ -1,0 +1,11 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+.items {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}

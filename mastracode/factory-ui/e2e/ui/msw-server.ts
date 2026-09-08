@@ -1,6 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
+import { attentionKindSummaries } from './attention';
+
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
  * (`vitest.setup.ts`) starts it with `onUnhandledRequest: 'error'` so any
@@ -20,7 +22,28 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Experimental surfaces stay hidden unless a test explicitly enables them.
+  http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
+  // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
+  http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
+  http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
+  http.get('*/web/factory/projects/:id/attention', () =>
+    HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false }),
+  ),
+  http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
+  // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It
+  // must never close — a closing stream puts every test into the retry loop.
+  http.get(
+    '*/web/factory/projects/:id/feed-events',
+    () =>
+      new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+  ),
+  http.get('*/web/factory/work-items/:workItemId/comments', () => HttpResponse.json({ comments: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

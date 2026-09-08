@@ -10,6 +10,7 @@ export {
   type PromptInjectionOptions,
   type PromptInjectionResult,
   type PromptInjectionCategoryScores,
+  type PromptInjectionDetectionEvent,
 } from './prompt-injection-detector';
 export {
   PIIDetector,
@@ -18,6 +19,7 @@ export {
   type PIICategories,
   type PIICategoryScores,
   type PIIDetection,
+  type PIIDetectionEvent,
 } from './pii-detector';
 export {
   LanguageDetector,
@@ -42,14 +44,22 @@ export {
 } from './system-prompt-scrubber';
 
 export {
+  TokenCostControl,
+  type TokenCostControlOptions,
+  type TokenCostControlUsage,
+  type TokenCostControlBreakdownEntry,
+  type TokenCostControlTripwireMetadata,
+  type TokenCostControlViolationDetail,
+  type CostScope,
+  type CostWindow,
+  // Deprecated alias for the previous API name
   CostGuardProcessor,
   type CostGuardOptions,
   type CostGuardUsage,
+  type CostGuardBreakdownEntry,
   type CostGuardTripwireMetadata,
   type CostGuardViolationDetail,
-  type CostScope,
-  type CostWindow,
-} from './cost-guard';
+} from './token-cost-control';
 
 export {
   RegexFilterProcessor,
@@ -71,7 +81,7 @@ export {
   type ToolSearchFilterPhase,
   type ToolSearchProcessorOptions,
 } from './tool-search';
-export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
+export { SkillsProcessor, formatSkillsCatalog, type SkillCatalogEntry, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
 export {

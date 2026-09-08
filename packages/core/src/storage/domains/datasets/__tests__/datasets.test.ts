@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { ExperimentsInMemory } from '../../experiments/inmemory';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
 
@@ -373,6 +374,47 @@ describe('DatasetsInMemory', () => {
       expect(notFound).toBeNull();
     });
 
+    it('getItemById returns the item row visible in the requested dataset snapshot', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const itemA = await storage.addItem({ datasetId: dataset.id, input: { value: 'original' } });
+
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: 0 })).resolves.toBeNull();
+
+      const itemB = await storage.addItem({ datasetId: dataset.id, input: { value: 'second item' } });
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion })).resolves.toMatchObject({
+        id: itemA.id,
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'original' },
+      });
+
+      const updated = await storage.updateItem({
+        id: itemA.id,
+        datasetId: dataset.id,
+        input: { value: 'updated' },
+      });
+      await expect(storage.getItemById({ id: itemA.id, datasetVersion: itemB.datasetVersion })).resolves.toMatchObject({
+        datasetVersion: itemA.datasetVersion,
+        input: { value: 'original' },
+      });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+      ).resolves.toMatchObject({
+        datasetVersion: updated.datasetVersion,
+        input: { value: 'updated' },
+      });
+
+      await storage.deleteItem({ id: itemA.id, datasetId: dataset.id });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion }),
+      ).resolves.toMatchObject({
+        datasetVersion: updated.datasetVersion,
+        input: { value: 'updated' },
+      });
+      await expect(
+        storage.getItemById({ id: itemA.id, datasetVersion: updated.datasetVersion + 1 }),
+      ).resolves.toBeNull();
+    });
+
     it('updateItem modifies item fields', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
@@ -554,7 +596,140 @@ describe('DatasetsInMemory', () => {
       expect(fetched).toBeNull();
     });
 
-    it('getItemById with datasetVersion returns exact row (T3.13)', async () => {
+    it('purgeItem scrubs every historical row without changing version visibility', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { patient: 'Alice' },
+        groundTruth: { diagnosis: 'private' },
+        metadata: { note: 'private' },
+      });
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { patient: 'Bob' },
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+      expect(
+        history.every(
+          row =>
+            row.input === null &&
+            row.groundTruth === null &&
+            row.expectedTrajectory === null &&
+            row.toolMocks === null &&
+            row.unmockedToolPolicy === null &&
+            row.scorerIds === null &&
+            row.requestContext === null &&
+            row.source === null,
+        ),
+      ).toBe(true);
+      expect(history.every(row => row.metadata?.__purged === true)).toBe(true);
+      await expect(storage.getItemById({ id: item.id, datasetVersion: item.datasetVersion })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+      await expect(storage.getItemById({ id: item.id, datasetVersion: updated.datasetVersion })).resolves.toMatchObject(
+        { input: null, metadata: { __purged: true } },
+      );
+    });
+
+    it('rejects updates that would restore purged item data', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: dataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toMatchObject({ id: 'DATASET_ITEM_PURGED' });
+      await expect(storage.getItemHistory(item.id)).resolves.toHaveLength(1);
+      await expect(storage.getItemById({ id: item.id })).resolves.toMatchObject({
+        input: null,
+        metadata: { __purged: true },
+      });
+    });
+
+    it('does not disclose purge state when updating an item through another dataset', async () => {
+      const sourceDataset = await storage.createDataset({ name: 'source' });
+      const targetDataset = await storage.createDataset({ name: 'target' });
+      const item = await storage.addItem({ datasetId: sourceDataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: sourceDataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: targetDataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toThrow('does not belong to dataset');
+    });
+
+    it('redacts in-memory experiment result writes submitted after item purge', async () => {
+      const experiments = new ExperimentsInMemory({ db });
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
+      const experiment = await experiments.createExperiment({
+        name: 'late-result',
+        datasetId: dataset.id,
+        datasetVersion: item.datasetVersion,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        totalItems: 1,
+      });
+
+      await storage.purgeItem({ id: item.id, datasetId: dataset.id });
+      const added = await experiments.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        tags: ['patient-alice'],
+      });
+      const updated = await experiments.updateExperimentResult({
+        id: added.id,
+        experimentId: experiment.id,
+        status: 'needs-review',
+        tags: ['patient-alice'],
+        comment: 'Patient Alice requires review',
+      });
+      const upserted = await experiments.upsertExperimentResult({
+        experimentId: experiment.id,
+        itemId: item.id,
+        itemDatasetVersion: item.datasetVersion,
+        input: { patient: 'Alice' },
+        output: { diagnosis: 'restored secret' },
+        groundTruth: { expected: 'private' },
+        metadata: { note: 'private' },
+        error: { message: 'Patient Alice failed' },
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        attempt: 0,
+      });
+
+      expect(added).toMatchObject({ input: null, output: null, metadata: { __purged: true }, tags: null });
+      expect(updated).toMatchObject({ status: 'needs-review', tags: null, comment: null });
+      expect(upserted).toMatchObject({
+        id: added.id,
+        input: null,
+        output: null,
+        groundTruth: null,
+        metadata: { __purged: true },
+        error: null,
+        tags: null,
+        comment: null,
+      });
+    });
+
+    it('getItemById with datasetVersion returns the row visible in the snapshot (T3.13)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 }, scorerIds: ['quality'] });
 
@@ -577,9 +752,9 @@ describe('DatasetsInMemory', () => {
       expect(atV2?.input).toEqual({ n: 2 });
       expect(atV2?.scorerIds).toEqual(['safety']);
 
-      // Version 99 — doesn't exist
+      // The current row remains visible in later snapshots
       const atV99 = await storage.getItemById({ id: item.id, datasetVersion: 99 });
-      expect(atV99).toBeNull();
+      expect(atV99?.input).toEqual({ n: 2 });
     });
 
     it('every mutation inserts a dataset_version row (T3.11)', async () => {

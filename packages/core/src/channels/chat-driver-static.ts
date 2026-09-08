@@ -33,6 +33,11 @@ export interface StaticDriverArgs {
   takePendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
   /** Optional adapter-supplied formatter for `error` chunks; defaults to a plain prefix. */
   formatError?: (error: Error) => unknown;
+  /**
+   * Dialect for the final reply text. `'markdown'` (the absent-value default)
+   * posts the buffered reply as `{ markdown }`; `'plain'` posts the bare string.
+   */
+  textFormat?: 'markdown' | 'plain';
 }
 
 /**
@@ -57,6 +62,7 @@ export async function runStaticDriver({
   getPendingApproval,
   takePendingApproval,
   formatError,
+  textFormat,
 }: StaticDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -70,18 +76,37 @@ export async function runStaticDriver({
   const renderToolEvent = (event: ToolDisplayEvent): PostableMessage | null => {
     if (toolDisplayFn) {
       const result = toolDisplayFn(event, { mode: 'static', platform });
-      if (result == null) return null;
+      // Approval requests must remain actionable even when a custom renderer
+      // intentionally suppresses ordinary tool chatter. A nullish result for
+      // an approval event falls back to the built-in card with Approve/Deny
+      // buttons; other events remain opt-out via `undefined`.
+      if (result == null) {
+        return event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null;
+      }
       if (result.kind === 'post') {
         // Skip blank posts so a fn that intentionally returns "" doesn't
         // post an empty message into the chat.
-        if (result.message == null) return null;
-        if (typeof result.message === 'string' && result.message.length === 0) return null;
+        const fallbackApproval = () => (event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null);
+        if (result.message == null) return fallbackApproval();
+        if (typeof result.message === 'string' && result.message.trim().length === 0) return fallbackApproval();
+        if (
+          typeof result.message === 'object' &&
+          'markdown' in result.message &&
+          result.message.markdown.trim().length === 0
+        ) {
+          return fallbackApproval();
+        }
         return result.message;
       }
-      if (result.kind === 'stream') return chunkToFallbackMessage(result.chunk);
+      if (result.kind === 'stream') {
+        const message = chunkToFallbackMessage(result.chunk);
+        return message ?? (event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null);
+      }
       return null;
     }
-    if (toolDisplay === 'hidden') return null;
+    if (toolDisplay === 'hidden') {
+      return event.kind === 'approval' ? renderBuiltInToolEvent(event, 'cards') : null;
+    }
     return renderBuiltInToolEvent(event, toolDisplay);
   };
 
@@ -100,7 +125,7 @@ export async function runStaticDriver({
     const cleaned = textBuffer.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
     if (cleaned) {
       try {
-        await chatThread.post(cleaned);
+        await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });
       } catch (e) {
         logger?.debug('[CHANNEL] Failed to post buffered text', { error: e });
       }

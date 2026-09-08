@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -21,6 +23,7 @@ import type {
   UpdateExperimentInput,
   AddExperimentResultInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
   ListExperimentsInput,
   ListExperimentsOutput,
   ListExperimentResultsInput,
@@ -32,8 +35,9 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
@@ -61,8 +65,8 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     this.#indexes = indexes?.filter(idx => (ExperimentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
@@ -90,12 +94,32 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'provenance',
+        'runnerAttestation',
+        'experimentSetId',
+        'comparisonId',
+        'variantId',
+        'trialIndex',
+        'scorerIds',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'status',
+        'tags',
+        'comment',
+        'toolMockReport',
+        'metadata',
+        'organizationId',
+        'projectId',
+        'attempt',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -184,11 +208,18 @@ export class ExperimentsPG extends ExperimentsStorage {
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
     return [
       { name: 'idx_experiments_datasetid', table: TABLE_EXPERIMENTS, columns: ['datasetId'] },
-      { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
       {
-        name: 'idx_experiment_results_exp_item',
+        name: 'idx_experiments_grouping',
+        table: TABLE_EXPERIMENTS,
+        columns: ['experimentSetId', 'comparisonId', 'variantId', 'trialIndex'],
+      },
+      { name: 'idx_experiment_results_experimentid', table: TABLE_EXPERIMENT_RESULTS, columns: ['experimentId'] },
+      // The natural key includes `attempt` so external runners can record
+      // repeated trials as separate rows (retry convergence happens per attempt).
+      {
+        name: 'idx_experiment_results_exp_item_attempt',
         table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['experimentId', 'itemId'],
+        columns: ['experimentId', 'itemId', 'attempt'],
         unique: true,
       },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
@@ -207,6 +238,13 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
+    // Legacy unique index without `attempt` — superseded by idx_experiment_results_exp_item_attempt.
+    // dropIndex is snapshot-aware, so converged inits stay DDL- and probe-free.
+    try {
+      await this.#db.dropIndex('idx_experiment_results_exp_item');
+    } catch (error) {
+      this.logger?.warn?.('Failed to drop legacy index idx_experiment_results_exp_item:', error);
+    }
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);
@@ -235,13 +273,20 @@ export class ExperimentsPG extends ExperimentsStorage {
       name: (row.name as string) ?? undefined,
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      provenance: row.provenance ? safelyParseJSON(row.provenance) : null,
+      runnerAttestation: row.runnerAttestation ? safelyParseJSON(row.runnerAttestation) : null,
+      experimentSetId: (row.experimentSetId as string | null) ?? null,
+      comparisonId: (row.comparisonId as string | null) ?? null,
+      variantId: (row.variantId as string | null) ?? null,
+      trialIndex: row.trialIndex != null ? (row.trialIndex as number) : null,
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      targetType: row.targetType as Experiment['targetType'],
-      targetId: row.targetId as string,
+      targetType: (row.targetType as Experiment['targetType']) ?? null,
+      targetId: (row.targetId as string | null) ?? null,
+      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : null,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
       succeededCount: row.succeededCount as number,
@@ -262,13 +307,15 @@ export class ExperimentsPG extends ExperimentsStorage {
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      input: safelyParseJSON(row.input),
+      input: row.input === null ? null : safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
+      metadata: row.metadata ? safelyParseJSON(row.metadata) : null,
       error: row.error ? safelyParseJSON(row.error) : null,
       startedAt: ensureDate(row.startedAtZ || row.startedAt)!,
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
       retryCount: row.retryCount as number,
+      attempt: row.attempt != null ? (row.attempt as number) : 0,
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
@@ -293,13 +340,20 @@ export class ExperimentsPG extends ExperimentsStorage {
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ?? null,
+          provenance: input.provenance ?? null,
+          runnerAttestation: input.runnerAttestation ?? null,
+          experimentSetId: input.experimentSetId ?? null,
+          comparisonId: input.comparisonId ?? null,
+          variantId: input.variantId ?? null,
+          trialIndex: input.trialIndex ?? null,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
-          targetType: input.targetType,
-          targetId: input.targetId,
+          targetType: input.targetType ?? null,
+          targetId: input.targetId ?? null,
+          scorerIds: input.scorerIds ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -317,13 +371,20 @@ export class ExperimentsPG extends ExperimentsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        provenance: input.provenance ?? null,
+        runnerAttestation: input.runnerAttestation ?? null,
+        experimentSetId: input.experimentSetId ?? null,
+        comparisonId: input.comparisonId ?? null,
+        variantId: input.variantId ?? null,
+        trialIndex: input.trialIndex ?? null,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         agentVersion: input.agentVersion ?? null,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        scorerIds: input.scorerIds ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -348,7 +409,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
     try {
-      const existing = await this.getExperimentById({ id: input.id });
+      const existing = await this.#getExperimentById(this.#db.client, { id: input.id });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
@@ -412,7 +473,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       );
 
       // Re-SELECT to get correctly transformed fields (timestamps, jsonb)
-      const updated = await this.getExperimentById({ id: input.id });
+      const updated = await this.#getExperimentById(this.#db.client, { id: input.id });
       return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -427,18 +488,23 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({
-    id,
-    filters,
-  }: {
-    id: string;
-    filters?: ExperimentTenancyFilters;
-  }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    return this.#getExperimentById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -482,6 +548,22 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
       }
+      if (args.experimentSetId !== undefined) {
+        conditions.push(`"experimentSetId" = $${paramIndex++}`);
+        queryParams.push(args.experimentSetId);
+      }
+      if (args.comparisonId !== undefined) {
+        conditions.push(`"comparisonId" = $${paramIndex++}`);
+        queryParams.push(args.comparisonId);
+      }
+      if (args.variantId !== undefined) {
+        conditions.push(`"variantId" = $${paramIndex++}`);
+        queryParams.push(args.variantId);
+      }
+      if (args.trialIndex !== undefined) {
+        conditions.push(`"trialIndex" = $${paramIndex++}`);
+        queryParams.push(args.trialIndex);
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
@@ -497,7 +579,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Count
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -511,7 +593,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -571,56 +653,76 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   // --- Experiment results ---
 
+  async #resolvePurgeMetadata(
+    t: TxClient,
+    datasetId: string | null | undefined,
+    itemId: string,
+  ): Promise<Record<string, unknown> | null> {
+    if (!datasetId) return null;
+
+    const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+    const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+    const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+    if (!dataset) return null;
+
+    const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT "metadata" FROM ${itemsTable}
+       WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+       LIMIT 1`,
+      [itemId, datasetId],
+    );
+    return purge?.metadata ?? null;
+  }
+
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const id = input.id ?? crypto.randomUUID();
-      const now = new Date();
-      const nowIso = now.toISOString();
+      const resultsTable = getTableName({
+        indexName: TABLE_EXPERIMENT_RESULTS,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      await this.#db.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
-          id,
-          experimentId: input.experimentId,
-          itemId: input.itemId,
-          itemDatasetVersion: input.itemDatasetVersion ?? null,
-          organizationId: input.organizationId ?? null,
-          projectId: input.projectId ?? null,
-          input: input.input,
-          output: input.output ?? null,
-          groundTruth: input.groundTruth ?? null,
-          error: input.error ?? null,
-          startedAt: input.startedAt.toISOString(),
-          completedAt: input.completedAt.toISOString(),
-          retryCount: input.retryCount,
-          traceId: input.traceId ?? null,
-          status: input.status ?? null,
-          tags: input.tags ?? null,
-          toolMockReport: input.toolMockReport ?? null,
-          createdAt: nowIso,
-        },
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
+        const nowIso = new Date().toISOString();
+        return t.one(
+          `INSERT INTO ${resultsTable} (
+            "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+            "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+            "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          RETURNING *`,
+          [
+            id,
+            input.experimentId,
+            input.itemId,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            input.attempt ?? 0,
+            input.traceId ?? null,
+            input.status ?? null,
+            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+            nowIso,
+          ],
+        );
       });
 
-      return {
-        id,
-        experimentId: input.experimentId,
-        itemId: input.itemId,
-        itemDatasetVersion: input.itemDatasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        input: input.input,
-        output: input.output ?? null,
-        groundTruth: input.groundTruth ?? null,
-        error: input.error ?? null,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        retryCount: input.retryCount,
-        traceId: input.traceId ?? null,
-        status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
-        createdAt: now,
-      };
+      return this.transformExperimentResultRow(row);
     } catch (error) {
       throw new MastraError(
         {
@@ -633,50 +735,146 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+      const attempt = input.attempt ?? 0;
+
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null }>(
+          `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
+          [input.experimentId],
+        );
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
+
+        // Natural key lookup under FOR UPDATE so concurrent retries serialize
+        // on the same row instead of inserting duplicates.
+        // Note: COALESCE("attempt", 0) is an expression predicate, so the
+        // planner narrows on the ("experimentId", "itemId") index prefix and
+        // filters the attempt term — bounded cost since one item has few
+        // attempts. Once legacy NULL attempts are backfilled to 0 and the
+        // column is NOT NULL DEFAULT 0, this can become "attempt" = $3 for a
+        // full index match.
+        const existing = await t.oneOrNone(
+          `SELECT "id" FROM ${tableName} WHERE "experimentId" = $1 AND "itemId" = $2 AND COALESCE("attempt", 0) = $3 FOR UPDATE`,
+          [input.experimentId, input.itemId, attempt],
+        );
+
+        if (!existing) {
+          const id = crypto.randomUUID();
+          return t.one(
+            `INSERT INTO ${tableName} (
+              "id", "experimentId", "itemId", "itemDatasetVersion", "organizationId", "projectId",
+              "input", "output", "groundTruth", "metadata", "error", "startedAt", "completedAt",
+              "retryCount", "attempt", "traceId", "status", "tags", "toolMockReport", "createdAt"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            RETURNING *`,
+            [
+              id,
+              input.experimentId,
+              input.itemId,
+              input.itemDatasetVersion ?? null,
+              input.organizationId ?? null,
+              input.projectId ?? null,
+              JSON.stringify(purgeMetadata ? null : input.input),
+              purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+              purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+              JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+              purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+              input.startedAt.toISOString(),
+              input.completedAt.toISOString(),
+              input.retryCount,
+              attempt,
+              input.traceId ?? null,
+              input.status ?? null,
+              purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+              purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+              new Date().toISOString(),
+            ],
+          );
+        }
+
+        // Last write wins on the natural key; keep row id + createdAt stable.
+        return t.one(
+          `UPDATE ${tableName} SET
+            "itemDatasetVersion" = $2, "organizationId" = $3, "projectId" = $4,
+            "input" = $5, "output" = $6, "groundTruth" = $7, "metadata" = $8, "error" = $9,
+            "startedAt" = $10, "completedAt" = $11, "retryCount" = $12, "attempt" = $13,
+            "traceId" = $14, "status" = $15, "tags" = $16, "toolMockReport" = $17
+          WHERE "id" = $1 RETURNING *`,
+          [
+            existing.id,
+            input.itemDatasetVersion ?? null,
+            input.organizationId ?? null,
+            input.projectId ?? null,
+            JSON.stringify(purgeMetadata ? null : input.input),
+            purgeMetadata || input.output == null ? null : JSON.stringify(input.output),
+            purgeMetadata || input.groundTruth == null ? null : JSON.stringify(input.groundTruth),
+            JSON.stringify(purgeMetadata ?? input.metadata ?? null),
+            purgeMetadata || input.error == null ? null : JSON.stringify(input.error),
+            input.startedAt.toISOString(),
+            input.completedAt.toISOString(),
+            input.retryCount,
+            attempt,
+            input.traceId ?? null,
+            input.status ?? null,
+            purgeMetadata || input.tags == null ? null : JSON.stringify(input.tags),
+            purgeMetadata || input.toolMockReport == null ? null : JSON.stringify(input.toolMockReport),
+          ],
+        );
+      });
+
+      return this.transformExperimentResultRow(row);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const setClauses: string[] = [];
-      const values: any[] = [];
-      let paramIndex = 1;
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      if (input.status !== undefined) {
-        setClauses.push(`"status" = $${paramIndex++}`);
-        values.push(input.status);
-      }
-      if (input.tags !== undefined) {
-        setClauses.push(`"tags" = $${paramIndex++}`);
-        values.push(JSON.stringify(input.tags));
-      }
-      if (input.comment !== undefined) {
-        setClauses.push(`"comment" = $${paramIndex++}`);
-        values.push(input.comment);
-      }
+      const row = await this.#db.client.tx(async t => {
+        const owner = await t.oneOrNone<{ datasetId: string | null; itemId: string }>(
+          `SELECT e."datasetId", r."itemId"
+           FROM ${tableName} r
+           JOIN ${experimentsTable} e ON e."id" = r."experimentId"
+           WHERE r."id" = $1${input.experimentId !== undefined ? ' AND r."experimentId" = $2' : ''}`,
+          input.experimentId !== undefined ? [input.id, input.experimentId] : [input.id],
+        );
+        if (!owner) return null;
 
-      if (setClauses.length === 0) {
-        const existing = await this.getExperimentResultById({ id: input.id });
-        if (!existing) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { resultId: input.id },
-          });
-        }
-        return existing;
-      }
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner.datasetId, owner.itemId);
 
-      values.push(input.id);
-      let whereClause = `"id" = $${paramIndex}`;
-      if (input.experimentId) {
-        paramIndex++;
-        values.push(input.experimentId);
-        whereClause += ` AND "experimentId" = $${paramIndex}`;
-      }
-      const row = await this.#db.client.oneOrNone(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClause} RETURNING *`,
-        values,
-      );
+        return t.oneOrNone(
+          `UPDATE ${tableName}
+           SET "status" = CASE WHEN $2 THEN $3 ELSE "status" END,
+               "tags" = CASE WHEN $4 THEN NULL WHEN $5 THEN $6::jsonb ELSE "tags" END,
+               "comment" = CASE WHEN $4 THEN NULL WHEN $7 THEN $8 ELSE "comment" END
+           WHERE "id" = $1${input.experimentId !== undefined ? ' AND "experimentId" = $9' : ''}
+           RETURNING *`,
+          [
+            input.id,
+            input.status !== undefined,
+            input.status ?? null,
+            Boolean(purgeMetadata),
+            input.tags !== undefined,
+            input.tags === undefined ? null : JSON.stringify(input.tags),
+            input.comment !== undefined,
+            input.comment ?? null,
+            ...(input.experimentId !== undefined ? [input.experimentId] : []),
+          ],
+        );
+      });
 
       if (!row) {
         throw new MastraError({
@@ -701,18 +899,26 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({
-    id,
-    filters,
-  }: {
+  async getExperimentResultById(args: {
     id: string;
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null> {
+    return this.#getExperimentResultById(this.#db.readClient, args);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getExperimentResultById(
+    client: DbClient,
+    { id, filters }: { id: string; filters?: ExperimentTenancyFilters },
+  ): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -757,7 +963,7 @@ export class ExperimentsPG extends ExperimentsStorage {
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
         queryParams,
       );
@@ -771,7 +977,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         [...queryParams, limitValue, offset],
       );
@@ -840,7 +1046,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const rows = await this.#db.client.manyOrNone(
+      const rows = await this.#db.readClient.manyOrNone(
         `SELECT
           "experimentId",
           COUNT(*)::int as total,

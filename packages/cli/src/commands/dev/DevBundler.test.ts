@@ -45,7 +45,8 @@ vi.mock('commander', () => {
     Command: CommandMock,
   };
 });
-// Don't reference top-level variables in mock definitions
+const getExistingFiles = vi.hoisted(() => vi.fn((files: string[]) => files));
+
 vi.mock('@mastra/deployer/build', () => {
   return {
     createWatcher: vi.fn().mockResolvedValue({
@@ -60,8 +61,17 @@ vi.mock('@mastra/deployer/build', () => {
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
     prepareFsAgentsEntry: vi.fn(),
     writeFsAgentsEntry: vi.fn(),
+    FileService: class {
+      getExistingFiles = getExistingFiles;
+    },
   };
 });
+
+vi.mock('@mastra/deployer', () => ({
+  FileService: class {
+    getExistingFiles = getExistingFiles;
+  },
+}));
 
 vi.mock('fs-extra', () => {
   return {
@@ -80,6 +90,7 @@ describe('DevBundler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    getExistingFiles.mockImplementation((files: string[]) => files);
     // Mock process.exit to prevent it from actually exiting during tests
     process.exit = vi.fn() as any;
   });
@@ -157,6 +168,27 @@ describe('DevBundler', () => {
         const { rm } = await import('node:fs/promises');
         await rm(tmpDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe('getEnvFiles', () => {
+    it('layers default dotenv files from base to development override', async () => {
+      const bundler = new DevBundler();
+
+      await expect(bundler.getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.development']);
+    });
+
+    it('uses only an explicit env file', async () => {
+      const bundler = new DevBundler('.env.custom');
+
+      await expect(bundler.getEnvFiles()).resolves.toEqual(['.env.custom']);
+    });
+
+    it('falls back to layered defaults when an explicit env file does not exist', async () => {
+      getExistingFiles.mockImplementation((files: string[]) => (files[0] === '.env.custom' ? [] : files));
+      const bundler = new DevBundler('.env.custom');
+
+      await expect(bundler.getEnvFiles()).resolves.toEqual(['.env', '.env.local', '.env.development']);
     });
   });
 

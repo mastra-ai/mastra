@@ -166,12 +166,20 @@ against — flag any deviation as a regression.
 | Tool missing required input     | 200  | `{ error: true, validationErrors: { ... } }`             |
 | Invalid JSON body               | 400  | `{ error: "..." }` (Hono body parse failure)             |
 
-**Known inconsistencies** (document if you observe, don't treat as
-failures unless they change):
+Record the released behavior above for comparison, but classify workflow schema-invalid input returning **500** as a potential server/API error-mapping bug rather than an accepted pass. Validation failures caused by client input should normally map to a 4xx response.
 
-- Workflow invalid input returns **500** (arguably should be 400)
-- Tool invalid input returns **200** with `error: true` in the body
-  (inconsistent with HTTP semantics vs. workflow/agent error responses)
+Also test a thread-scoped Observational Memory agent without a memory payload:
+
+```bash
+curl -sw "\nHTTP %{http_code}\n" -X POST \
+  http://localhost:4111/api/agents/<agentKey>/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"test"}]}'
+```
+
+The requirement for a `threadId` is intentional, but a resulting **500** is a potential API/UX error-mapping issue. If `memory.resource` is supplied without `memory.thread`, the request schema may reject it earlier with **400**; record both paths separately.
+
+**Known inconsistency:** tool invalid input returns **200** with `error: true` in the body, which is inconsistent with workflow and agent HTTP semantics.
 
 ### Pass criteria
 

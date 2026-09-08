@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ScoresDataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { ScoresDataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Columns3Icon } from 'lucide-react';
@@ -111,6 +111,8 @@ export function ScoresList({
         }
       : undefined;
 
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: scores?.length ?? 0 });
+
   const handleClose = useCallback(() => {
     setInternalSelectedId(undefined);
     onScoreClick?.('');
@@ -151,7 +153,7 @@ export function ScoresList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="flex h-full min-h-0 min-w-0 flex-col gap-0">
         <div className="flex shrink-0 items-center justify-end pb-2">
@@ -177,14 +179,15 @@ export function ScoresList({
           </DropdownMenu>
         </div>
 
-        <ScoresDataList columns={columns} className="min-h-0 flex-1">
+        <ScoresDataList columns={columns} className="min-h-0 flex-1" scrollRef={containerRef}>
           {header}
 
-          {scores.map(score => (
+          {scores.map((score, index) => (
             <ScoresDataList.RowButton
               key={score.id}
               onClick={() => handleScoreClick(score.id)}
               className={selectedScoreId === score.id ? 'bg-surface4' : ''}
+              {...getRowProps(index)}
             >
               <ScoresDataList.DateCell timestamp={score.createdAt} />
               <ScoresDataList.TimeCell timestamp={score.createdAt} />
@@ -203,12 +206,14 @@ export function ScoresList({
       </div>
 
       {selectedScore && (
-        <ScoreDataPanel
-          score={mapScore(selectedScore)}
-          onClose={handleClose}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-        />
+        <div className="grid h-full max-h-full min-h-0 grid-rows-[1fr] overflow-hidden">
+          <ScoreDataPanel
+            score={mapScore(selectedScore)}
+            onClose={handleClose}
+            onPrevious={handlePrevious}
+            onNext={handleNext}
+          />
+        </div>
       )}
     </div>
   );

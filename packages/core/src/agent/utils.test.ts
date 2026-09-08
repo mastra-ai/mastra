@@ -215,6 +215,18 @@ describe('agent/utils', () => {
       expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
     });
 
+    it('returns the first result without a fallback for a valid falsy object', async () => {
+      // A structuredOutput schema can legitimately resolve to a falsy-but-defined
+      // value (e.g. z.boolean() -> false, z.number() -> 0). That is a successful
+      // first attempt and must not trigger the JSON-prompt fallback.
+      const firstResult = { object: Promise.resolve(false) };
+      const stream = vi.fn().mockResolvedValueOnce(firstResult);
+      const options = { structuredOutput: { schema: z.boolean() } } as any;
+
+      await expect(tryStreamWithJsonFallback(makeStreamAgent(stream), 'prompt', options)).resolves.toBe(firstResult);
+      expect(stream).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
       ['retryable provider error', makeAPICallError(true)],
       ['non-retryable provider error', makeAPICallError(false)],

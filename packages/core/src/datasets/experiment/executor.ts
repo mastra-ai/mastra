@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
@@ -6,7 +7,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
@@ -45,7 +46,7 @@ export interface ExecutionResult {
   output: unknown;
   /** Structured error if execution failed */
   error: { message: string; stack?: string; code?: string } | null;
-  /** Trace ID from agent/workflow execution (null for scorers or errors) */
+  /** Trace ID from agent/workflow execution (null when execution has no trace identity) */
   traceId: string | null;
   /** Root span ID from agent/workflow execution (null when not traced) */
   spanId?: string | null;
@@ -113,6 +114,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: {
+    id?: string;
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
@@ -130,6 +132,8 @@ export async function executeTarget(
     unmockedToolPolicy?: UnmockedToolPolicy;
   },
 ): Promise<ExecutionResult> {
+  let traceId: string | null = null;
+
   try {
     const signal = options?.signal;
 
@@ -150,6 +154,9 @@ export async function executeTarget(
           options?.versions,
           options?.toolMocks,
           options?.unmockedToolPolicy,
+          assignedTraceId => {
+            traceId = assignedTraceId;
+          },
         );
         break;
       case 'workflow':
@@ -178,7 +185,7 @@ export async function executeTarget(
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       },
-      traceId: null,
+      traceId,
     };
   }
 }
@@ -217,26 +224,64 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  */
 async function executeAgent(
   agent: Agent,
-  item: { input: unknown; groundTruth?: unknown },
+  item: { id?: string; input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
   experimentId?: string,
   versions?: VersionOverrides,
   toolMocks?: ItemToolMock[],
   unmockedToolPolicy?: UnmockedToolPolicy,
+  onTraceIdAssigned?: (traceId: string) => void,
 ): Promise<ExecutionResult> {
-  const model = await agent.getModel();
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext))
+    : undefined;
+  const model = await agent.getModel({ requestContext: reqCtx });
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
 
-  const reqCtx: RequestContext | undefined = requestContext
-    ? new RequestContext(Object.entries(requestContext))
+  // Memory-enabled experiment runs need a thread even when the caller provides no
+  // memory identifiers. Use the caller's resource when present; otherwise isolate
+  // every item under an experiment-owned resource so resource-scoped memory cannot
+  // leak context between concurrently evaluated items. Explicit empty/null resource
+  // values retain their previous opt-out behavior, and explicit threads still win.
+  const contextResourceId = requestContext?.[MASTRA_RESOURCE_ID_KEY];
+  const shouldInjectThread =
+    (Boolean(contextResourceId) || contextResourceId === undefined) &&
+    !requestContext?.[MASTRA_THREAD_ID_KEY] &&
+    typeof agent.hasOwnMemory === 'function' &&
+    agent.hasOwnMemory();
+  const injectedThreadId = shouldInjectThread ? randomUUID() : undefined;
+  const memoryOption = injectedThreadId
+    ? {
+        memory: {
+          thread: {
+            id: injectedThreadId,
+            // Tag experimentId (and the item id when known) so a large run's threads
+            // map back to their items without matching transcripts.
+            ...(experimentId || item.id
+              ? {
+                  metadata: {
+                    ...(experimentId ? { experimentId } : {}),
+                    ...(item.id ? { experimentItemId: item.id } : {}),
+                  },
+                }
+              : {}),
+          },
+          resource: contextResourceId
+            ? String(contextResourceId)
+            : `dataset-experiment:${experimentId ?? randomUUID()}:thread:${injectedThreadId}`,
+          // Suppress title generation: these threads are runner bookkeeping, so an
+          // extra title LLM call per item (and per retry) is pure waste (precedent:
+          // ephemeral subagent-delegation threads, issue #18738). lastMessages is
+          // deliberately NOT disabled — it also gates the MessageHistory output
+          // processor, and disabling it would persist every injected thread empty.
+          options: { generateTitle: false },
+        },
+      }
     : undefined;
-
-  // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
-  const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
   // Build a fresh matcher per item run so ordered consumption is deterministic and
   // not leaked across retries. Compose with the agent's configured hooks.
@@ -256,6 +301,13 @@ async function executeAgent(
   // consumption of repeated (toolName, args) mocks. No cost for mock-free runs.
   const mockConcurrency = shouldInterceptTools ? { toolCallConcurrency: 1 } : undefined;
 
+  const assignedTraceId = randomUUID().replaceAll('-', '');
+  onTraceIdAssigned?.(assignedTraceId);
+  const tracingOptions = {
+    traceId: assignedTraceId,
+    ...(experimentId ? { metadata: { experimentId } } : {}),
+  };
+
   let rawResult: unknown;
   try {
     rawResult = isSupportedLanguageModel(model)
@@ -263,8 +315,9 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
-          ...(tracingOptions ? { tracingOptions } : {}),
+          tracingOptions,
           ...(versions ? { versions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
@@ -273,8 +326,9 @@ async function executeAgent(
           scorers: {},
           returnScorerData: true,
           abortSignal: generateSignal,
+          ...memoryOption,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
-          ...(tracingOptions ? { tracingOptions } : {}),
+          tracingOptions,
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         });
@@ -283,7 +337,7 @@ async function executeAgent(
     // error instead of the raw abort. Any other error rethrows unchanged.
     const mockReport = shouldInterceptTools ? matcher.report() : undefined;
     if (mockReport?.failure) {
-      return toolMockFailureResult(mockReport, null);
+      return toolMockFailureResult(mockReport, assignedTraceId);
     }
     throw error;
   }
@@ -300,7 +354,7 @@ async function executeAgent(
   // propagates: the matcher still recorded the first failure, so fail the item
   // deterministically with the coded error. The mis-called tool never ran live.
   if (toolMockReport?.failure) {
-    return toolMockFailureResult(toolMockReport, traceId);
+    return toolMockFailureResult(toolMockReport, traceId ?? assignedTraceId);
   }
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,

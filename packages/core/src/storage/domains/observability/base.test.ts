@@ -261,4 +261,115 @@ describe('ObservabilityStorage base class', () => {
       await expect(s.getTraceLight({ traceId: 't1' })).rejects.toThrow('does not support getting lightweight traces');
     });
   });
+
+  describe('listTracesLight fallback', () => {
+    const fullTraceSpan = {
+      traceId: 't1',
+      spanId: 's1',
+      parentSpanId: null,
+      name: 'agent run',
+      spanType: 'agent_run' as const,
+      isEvent: false,
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      endedAt: new Date('2026-01-01T00:00:01Z'),
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: null,
+      status: 'success' as const,
+      entityType: null,
+      entityId: null,
+      entityName: null,
+      error: null,
+      input: { messages: [{ role: 'user', content: 'summarize this thread' }] },
+      output: { text: 'x'.repeat(10_000) },
+      attributes: { model: 'claude-sonnet-4-6' },
+      metadata: { environment: 'production' },
+    };
+
+    // Mirrors what a backend without a dedicated lightweight query returns.
+    class TracesOnly extends ObservabilityStorage {
+      override async listTraces() {
+        return {
+          pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+          spans: [fullTraceSpan],
+        };
+      }
+    }
+
+    it('serves lightweight rows on a backend that only implements listTraces', async () => {
+      const s = new TracesOnly();
+
+      const { spans } = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+      expect(spans).toHaveLength(1);
+      const row = spans[0]! as Record<string, unknown>;
+      expect(row.traceId).toBe('t1');
+      expect(row.input).toBeUndefined();
+      expect(row.output).toBeUndefined();
+      expect(row.attributes).toBeUndefined();
+      // The preview column still renders — derived from `input` on the way out.
+      expect(row.inputPreview).toBe('summarize this thread');
+      // Status and metadata survive projection so configurable list columns render.
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ environment: 'production' });
+    });
+
+    it('computes status on projected rows from error and endedAt', async () => {
+      const rows = [
+        { ...fullTraceSpan, spanId: 'errored', error: { message: 'boom' }, status: 'error' as const },
+        { ...fullTraceSpan, spanId: 'running', endedAt: null, status: 'running' as const },
+        fullTraceSpan,
+      ];
+      class ThreeStates extends ObservabilityStorage {
+        override async listTraces() {
+          return {
+            pagination: { total: 3, page: 0, perPage: 10, hasMore: false },
+            spans: rows,
+          };
+        }
+      }
+      const s = new ThreeStates();
+
+      const { spans } = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+      const statusBySpanId = Object.fromEntries(spans.map(row => [row.spanId, row.status]));
+      expect(statusBySpanId).toEqual({ errored: 'error', running: 'running', s1: 'success' });
+    });
+
+    it('preserves pagination metadata from listTraces', async () => {
+      const s = new TracesOnly();
+
+      const result = await s.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+      expect(result.pagination).toEqual({ total: 1, page: 0, perPage: 10, hasMore: false });
+    });
+
+    it('passes delta metadata through and projects rows light in delta mode', async () => {
+      class DeltaTraces extends ObservabilityStorage {
+        override async listTraces() {
+          return {
+            delta: { limit: 100, hasMore: true },
+            deltaCursor: 'cursor-after',
+            spans: [fullTraceSpan],
+          };
+        }
+      }
+      const s = new DeltaTraces();
+
+      const result = await s.listTracesLight({ mode: 'delta', after: 'cursor-before', limit: 100 });
+
+      expect(result.delta).toEqual({ limit: 100, hasMore: true });
+      expect(result.deltaCursor).toBe('cursor-after');
+      const row = result.spans[0]! as Record<string, unknown>;
+      expect(row.input).toBeUndefined();
+      expect(row.inputPreview).toBe('summarize this thread');
+      expect(row.status).toBe('success');
+      expect(row.metadata).toEqual({ environment: 'production' });
+    });
+
+    it('still throws when the backend implements neither', async () => {
+      const s = new ObservabilityStorage();
+
+      await expect(s.listTracesLight({})).rejects.toThrow('does not support listing traces');
+    });
+  });
 });

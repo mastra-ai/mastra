@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { standardSchemaToJSONSchema } from '@mastra/core/schema';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -1134,6 +1135,144 @@ describe('om-tools', () => {
       expect(result.text).toContain('export function main()');
     });
 
+    it('should continue an oversized part from charOffset', async () => {
+      const fullText = Array.from({ length: 120 }, (_, index) => `segment-${index.toString().padStart(3, '0')}`).join(
+        ' ',
+      );
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-large-part',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const firstChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        maxTokens: 12,
+      });
+
+      expect(firstChunk.truncated).toBe(true);
+      expect(firstChunk.charOffset).toBe(0);
+      expect(firstChunk.nextCharOffset).toBeGreaterThan(0);
+      expect(firstChunk.note).toContain('charOffset=');
+      expect(firstChunk.text).not.toContain('To continue');
+
+      const secondChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        charOffset: firstChunk.nextCharOffset,
+        maxTokens: 12,
+      });
+
+      expect(secondChunk.charOffset).toBe(firstChunk.nextCharOffset);
+      expect(secondChunk.text).not.toBe(firstChunk.text);
+      expect(fullText).toContain(firstChunk.text);
+      expect(fullText).toContain(secondChunk.text);
+    });
+
+    it('should reproduce the original oversized part when chunks are concatenated', async () => {
+      const fullText = Array.from({ length: 45 }, (_, index) => `chunk-${index.toString().padStart(3, '0')}`).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-exact-chunks',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-exact-chunks',
+          partIndex: 0,
+          charOffset,
+          maxTokens: 10,
+        });
+
+        if (result.nextCharOffset !== undefined) {
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.join('')).toBe(fullText);
+    });
+
+    it('should truncate an oversized part using the default token budget', async () => {
+      const fullText = Array.from(
+        { length: 1500 },
+        (_, index) => `default-budget-segment-${index.toString().padStart(4, '0')}`,
+      ).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-default-budget',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-default-budget',
+          partIndex: 0,
+          charOffset,
+        });
+
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(fullText);
+    });
+
     it('should fall forward to the first part of the next visible message when partIndex overflows', async () => {
       await memory.saveMessages({
         messages: [
@@ -1178,6 +1317,68 @@ describe('om-tools', () => {
         'Part index 1 not found in message msg-single; showing partIndex 0 from next message msg-next-visible.',
       );
       expect(result.text).toContain('This is the next visible message');
+    });
+
+    it('should continue a truncated fall-forward part via charOffset', async () => {
+      const nextText = Array.from({ length: 200 }, (_, i) => `next-line ${i}`).join('\n');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-ff-source',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Only part here' }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+          {
+            id: 'msg-ff-next',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: nextText }],
+            },
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-ff-source',
+          partIndex: 1,
+          charOffset,
+          maxTokens: 50,
+        });
+
+        expect(result.messageId).toBe('msg-ff-next');
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+          expect(result.note).toContain('cursor="msg-ff-source" partIndex=1');
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+          expect(result.text).not.toContain('To continue');
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(
+        `Part index 1 not found in message msg-ff-source; showing partIndex 0 from next message msg-ff-next.\n\n${nextText}`,
+      );
     });
 
     it('should skip data-only messages when falling forward to the next visible message', async () => {
@@ -2785,6 +2986,125 @@ describe('om-tools', () => {
 
       // recall tool should still be registered
       expect(memory.listTools()).toHaveProperty('recall');
+    });
+  });
+
+  describe('recall search mode without a vector store (#20775)', () => {
+    const getInputJSONSchema = (tool: ReturnType<typeof recallTool>) =>
+      standardSchemaToJSONSchema(tool.inputSchema as any) as {
+        properties: Record<string, { enum?: string[]; description?: string }>;
+      };
+
+    it('omits "search" from the mode enum and descriptions when search is not enabled', () => {
+      for (const retrievalScope of ['thread', 'resource'] as const) {
+        const tool = recallTool(undefined, { retrievalScope, searchEnabled: false });
+        const schema = getInputJSONSchema(tool);
+
+        expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+        expect(tool.description).not.toContain('mode="search"');
+        expect(schema.properties.mode.description).not.toContain('"search"');
+        expect(schema.properties).not.toHaveProperty('query');
+      }
+    });
+
+    it('keeps "search" advertised by default for direct callers', () => {
+      const tool = recallTool(undefined, { retrievalScope: 'resource' });
+      const schema = getInputJSONSchema(tool);
+
+      expect(schema.properties.mode.enum).toContain('search');
+      expect(tool.description).toContain('mode="search"');
+    });
+
+    it('rejects a stray search call with an informative validation error instead of throwing', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+      const result = await tool.execute?.({ mode: 'search', query: 'that diagram from last time' }, {
+        memory,
+        agent: { threadId: 'thread-1', resourceId: 'resource-1' },
+      } as any);
+
+      // Schema validation catches it: the model gets a correctable error, not
+      // the "searchMessages requires a vector store" throw.
+      expect((result as any).error).toBe(true);
+      expect((result as any).message).toContain('must be equal to one of the allowed values');
+    });
+
+    it('returns the "Search is not configured" guidance when a resumed run carries a stale search call', async () => {
+      const memory = new Memory({ storage: new InMemoryStore() });
+      const tool = recallTool(undefined, { retrievalScope: 'resource', searchEnabled: false });
+
+      // resumeData skips input validation (see Tool.execute), so without the
+      // in-execute guard this would reach Memory.searchMessages and throw.
+      const result = await tool.execute?.({ mode: 'search', query: 'that diagram from last time' }, {
+        memory,
+        resumeData: { stale: true },
+        agent: { threadId: 'thread-1', resourceId: 'resource-1' },
+      } as any);
+
+      expect(result).toMatchObject({ count: 0 });
+      expect((result as any).results).toContain('Search is not configured');
+    });
+
+    it('does not advertise search from Memory.listTools when no vector store is configured', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { scope: 'resource' },
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('does not advertise search when a vector store exists but retrieval search is disabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: true,
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads']);
+      expect(recall.description).not.toContain('mode="search"');
+    });
+
+    it('advertises search when retrieval search, a vector store, and an embedder are configured', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: { id: 'test' } as any,
+        embedder: {
+          specificationVersion: 'v3',
+          modelId: 'test',
+          doEmbed: async () => ({ embeddings: [] }),
+        } as any,
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: { vector: true, scope: 'resource' },
+          },
+        } as any,
+      });
+
+      const recall = memory.listTools().recall;
+      const schema = getInputJSONSchema(recall);
+      expect(schema.properties.mode.enum).toEqual(['messages', 'threads', 'search']);
+      expect(recall.description).toContain('mode="search"');
     });
   });
 });

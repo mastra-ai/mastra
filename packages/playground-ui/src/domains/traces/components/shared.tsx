@@ -4,6 +4,7 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { FolderIcon } from '@/ds/icons/FolderIcon';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
@@ -16,6 +17,7 @@ export const spanTypePrefixes = [
   'provider',
   'memory',
   'workspace',
+  'skill',
   'scorer',
   'other',
 ];
@@ -68,6 +70,12 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     color: 'oklch(0.75 0.15 40)',
     label: 'Workspace',
     typePrefix: 'workspace',
+  },
+  skill: {
+    icon: <SkillIcon />,
+    color: 'oklch(0.75 0.15 130)',
+    label: 'Skill',
+    typePrefix: 'skill',
   },
   scorer: {
     icon: <GaugeIcon />,

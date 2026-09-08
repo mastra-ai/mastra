@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
+import { isSystemReminderSignalType } from '../../../../memory/system-reminders';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { createRunMessageList } from '../../utils/run-message-list';
 
 const SIGNAL_DRAIN_STEP_ID = `${DurableStepIds.AGENTIC_EXECUTION}-signal-drain`;
 
@@ -40,19 +41,15 @@ export function createDurableSignalDrainStep() {
         const pendingSignals = drainFn('pending');
         if (pendingSignals.length === 0) return execOutput;
 
-        const drainList = new MessageList();
-        drainList.deserialize(execOutput.messageListState);
-        drainList.markResponseMessageBoundary(execOutput.messageId);
-
-        const nextMessageId =
-          (params.mastra as Mastra | undefined)?.generateId?.() ??
-          globalThis.crypto?.randomUUID?.() ??
-          `msg_${Date.now()}`;
+        const drainList = createRunMessageList({ mastra: params.mastra as Mastra | undefined }).deserialize(
+          execOutput.messageListState,
+        );
+        const nextMessageId = drainList.rotateResponseMessageId(execOutput.messageId);
 
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = drainList.addSignal(pendingSignal);
-          if (pubsub) {
+          if (pubsub && !isSystemReminderSignalType(signalForTranscript.type)) {
             await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
           }
         }

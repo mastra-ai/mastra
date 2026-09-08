@@ -274,7 +274,29 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
 
     return {
       create: input => store.create({ workspace: input }),
-      getByIdResolved: id => store.getByIdResolved(id),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber !== undefined) {
+          const workspace = await store.getById(id);
+          if (!workspace) return null;
+
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+          if (!version || version.workspaceId !== id) return null;
+
+          const {
+            id: versionId,
+            workspaceId: _workspaceId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshot
+          } = version;
+          return { ...workspace, ...snapshot, resolvedVersionId: versionId } as StorageResolvedWorkspaceType;
+        }
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
+      },
       update: input => store.update(input),
       delete: id => store.delete(id),
       list: args => store.list(args),

@@ -1,4 +1,6 @@
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import type { MessageAuthor } from '@mastra/core/agent-controller';
+import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import {
   registerApiRoute,
   isAuthHttpHandler,
@@ -9,9 +11,14 @@ import {
 } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
 import type { Context, Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 
 import type { RouteAuth } from './routes/route.js';
+import { actorFromAuthUser } from './storage/domains/comments/actor.js';
+import { isFactoryTelemetryEnabled } from './telemetry.js';
 import { timedAboveThreshold } from './timing.js';
+
+const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 
 /**
  * Provider-neutral factory auth gating for the MastraCode web server.
@@ -45,12 +52,16 @@ export interface FactoryAuthUser {
   id?: string;
   email?: string;
   name?: string;
+  /** Provider-supplied profile picture URL, when the auth provider exposes one. */
+  avatarUrl?: string;
   /**
    * Organization id. The org is the top-level tenant: it owns the GitHub
    * App installation and connected projects, while each user inside the org gets
    * isolated building instances. Absent for personal (no-org) accounts.
    */
   organizationId?: string;
+  /** Organization ids proven by the provider's authenticated membership response. */
+  organizationMembershipIds?: string[];
 }
 
 /**
@@ -112,6 +123,25 @@ export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
   return c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined;
 }
 
+/**
+ * Read the authenticated user off a request context, normalizing whatever the
+ * active auth provider put there.
+ *
+ * The server's auth layer writes the provider's `authenticateToken` result into
+ * the request context's `user` slot verbatim, so the value's shape follows the
+ * provider: WorkOS writes a flat user, better-auth writes a `{ session, user }`
+ * wrapper whose org lives on the session. Reading that slot as a
+ * {@link FactoryAuthUser} therefore yields `undefined` for both the id and the
+ * org under better-auth, which reads as "this session belongs to somebody else"
+ * at every ownership check. Normalize on the way in instead.
+ */
+export function getFactoryAuthUserFromContext(
+  requestContext: { get: (key: string) => unknown } | undefined,
+): FactoryAuthUser | undefined {
+  if (!requestContext || typeof requestContext.get !== 'function') return undefined;
+  return toFactoryAuthUser(requestContext.get('user')) ?? undefined;
+}
+
 /** Resolve the stable user id from an authenticated user shape. */
 export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.workosId ?? user?.id;
@@ -134,6 +164,17 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
   return { orgId: getFactoryAuthOrgId(user), userId };
+}
+
+function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  const actor = actorFromAuthUser(userId, user);
+  return {
+    id: actor.id,
+    ...(actor.displayName ? { name: actor.displayName } : {}),
+    ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
+  };
 }
 
 /** True when both WorkOS credential env vars are present (legacy env gate). */
@@ -170,15 +211,19 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
 
-  // Session-shaped results: { session, user }.
+  // Session-shaped results: { session, user }. A result carrying both halves and
+  // top-level identity fields is read as session-shaped: the session half is the
+  // authenticated one, and preferring it keeps the org and the id from coming
+  // from two different places.
   if (record.user && typeof record.user === 'object' && record.session && typeof record.session === 'object') {
-    const user = record.user as { id?: unknown; email?: unknown; name?: unknown };
+    const user = record.user as { id?: unknown; email?: unknown; name?: unknown; avatarUrl?: unknown };
     const session = record.session as { activeOrganizationId?: unknown };
     if (typeof user.id !== 'string') return null;
     return {
       id: user.id,
       email: typeof user.email === 'string' ? user.email : undefined,
       name: typeof user.name === 'string' ? user.name : undefined,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
       organizationId: typeof session.activeOrganizationId === 'string' ? session.activeOrganizationId : undefined,
     };
   }
@@ -189,17 +234,33 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     workosId?: unknown;
     email?: unknown;
     name?: unknown;
+    avatarUrl?: unknown;
     organizationId?: unknown;
+    memberships?: unknown;
+    memberOrgIds?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
   const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
   if (!id && !workosId) return null;
+  const membershipOrganizationIds = Array.isArray(flat.memberships)
+    ? flat.memberships.flatMap(membership => {
+        if (!membership || typeof membership !== 'object') return [];
+        const organizationId = (membership as { organizationId?: unknown }).organizationId;
+        return typeof organizationId === 'string' ? [organizationId] : [];
+      })
+    : [];
+  const memberOrgIds = Array.isArray(flat.memberOrgIds)
+    ? flat.memberOrgIds.filter((organizationId): organizationId is string => typeof organizationId === 'string')
+    : [];
+  const organizationMembershipIds = [...new Set([...membershipOrganizationIds, ...memberOrgIds])];
   return {
     id,
     workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
+    avatarUrl: typeof flat.avatarUrl === 'string' ? flat.avatarUrl : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
+    organizationMembershipIds,
   };
 }
 
@@ -239,6 +300,13 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   } catch {
     // Best-effort: the user stays no-org until a later request succeeds.
   }
+}
+
+function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
+  if (user.organizationId === requestedOrganizationId) return true;
+  if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
+  user.organizationId = requestedOrganizationId;
+  return true;
 }
 
 /**
@@ -332,7 +400,14 @@ export async function ensureFactoryAuthUser(
   const user = await authenticateRequest(provider, token, c.req.raw);
   if (!user) return undefined;
 
-  await ensureUserOrg(provider, user);
+  const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+  if (requestedOrganizationId) {
+    if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+      throw new HTTPException(403, { message: 'organization_forbidden' });
+    }
+  } else {
+    await ensureUserOrg(provider, user);
+  }
 
   c.set(FACTORY_AUTH_USER_KEY, user);
   return user;
@@ -386,10 +461,12 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<
   await ensureUserOrg(provider, user);
   return c.json({
     authenticated: true,
+    telemetryEnabled: isFactoryTelemetryEnabled(provider.name),
     user: {
       userId: getFactoryAuthUserId(user),
       email: user.email,
       name: user.name,
+      avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
     },
     ...meta,
@@ -525,6 +602,16 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
           const cookieReturnTo = sanitizeReturnTo(readReturnToCookie(c));
           const returnTo = cookieReturnTo !== '/' ? cookieReturnTo : stateReturnTo;
           c.header('Set-Cookie', clearReturnToCookieHeader(), { append: true });
+          const idpError = c.req.query('error');
+          if (idpError) {
+            // IdP denial (e.g. access_denied for a non-org-member): bouncing to
+            // /auth/login would re-enter the IdP in a redirect loop.
+            const query = new URLSearchParams({ error: idpError.slice(0, 64) });
+            const description = c.req.query('error_description');
+            if (description) query.set('error_description', description.slice(0, 256));
+            if (returnTo !== '/') query.set('returnTo', returnTo);
+            return c.redirect(`/signin?${query.toString()}`);
+          }
           if (!code) {
             return c.redirect('/auth/login');
           }
@@ -680,6 +767,15 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
  */
 const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
 
+// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
+// so a future route under the same prefix does not inherit the pass.
+const SESSION_FAVICON_PATHS = new Set([
+  '/favicon-session-initializing.svg',
+  '/favicon-session-working.svg',
+  '/favicon-session-awaiting.svg',
+  '/favicon-session-error.svg',
+]);
+
 /**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
@@ -716,6 +812,12 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
       return next();
     }
+    // The platform's deploy-auth flow lands IdP denials on `/login`
+    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
+    // `/signin`, so forward the query there instead of burying it in returnTo.
+    if (c.req.method === 'GET' && path === '/login') {
+      return c.redirect(`/signin${new URL(c.req.url).search}`);
+    }
     // The SPA sign-in page, its static bundle, and browser-fetched metadata
     // must be reachable while signed out; no user is stashed, so `/api/*`
     // stays protected.
@@ -723,7 +825,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
       path === '/signin' ||
       path.startsWith('/assets/') ||
       path === '/manifest.webmanifest' ||
-      path === '/mastra.svg'
+      path === '/mastra.svg' ||
+      path === '/pwa-192.png' ||
+      path === '/pwa-512.png' ||
+      path === '/apple-touch-icon.png' ||
+      (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
     ) {
       return next();
     }
@@ -736,11 +842,20 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     );
 
     if (user) {
-      // Bootstrap a personal org for no-org accounts so the org id resolves on
-      // this request (see ensureFactoryAuthUser for the rationale).
-      await ensureUserOrg(provider, user);
+      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+      if (requestedOrganizationId) {
+        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+          return c.json({ error: 'organization_forbidden' }, 403);
+        }
+      } else {
+        // Bootstrap a personal org for no-org accounts so the org id resolves on
+        // this request (see ensureFactoryAuthUser for the rationale).
+        await ensureUserOrg(provider, user);
+      }
       c.set(FACTORY_AUTH_USER_KEY, user);
-      c.get('requestContext')?.set('user', user);
+      const requestContext = c.get('requestContext');
+      requestContext?.set('user', user);
+      requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
       return next();
     }
 

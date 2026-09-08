@@ -2,6 +2,7 @@ import Link from '@docusaurus/Link'
 import { GitHubIconLink } from '@site/src/components/github-icon-link'
 import NavbarLayout from '@theme/Navbar/Layout'
 import NavbarMobileSidebarToggle from '@theme/Navbar/MobileSidebar/Toggle'
+import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 import SearchBar from '@theme/SearchBar'
 import { type ReactNode } from 'react'
 import { AskAI } from './ask-ai'
@@ -21,15 +22,15 @@ function NavbarContentDesktop() {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center">
-          <GitHubIconLink />
-        </div>
-
         <div className="flex items-center gap-2">
           <SearchBar />
           <div className="hidden lg:block">
             <AskAI />
           </div>
+          <div className="flex items-center">
+            <GitHubIconLink />
+          </div>
+          <ThemeSwitcher />
         </div>
         <NavbarMobileSidebarToggle />
       </div>

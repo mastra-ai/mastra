@@ -21,11 +21,20 @@ const SETTINGS_URL = `${ORIGIN}/web/github/projects/${PROJECT}/settings`;
 
 describe('project settings hooks', () => {
   it('given a github project, when the query runs, then it resolves the stored setup command', async () => {
-    server.use(http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: 'pnpm i && pnpm build' })));
+    server.use(
+      http.get(SETTINGS_URL, () =>
+        HttpResponse.json({ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' }),
+      ),
+    );
 
     const { result } = renderHookWithProviders(() => useRepositorySettingsQuery(PROJECT));
 
-    await waitFor(() => expect(result.current.data).toEqual({ setupCommand: 'pnpm i && pnpm build' }));
+    await waitFor(() =>
+      expect(result.current.data).toEqual({
+        setupCommand: 'pnpm i && pnpm build',
+        teardownCommand: 'pnpm local teardown',
+      }),
+    );
   });
 
   it('given no github project id, when rendered, then the query stays idle', async () => {
@@ -37,19 +46,28 @@ describe('project settings hooks', () => {
   it('given a new setup command, when saving, then it posts the settings and updates the cached copy', async () => {
     server.use(
       http.post(SETTINGS_URL, async ({ request }) => {
-        expect(await request.json()).toEqual({ setupCommand: 'pnpm i' });
-        return HttpResponse.json({ setupCommand: 'pnpm i' } satisfies RepositorySettings);
+        expect(await request.json()).toEqual({ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' });
+        return HttpResponse.json({
+          setupCommand: 'pnpm i',
+          teardownCommand: 'pnpm local teardown',
+        } satisfies RepositorySettings);
       }),
     );
 
     const { result, client } = renderHookWithProviders(() => useSaveRepositorySettingsMutation());
 
     await act(async () => {
-      await result.current.mutateAsync({ projectRepositoryId: PROJECT, settings: { setupCommand: 'pnpm i' } });
+      await result.current.mutateAsync({
+        projectRepositoryId: PROJECT,
+        settings: { setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' },
+      });
     });
     await waitForMutationsIdle(client);
 
-    expect(client.getQueryData(queryKeys.githubRepositorySettings(PROJECT))).toEqual({ setupCommand: 'pnpm i' });
+    expect(client.getQueryData(queryKeys.githubRepositorySettings(PROJECT))).toEqual({
+      setupCommand: 'pnpm i',
+      teardownCommand: 'pnpm local teardown',
+    });
   });
 
   it('given the server rejects the command, when saving fails, then the error carries the server message', async () => {
@@ -59,7 +77,10 @@ describe('project settings hooks', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ projectRepositoryId: PROJECT, settings: { setupCommand: 'x' } }),
+        result.current.mutateAsync({
+          projectRepositoryId: PROJECT,
+          settings: { setupCommand: 'x', teardownCommand: null },
+        }),
       ).rejects.toMatchObject({ status: 400 });
     });
     await waitForMutationsIdle(client);

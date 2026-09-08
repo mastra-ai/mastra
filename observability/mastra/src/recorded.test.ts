@@ -643,4 +643,127 @@ describe('RecordedTrace', () => {
       eventType: 'score',
     });
   });
+
+  describe('recorded annotation flush race', () => {
+    function createScoringMirror() {
+      return {
+        name: 'scoring-mirror',
+        onTracingEvent: vi.fn(async () => {}),
+        onScoreEvent: vi.fn(async () => {}),
+      };
+    }
+
+    function createMastraWithStorageExporter(
+      storage: MockStore,
+      scoringMirror: ReturnType<typeof createScoringMirror>,
+    ) {
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'test-service',
+            exporters: [new MastraStorageExporter(), scoringMirror as any],
+          },
+        },
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        observability,
+      });
+
+      const instance = mastra.observability.getDefaultInstance()!;
+      return { mastra, observability, instance };
+    }
+
+    it('retries storage lookup and persists a score for a span flushed at the default batch interval', async () => {
+      vi.useFakeTimers();
+      try {
+        const storage = new MockStore();
+        const scoringMirror = createScoringMirror();
+
+        // Dedicated instance whose only job is to flush the trace spans to
+        // storage, mimicking the async exporter flush of a live workflow run.
+        const { mastra, instance } = createMastraWithStorageExporter(storage, scoringMirror);
+
+        const root = instance.startSpan({
+          type: SpanType.WORKFLOW_RUN,
+          name: 'workflow-root',
+          entityType: EntityType.WORKFLOW_RUN,
+          entityId: 'workflow-1',
+        });
+        const child = root.createChildSpan({
+          type: SpanType.WORKFLOW_STEP,
+          name: 'step-1',
+          entityType: EntityType.WORKFLOW_STEP,
+          entityId: 'step-1',
+        });
+
+        // The annotation arrives before the spans have been exported.
+        child.end();
+
+        const addScorePromise = mastra.observability.addScore({
+          traceId: root.traceId,
+          spanId: root.id,
+          score: {
+            scorerId: 'manual-review',
+            score: 0.75,
+            reason: 'late flush',
+          },
+        });
+
+        // The exporter only persists the spans when its scheduled flush runs,
+        // at the default maxBatchWaitMs (5000ms).
+        setTimeout(() => {
+          root.end({ end: true });
+          void instance.flush().catch(() => {});
+        }, 5000);
+
+        await vi.advanceTimersByTimeAsync(6100);
+        await addScorePromise;
+
+        expect(scoringMirror.onScoreEvent).toHaveBeenCalledTimes(1);
+        const event = scoringMirror.onScoreEvent.mock.calls[0]![0];
+        expect(event.type).toBe('score');
+        expect(event.score.traceId).toBe(root.traceId);
+        expect(event.score.spanId).toBe(root.id);
+        expect(event.score.score).toBe(0.75);
+        expect(event.score.scorerId).toBe('manual-review');
+        expect(event.score.reason).toBe('late flush');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('warns instead of silently dropping a score whose target span never reaches storage', async () => {
+      vi.useFakeTimers();
+      try {
+        const storage = new MockStore();
+        const scoringMirror = createScoringMirror();
+        const warn = vi.fn();
+
+        const { mastra } = createMastraWithStorageExporter(storage, scoringMirror);
+        (mastra.observability as any).__setLogger({ warn });
+
+        const addScorePromise = mastra.observability.addScore({
+          traceId: 'missing-trace',
+          spanId: 'missing-span',
+          score: {
+            scorerId: 'manual-review',
+            score: 0.5,
+          },
+        });
+
+        // Advance past the full retry schedule; the target never appears.
+        await vi.advanceTimersByTimeAsync(6000);
+        await addScorePromise;
+
+        expect(scoringMirror.onScoreEvent).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('Score event was dropped'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

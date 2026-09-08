@@ -263,3 +263,157 @@ describe('finish usage conversion', () => {
     });
   });
 });
+
+describe('tool-output-denied chunk conversion (issue #20880)', () => {
+  const chunk = {
+    type: 'tool-output-denied' as const,
+    runId: 'run-123',
+    from: ChunkFrom.AGENT,
+    payload: {
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+      args: { param: 'value' },
+      approval: { id: 'approval-1', approved: false as const, reason: 'Not allowed' },
+    },
+  };
+
+  it('converts the Mastra denial to an AI SDK v6 stream part', () => {
+    expect(convertMastraChunkToAISDKv6({ chunk, mode: 'stream' })).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
+      toolName: 'myTool',
+    });
+  });
+
+  it('converts the stream part to an AI SDK UI message chunk', () => {
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-output-denied',
+          toolCallId: 'tooluse_abc123',
+          toolName: 'myTool',
+        },
+        onError: String,
+      }),
+    ).toEqual({
+      type: 'tool-output-denied',
+      toolCallId: 'tooluse_abc123',
+    });
+  });
+});
+
+describe('finish reason on UI message chunks (issue #20562)', () => {
+  const mastraFinishChunk = (reason: string) =>
+    ({
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        stepResult: { reason },
+        output: { usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+      },
+    }) as any;
+
+  it('keeps the v6 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('content-filter') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'content-filter' });
+  });
+
+  it('reports the Mastra-only tripwire reason as other on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraFinishChunk('tripwire') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'other' });
+  });
+
+  it('keeps the v5 finish reason on the terminal UI chunk', () => {
+    const part = convertMastraChunkToAISDKv5({ chunk: mastraFinishChunk('length') });
+
+    expect(
+      convertFullStreamChunkToUIMessageStream({
+        part: part as any,
+        sendFinish: true,
+        messageMetadataValue: { custom: true },
+        onError: String,
+      }),
+    ).toEqual({ type: 'finish', finishReason: 'length', messageMetadata: { custom: true } });
+  });
+});
+
+// Regression: both conversion hops dropped the tool result's providerMetadata, so the
+// `mastra.modelOutput` projection never reached the browser. Without Mastra Memory that
+// made `toModelOutput` a single-turn feature (issue #22012).
+describe('tool-result provider metadata forwarding (issue #22012)', () => {
+  const modelOutput = { type: 'content', value: [{ type: 'text', text: 'Found 5 vendors' }] };
+
+  const mastraToolResultChunk = () =>
+    ({
+      type: 'tool-result',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: {
+        toolCallId: 'call-1',
+        toolName: 'listVendors',
+        args: { region: 'emea' },
+        result: { vendors: [{ id: 1 }, { id: 2 }] },
+        providerMetadata: { mastra: { modelOutput } },
+      },
+    }) as any;
+
+  it('keeps providerMetadata on the v6 tool-result stream part', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() }) as any;
+
+    expect(part.type).toBe('tool-result');
+    expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
+  });
+
+  it('keeps providerMetadata on the v5 tool-result stream part', () => {
+    const part = convertMastraChunkToAISDKv5({ chunk: mastraToolResultChunk() }) as any;
+
+    expect(part.type).toBe('tool-result');
+    expect(part.providerMetadata).toEqual({ mastra: { modelOutput } });
+  });
+
+  it('forwards providerMetadata onto the tool-output-available ui chunk', () => {
+    const part = convertMastraChunkToAISDKv6({ chunk: mastraToolResultChunk() });
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: part as any,
+      onError: err => (err instanceof Error ? err.message : String(err)),
+    }) as any;
+
+    expect(uiChunk).toMatchObject({
+      type: 'tool-output-available',
+      toolCallId: 'call-1',
+      providerMetadata: { mastra: { modelOutput } },
+    });
+  });
+
+  it('omits providerMetadata entirely when the tool result carries none', () => {
+    const chunk = mastraToolResultChunk();
+    delete chunk.payload.providerMetadata;
+
+    const part = convertMastraChunkToAISDKv6({ chunk }) as any;
+    expect(part).not.toHaveProperty('providerMetadata');
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: part as any,
+      onError: String,
+    }) as any;
+
+    expect(uiChunk.type).toBe('tool-output-available');
+    expect(uiChunk).not.toHaveProperty('providerMetadata');
+  });
+});

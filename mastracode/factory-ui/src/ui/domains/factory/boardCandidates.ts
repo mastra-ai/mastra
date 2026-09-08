@@ -1,12 +1,7 @@
-import { CircleDot, GitCompareArrows } from 'lucide-react';
-import type { ComponentType } from 'react';
-
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
-import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL, hasLabel } from './boardItems';
-import { LINEAR_FETCH_HINT, approvalRunAction, guidedPrompt, issueRunActions, reviewRunAction } from './boardRunSpecs';
-import type { RunAction } from './boardRunSpecs';
+import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
-import { IssueSourceIcon } from './components/BoardIcons';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
@@ -25,6 +20,17 @@ export const INTAKE_SOURCES = [
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 
+/** What a candidate feed exposes to the column rendering it. */
+export interface IntakeFeed {
+  error: Error | null;
+  /** Set when the failure came from paging, not from the stored pages. */
+  isFetchNextPageError?: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  fetchNextPage: () => unknown;
+  refetch: () => unknown;
+}
+
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;
@@ -33,80 +39,57 @@ export interface BoardCandidate {
   url: string;
   /** Meta line under the title, e.g. `#12 · alice · opened 3 days ago`. */
   meta: string;
-  icon: ComponentType<{ size?: number; className?: string }>;
-  iconClassName: string;
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
-  /** Runs the candidate can start; the first is the one-click default. */
-  runActions: RunAction[];
-  branch: string;
-  threadTitle: string;
-  customPrompt: (instructions: string) => string;
   metadata: Record<string, unknown>;
-  issue?: GithubIssue;
 }
 
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
   const labels = issue.labels;
-  const autoTriaged = hasLabel(labels, AUTO_TRIAGED_LABEL);
-  const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-  const ref = `GitHub issue #${issue.number} (${issue.url})`;
-  const investigateBase = `Investigate ${ref}.`;
-  const approvalBase = `Prepare approval for ${ref}.`;
   return {
     sourceKey: `github-issue:${issue.number}`,
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
-    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
-    icon: IssueSourceIcon,
-    iconClassName: '',
-    column: autoTriaged ? 'triage' : 'intake',
-    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref),
-    branch: `factory/issue-${issue.number}`,
-    threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
-    customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
-    metadata: { number: issue.number, author: issue.author, labels },
-    issue,
+    meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
+    column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
+    metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
   };
 }
 
 export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
-  const ref = `GitHub pull request #${pr.number} (${pr.url})`;
-  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`. Expected head branch: ${pr.headBranch}.`;
   return {
     sourceKey: `github-pr:${pr.number}`,
     source: 'github-pr',
     title: pr.title,
     url: pr.url,
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
-    icon: GitCompareArrows,
-    iconClassName: 'text-accent1',
     column: 'intake',
-    runActions: [reviewRunAction(ref, checkout)],
-    branch: `factory/pr-${pr.number}`,
-    threadTitle: `PR #${pr.number}: ${pr.title}`,
-    customPrompt: instructions => guidedPrompt(`Review ${ref}. ${checkout}`, instructions),
-    metadata: { number: pr.number, author: pr.author, headBranch: pr.headBranch, baseBranch: pr.baseBranch },
+    metadata: {
+      number: pr.number,
+      author: pr.author,
+      assignees: pr.assignees ?? [],
+      requestedReviewers: pr.requestedReviewers ?? [],
+      headBranch: pr.headBranch,
+      baseBranch: pr.baseBranch,
+    },
   };
 }
 
 export function linearCandidate(issue: LinearIssue): BoardCandidate {
-  const ref = `Linear issue ${issue.identifier} (${issue.url})`;
   return {
     sourceKey: `linear:${issue.identifier}`,
     source: 'linear-issue',
     title: issue.title,
     url: issue.url,
     meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
-    icon: CircleDot,
-    iconClassName: 'text-accent3',
     column: 'intake',
-    runActions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
-    branch: `factory/linear-${issue.identifier.toLowerCase()}`,
-    threadTitle: `${issue.identifier}: ${issue.title}`,
-    customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${LINEAR_FETCH_HINT}`, instructions),
-    metadata: { identifier: issue.identifier, state: issue.state, assignee: issue.assignee },
+    metadata: {
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      creator: issue.creator ?? null,
+    },
   };
 }
 

@@ -19,6 +19,37 @@ describe('aiV4CoreMessageToV1PromptMessage image conversion', () => {
     expect(result.content[0].image).toBeInstanceOf(Uint8Array);
     expect(Array.from(result.content[0].image as Uint8Array)).toEqual([1, 2, 3, 4]);
   });
+
+  it('passes an OpenAI Files API file ID through a file part untouched', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    // Must not throw "Invalid URL: file-..." (regression for #16408 follow-up)
+    const result = aiV4CoreMessageToV1PromptMessage({
+      role: 'user',
+      content: [{ type: 'file', data: fileId, mimeType: 'application/pdf' }],
+    });
+
+    expect(result.content[0]).toMatchObject({
+      type: 'file',
+      data: fileId,
+      mimeType: 'application/pdf',
+    });
+  });
+
+  it('converts an image part carrying an OpenAI Files API file ID to a file part instead of throwing', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+
+    const result = aiV4CoreMessageToV1PromptMessage({
+      role: 'user',
+      content: [{ type: 'image', image: fileId, mimeType: 'image/png' }],
+    });
+
+    expect(result.content[0]).toMatchObject({
+      type: 'file',
+      data: fileId,
+      mimeType: 'image/png',
+    });
+  });
 });
 
 describe('aiV5ModelMessageToV2PromptMessage tool-name sanitization', () => {

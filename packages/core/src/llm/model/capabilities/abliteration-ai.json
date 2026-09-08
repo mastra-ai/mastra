@@ -1,5 +1,5 @@
 {
   "attachment": ["abliterated-model"],
-  "temperature": ["abliterated-model", "abliterated-model-large"],
-  "structuredOutput": ["abliterated-model-large"]
+  "temperature": ["abliterated-model", "abliterated-model-large", "abliterated-model-large-v2"],
+  "structuredOutput": ["abliterated-model-large", "abliterated-model-large-v2"]
 }

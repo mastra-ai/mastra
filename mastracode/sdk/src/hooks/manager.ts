@@ -24,6 +24,7 @@ import type {
   PermissionKind,
   PermissionDecision,
   InterruptReason,
+  SessionWorktreeInfo,
 } from './types.js';
 
 const emptyResult = (): HookEventResult => ({ allowed: true, results: [], warnings: [] });
@@ -35,8 +36,16 @@ export class HookManager {
   private configDirName: string;
   private homeDir?: string;
   private runId?: string;
+  private worktree?: SessionWorktreeInfo;
 
-  constructor(projectDir: string, sessionId: string, configDirName = DEFAULT_CONFIG_DIR, homeDir?: string) {
+  constructor(
+    projectDir: string,
+    sessionId: string,
+    configDirName = DEFAULT_CONFIG_DIR,
+    homeDir?: string,
+    worktree?: SessionWorktreeInfo,
+  ) {
+    this.worktree = worktree;
     this.projectDir = projectDir;
     this.sessionId = sessionId;
     this.configDirName = configDirName;
@@ -104,6 +113,21 @@ export class HookManager {
     };
     if (this.runId) base.run_id = this.runId;
     return base;
+  }
+
+  /**
+   * Session stdin, carrying worktree identity when there is one. Emitted on both
+   * session events so a hook that provisions on start can tear down on end using
+   * the same fields.
+   */
+  private sessionStdin(hook_event_name: 'SessionStart' | 'SessionEnd'): HookStdinSession {
+    const stdin: HookStdinSession = this.baseStdinFields(hook_event_name);
+    if (this.worktree) {
+      stdin.worktree_path = this.worktree.path;
+      if (this.worktree.branch) stdin.branch = this.worktree.branch;
+      if (this.worktree.mainRepoPath) stdin.main_repo_path = this.worktree.mainRepoPath;
+    }
+    return stdin;
   }
 
   // =========================================================================
@@ -185,9 +209,7 @@ export class HookManager {
       return emptyResult();
     }
 
-    const stdin: HookStdinSession = {
-      ...this.baseStdinFields('SessionStart'),
-    };
+    const stdin: HookStdinSession = this.sessionStdin('SessionStart');
 
     return runHooksForEvent(hooks, stdin);
   }
@@ -197,9 +219,7 @@ export class HookManager {
       return emptyResult();
     }
 
-    const stdin: HookStdinSession = {
-      ...this.baseStdinFields('SessionEnd'),
-    };
+    const stdin: HookStdinSession = this.sessionStdin('SessionEnd');
 
     return runHooksForEvent(hooks, stdin);
   }

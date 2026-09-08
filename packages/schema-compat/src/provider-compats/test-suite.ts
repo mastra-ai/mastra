@@ -995,6 +995,24 @@ export function createOpenAISuite(layer: SchemaCompatLayer) {
     });
   });
 
+  // OpenAI strict mode rejects `propertyNames`, which z.record() emits for its key type.
+  // See https://github.com/mastra-ai/mastra/issues/19273
+  describe('z.record() under strict mode', () => {
+    it('emits a record node that strict mode permits', () => {
+      const schema = z.object({ flags: z.record(z.string(), z.string()) });
+
+      const json = layer.processToJSONSchema(schema);
+
+      // Strict mode cannot express an open-ended map, so the value schema is not kept either.
+      // Assert the whole node, so that record support must update this expectation on purpose.
+      expect(json.properties!['flags']).toEqual({
+        type: 'object',
+        additionalProperties: false,
+        required: [],
+      });
+    });
+  });
+
   describe('Workspace tool schemas', () => {
     it('file_stat - no optional fields', () => {
       const schema = z.object({ path: z.string() });

@@ -179,8 +179,25 @@ title: Other Doc
 ---
 Link to [auth](/docs/auth/overview)
 <Card link="/docs/auth/overview#card" />
-const item = { link: '/docs/auth/overview#array' }
+<Card href="/docs/auth/overview#href" />
+const item = { link: '/docs/auth/overview#array', href: '/docs/auth/overview#object-href' }
 [auth-ref]: /docs/auth/overview#ref`,
+  },
+  {
+    path: 'src/content/en/docs/index-links.mdx',
+    content: `---
+title: Index links
+---
+[Auth](/docs/server/auth)
+[Auth slash](/docs/server/auth/)
+<Card href="/docs/server/auth#card" />`,
+  },
+  {
+    path: 'src/learn/content/auth.mdx',
+    content: `# Learn auth
+
+[Auth](/docs/auth/overview)
+[Auth website](https://mastra.ai/docs/auth/overview)`,
   },
   {
     path: 'src/content/en/docs/sidebars.js',
@@ -251,23 +268,16 @@ describe('move-doc utility functions', () => {
   test('routeToFilePath maps editable Mastra route families', () => {
     expect(routeToFilePath('/docs/agents/overview')).toBe('src/content/en/docs/agents/overview.mdx')
     expect(routeToFilePath('/reference/agents/agent')).toBe('src/content/en/reference/agents/agent.mdx')
-    expect(routeToFilePath('/guides/getting-started/quickstart')).toBe(
-      'src/content/en/guides/getting-started/quickstart.mdx',
-    )
   })
 
   test('filePathToRoute maps editable Mastra content files to routes', () => {
     expect(filePathToRoute('src/content/en/docs/agents/overview.mdx')).toBe('/docs/agents/overview')
     expect(filePathToRoute('src/content/en/reference/agents/agent.mdx')).toBe('/reference/agents/agent')
-    expect(filePathToRoute('src/content/en/guides/getting-started/quickstart.mdx')).toBe(
-      '/guides/getting-started/quickstart',
-    )
   })
 
   test('routeToSidebarId strips editable family route prefix', () => {
     expect(routeToSidebarId('/docs/agents/overview')).toBe('agents/overview')
     expect(routeToSidebarId('/reference/agents/agent')).toBe('agents/agent')
-    expect(routeToSidebarId('/guides/getting-started/quickstart')).toBe('getting-started/quickstart')
   })
 
   test('model routes are rejected because they are auto-generated', () => {
@@ -369,8 +379,23 @@ describe('move-doc Mastra integration tests', () => {
     const content = await tempSetup.readFile('src/content/en/docs/other-doc.mdx')
     expect(content).toContain('[auth](/docs/authentication/guide)')
     expect(content).toContain('link="/docs/authentication/guide#card"')
+    expect(content).toContain('href="/docs/authentication/guide#href"')
     expect(content).toContain("link: '/docs/authentication/guide#array'")
+    expect(content).toContain("href: '/docs/authentication/guide#object-href'")
     expect(content).toContain('[auth-ref]: /docs/authentication/guide#ref')
+
+    const learnContent = await tempSetup.readFile('src/learn/content/auth.mdx')
+    expect(learnContent).toContain('[Auth](/docs/authentication/guide)')
+    expect(learnContent).toContain('[Auth website](https://mastra.ai/docs/authentication/guide)')
+  })
+
+  test('rewrites public directory aliases when an index document moves', async () => {
+    await updateMdxLinks(['/docs/server/auth/index'], '/docs/auth/overview', { verbose: false })
+
+    const content = await tempSetup.readFile('src/content/en/docs/index-links.mdx')
+    expect(content).toContain('[Auth](/docs/auth/overview)')
+    expect(content).toContain('[Auth slash](/docs/auth/overview)')
+    expect(content).toContain('href="/docs/auth/overview#card"')
   })
 
   test('rewrites relative markdown links and preserves relative style', async () => {

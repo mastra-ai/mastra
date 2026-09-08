@@ -108,11 +108,19 @@ export class NetlifyDeployer extends Deployer {
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
     bundlerOptions: BundlerOptions,
+    additionalEntries: Record<string, string>,
   ) {
-    const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
-      ...bundlerOptions,
-      enableEsmShim: this.target !== 'edge',
-    });
+    const inputOptions = await super.getBundlerOptions(
+      serverFile,
+      mastraEntryFile,
+      analyzedBundleInfo,
+      toolsPaths,
+      {
+        ...bundlerOptions,
+        enableEsmShim: this.target !== 'edge',
+      },
+      additionalEntries,
+    );
 
     if (this.target === 'edge' && Array.isArray(inputOptions.plugins)) {
       // Run before subpathExternalsResolver so the resolveId hooks win.

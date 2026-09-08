@@ -1,7 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import {
   Composer,
   ComposerActions,
@@ -10,18 +12,15 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from '@mastra/playground-ui/components/MessageScroller';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
-import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import {
+  buildThreadRailTurns,
+  getClientMessageKey,
+  groupTurns,
+  ThreadRail,
+} from '@mastra/playground-ui/components/ThreadRail';
 import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
-import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -33,9 +32,9 @@ import { ComposerAttachmentsProvider, useComposerAttachments } from './attachmen
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
-import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
@@ -47,6 +46,7 @@ import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
+const EMPTY_SUGGESTED_PROMPTS: string[] = [];
 
 /**
  * Returns true only after `flag` has stayed true for `delayMs` continuously, so
@@ -92,9 +92,10 @@ const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
   if (turns.length === 0) return null;
 
   return (
+    // Shown once the viewport fits the 48rem column plus a rail-safe gutter on each side.
     <div
       data-testid="thread-rail-layer"
-      className="thread-rail-layer pointer-events-none absolute inset-y-0 left-4 z-20"
+      className="pointer-events-none absolute inset-y-0 left-4 z-20 hidden @min-[58rem]:block"
     >
       <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
     </div>
@@ -105,6 +106,7 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
+  suggestedPrompts?: string[];
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
@@ -120,14 +122,13 @@ export const Thread = ({
   agentName,
   agentId,
   threadId,
+  suggestedPrompts,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
   refreshThreadList,
 }: ThreadProps) => {
-  const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  useAutoscroll(areaRef, { enabled: true });
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
@@ -143,97 +144,100 @@ export const Thread = ({
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
   const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
   const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
+  // Keyed by the opening message's client key: `data-user-message` reconciliation
+  // swaps `message.id` to the server signal id, and a changing key would remount
+  // the whole turn.
+  const turnGroups = groupTurns(messages, {
+    key: getClientMessageKey,
+    opensTurn: message => threadRailAnchorIds.has(message.id),
+  });
 
   return (
     <ComposerAttachmentsProvider>
-      <MessageScrollerProvider>
-        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
-          <MessageScroller>
-            <MessageScrollerViewport
-              ref={areaRef}
-              className="h-full overflow-y-scroll"
-              style={{ overflowAnchor: 'none' }}
-            >
+      <ChatShell className="h-full" scroller={{ defaultScrollPosition: 'last-anchor' }} data-testid="thread-wrapper">
+        <ChatShell.Stage>
+          <ChatShell.Viewport style={{ overflowAnchor: 'none' }}>
+            <ThreadRailLayer turns={threadRailTurns} />
+            <ChatShell.Content>
               {isEmpty ? (
-                <ThreadWelcome agentName={agentName} />
+                <ThreadWelcome agentName={agentName} suggestedPrompts={suggestedPrompts} />
               ) : (
-                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
-                  <ThreadRailLayer turns={threadRailTurns} />
-                  <div
-                    ref={messagesContainerRef}
-                    data-testid="thread-message-column"
-                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
-                  >
-                    <BracketOverlay containerRef={messagesContainerRef} />
-                    <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                      {messages.map(message => {
-                        // Prefer the optimistic `clientMessageId` as the React key so the
-                        // user row keeps a stable identity when `data-user-message`
-                        // reconciliation swaps `message.id` to the server signal id. A
-                        // changing key would unmount/remount the row and shift the
-                        // trailing pending indicator. Falls back to `message.id` for
-                        // messages without a correlation key (assistant, reloaded).
-                        const messageKey = getClientMessageKey(message);
-                        return (
-                          <MessageScrollerItem
-                            key={messageKey}
-                            messageId={message.id}
-                            scrollAnchor={threadRailAnchorIds.has(message.id)}
-                          >
-                            <MessageRow
-                              message={message}
-                              hasModelList={hasModelList}
-                              isSpeaking={isSpeaking}
-                              onReadAloud={readAloud}
-                              onStopSpeaking={stopSpeaking}
-                            />
-                          </MessageScrollerItem>
-                        );
-                      })}
-                      {delayedPending && <PendingIndicator />}
-                    </MessageScrollerContent>
-
-                    {!isRunning && <SaveFullConversationAction />}
-                  </div>
-                </div>
+                <ChatShell.Column
+                  ref={messagesContainerRef}
+                  data-testid="thread-message-column"
+                  className="relative flex-1 gap-6 py-6"
+                >
+                  <BracketOverlay containerRef={messagesContainerRef} />
+                  {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
+                  <ArrivalScope>
+                    {turnGroups.map((group, index) => {
+                      const isLiveTurn = index === turnGroups.length - 1;
+                      // The first turn opens at the top already; room under it would only add empty scroll.
+                      const holdsRoom = isLiveTurn && isRunning && group.opensTurn && index > 0;
+                      return (
+                        <ChatShell.Turn
+                          key={group.key}
+                          opensTurn={group.opensTurn}
+                          holdsRoom={holdsRoom}
+                          className="gap-6"
+                        >
+                          {group.entries.map(message => (
+                            <MessageScrollerItem
+                              key={getClientMessageKey(message)}
+                              messageId={message.id}
+                              scrollAnchor={threadRailAnchorIds.has(message.id)}
+                            >
+                              <MessageRow
+                                message={message}
+                                hasModelList={hasModelList}
+                                isSpeaking={isSpeaking}
+                                onReadAloud={readAloud}
+                                onStopSpeaking={stopSpeaking}
+                              />
+                            </MessageScrollerItem>
+                          ))}
+                          {isLiveTurn && delayedPending && <PendingIndicator />}
+                        </ChatShell.Turn>
+                      );
+                    })}
+                  </ArrivalScope>
+                  {!isRunning && <SaveFullConversationAction />}
+                </ChatShell.Column>
               )}
-            </MessageScrollerViewport>
-            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
-              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
-            </div>
-          </MessageScroller>
-
-          {showThumbnailInChat && agentId && threadId && (
-            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
-              <BrowserThumbnail agentName={agentName} />
-            </div>
-          )}
-
-          <TaskPanel />
-
-          <AgentComposer
-            agentId={agentId}
-            threadId={threadId}
-            hasModelList={hasModelList}
-            hideModelSwitcher={hideModelSwitcher}
-            runOptionsSlot={runOptionsSlot}
-            refreshThreadList={refreshThreadList}
-          />
-        </div>
-      </MessageScrollerProvider>
+            </ChatShell.Content>
+            <ChatShell.Dock>
+              <ChatShell.ScrollButton />
+              <ChatShell.Column className="gap-2 px-2 md:px-2">
+                {showThumbnailInChat && agentId && threadId && <BrowserThumbnail agentName={agentName} />}
+                <TaskPanel />
+                <AgentComposer
+                  agentId={agentId}
+                  threadId={threadId}
+                  hasModelList={hasModelList}
+                  hideModelSwitcher={hideModelSwitcher}
+                  runOptionsSlot={runOptionsSlot}
+                  refreshThreadList={refreshThreadList}
+                />
+              </ChatShell.Column>
+            </ChatShell.Dock>
+          </ChatShell.Viewport>
+        </ChatShell.Stage>
+      </ChatShell>
     </ComposerAttachmentsProvider>
   );
 };
 
 export interface ThreadWelcomeProps {
   agentName?: string;
+  suggestedPrompts?: string[];
 }
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
+const ThreadWelcome = ({ agentName, suggestedPrompts = EMPTY_SUGGESTED_PROMPTS }: ThreadWelcomeProps) => {
   return (
     <div className="flex w-full grow flex-col items-center pt-[15vh]">
       <Avatar name={agentName || 'Agent'} size="lg" />
       <p className="mt-4 font-medium">How can I help you today?</p>
+      <SuggestedPromptList prompts={suggestedPrompts} />
     </div>
   );
 };
@@ -286,7 +290,7 @@ const AgentComposer = ({
     <div className="relative" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <VoiceCallPanel voiceCall={voiceCall} />
       <Composer
-        className="relative px-2 pb-2"
+        className="relative"
         onSubmit={event => {
           event.preventDefault();
           void submit();

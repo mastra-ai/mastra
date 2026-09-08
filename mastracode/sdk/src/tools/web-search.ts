@@ -1,6 +1,9 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, isValidationError, type ValidationError } from '@mastra/core/tools';
+import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
+import { z } from 'zod';
 
+import { loadSettings, type WebSearchProviderSetting } from '../onboarding/settings.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
 const MAX_WEB_SEARCH_TOKENS = 2_000;
@@ -8,13 +11,34 @@ const MAX_WEB_EXTRACT_TOKENS = 2_000;
 
 const MIN_RELEVANCE_SCORE = 0.25;
 
+const parallelWebSearchInputSchema = z.object({
+  query: z.string().min(1).describe('The search query'),
+});
+
+function requireParallelOutput<T>(output: T | ValidationError | void, operation: 'search' | 'extract'): T {
+  if (output === undefined) {
+    throw new Error(`Parallel ${operation} returned no output`);
+  }
+
+  if (isValidationError(output)) {
+    throw new Error(output.message);
+  }
+
+  return output;
+}
+
 /**
  * Check whether a Tavily API key is available in the environment.
- * Used by main.ts to decide whether to include Tavily tools or fall back
- * to Anthropic's native web search.
+ * Used to select model-independent web tools before falling back to
+ * model-native web search.
  */
 export function hasTavilyKey(): boolean {
   return !!process.env.TAVILY_API_KEY;
+}
+
+/** Check whether a Parallel API key is available in the environment. */
+export function hasParallelKey(): boolean {
+  return !!process.env.PARALLEL_API_KEY;
 }
 
 /**
@@ -82,4 +106,104 @@ export function createWebExtractTool() {
       return truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
     },
   });
+}
+
+/**
+ * Wraps the @mastra/parallel search tool with Mastra Code's standard tool id,
+ * markdown string output, and token truncation.
+ */
+export function createParallelWebSearchTool() {
+  const parallelSearchTool = createParallelSearchTool();
+
+  return createTool({
+    id: 'web-search',
+    description: parallelSearchTool.description!,
+    inputSchema: parallelWebSearchInputSchema,
+    execute: async (input, context) => {
+      const output = requireParallelOutput(
+        await parallelSearchTool.execute!({ searchQueries: [input.query] }, context),
+        'search',
+      );
+      const parts: string[] = [];
+
+      for (const result of output.results) {
+        const title = result.title || result.url;
+        const excerpts = (result.excerpts || []).filter(Boolean).join('\n');
+        parts.push([`## ${title}`, result.url, excerpts].filter(Boolean).join('\n'));
+      }
+
+      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_SEARCH_TOKENS);
+    },
+  });
+}
+
+/**
+ * Wraps the @mastra/parallel extract tool with Mastra Code's standard tool id,
+ * markdown string output, and token truncation.
+ */
+export function createParallelWebExtractTool() {
+  const parallelExtractTool = createParallelExtractTool();
+
+  return createTool({
+    id: 'web-extract',
+    description: parallelExtractTool.description!,
+    inputSchema: parallelExtractTool.inputSchema!,
+    execute: async (input, context) => {
+      const output = requireParallelOutput(await parallelExtractTool.execute!(input, context), 'extract');
+      const parts: string[] = [];
+
+      for (const result of output.results) {
+        const content = result.fullContent || (result.excerpts || []).filter(Boolean).join('\n');
+        parts.push([`## ${result.url}`, content].filter(Boolean).join('\n'));
+      }
+
+      for (const error of output.errors) {
+        const status = error.httpStatusCode ? ` (${error.httpStatusCode})` : '';
+        parts.push([`## ${error.url}`, `Error: ${error.errorType}${status}`, error.content].filter(Boolean).join('\n'));
+      }
+
+      return truncateStringForTokenEstimate(parts.join('\n\n'), MAX_WEB_EXTRACT_TOKENS);
+    },
+  });
+}
+
+/**
+ * Resolve which model-independent web provider to use. An explicit user
+ * preference wins while its API key is configured; otherwise `auto` picks the
+ * first configured provider key (Tavily, then Parallel).
+ */
+export function resolveWebSearchProvider(
+  preference: WebSearchProviderSetting = 'auto',
+): 'tavily' | 'parallel' | undefined {
+  if (preference === 'tavily' && hasTavilyKey()) return 'tavily';
+  if (preference === 'parallel' && hasParallelKey()) return 'parallel';
+
+  // `auto`, or an explicit choice whose key is no longer configured.
+  if (hasTavilyKey()) return 'tavily';
+  if (hasParallelKey()) return 'parallel';
+  return undefined;
+}
+
+/**
+ * Create the configured model-independent web tools for the provider selected
+ * via the `webSearchProvider` preference (set in the TUI settings panel).
+ */
+export function createConfiguredWebTools() {
+  const provider = resolveWebSearchProvider(loadSettings().preferences.webSearchProvider);
+
+  if (provider === 'parallel') {
+    return {
+      web_search: createParallelWebSearchTool(),
+      web_extract: createParallelWebExtractTool(),
+    };
+  }
+
+  if (provider === 'tavily') {
+    return {
+      web_search: createWebSearchTool(),
+      web_extract: createWebExtractTool(),
+    };
+  }
+
+  return undefined;
 }

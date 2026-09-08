@@ -100,25 +100,35 @@ export class WorkingMemory implements Processor {
     // Determine scope (default to 'resource')
     const scope = this.options.scope || 'resource';
 
+    const memoryRunState = memoryContext?.runState?.();
+
     // Retrieve working memory based on scope
     let workingMemoryData: string | null = null;
 
     if (scope === 'thread' && threadId) {
-      // Get thread-scoped working memory
-      const thread = await this.options.storage.getThreadById({ threadId });
+      // The thread was already loaded and ownership-validated during run preparation.
+      const thread = memoryRunState?.thread ?? (await this.options.storage.getThreadById({ threadId }));
       workingMemoryData = (thread?.metadata?.workingMemory as string) || null;
     } else if (scope === 'resource' && resourceId) {
-      // Get resource-scoped working memory
-      const resource = await this.options.storage.getResourceById({ resourceId });
-      workingMemoryData = resource?.workingMemory || null;
+      const cacheKey = `working-memory:resource:${resourceId}`;
+      const loadWorkingMemory = async () => {
+        const resource = await this.options.storage.getResourceById({ resourceId });
+        return resource?.workingMemory || null;
+      };
+      workingMemoryData = memoryRunState
+        ? await memoryRunState.load(cacheKey, loadWorkingMemory)
+        : await loadWorkingMemory();
     }
 
     // Get template (use template provider if available, then provided template, then default)
     let template: WorkingMemoryTemplate;
     if (this.options.templateProvider) {
-      const dynamicTemplate = await this.options.templateProvider.getWorkingMemoryTemplate({
-        memoryConfig: memoryContext.memoryConfig,
-      });
+      const cacheKey = 'working-memory:template';
+      const loadTemplate = () =>
+        this.options.templateProvider!.getWorkingMemoryTemplate({
+          memoryConfig: memoryContext?.memoryConfig,
+        });
+      const dynamicTemplate = memoryRunState ? await memoryRunState.load(cacheKey, loadTemplate) : await loadTemplate();
       template = dynamicTemplate ||
         this.options.template || {
           format: 'markdown' as const,

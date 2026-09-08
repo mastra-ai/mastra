@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createOpenAI } from '@ai-sdk/openai';
+import { stateSchema as mastraCodeStateSchema } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -47,6 +48,8 @@ export interface ScenarioServerOptions {
    * production web-server wiring). Default false (controller owns its storage).
    */
   inheritStorageFromMastra?: boolean;
+  /** Validate session state through the production MastraCode state schema. */
+  useMastraCodeStateSchema?: boolean;
 }
 
 export interface ScenarioServer {
@@ -102,6 +105,7 @@ export async function startAgentControllerServer(
     workspace: withWorkspace = false,
     browser: browserProvider = false,
     inheritStorageFromMastra = false,
+    useMastraCodeStateSchema = false,
   } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
@@ -173,6 +177,7 @@ export async function startAgentControllerServer(
     id: CONTROLLER_ID,
     ...(controllerStore ? { storage: controllerStore } : {}),
     workspace,
+    ...(useMastraCodeStateSchema ? { stateSchema: mastraCodeStateSchema } : {}),
     // Auto-approve tool calls (yolo) so scenarios exercise the full
     // execute-and-suspend path for built-in interactive tools (ask_user,
     // submit_plan) without a separate approval round-trip. Disable to test the

@@ -122,6 +122,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private queue: unknown[] = [];
   private transcriber: Realtime.AudioTranscriptionModel;
   private requestContext?: RequestContext;
+  private connectionAbort?: AbortController;
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
@@ -149,9 +150,20 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       speaker?: Realtime.Voice;
       transcriber?: Realtime.AudioTranscriptionModel;
       debug?: boolean;
+      /** Maximum connection handshake duration in milliseconds. Defaults to 15,000. */
+      connectTimeoutMs?: number;
     } = {},
   ) {
     super();
+
+    if (
+      options.connectTimeoutMs !== undefined &&
+      (!Number.isFinite(options.connectTimeoutMs) ||
+        options.connectTimeoutMs <= 0 ||
+        options.connectTimeoutMs > 2_147_483_647)
+    ) {
+      throw new Error('connectTimeoutMs must be a positive finite number no greater than 2147483647');
+    }
 
     this.client = new EventEmitter();
     this.state = 'close';
@@ -356,15 +368,69 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     }
   }
 
-  waitForOpen() {
-    return new Promise(resolve => {
-      this.ws?.on('open', resolve);
-    });
+  waitForOpen(): Promise<void> {
+    return this.waitForHandshake('open');
   }
 
-  waitForSessionCreated() {
-    return new Promise(resolve => {
-      this.client.on('session.created', resolve);
+  waitForSessionCreated(): Promise<void> {
+    return this.waitForHandshake('session.created');
+  }
+
+  private waitForHandshake(event: 'open' | 'session.created'): Promise<void> {
+    const ws = this.ws;
+    const signal = this.connectionAbort?.signal;
+    return new Promise((resolve, reject) => {
+      if (!ws) {
+        reject(new Error('WebSocket not initialized'));
+        return;
+      }
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        reject(new Error('OpenAI realtime WebSocket is closed'));
+        return;
+      }
+      if (event === 'open' && ws.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        ws.removeListener('open', onReady);
+        ws.removeListener('error', onError);
+        ws.removeListener('close', onClose);
+        this.client.removeListener('session.created', onReady);
+        this.client.removeListener('error', onProtocolError);
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      const onClose = (code: number, reason: Buffer) =>
+        onError(new Error(`OpenAI realtime WebSocket closed during handshake (${code}: ${reason.toString()})`));
+      const onProtocolError = (event: RealtimeServerEvents.EventMap['error']) =>
+        onError(new Error(event.error.message, { cause: event.error }));
+      const onAbort = () => onError(signal!.reason);
+      const timeoutMs = this.options.connectTimeoutMs ?? 15_000;
+      const timer = setTimeout(
+        () => onError(new Error(`OpenAI realtime connection timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+
+      if (event === 'open') ws.once('open', onReady);
+      else this.client.once('session.created', onReady);
+      ws.once('error', onError);
+      ws.once('close', onClose);
+      this.client.once('error', onProtocolError);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -391,8 +457,23 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       },
     });
 
+    const ws = this.ws;
+    this.state = 'close';
+    this.client.removeAllListeners();
+    const controller = new AbortController();
+    this.connectionAbort = controller;
     this.setupEventListeners();
-    await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
+    try {
+      await Promise.all([this.waitForOpen(), this.waitForSessionCreated()]);
+    } catch (error) {
+      controller.abort(error);
+      this.state = 'close';
+      this.ws = undefined;
+      ws.close();
+      throw error;
+    } finally {
+      this.connectionAbort = undefined;
+    }
 
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
@@ -415,6 +496,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
   disconnect() {
     this.state = 'close';
+    this.connectionAbort?.abort(new Error('OpenAI realtime connection disconnected during handshake'));
     this.ws?.close();
   }
 
@@ -565,7 +647,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       throw new Error('WebSocket not initialized');
     }
 
-    this.ws.on('message', message => {
+    const ws = this.ws;
+    ws.on('error', error => {
+      if (this.ws === ws) this.emit('error', error);
+    });
+    ws.on('message', message => {
+      if (this.ws !== ws) return;
       const data = JSON.parse(message.toString());
       this.client.emit(data.type, data);
 

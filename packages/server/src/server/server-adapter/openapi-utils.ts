@@ -6,6 +6,12 @@ import { standardSchemaToJSONSchema } from '@mastra/schema-compat';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import type { ServerRoute } from './routes';
 
+type SchemaApiRoute = Extract<ApiRoute, { readonly _mastraSchemaRoute: true }>;
+
+function isSchemaApiRoute(route: ApiRoute): route is SchemaApiRoute {
+  return '_mastraSchemaRoute' in route && route._mastraSchemaRoute === true;
+}
+
 interface RouteOpenAPIConfig {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   path: string;
@@ -131,6 +137,7 @@ function convertToJsonSchema(spec: OpenAPIRoute): any {
     summary: spec.summary,
     description: spec.description,
     tags: spec.tags,
+    deprecated: spec.deprecated,
     responses: {},
   };
 
@@ -272,6 +279,12 @@ export function convertCustomRoutesToOpenAPIPaths(routes: ApiRoute[]): Record<st
     }
 
     const method = route.method.toLowerCase();
+
+    if (isSchemaApiRoute(route)) {
+      paths[openapiPath][method] = convertToJsonSchema(route.openapi as OpenAPIRoute);
+      continue;
+    }
+
     const openapi = route.openapi;
 
     // Build the OpenAPI operation object from DescribeRouteOptions

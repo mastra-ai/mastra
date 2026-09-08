@@ -2,6 +2,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,9 @@ const itemClass = cn(
   'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-ui-smd leading-ui-sm text-neutral4 transition-colors outline-none select-none hover:bg-surface4 hover:text-neutral6 focus:bg-surface4 focus:text-neutral6 focus:outline-none focus-visible:ring-0 focus-visible:outline-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:bg-transparent data-disabled:hover:text-neutral4 data-disabled:focus:bg-transparent data-disabled:focus:text-neutral4 data-[highlighted]:bg-surface4 data-[highlighted]:text-neutral6 data-disabled:data-[highlighted]:bg-transparent data-disabled:data-[highlighted]:text-neutral4 [&_svg]:size-4 [&_svg]:shrink-0 [&>span]:truncate',
   '[&:hover>svg]:opacity-100 [&>svg]:size-[1.1em] [&>svg]:opacity-60',
 );
+
+// A hidden anchor makes Floating UI fall back to the top-left corner, so the popup goes with it.
+const positionerClass = 'z-50 outline-none data-[anchor-hidden]:hidden';
 
 const popupClass = cn(
   'z-50 max-h-[min(20rem,var(--available-height))] min-w-44 origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog outline-none',
@@ -86,7 +90,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       side = 'right',
       sideOffset = 0,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,
@@ -117,7 +121,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
+        <MenuPrimitive.Positioner className={positionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-sub-content"
@@ -146,7 +150,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       side = 'bottom',
       sideOffset = 8,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,
@@ -177,7 +181,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
+        <MenuPrimitive.Positioner className={positionerClass} {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"

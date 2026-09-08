@@ -3,6 +3,7 @@ import {
   ScreencastStreamImpl,
   DEFAULT_THREAD_ID,
   createBrowserRecordingTools,
+  resolveLaunchViewport,
 } from '@mastra/core/browser';
 import type {
   BrowserState,
@@ -183,9 +184,9 @@ export class AgentBrowser extends MastraBrowser {
     this.sharedManager = new BrowserManager();
 
     const localConfig = this.config as BrowserConfig;
-    const launchOptions: BrowserLaunchOptions = {
+    const launchOptions: BrowserLaunchOptions & { cdpHeaders?: Record<string, string> } = {
       headless: this.headless,
-      viewport: localConfig.viewport,
+      ...resolveLaunchViewport(localConfig.viewport),
       profile: localConfig.profile,
       executablePath: localConfig.executablePath,
       storageState: localConfig.storageState,
@@ -194,6 +195,9 @@ export class AgentBrowser extends MastraBrowser {
     // Resolve CDP URL if provided (can be string or function)
     if (localConfig.cdpUrl) {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
+    }
+    if (localConfig.cdpHeaders) {
+      launchOptions.cdpHeaders = localConfig.cdpHeaders;
     }
 
     await this.sharedManager.launch(launchOptions);

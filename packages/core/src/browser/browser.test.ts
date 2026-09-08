@@ -2,7 +2,7 @@ import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanupProfileLockFiles, killProcessGroup } from './browser';
+import { cleanupProfileLockFiles, killProcessGroup, resolveLaunchViewport, resolveViewportSize } from './browser';
 
 describe('cleanupProfileLockFiles', () => {
   let profileDir: string;
@@ -85,5 +85,36 @@ describe('killProcessGroup', () => {
     });
     expect(() => killProcessGroup(12345)).not.toThrow();
     killSpy.mockRestore();
+  });
+});
+
+describe('resolveViewportSize', () => {
+  it('passes explicit dimensions through', () => {
+    expect(resolveViewportSize({ width: 800, height: 600 })).toEqual({ width: 800, height: 600 });
+  });
+
+  // Providers that emulate a fixed size treat an absent viewport as "do not
+  // emulate", which is how 'window' is expressed.
+  it('drops the viewport for window', () => {
+    expect(resolveViewportSize('window')).toBeUndefined();
+  });
+
+  it('passes undefined through', () => {
+    expect(resolveViewportSize(undefined)).toBeUndefined();
+  });
+});
+
+describe('resolveLaunchViewport', () => {
+  it('passes explicit dimensions through without launch args', () => {
+    expect(resolveLaunchViewport({ width: 800, height: 600 })).toEqual({ viewport: { width: 800, height: 600 } });
+  });
+
+  // agent-browser disables viewport emulation when it sees a window-sizing arg.
+  it('requests a maximized window for window', () => {
+    expect(resolveLaunchViewport('window')).toEqual({ args: ['--start-maximized'] });
+  });
+
+  it('leaves the viewport unset when unconfigured', () => {
+    expect(resolveLaunchViewport(undefined)).toEqual({ viewport: undefined });
   });
 });

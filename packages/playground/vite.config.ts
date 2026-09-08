@@ -265,6 +265,14 @@ export default defineConfig(({ mode }) => {
             target: `http://${targetHost}:${targetPort}`,
             changeOrigin: true,
           },
+          // The Studio shell (index.html) opens an SSE connection to the dev
+          // server's refresh notifications at the root, outside /api. Without
+          // this entry the dev playground 404s the SSE and hot-reload
+          // refreshes never reach it.
+          '/refresh-events': {
+            target: `http://${targetHost}:${targetPort}`,
+            changeOrigin: true,
+          },
         },
       },
     };

@@ -24,7 +24,8 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/libsql": "link:../../stores/libsql",
-      "@mastra/memory": "link:../../packages/memory"
+      "@mastra/memory": "link:../../packages/memory",
+      "nanoid@>=3.0.0 <3.3.18": "3.3.18"
     }
   },
   "devDependencies": {

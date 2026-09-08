@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 const sourcePath = new URL('../vercel.redirects.json', import.meta.url)
 const outputPath = new URL('../vercel.json', import.meta.url)
 
-const INTERNAL_PREFIXES = ['/docs', '/guides', '/models', '/reference']
+const INTERNAL_PREFIXES = ['/docs', '/guides', '/integrations', '/models', '/reference']
 
 const HEADERS = [
   {
@@ -43,9 +43,7 @@ function isExternalUrl(value) {
 }
 
 export function toLlmsTxtPath(value) {
-  const fragmentIndex = value.indexOf('#')
-  const pathname = fragmentIndex === -1 ? value : value.slice(0, fragmentIndex)
-  const fragment = fragmentIndex === -1 ? '' : value.slice(fragmentIndex + 1)
+  const pathname = value.split('#', 1)[0]
   let llmsPath
 
   if (pathname.endsWith('/llms.txt')) {
@@ -56,7 +54,7 @@ export function toLlmsTxtPath(value) {
     llmsPath = `${pathname}/llms.txt`
   }
 
-  return fragment ? `${llmsPath}#${fragment}` : llmsPath
+  return llmsPath
 }
 
 export function shouldGenerateLlmsRedirect(redirect) {
@@ -95,7 +93,25 @@ export function assertNoDuplicateSources(redirects) {
   }
 }
 
+export function assertNoRedirectChains(redirects) {
+  const redirectsBySource = new Map(redirects.map(redirect => [redirect.source.split('#', 1)[0], redirect]))
+
+  for (const redirect of redirects) {
+    const destinationPath = redirect.destination.split('#', 1)[0]
+    const nextRedirect = redirectsBySource.get(destinationPath)
+
+    if (nextRedirect) {
+      throw new Error(
+        `Redirect chain detected: ${redirect.source} -> ${redirect.destination} -> ${nextRedirect.destination}`,
+      )
+    }
+  }
+}
+
 export function generateRedirects(sourceRedirects) {
+  assertNoDuplicateSources(sourceRedirects)
+  assertNoRedirectChains(sourceRedirects)
+
   const generated = sourceRedirects.filter(shouldGenerateLlmsRedirect).map(createLlmsRedirect)
   const redirects = [...sourceRedirects, ...generated]
   assertNoDuplicateSources(redirects)

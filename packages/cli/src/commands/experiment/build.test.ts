@@ -51,6 +51,21 @@ describe('buildExperimentWorker', () => {
     expect(mocks.writeArtifactManifest).toHaveBeenCalledWith(outputDirectory, expect.any(String));
   });
 
+  it('resolves a relative project root before bundling', async () => {
+    const { buildExperimentWorker } = await import('./build');
+
+    await buildExperimentWorker({ root: '.' });
+
+    expect(mocks.bundle).toHaveBeenCalledWith(
+      '/project/src/mastra/index.ts',
+      join(process.cwd(), '.mastra', 'experiment-worker'),
+      {
+        toolsPaths: [],
+        projectRoot: process.cwd(),
+      },
+    );
+  });
+
   it('resolves a relative custom output directory from the project root', async () => {
     const { buildExperimentWorker } = await import('./build');
 

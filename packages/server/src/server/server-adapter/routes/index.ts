@@ -16,6 +16,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { DYNAMIC_WORKFLOWS_ROUTES } from './dynamic-workflows';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -33,7 +34,6 @@ import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
 import { STORED_PROMPT_BLOCKS_ROUTES } from './stored-prompt-blocks';
 import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import { STORED_SKILLS_ROUTES } from './stored-skills';
-import { STORED_WORKFLOWS_ROUTES } from './stored-workflows';
 import { STORED_WORKSPACES_ROUTES } from './stored-workspaces';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
@@ -180,7 +180,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
-  ...STORED_WORKFLOWS_ROUTES,
+  ...DYNAMIC_WORKFLOWS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
   ...STORED_SCORERS_ROUTES,

@@ -121,6 +121,41 @@ describe('RedisStreamsPubSub', () => {
     });
   });
 
+  describe('subscription start position', () => {
+    it('skips existing events when a new consumer group starts from latest', async () => {
+      const ps = createPubSub();
+      const topic = `t-${randomUUID()}`;
+      const received = captureCalls();
+
+      await ps.publish(topic, makeEvent({ type: 'backlog' }));
+      await ps.subscribe(topic, received.cbAutoAck, { group: 'live-tail', startFrom: 'latest' });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(received.calls).toHaveLength(0);
+
+      await ps.publish(topic, makeEvent({ type: 'live' }));
+      await waitFor(() => received.calls.length === 1);
+      expect(received.calls[0]!.event.type).toBe('live');
+    });
+
+    it('does not reset an existing consumer group when startFrom is latest', async () => {
+      const ps = createPubSub();
+      const topic = `t-${randomUUID()}`;
+      const first = captureCalls();
+      const resumed = captureCalls();
+
+      await ps.publish(topic, makeEvent({ type: 'first' }));
+      await ps.subscribe(topic, first.cbAutoAck, { group: 'existing' });
+      await waitFor(() => first.calls.length === 1);
+      await ps.unsubscribe(topic, first.cbAutoAck);
+
+      await ps.publish(topic, makeEvent({ type: 'while-detached' }));
+      await ps.subscribe(topic, resumed.cbAutoAck, { group: 'existing', startFrom: 'latest' });
+
+      await waitFor(() => resumed.calls.length === 1);
+      expect(resumed.calls[0]!.event.type).toBe('while-detached');
+    });
+  });
+
   describe('group (competing consumers)', () => {
     it('delivers each message to exactly one subscriber in the group', async () => {
       const ps = createPubSub();

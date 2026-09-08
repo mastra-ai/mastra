@@ -5,30 +5,16 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser, IRBACProvider, RoleMapping } from '@internal/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
 import { MastraAuthProvider } from '@internal/auth/provider';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
-
-type HonoRequestLike = {
-  raw?: Request;
-  headers?: Headers;
-  header(name: string): string | undefined;
-};
-
-type MastraAuthRequest = Request | HonoRequestLike;
-
-function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
-  if (request instanceof Request) {
-    return request.headers.get(name);
-  }
-
-  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
-}
 
 export interface StudioUser extends EEUser {
   id: string;

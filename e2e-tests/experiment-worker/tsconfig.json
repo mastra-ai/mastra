@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": false
+  },
+  "include": [
+    "helpers",
+    "reporters",
+    "scenarios",
+    "tests",
+    "setup.ts",
+    "vitest.config.ts",
+    "vitest.routing.config.ts",
+    "vitest.d.ts"
+  ],
+  "exclude": ["node_modules", "fixtures"]
+}

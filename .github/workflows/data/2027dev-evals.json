@@ -1,0 +1,9 @@
+{
+  "evals": [
+    {
+      "title": "chatbot w/ tools",
+      "promptId": "6404c098-6a30-47d8-be74-b87ceee70552",
+      "paths": ["docs/src/content/en/docs/index.mdx"]
+    }
+  ]
+}

@@ -46,6 +46,14 @@ export type OutputChunkType<OUTPUT = undefined> =
   | DataChunkType
   | undefined;
 
+type AISDKToolOutputDenied = {
+  type: 'tool-output-denied';
+  toolCallId: string;
+  toolName: string;
+  providerExecuted?: boolean;
+  dynamic?: boolean;
+};
+
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
@@ -366,7 +374,9 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         output: hasTransformedToolPayload(displayOutputTransform)
           ? displayOutputTransform.transformed
           : chunk.payload.result,
-        // providerMetadata: chunk.payload.providerMetadata, // AI v5 types don't show this?
+        // Carries the `toModelOutput` projection as `mastra.modelOutput`; dropping it sent
+        // the raw tool output back into the prompt on a `useChat` round trip (issue #22012).
+        ...(chunk.payload.providerMetadata != null ? { providerMetadata: chunk.payload.providerMetadata } : {}),
       };
     case 'tool-error':
       return {
@@ -510,7 +520,15 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
 }: {
   chunk: ChunkType<OUTPUT>;
   mode?: 'generate' | 'stream';
-}): OutputChunkType<OUTPUT> | OutputChunkType<OUTPUT>[] {
+}): OutputChunkType<OUTPUT> | AISDKToolOutputDenied | OutputChunkType<OUTPUT>[] {
+  if (chunk.type === 'tool-output-denied') {
+    return {
+      type: 'tool-output-denied',
+      toolCallId: chunk.payload.toolCallId,
+      toolName: chunk.payload.toolName,
+    };
+  }
+
   if (chunk.type === 'tool-call-approval') {
     const displayTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
     // Emit both the native v6 tool-approval-request AND the legacy data-tool-call-approval
@@ -559,6 +577,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
   // tool-output is a custom mastra chunk type used in ToolStream
   part:
     | TextStreamPart<ToolSet>
+    | AISDKToolOutputDenied
     | DataChunkType
     | ToolApprovalRequest
     | { type: 'tool-output'; toolCallId: string; output: any };
@@ -722,7 +741,17 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         toolCallId: part.toolCallId,
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
+        // Mirrors `tool-call` above. The AI SDK stores this as the UI part's
+        // `resultProviderMetadata`, so `mastra.modelOutput` survives the trip (issue #22012).
+        ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+      };
+    }
+
+    case 'tool-output-denied': {
+      return {
+        type: 'tool-output-denied',
+        toolCallId: part.toolCallId,
       };
     }
 
@@ -802,6 +831,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
       if (sendFinish) {
         return {
           type: 'finish' as const,
+          // Matches the AI SDK UI converter, which keeps the finish reason on the terminal chunk.
+          ...(part.finishReason != null ? { finishReason: part.finishReason } : {}),
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
         } as InferUIMessageChunk<UI_MESSAGE>;
       }

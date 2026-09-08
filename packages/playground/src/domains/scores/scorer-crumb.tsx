@@ -7,7 +7,7 @@ export function ScorerCrumb() {
   const { scorerId } = useParams<{ scorerId: string }>();
   if (!scorerId) return null;
 
-  return <ScorerCombobox value={scorerId} variant="ghost" />;
+  return <ScorerCombobox value={scorerId} variant="ghost" size="sm" />;
 }
 
 export function StoredScorerCrumb() {

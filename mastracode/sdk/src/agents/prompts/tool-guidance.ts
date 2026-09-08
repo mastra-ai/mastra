@@ -8,12 +8,18 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  hasSubagents?: boolean;
+  /** Subconscious knowledge tools are registered (experimental subconscious enabled). */
+  hasSubconscious?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
+  /** Workspace-relative directory where plan mode can write plans. */
+  plansDir?: string;
 }
 
 export function buildToolGuidance(modeId: string, options: ToolGuidanceOptions = {}): string {
   const denied = options.deniedTools ?? new Set<string>();
+  const plansDir = options.plansDir ?? '.mastracode/plans';
   const sections: string[] = [];
 
   sections.push(`# Tool Usage Rules
@@ -134,6 +140,53 @@ ${webTools.join(' / ')} — Search the web / extract page content
     }
   }
 
+  // --- Subconscious knowledge tools (all modes, conditionally available) ---
+
+  if (options.hasSubconscious) {
+    const knowledgeTools = ['knowledge_search', 'knowledge_read', 'knowledge_browse'].filter(name => !denied.has(name));
+    const hasAskMemory = !denied.has('ask_memory');
+    if (knowledgeTools.length > 0 || hasAskMemory) {
+      const lines = [
+        `
+# Subconscious Memory
+
+A background memory system (the "subconscious") runs alongside you. After conversations, it extracts durable knowledge — decisions, preferences, people, files, repos, work items — into a knowledge graph scoped to this project, visible across your sessions here. It also delivers reminders (\`<remembered>\`) and pinned knowledge into your context on its own; you do not manage those directly.`,
+      ];
+      if (knowledgeTools.length > 0) {
+        const bullets: string[] = [];
+        if (knowledgeTools.includes('knowledge_search')) {
+          bullets.push(
+            "- Use `knowledge_search` for a quick lexical + semantic lookup when you need a specific fact (a past decision, a person's role, what a file is for). Cheaper than re-deriving it from the codebase or asking the user.",
+          );
+        }
+        if (knowledgeTools.includes('knowledge_read')) {
+          bullets.push('- Use `knowledge_read` to open a node by name or ID and see the records about it.');
+        }
+        if (knowledgeTools.includes('knowledge_browse')) {
+          bullets.push(
+            "- Use `knowledge_browse` to list nodes by kind or name prefix, or to walk a node's mentions and backlinks.",
+          );
+        }
+        if (!denied.has('recall')) {
+          bullets.push(
+            '- Prefer these over `recall` when the question is about durable facts rather than what was said in a specific past conversation.',
+          );
+        }
+        lines.push(`
+${knowledgeTools.map(name => `**${name}**`).join(' / ')} — Query the knowledge graph directly
+${bullets.join('\n')}`);
+      }
+      if (hasAskMemory) {
+        lines.push(`
+**ask_memory** — Ask the reminder sidekick a question about existing memory
+- Use only when the answer is not already in your context and a direct search is not enough: open-ended questions ("what did we decide about X and why?") or questions that need synthesis across several memories. It answers from what is already remembered; it does not store anything.
+- It is ASYNCHRONOUS. The tool returns as soon as the question is accepted; the answer arrives later as one or more \`<remind-answer source="subconscious" agent="remind" replyId="…" moreComing="true|false">\` messages in your context. Keep working — do not poll or wait, and do not re-ask the same question.
+- Treat a message with \`moreComing="true"\` as partial; the reply is complete only when \`moreComing="false"\` arrives. Fold the answer into your work and cite it as remembered context rather than as something you verified yourself.`);
+      }
+      sections.push(lines.join('\n'));
+    }
+  }
+
   // --- Task management tools (all modes) ---
 
   const taskTools: string[] = [];
@@ -213,12 +266,12 @@ ${patchToolGuidance}
 - Call this tool when your plan is complete. Do NOT just describe your plan in text — you MUST call this tool.
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
-- Takes one argument: \`path\` (the plan markdown file you wrote under \`.mastracode/plans/\`). Do NOT pass the plan body — it lives in the file.`);
+- Takes one argument: \`path\` (the plan markdown file you wrote under \`${plansDir}/\`). Do NOT pass the plan body — it lives in the file.`);
   }
 
   if (modeId === 'plan') {
     sections.push(`
-**Plan file access** — Your plan lives in a markdown file under \`.mastracode/plans/\` (e.g. \`add-dark-mode-toggle.md\`)
+**Plan file access** — Your plan lives in a markdown file under \`${plansDir}/\` (e.g. \`add-dark-mode-toggle.md\`)
 - Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
 - On first submission: write the plan to the file, then call \`submit_plan\` with its \`path\`.
 - On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with the same \`path\`.
@@ -227,7 +280,7 @@ ${patchToolGuidance}
 
   // --- Subagent tool (all modes) ---
 
-  if (!denied.has('subagent')) {
+  if (options.hasSubagents !== false && !denied.has('subagent')) {
     sections.push(`
 **subagent** — Delegate a focused task to a specialized subagent
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.

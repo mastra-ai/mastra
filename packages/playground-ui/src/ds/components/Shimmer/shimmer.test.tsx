@@ -20,13 +20,22 @@ describe('Shimmer', () => {
 
     const el = screen.getByText('Loading');
     expect(el.className).toContain('custom-class');
-    expect(el.className).toContain('text-transparent');
+    expect(el.className).toContain('shimmer-text');
   });
 
-  it('drives the shimmer-text keyframe animation', () => {
-    render(<Shimmer>Animate</Shimmer>);
+  it('lands in place when the work it watches ends, keeping the element it wraps', () => {
+    const { rerender } = render(<Shimmer>Running</Shimmer>);
+    const sweeping = screen.getByText('Running');
 
-    const el = screen.getByText('Animate');
-    expect(el.style.animation).toContain('shimmer-text');
+    rerender(<Shimmer active={false}>Running</Shimmer>);
+
+    expect(screen.getByText('Running')).toBe(sweeping);
+    expect(sweeping.className).toContain('shimmer-settled');
+  });
+
+  it('leaves text that never swept unpainted', () => {
+    render(<Shimmer active={false}>Done</Shimmer>);
+
+    expect(screen.getByText('Done').className).not.toContain('shimmer');
   });
 });

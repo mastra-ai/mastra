@@ -61,12 +61,16 @@ describe('nested workflow output compaction', () => {
       state: { iteration: 2 },
       suspended: [['approval']],
       suspendPayload: { approvalId: 'approval-1' },
+      resumeLabels: { 'approve-me': { stepId: 'approval' } },
     } as any;
 
     expect(compactNestedWorkflowResult(result)).toEqual({
       status: 'suspended',
       steps,
       state: { iteration: 2 },
+      // Labels must survive compaction; the parent re-registers them so each
+      // parked leaf stays individually addressable.
+      resumeLabels: { 'approve-me': { stepId: 'approval' } },
     });
   });
 
@@ -114,7 +118,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
-          outputOptions: { includeState: true },
+          outputOptions: { includeState: true, includeResumeLabels: true },
         }),
       }),
     );

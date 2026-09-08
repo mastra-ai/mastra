@@ -131,7 +131,7 @@ function looksLikeProcessorStepSchema(schema: PublicSchema<unknown> | undefined)
     if (!variants || !Array.isArray(variants)) return false;
 
     // Check if all variants have a 'phase' property with processor phase values
-    const processorPhases = new Set(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']);
+    const processorPhases = new Set(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult']);
 
     for (const variant of variants) {
       const properties = variant.properties as Record<string, unknown> | undefined;

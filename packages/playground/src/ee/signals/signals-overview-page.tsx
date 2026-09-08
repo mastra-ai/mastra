@@ -1,71 +1,47 @@
-import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
-import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
-import { useState } from 'react';
+import { TraceIntelligenceEntityIndex, TraceIntelligenceProvider } from '@mastra/playground-ui/ee/signals';
+import { Navigate, useSearchParams } from 'react-router';
 
 import { Link } from '../../lib/link';
-import { useEntityLearningProgress } from './hooks';
-import { SankeySignals } from './sankey-signals';
-import { SignalsErrorState } from './signals-error-state';
-import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
-import type { TraceSignalName } from './types';
-import { useSelectedThemeEntity } from './use-selected-theme-entity';
-
-const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
+import { useEntityIndexUrlState } from './use-entity-index-url-state';
 
 export function SignalsOverviewPage() {
-  const { entitiesQuery, entity } = useSelectedThemeEntity();
-  const [datePreset, setDatePreset] = useState<DateRangePreset>('last-7d');
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-  const [dateTo, setDateTo] = useState<Date>();
-  const handleDateChange = (value: Date | undefined, type: 'from' | 'to') => {
-    if (type === 'from') setDateFrom(value);
-    else setDateTo(value);
-  };
-  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
-  const progressQuery = useEntityLearningProgress(
-    entity?.entityId,
-    entity?.entityType ?? 'agent',
-    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
+  return (
+    <TraceIntelligenceProvider cacheScope="oss-studio" LinkComponent={Link}>
+      <SignalsOverviewContent />
+    </TraceIntelligenceProvider>
   );
+}
 
-  if (entitiesQuery.isPending) {
-    return <SignalsLoadingSkeleton />;
-  }
+function SignalsOverviewContent() {
+  const urlState = useEntityIndexUrlState();
+  const [searchParams] = useSearchParams();
+  const legacyEntityId = searchParams.get('agent');
 
-  if (entitiesQuery.isError) {
+  if (legacyEntityId) {
+    const detailSearch = new URLSearchParams(searchParams);
+    detailSearch.delete('agent');
+    const query = detailSearch.toString();
     return (
-      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
+      <Navigate
+        replace
+        to={`/intelligence/entities/agent/${encodeURIComponent(legacyEntityId)}${query ? `?${query}` : ''}`}
+      />
     );
   }
 
-  if (!entity) {
-    return <SignalsEmptyState LinkComponent={Link} />;
-  }
-
-  if (signalNames.length < 2) {
-    return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
-  }
-
   return (
-    <SankeySignals
-      key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
-      entityId={entity.entityId}
+    <TraceIntelligenceEntityIndex
       entityType="agent"
-      signalNames={signalNames}
-      dateFrom={dateFrom}
-      dateTo={dateTo}
-      dateRangePicker={
-        <DateTimeRangePicker
-          preset={datePreset}
-          onPresetChange={setDatePreset}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onDateChange={handleDateChange}
-          presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-          size="sm"
-        />
-      }
+      {...urlState}
+      getEntityHref={entity => {
+        const detailSearch = new URLSearchParams();
+        for (const key of ['datePreset', 'dateFrom', 'dateTo']) {
+          const value = searchParams.get(key);
+          if (value) detailSearch.set(key, value);
+        }
+        const query = detailSearch.toString();
+        return `/intelligence/entities/${encodeURIComponent(entity.entityType)}/${encodeURIComponent(entity.entityId)}${query ? `?${query}` : ''}`;
+      }}
     />
   );
 }

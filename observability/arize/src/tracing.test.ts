@@ -159,6 +159,11 @@ describe('ArizeExporter', () => {
     expect(exporter).toBeDefined();
     expect(exportedSpans.length).toBe(1);
 
+    // The attribute shape below is dictated by @arizeai/openinference-genai, not by us. Two details
+    // are owned by that package rather than this exporter: tool messages carry a flat
+    // `message.content` (not the nested `contents.0.message_content` shape the other roles use), and
+    // `llm.system` is emitted alongside `llm.provider`. Both arrived in 0.3.0. If this snapshot
+    // fails after a dependency bump, diff it against that package before assuming a regression here.
     expect(exportedSpans[0].attributes).toMatchInlineSnapshot(`
       {
         "input.mime_type": "application/json",
@@ -175,8 +180,7 @@ describe('ArizeExporter', () => {
         "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments": ""{\\"city\\":\\"Tokyo\\"}"",
         "llm.input_messages.2.message.tool_calls.0.tool_call.function.name": "weatherTool",
         "llm.input_messages.2.message.tool_calls.0.tool_call.id": "weatherTool-1",
-        "llm.input_messages.3.message.contents.0.message_content.text": "{"city":"Tokyo","temperature":70,"condition":"sunny"}",
-        "llm.input_messages.3.message.contents.0.message_content.type": "text",
+        "llm.input_messages.3.message.content": "{"city":"Tokyo","temperature":70,"condition":"sunny"}",
         "llm.input_messages.3.message.role": "tool",
         "llm.input_messages.3.message.tool_call_id": "weatherTool-1",
         "llm.invocation_parameters": "{"model":"gpt-4"}",
@@ -185,6 +189,7 @@ describe('ArizeExporter', () => {
         "llm.output_messages.0.message.contents.0.message_content.type": "text",
         "llm.output_messages.0.message.role": "assistant",
         "llm.provider": "openai",
+        "llm.system": "openai",
         "llm.token_count.completion": 5,
         "llm.token_count.prompt": 10,
         "llm.token_count.total": 15,
@@ -723,7 +728,11 @@ describe('ArizeExporter', () => {
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
     });
 
-    it('maps mcp_tool_call spans to TOOL span kind', async () => {
+    it.each([
+      { mcpServer: 'filesystem-server', serverVersion: '1.2.0' },
+      { mcpServer: 'roster-server', serverVersion: '9.9.9' },
+      { mcpServer: 'unversioned-server', serverVersion: undefined },
+    ])('preserves MCP tool and server metadata for $mcpServer', async ({ mcpServer, serverVersion }) => {
       exporter = new ArizeExporter({
         endpoint: 'http://localhost:4318/v1/traces',
       });
@@ -734,15 +743,21 @@ describe('ArizeExporter', () => {
         parentSpanId: 'parent-agent',
         type: SpanType.MCP_TOOL_CALL,
         name: 'execute_tool filesystem.readFile',
+        entityName: 'filesystem.readFile',
+        isEvent: false,
         startTime: new Date(),
         endTime: new Date(),
         isRootSpan: false,
         input: { path: '/tmp/file.txt' },
         output: { content: 'file contents' },
         attributes: {
-          mcpServer: 'filesystem-server',
+          mcpServer,
+          serverVersion,
+          toolDescription: 'Read a file',
+          toolType: 'tool',
+          toolCallId: 'mcp-call-1',
         },
-      } as unknown as AnyExportedSpan;
+      };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -752,8 +767,16 @@ describe('ArizeExporter', () => {
       expect(exportedSpans.length).toBe(1);
       const attrs = exportedSpans[0].attributes;
 
-      // MCP tool call spans should be mapped to TOOL span kind
       expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
+      expect(attrs['tool.name']).toBe('filesystem.readFile');
+      expect(attrs['tool.description']).toBe('Read a file');
+      expect(attrs['tool_call.id']).toBe('mcp-call-1');
+      expect(attrs['mastra.mcp_tool_call.server_name']).toBe(mcpServer);
+      if (serverVersion) {
+        expect(attrs['mastra.mcp_tool_call.server_version']).toBe(serverVersion);
+      } else {
+        expect(attrs).not.toHaveProperty('mastra.mcp_tool_call.server_version');
+      }
     });
 
     it('defaults unknown span types to CHAIN span kind', async () => {

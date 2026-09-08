@@ -2,9 +2,15 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PNPM_WORKSPACE, writeEmptyScaffold } from './utils';
+
+// writeEmptyScaffold resolves exact versions via `npm view`. These tests only
+// care about manifest shape, so skip the registry and fall back to the tag.
+vi.mock('./version-resolver', () => ({
+  resolveMastraPackageVersions: vi.fn(async () => undefined),
+}));
 
 /**
  * Verifies that the direct pnpm scaffold avoids packageManager metadata that
@@ -50,6 +56,11 @@ describe('pnpm v11 packageManager normalization', () => {
   it('writes the complete pnpm 11 workspace and build-policy configuration', async () => {
     const projectPath = await createPnpmProject();
 
-    expect(await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8')).toBe(PNPM_WORKSPACE);
+    const workspace = await fs.readFile(path.join(projectPath, 'pnpm-workspace.yaml'), 'utf8');
+    expect(workspace).toBe(PNPM_WORKSPACE);
+    expect(workspace).toContain('  bufferutil: true');
+    expect(workspace).toContain('  protobufjs: true');
+    expect(workspace).toContain('  utf-8-validate: true');
+    expect(workspace).not.toContain('onlyBuiltDependencies');
   });
 });

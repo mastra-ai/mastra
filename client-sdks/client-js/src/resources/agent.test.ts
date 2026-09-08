@@ -13,6 +13,7 @@ import type {
   SubscribeAgentThreadParams,
 } from '../types';
 import { processClientTools } from '../utils/process-client-tools';
+import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
 
@@ -2089,6 +2090,24 @@ describe('Agent Client Methods', () => {
     );
   });
 
+  it('should read a submitted plan with the agent version and request context', async () => {
+    global.fetch = vi.fn();
+    const path = '.mastracode/plans/add-dark-mode.md';
+    const mockResponse = { path, content: '# Add dark mode' };
+    const requestContext = { tenantId: 'tenant-123' };
+    mockFetchResponse(mockResponse);
+
+    const versionedAgent = client.getAgent('test-agent', { versionId: 'version-123' });
+    const result = await versionedAgent.readPlan(path, requestContext);
+
+    expect(result).toEqual(mockResponse);
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.pathname).toBe('/api/agents/test-agent/plans/file');
+    expect(requestedUrl.searchParams.get('path')).toBe(path);
+    expect(requestedUrl.searchParams.get('versionId')).toBe('version-123');
+    expect(requestedUrl.searchParams.get('requestContext')).toBe(btoa(JSON.stringify(requestContext)));
+  });
+
   it('should list override versions for a code agent', async () => {
     const mockResponse = {
       versions: [{ id: 'version-1', agentId: 'test-agent', versionNumber: 1 }],
@@ -2487,12 +2506,14 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     baseUrl: 'https://api.test.com',
   };
 
-  function makeStreamingResponse(chunks: unknown[]): Response {
+  function makeStreamingResponse(chunks: Array<unknown | Uint8Array>): Response {
     const encoder = new TextEncoder();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         for (const chunk of chunks) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          controller.enqueue(
+            chunk instanceof Uint8Array ? chunk : encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`),
+          );
         }
         controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         controller.close();
@@ -2611,6 +2632,67 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
 
     // And the recursive call must have happened.
     expect(mockRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves multi-byte characters split across network chunks', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-id');
+    const encoder = new TextEncoder();
+    const event = encoder.encode(`data: ${JSON.stringify({ type: 'text-delta', payload: { text: 'Mañana' } })}\n\n`);
+    const splitAt = event.indexOf(0xc3) + 1;
+    const response = makeStreamingResponse([event.slice(0, splitAt), event.slice(splitAt)]);
+    const mockRequest = vi.fn().mockResolvedValue(response);
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    let outerController!: ReadableStreamDefaultController<Uint8Array>;
+    const outerStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        outerController = controller;
+      },
+    });
+
+    const processPromise = agent.processStreamResponse(
+      { messages: [{ role: 'user', content: 'hi' }] },
+      outerController,
+    );
+
+    const captured = await readAllText(outerStream);
+    await processPromise;
+
+    expect(parseSseDataLines(captured)).toContainEqual({
+      type: 'text-delta',
+      payload: { text: 'Mañana' },
+    });
+  });
+
+  it('preserves SSE separators between complete network writes for processMastraStream', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent-id');
+    const firstChunk = { type: 'text-delta', payload: { text: 'first' } };
+    const secondChunk = { type: 'text-delta', payload: { text: 'second' } };
+    agent['request'] = vi
+      .fn()
+      .mockResolvedValue(makeStreamingResponse([firstChunk, secondChunk])) as (typeof agent)['request'];
+
+    let outerController!: ReadableStreamDefaultController<Uint8Array>;
+    const outerStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        outerController = controller;
+      },
+    });
+
+    const processPromise = agent.processStreamResponse(
+      { messages: [{ role: 'user', content: 'hi' }] },
+      outerController,
+    );
+    const receivedChunks: unknown[] = [];
+    await processMastraStream({
+      stream: outerStream,
+      onChunk: chunk => {
+        receivedChunks.push(chunk);
+      },
+    });
+    await processPromise;
+
+    expect(receivedChunks).toEqual([firstChunk, secondChunk]);
   });
 
   it('uses the observed stream runId for synthetic chunks on the public stream API', async () => {
