@@ -140,6 +140,38 @@ describe('envSuggestionsAction', () => {
     expect(mockStartEnvironmentDeployDiagnosis).toHaveBeenCalledWith('t', 'o', 'proj-1', 'env-1', 'dep-1');
   });
 
+  it('reports the diagnosis error and exits when diagnosis status is FAILED', async () => {
+    mockFetchEnvironments.mockResolvedValue([{ id: 'env-1', name: 'production', slug: 'production' }]);
+    mockFetchEnvironmentDeploys.mockResolvedValue([{ id: 'dep-1', environmentId: 'env-1', createdAt: '2025-06-01' }]);
+    mockFetchEnvironmentDeployDiagnosis.mockResolvedValue({
+      state: 'ready',
+      diagnosis: {
+        id: 'diag-1',
+        deployId: 'dep-1',
+        status: 'FAILED',
+        summary: null,
+        recommendations: [],
+        error: 'agent timed out',
+        createdAt: '2025-06-01T00:00:00Z',
+        completedAt: '2025-06-01T00:00:05Z',
+      },
+    });
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(((code?: string | number | null) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    const { envSuggestionsAction } = await import('./deploy-suggestions.js');
+    await expect(envSuggestionsAction('dep-1', { environment: 'production' })).rejects.toThrow('exit:1');
+
+    const errorMsg = String(mockLogError.mock.calls[0]?.[0] ?? '');
+    expect(errorMsg).toContain('agent timed out');
+    const stepMsg = String(mockLogStep.mock.calls[0]?.[0] ?? '');
+    expect(stepMsg).toContain('projects.mastra.ai');
+    expect(stepMsg).toContain('dep-1');
+
+    mockExit.mockRestore();
+  });
+
   it('exits with error when the environment cannot be found', async () => {
     mockFetchEnvironments.mockResolvedValue([{ id: 'env-1', name: 'production', slug: 'production' }]);
     const mockExit = vi.spyOn(process, 'exit').mockImplementation(((code?: string | number | null) => {
