@@ -8,6 +8,7 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  hasSubagents?: boolean;
   /** Subconscious knowledge tools are registered (experimental subconscious enabled). */
   hasSubconscious?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
@@ -279,7 +280,7 @@ ${patchToolGuidance}
 
   // --- Subagent tool (all modes) ---
 
-  if (!denied.has('subagent')) {
+  if (options.hasSubagents !== false && !denied.has('subagent')) {
     sections.push(`
 **subagent** — Delegate a focused task to a specialized subagent
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.

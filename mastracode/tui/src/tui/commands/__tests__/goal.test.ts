@@ -207,6 +207,7 @@ describe('handleGoalCommand', () => {
     const showInfo = vi.fn();
     const ctx = {
       state: createMockState({ session: { sendSignal }, extra: { goalManager } }),
+      addUserMessage: vi.fn(),
       showInfo,
       showError: vi.fn(),
       updateStatusLine: vi.fn(),
@@ -216,7 +217,14 @@ describe('handleGoalCommand', () => {
 
     expect(goalManager.resume).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    // No showInfo — only the signal renders the goal box (avoids duplicate).
+    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
+    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
+      reminderType: 'goal',
+      message: goal.objective,
+      goalMaxTurns: goal.maxTurns,
+      judgeModelId: goal.judgeModelId,
+    });
+    expect(ctx.addUserMessage.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(showInfo).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith({
       type: 'system-reminder',
@@ -542,6 +550,14 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
+    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
+    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
+      reminderType: 'goal',
+      message: objective,
+      goalMaxTurns: 50,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    });
+    expect(ctx.addUserMessage.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
     expect(sendSignal).toHaveBeenCalledWith({
@@ -638,6 +654,13 @@ describe('handleGoalCommand', () => {
 
     expect(goalManager.isActive()).toBe(true);
     expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0 });
+    expect(ctx.addUserMessage).toHaveBeenCalledTimes(1);
+    expect(getReminderView(ctx.addUserMessage.mock.calls[0][0])).toMatchObject({
+      reminderType: 'goal',
+      message: '# Ship it\n\n1. Build\n2. Test',
+      goalMaxTurns: 50,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    });
     expect(sendMessage).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
@@ -838,6 +861,7 @@ describe('handleGoalCommand', () => {
     const showError = vi.fn();
     const ctx = {
       state,
+      addUserMessage: vi.fn(),
       showInfo,
       showError,
       updateStatusLine: vi.fn(),

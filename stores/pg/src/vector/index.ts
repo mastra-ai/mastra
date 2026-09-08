@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -496,6 +497,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'`,
     );
 
+    // Create the namespaced unique index before dropping the legacy one so that a failure
+    // at any step never leaves the table without a uniqueness guarantee on vector_id.
+    const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
+    );
+
     const legacyConstraints = await client.query<{ conname: string }>(
       `SELECT c.conname
        FROM pg_constraint c
@@ -509,11 +517,25 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const parsedConstraintName = parseSqlIdentifier(conname, 'constraint name');
       await client.query(`ALTER TABLE ${tableName} DROP CONSTRAINT "${parsedConstraintName}"`);
     }
+  }
 
-    const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
-    await client.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
-    );
+  /**
+   * Name of the unique (namespace, vector_id) index for a table.
+   *
+   * The full `<index>_namespace_vector_id_idx` name is kept whenever it fits so tables that
+   * were already migrated keep matching `IF NOT EXISTS`. Longer index names would exceed
+   * Postgres' 63-char identifier limit, so those fall back to a truncated prefix plus a hash
+   * of the index name to distinguish tables that
+   * share a long prefix.
+   */
+  private getNamespaceIndexName(parsedIndexName: string): string {
+    const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
+    if (fullName.length <= 63) {
+      return fullName;
+    }
+    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const suffix = `_ns_${hash}_idx`;
+    return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
 
   transformFilter(filter?: PGVectorFilter) {

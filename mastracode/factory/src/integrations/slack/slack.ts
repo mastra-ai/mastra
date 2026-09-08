@@ -35,6 +35,7 @@ import type { SourceControlStorageHandle } from '../../storage/domains/source-co
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { FactoryChannelsConfig } from '../base.js';
 
+import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
 
 // Derive the thread/message types from the core handler signature rather than
@@ -46,6 +47,20 @@ type HandlerThread = Parameters<ChannelHandler>[0];
 type HandlerMessage = Parameters<ChannelHandler>[1];
 
 const SLACK_REQUEST_TIMEOUT_MS = 15_000;
+const MAX_WORK_ITEM_TITLE_CHARS = 80;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * A card is titled with what the sender wrote. Cutting counts graphemes, not
+ * code points: `👍🏼` is a base plus a skin-tone modifier, and a cut between
+ * them leaves the wrong emoji.
+ */
+function workItemTitleFrom(messageText: string): string {
+  const resolved = resolveEmojiShortcodes(messageText);
+  const characters = [...graphemes.segment(resolved)].map(({ segment }) => segment);
+  if (characters.length <= MAX_WORK_ITEM_TITLE_CHARS) return resolved;
+  return `${characters.slice(0, MAX_WORK_ITEM_TITLE_CHARS - 1).join('')}…`;
+}
 
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
@@ -594,7 +609,7 @@ export async function upsertThreadWorkItem({
   url?: string;
 }): Promise<void> {
   try {
-    const title = message.text.length > 80 ? `${message.text.slice(0, 79)}…` : message.text;
+    const title = workItemTitleFrom(message.text);
 
     await workItems.upsert({
       orgId: link.orgId ?? '',
@@ -722,7 +737,7 @@ async function ingestAside(
   { feed, workItems, accountLinks }: SlackChannelDeps,
 ): Promise<void> {
   if (!feed || !workItems) return;
-  const body = message.text.replace(/^aside\b[,:]?\s*/i, '').trim();
+  const body = resolveEmojiShortcodes(message.text.replace(/^aside\b[,:]?\s*/i, '').trim());
   if (!body) return;
   try {
     const teamId = slackTeamId(message);

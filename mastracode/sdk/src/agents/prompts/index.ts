@@ -109,6 +109,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
     hasSubconscious: ctx.hasSubconscious === true,
+    hasSubagents: ctx.hasSubagents,
     deniedTools,
     plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
   });
@@ -124,6 +125,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     mode: ctx.modeId,
     modelId: ctx.modelId,
     activePlan: ctx.state?.activePlan,
+    hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
     toolGuidance,
   };
 

@@ -1,4 +1,4 @@
-import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from '../../rules/types.js';
+import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
@@ -41,7 +41,7 @@ export interface LinearIssueIngress {
 export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  configVersion: string;
   linearRules: LinearEventRules;
 }
 
@@ -93,7 +93,7 @@ export class LinearRules {
       ingress: { type: 'linear', id: ingressId },
       cause: `linear.${event}`,
       causalChain: [],
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       ...(relatedItem
         ? {
             item: {
@@ -144,7 +144,7 @@ export class LinearRules {
       factoryProjectId: input.factoryProjectId,
       workItemId: relatedItem?.id ?? null,
       ingress: { identity: ingressId, triggerType: 'linear.issueObserved' },
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       expectedRevision: relatedItem?.revision ?? null,
       actor,
       outcome,
@@ -160,11 +160,11 @@ export function attachLinearRules(
   linear: { readonly rules: LinearEventRules },
   context: IntegrationContext,
 ): ((input: LinearRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   const rules = new LinearRules({
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
     linearRules: linear.rules,
   });
   return input => rules.ingest(input);

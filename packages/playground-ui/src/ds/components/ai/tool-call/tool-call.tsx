@@ -246,4 +246,12 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
   </div>
 );
 
+/** A shell command as the body shows it: `$` in the margin, the copy takes the command alone. */
+export const ToolCallCommand = ({ command }: { command: string }) => (
+  <ToolCallMono copyText={command} className="text-icon5">
+    <span className="text-icon3 select-none">$ </span>
+    {command}
+  </ToolCallMono>
+);
+
 export type { ToolCallStatus };

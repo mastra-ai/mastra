@@ -1,13 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
-import type {
-  FactoryRuleHandler,
-  FactoryRuleSource,
-  FactoryRuleStage,
-  FactoryRules,
-  FactoryStageRuleContext,
-  FactoryToolResultRuleContext,
-  FactoryToolRuleLeaf,
-} from './types.js';
+import type { FactoryRuleHandler, FactoryRuleSource, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 
 export interface ResolvedFactoryStageRule {
   phase: 'exit' | 'enter';
@@ -39,9 +31,3 @@ export function resolveFactoryStageRules(
   if (onEnter) resolved.push({ phase: 'enter', handler: onEnter });
   return resolved;
 }
-
-export function resolveFactoryToolRule(rules: FactoryRules, toolName: string): FactoryToolRuleLeaf['onResult'] {
-  return rules.tools[toolName]?.onResult;
-}
-
-export type ResolvedFactoryToolRule = FactoryRuleHandler<FactoryToolResultRuleContext>;
