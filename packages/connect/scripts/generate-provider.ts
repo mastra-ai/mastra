@@ -63,7 +63,6 @@ interface ExtractedAction {
   moduleStatements: string[];
   execBody: string;
   usesProxyRequestType: boolean;
-  usesProxyContextType: boolean;
 }
 
 interface SkippedAction {
@@ -239,11 +238,9 @@ function extractAction(
       }
     }
   }
-  let usesProxyContextType = false;
   for (const alias of source.getTypeAliases()) {
     if (alias.getName() === 'NangoActionLocal') {
       alias.rename('PlatformProxy');
-      usesProxyContextType = true;
     }
   }
   for (const parameter of source.getDescendantsOfKind(SyntaxKind.Parameter)) {
@@ -271,35 +268,30 @@ function extractAction(
       moduleStatements,
       execBody,
       usesProxyRequestType,
-      usesProxyContextType,
     },
   };
 }
 
 function emitActionFile(action: ExtractedAction): string {
-  const proxyTypeImports = [
-    action.usesProxyContextType ? 'PlatformProxy' : undefined,
-    action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined,
-  ].filter((name): name is string => Boolean(name));
-  const proxyTypeImport =
-    proxyTypeImports.length > 0
-      ? `import type { ${proxyTypeImports.join(', ')} } from '../../../runtime/platform-proxy.js';\n`
-      : '';
+  const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
+    (name): name is string => Boolean(name),
+  );
+  const proxyImport = `import type { PlatformProxy${proxyTypeImports.length > 0 ? `, ${proxyTypeImports.join(', ')}` : ''} } from '../../../runtime/platform-proxy.js';\n`;
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { defineActionTool, type ActionToolContext } from '../../../runtime/action-tool.js';
-${proxyTypeImport}
+${proxyImport}
 ${action.moduleStatements.join('\n\n')}
 
-export function ${action.toolFactoryName}(ctx: ActionToolContext) {
-  return defineActionTool<z.infer<typeof ${action.inputSchemaName}>, z.infer<typeof ${action.outputSchemaName}>>(ctx, {
+export function ${action.toolFactoryName}(platformProxy: PlatformProxy) {
+  return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
     outputSchema: ${action.outputSchemaName},
-    exec: async (platformProxy, input) => ${action.execBody},
+    execute: async (input): Promise<z.infer<typeof ${action.outputSchemaName}>> => ${action.execBody},
   });
 }
 `;
@@ -311,11 +303,11 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
     .join('\n');
   const toolEntries = actions
-    .map(action => `    ${action.candidate.toolKey}: ${action.toolFactoryName}(ctx),`)
+    .map(action => `    ${action.candidate.toolKey}: ${action.toolFactoryName}(platformProxy),`)
     .join('\n');
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
-import type { ActionToolContext } from '../../runtime/action-tool.js';
+import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
 ${imports}
@@ -323,7 +315,7 @@ ${imports}
 const ENV_VAR = '${envVar}';
 
 export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOptions) {
-  const ctx: ActionToolContext = { envVar: ENV_VAR, options };
+  const platformProxy = createPlatformProxy({ envVar: ENV_VAR, options });
   const tools = {
 ${toolEntries}
   };

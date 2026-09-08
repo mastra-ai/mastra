@@ -97,7 +97,8 @@ describe('maintainer provider commands', () => {
     // Generated output must not reference the upstream SDK by name; the only
     // permitted mention is the source attribution in the header comment.
     const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/first-provider/tools/echo.ts'), 'utf8');
-    expect(generatedTool).toContain('exec: async (platformProxy, input)');
+    expect(generatedTool).toContain('export function echoTool(platformProxy: PlatformProxy)');
+    expect(generatedTool).toContain('return createTool({');
     const [header, ...body] = generatedTool.split('\n');
     expect(header).toContain('AUTO-GENERATED');
     expect(body.join('\n')).not.toMatch(/nango/i);

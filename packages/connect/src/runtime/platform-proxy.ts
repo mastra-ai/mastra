@@ -9,8 +9,10 @@
  * here, the generator fails at generation time (unknown property access)
  * rather than exploding at runtime.
  */
-import { proxyRequest, type ProxyRequestOptions, type ResolvedClient } from '../client.js';
+import { proxyRequest, resolveClient, type ProxyRequestOptions } from '../client.js';
 import { MastraConnectError } from '../errors.js';
+import type { ProviderToolsOptions } from '../toolset.js';
+import { resolveConnectionId } from '../toolset.js';
 
 /**
  * The shape of an individual request as templates author them — a strict
@@ -68,15 +70,19 @@ export interface PlatformProxy {
 }
 
 interface CreatePlatformProxyOptions {
-  client: ResolvedClient;
-  connectionId: string;
+  envVar: string;
+  options?: ProviderToolsOptions;
 }
 
 async function callProxy<T>(
   method: ProxyRequestOptions['method'],
-  { client, connectionId }: CreatePlatformProxyOptions,
+  { envVar, options }: CreatePlatformProxyOptions,
   config: PlatformProxyRequest,
 ): Promise<PlatformProxyResponse<T>> {
+  // Connection id and client config resolve lazily per call, so building
+  // toolsets without env vars set never throws.
+  const connectionId = resolveConnectionId(envVar, options?.connectionId);
+  const client = resolveClient(options?.client);
   const attempts = Math.max(1, Math.min(config.retries ?? 1, 5));
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -112,12 +118,15 @@ function isTransient(error: unknown): boolean {
   return !(error instanceof MastraConnectError);
 }
 
-/** Builds a platform proxy context bound to one connection for a single tool call. */
-export function createPlatformProxy(options: CreatePlatformProxyOptions): PlatformProxy {
+/**
+ * Builds the platform proxy context shared by every tool of a provider
+ * toolset. Connection id and client config resolve lazily inside each call.
+ */
+export function createPlatformProxy(context: CreatePlatformProxyOptions): PlatformProxy {
   const bind =
     (method: ProxyRequestOptions['method']) =>
     <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
-      callProxy<T>(method, options, config);
+      callProxy<T>(method, context, config);
   return {
     get: bind('GET'),
     post: bind('POST'),
