@@ -141,13 +141,13 @@ await dataset.deleteItem({ itemId: 'item-abc-123' })
 await dataset.deleteItems({ itemIds: ['item-1', 'item-2'] })
 ```
 
-Deleting an item hides it from the current dataset version but retains its content in historical rows and the deletion tombstone. Use [`purgeItem()`](/reference/datasets/purgeItem) when you must permanently erase the item's stored content:
+Deleting an item hides it from the current dataset version but retains its content in historical rows and the deletion tombstone. Use [`purgeItem()`](/reference/datasets/purgeItem) to redact the item's stored content across its existing history:
 
 ```typescript title="src/mastra/datasets/purge-item.ts"
 await dataset.purgeItem({ itemId: 'item-abc-123' })
 ```
 
-Purging replaces content in every historical row and deletion tombstone with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content. It keeps version, identity, experiment counters, and review status so pinned dataset versions and experiment records remain structurally consistent. Purging doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
+Purging replaces content in every historical row and deletion tombstone present during the operation with redacted values, and scrubs linked experiment-result payloads, tags, and comments. Later experiment-result submissions for the item are also stored with redacted content, and later `updateItem()` calls reject with `DATASET_ITEM_PURGED`. Don't run purge concurrently with dataset item updates or deletions because a write that started before purge can commit a stale revision afterward. Purging keeps version, identity, experiment counters, and review status so pinned dataset versions and experiment records remain structurally consistent. It doesn't create a dataset version and can't be undone. Avoid storing sensitive data in `externalId`, which remains unchanged as the item's identity key.
 
 MongoDB storage requires a replica set or sharded deployment with transaction support for this operation. Purging fails before changing data when MongoDB transactions aren't available.
 

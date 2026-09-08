@@ -50,6 +50,21 @@ function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
 }
 
+function parseStoredJSON<T>(value: unknown): T {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return value as T;
+    }
+  }
+  return value as T;
+}
+
+function parseOptionalJSON<T>(value: unknown, emptyValue: null | undefined): T | null | undefined {
+  return value === null || value === undefined ? emptyValue : parseStoredJSON<T>(value);
+}
+
 export class DatasetsPG extends DatasetsStorage {
   #db: PgDB;
   #schema: string;
@@ -223,7 +238,7 @@ export class DatasetsPG extends DatasetsStorage {
   }
 
   private transformItemRow(row: Record<string, any>): DatasetItem {
-    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const metadata = parseOptionalJSON<Record<string, unknown>>(row.metadata, undefined);
     const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
@@ -232,22 +247,22 @@ export class DatasetsPG extends DatasetsStorage {
       externalId: (row.externalId as string | null) ?? null,
       organizationId: (row.organizationId as string | null) ?? null,
       projectId: (row.projectId as string | null) ?? null,
-      input: row.input === null ? null : safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      input: row.input === null ? null : parseStoredJSON(row.input),
+      groundTruth: parseOptionalJSON(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON(row.toolMocks, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      scorerIds: parseOptionalJSON(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON(row.requestContext, emptyValue),
       metadata,
-      source: row.source ? safelyParseJSON(row.source) : emptyValue,
+      source: parseOptionalJSON(row.source, emptyValue),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };
   }
 
   private transformItemRowFull(row: Record<string, any>): DatasetItemRow {
-    const metadata = row.metadata ? safelyParseJSON(row.metadata) : undefined;
+    const metadata = parseOptionalJSON<Record<string, unknown>>(row.metadata, undefined);
     const emptyValue = metadata?.__purged === true ? null : undefined;
     return {
       id: row.id as string,
@@ -258,15 +273,15 @@ export class DatasetsPG extends DatasetsStorage {
       projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
-      input: row.input === null ? null : safelyParseJSON(row.input),
-      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : emptyValue,
-      expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : emptyValue,
-      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : emptyValue,
+      input: row.input === null ? null : parseStoredJSON(row.input),
+      groundTruth: parseOptionalJSON(row.groundTruth, emptyValue),
+      expectedTrajectory: parseOptionalJSON(row.expectedTrajectory, emptyValue),
+      toolMocks: parseOptionalJSON(row.toolMocks, emptyValue),
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
-      scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : emptyValue,
-      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : emptyValue,
+      scorerIds: parseOptionalJSON(row.scorerIds, emptyValue),
+      requestContext: parseOptionalJSON(row.requestContext, emptyValue),
       metadata,
-      source: row.source ? safelyParseJSON(row.source) : emptyValue,
+      source: parseOptionalJSON(row.source, emptyValue),
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
     };

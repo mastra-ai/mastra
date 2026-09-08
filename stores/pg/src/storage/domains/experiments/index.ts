@@ -35,6 +35,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
+import type { TxClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { cutoffFor, runBatchedDelete } from '../../retention';
@@ -652,6 +653,27 @@ export class ExperimentsPG extends ExperimentsStorage {
 
   // --- Experiment results ---
 
+  async #resolvePurgeMetadata(
+    t: TxClient,
+    datasetId: string | null | undefined,
+    itemId: string,
+  ): Promise<Record<string, unknown> | null> {
+    if (!datasetId) return null;
+
+    const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
+    const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
+    const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [datasetId]);
+    if (!dataset) return null;
+
+    const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
+      `SELECT "metadata" FROM ${itemsTable}
+       WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
+       LIMIT 1`,
+      [itemId, datasetId],
+    );
+    return purge?.metadata ?? null;
+  }
+
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const id = input.id ?? crypto.randomUUID();
@@ -660,29 +682,13 @@ export class ExperimentsPG extends ExperimentsStorage {
         schemaName: getSchemaName(this.#schema),
       });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
       const row = await this.#db.client.tx(async t => {
         const owner = await t.oneOrNone<{ datasetId: string | null }>(
           `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
           [input.experimentId],
         );
-        let purgeMetadata: Record<string, unknown> | null = null;
-        if (owner?.datasetId) {
-          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
-            owner.datasetId,
-          ]);
-          if (dataset) {
-            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
-              `SELECT "metadata" FROM ${itemsTable}
-               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
-               LIMIT 1`,
-              [input.itemId, owner.datasetId],
-            );
-            purgeMetadata = purge?.metadata ?? null;
-          }
-        }
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
         const nowIso = new Date().toISOString();
         return t.one(
           `INSERT INTO ${resultsTable} (
@@ -733,8 +739,6 @@ export class ExperimentsPG extends ExperimentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
       const attempt = input.attempt ?? 0;
 
       const row = await this.#db.client.tx(async t => {
@@ -742,21 +746,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           `SELECT "datasetId" FROM ${experimentsTable} WHERE "id" = $1`,
           [input.experimentId],
         );
-        let purgeMetadata: Record<string, unknown> | null = null;
-        if (owner?.datasetId) {
-          const dataset = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [
-            owner.datasetId,
-          ]);
-          if (dataset) {
-            const purge = await t.oneOrNone<{ metadata: Record<string, unknown> }>(
-              `SELECT "metadata" FROM ${itemsTable}
-               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
-               LIMIT 1`,
-              [input.itemId, owner.datasetId],
-            );
-            purgeMetadata = purge?.metadata ?? null;
-          }
-        }
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner?.datasetId, input.itemId);
 
         // Natural key lookup under FOR UPDATE so concurrent retries serialize
         // on the same row instead of inserting duplicates.
@@ -852,8 +842,6 @@ export class ExperimentsPG extends ExperimentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-      const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
 
       const row = await this.#db.client.tx(async t => {
         const owner = await t.oneOrNone<{ datasetId: string | null; itemId: string }>(
@@ -865,17 +853,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         );
         if (!owner) return null;
 
-        const dataset = owner.datasetId
-          ? await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`, [owner.datasetId])
-          : null;
-        const purge = dataset
-          ? await t.oneOrNone<{ metadata: Record<string, unknown> }>(
-              `SELECT "metadata" FROM ${itemsTable}
-               WHERE "id" = $1 AND "datasetId" = $2 AND "metadata"->>'__purged' = 'true'
-               LIMIT 1`,
-              [owner.itemId, owner.datasetId],
-            )
-          : null;
+        const purgeMetadata = await this.#resolvePurgeMetadata(t, owner.datasetId, owner.itemId);
 
         return t.oneOrNone(
           `UPDATE ${tableName}
@@ -888,7 +866,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.id,
             input.status !== undefined,
             input.status ?? null,
-            Boolean(purge),
+            Boolean(purgeMetadata),
             input.tags !== undefined,
             input.tags === undefined ? null : JSON.stringify(input.tags),
             input.comment !== undefined,
