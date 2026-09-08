@@ -1,5 +1,31 @@
 # @mastra/factory
 
+## 0.13.0-alpha.14
+
+### Patch Changes
+
+- Factory transcript file diffs now use the same colors as code blocks, and tool cards and folded tool groups keep their look while sharing their parts with Studio. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Pull request review sessions now start on the PR head in seconds. The session branch comes from a blob-less fetch of the repository history, so `git log` and `git blame` work in the review while past file contents load on demand. ([#23261](https://github.com/mastra-ai/mastra/pull/23261))
+
+- Added Factory API support for automation clients to inspect and operate projects, work items, decisions, attention, health, metrics, and supervisor state. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```ts
+  import { MastraFactory, type MastraFactoryConfig } from '@mastra/factory';
+
+  export function createFactory(storage: MastraFactoryConfig['storage']) {
+    return new MastraFactory({ storage });
+  }
+  ```
+
+- The sidebar stage chip next to the Mastra logo now reads Beta instead of Alpha. ([#23331](https://github.com/mastra-ai/mastra/pull/23331))
+
+- Improved the chat transcript: a run of three or more tool calls now folds into a single row while the reply is still being written, instead of only once it is finished. The folded row names the step that is running and counts progress, and opens onto the individual calls. Calls that need something from you, such as a question, a plan or an approval, stay on their own row. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/code-sdk@1.7.0-alpha.11
+
 ## 0.13.0-alpha.13
 
 ### Minor Changes
