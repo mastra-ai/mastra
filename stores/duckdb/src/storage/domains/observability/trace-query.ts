@@ -359,7 +359,6 @@ export function compileDuckDBTraceQuery(plan: TrustedTraceQueryPlan): CompiledDu
       SELECT f.*
       FROM feedback_events f
       INNER JOIN root_scope roots ON roots.traceId = f.traceId
-      WHERE f.traceId IS NOT NULL
     )`);
   }
 

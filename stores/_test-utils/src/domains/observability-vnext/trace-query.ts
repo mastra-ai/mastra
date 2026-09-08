@@ -352,8 +352,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
     }),
   ],
   feedback: [
-    feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'patient', -1, {
-      timestamp: '2026-07-15T10:00:00.000Z',
+    feedbackRecord(1, 'feedback-a-rating', 'trace-a', 'rating', 'superseded-patient', -1, {
+      timestamp: '2026-07-14T10:00:00.000Z',
       feedbackUserId: 'patient-1',
       sourceId: 'survey-result-1',
       comment: 'Needs improvement',
@@ -1062,6 +1062,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-b' }],
   },
   {
+    name: 'uses only the latest feedback record when its timestamp changes',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'eq',
+            left: { path: 'feedbackSource' },
+            right: { literal: 'superseded-patient' },
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
     name: 'preserves string feedback values without numeric coercion',
     request: {
       timeRange: fullRange,
@@ -1097,6 +1113,26 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       },
     },
     expected: [],
+  },
+  {
+    name: 'treats textual feedback as unequal to a numeric literal',
+    requiresStrictFeedbackValueTypes: true,
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'feedbackType' }, right: { literal: 'rating' } },
+              { op: 'eq', left: { path: 'feedbackSource' }, right: { literal: 'patient' } },
+              { op: 'ne', left: { path: 'value' }, right: { literal: 3 } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'matches feedback lineage, user, and source fields',
@@ -1233,9 +1269,8 @@ function currentScores(scores: RawTraceQueryScore[]): RawTraceQueryScore[] {
 function currentFeedback(feedback: RawTraceQueryFeedback[]): RawTraceQueryFeedback[] {
   const records = new Map<string, RawTraceQueryFeedback>();
   for (const candidate of feedback) {
-    const key = `${candidate.feedbackId}\u0000${candidate.timestamp}`;
-    const current = records.get(key);
-    if (!current || candidate.cursorId > current.cursorId) records.set(key, candidate);
+    const current = records.get(candidate.feedbackId);
+    if (!current || candidate.cursorId > current.cursorId) records.set(candidate.feedbackId, candidate);
   }
   return [...records.values()];
 }

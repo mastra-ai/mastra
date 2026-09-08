@@ -89,6 +89,12 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+function currentTraceQueryFeedbackFixture() {
+  const feedback = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.feedback)[number]>();
+  for (const record of TRACE_QUERY_FIXTURE_DATA.feedback) feedback.set(record.feedbackId, record);
+  return [...feedback.values()];
+}
+
 function completionOnlyTraceQueryFixture() {
   const roots = new Map<string | null, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
   const spans = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
@@ -107,7 +113,7 @@ function completionOnlyTraceQueryFixture() {
     spans: [...roots.values()].filter(root => !root.isPending),
     relatedSpans: [...spans.values()],
     scores: [...scores.values()],
-    feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
+    feedback: currentTraceQueryFeedbackFixture(),
   };
 }
 
@@ -159,7 +165,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 spans: TRACE_QUERY_FIXTURE_DATA.spans,
                 relatedSpans: [],
                 scores: TRACE_QUERY_FIXTURE_DATA.scores,
-                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
+                feedback: currentTraceQueryFeedbackFixture(),
               };
         const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)
