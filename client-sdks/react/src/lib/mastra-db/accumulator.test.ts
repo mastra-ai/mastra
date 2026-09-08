@@ -461,6 +461,13 @@ describe('accumulateChunk - lifecycle', () => {
     });
   });
 
+  it('start chunk without a payload does not throw and appends a fallback assistant message', () => {
+    const out = reduce([{ type: 'start', runId: RUN_ID } as unknown as ChunkType]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ role: 'assistant', content: { format: 2, parts: [] } });
+    expect(out[0].id.startsWith(`start-${RUN_ID}`)).toBe(true);
+  });
+
   it('start chunk dedupes by messageId', () => {
     const out = reduce([startChunk('asst-1'), startChunk('asst-1')]);
     expect(out).toHaveLength(1);
