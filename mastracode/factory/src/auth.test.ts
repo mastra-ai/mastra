@@ -374,6 +374,88 @@ describe('mountFactoryAuth gate (enabled)', () => {
       avatarUrl: 'https://avatars.example/user.png',
     });
   });
+
+  it('selects a requested bearer organization proven by provider memberships', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      memberships: [
+        { id: 'membership_1', organizationId: 'org_1' },
+        { id: 'membership_2', organizationId: 'org_2' },
+      ],
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('selects a requested bearer organization proven by Studio membership ids', async () => {
+    mockAuthenticate.mockResolvedValue({
+      id: 'user_123',
+      organizationId: 'org_1',
+      memberOrgIds: ['org_1', 'org_2'],
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('rejects a requested bearer organization not present in provider memberships', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_123',
+      memberships: [{ id: 'membership_1', organizationId: 'org_1' }],
+    });
+    const { app } = buildApp();
+
+    const res = await app.request('/web/projects', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_other',
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+    expect(mockEnsureOrganization).not.toHaveBeenCalled();
+  });
+
+  it('does not let an organization header change cookie-authenticated tenancy', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_123', organizationId: 'org_cookie' });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+
+    const res = await app.request('/web/whoami', {
+      headers: { Accept: 'application/json', 'X-Mastra-Organization-Id': 'org_other' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
+  });
 });
 
 describe('mountFactoryAuth /auth routes (enabled)', () => {

@@ -1,5 +1,71 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+  - @mastra/client-js@1.44.0-alpha.9
+  - @mastra/react@1.4.11-alpha.9
+
+## 53.0.0-alpha.9
+
+### Patch Changes
+
+- Added an `onInputValueChange` callback to the `Combobox` component so consumers can react to the search text (for example to offer a "Create ..." option built from what the user typed). ([#23225](https://github.com/mastra-ai/mastra/pull/23225))
+
+- Trace filters on the traces page now save automatically as you change them and are restored on your next visit; the explicit **Save filters** action is gone. Custom absolute date ranges are not persisted since they would go stale. Faded spans in the light theme are now tuned separately from the dark theme so they stay legible while highlighted spans still stand out. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- - `CodeDiff` renders a GitHub-style split diff: removed lines red on the left, added lines green on the right, with line numbers and expandable collapsed regions. ([#23234](https://github.com/mastra-ai/mastra/pull/23234))
+  - `DataCodeSection` accepts an optional `diff={{ against, side }}` prop that highlights the lines differing from another document (red for side `a`, green for side `b`) without changing the section layout.
+
+  ```tsx
+  // Left column shows the older document: differing lines are red
+  <DataCodeSection title="Input" codeStr={olderJson} diff={{ against: newerJson, side: 'a' }} />
+  // Right column shows the newer document: differing lines are green
+  <DataCodeSection title="Input" codeStr={newerJson} diff={{ against: olderJson, side: 'b' }} />
+  ```
+
+- Added an inline tag editor on the dataset detail page. Existing tags show as removable badges under the actions row, and an "Add tag" combobox lists all tags used across datasets or lets you create a new one by typing its name. Changes are saved immediately. ([#23225](https://github.com/mastra-ai/mastra/pull/23225))
+
+- Updated dependencies [[`99c97ab`](https://github.com/mastra-ai/mastra/commit/99c97ab439900ac3930badc1fa80e2cea7826563), [`db7cc1c`](https://github.com/mastra-ai/mastra/commit/db7cc1c5d8cd1650c41c57590c25ab86c9e5032f), [`52ff00e`](https://github.com/mastra-ai/mastra/commit/52ff00e937c0af1a18eddfd35bbb79e7d398d8a9), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`473a2dd`](https://github.com/mastra-ai/mastra/commit/473a2dd9a372898dd053b419fa1d95943fc88ce2), [`7aca62a`](https://github.com/mastra-ai/mastra/commit/7aca62a98a1a04593ff7f20d917a1ec34891f031), [`64db1b3`](https://github.com/mastra-ai/mastra/commit/64db1b313bdb02e063019fdcbb8d28608858ae71)]:
+  - @mastra/client-js@1.44.0-alpha.8
+  - @mastra/memory@1.28.3-alpha.3
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/react@1.4.11-alpha.8
+
+## 53.0.0-alpha.8
+
+### Minor Changes
+
+- Added a `thread` variant to the `Comment` component, plus `CommentQuote`, `CommentEditor` and `CommentArrival` parts, so a dense comment feed (avatar gutter, grouped rows, quoted replies, inline editing, hover actions) can be built from the design system instead of hand-rolled per app. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+  ```tsx
+  <Comment variant="thread">
+    <CommentItem continued={sameAuthorAsAbove} highlighted={isLinkedComment}>
+      <CommentItemAvatar>{sameAuthorAsAbove ? null : <Avatar name={author} />}</CommentItemAvatar>
+      <CommentItemContent>
+        <CommentItemHeader>
+          <CommentItemAuthor>{author}</CommentItemAuthor>
+          <CommentItemTimestamp dateTime={occurredAt}>{relative}</CommentItemTimestamp>
+        </CommentItemHeader>
+        <CommentQuote authorName={replyTo.authorName} quote={replyTo.quote} />
+        <CommentItemBody>{body}</CommentItemBody>
+      </CommentItemContent>
+      <CommentItemActions>{/* revealed on row hover */}</CommentItemActions>
+    </CommentItem>
+  </Comment>
+  ```
+
+  `CommentEditor` owns only the draft: pass `isPending` and `error` from the mutation that saves it, and close it from that mutation's success. While `isPending` the textarea is read-only and both buttons are disabled.
+
+  The existing `default` and `embed` variants are unchanged.
+
+### Patch Changes
+
+- Fixed inconsistent empty-state icons and centering in Studio and Agent Builder. ([#23200](https://github.com/mastra-ai/mastra/pull/23200))
+
 ## 53.0.0-alpha.7
 
 ### Patch Changes

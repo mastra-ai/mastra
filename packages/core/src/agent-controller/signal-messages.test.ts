@@ -1426,6 +1426,64 @@ describe('AgentController signal messages', () => {
     ]);
   });
 
+  it('opens a new reasoning part when a later step reuses a block id after reasoning-end', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const chunks: Parameters<typeof session.runEngine.processStreamChunk>[1][] = [
+      { type: 'reasoning-start', payload: { id: '0' } },
+      { type: 'reasoning-delta', payload: { id: '0', text: 'step one' } },
+      { type: 'reasoning-end', payload: { id: '0' } },
+      { type: 'reasoning-start', payload: { id: '0' } },
+      { type: 'reasoning-delta', payload: { id: '0', text: 'step two' } },
+    ];
+
+    for (const chunk of chunks) {
+      await session.runEngine.processStreamChunk(state, chunk, requestContext);
+    }
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([
+      { type: 'reasoning', reasoning: 'step one', details: [{ type: 'text', text: 'step one' }] },
+      { type: 'reasoning', reasoning: 'step two', details: [{ type: 'text', text: 'step two' }] },
+    ]);
+  });
+
+  it('opens a new text part when a later step reuses a block id after text-end', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const chunks: Parameters<typeof session.runEngine.processStreamChunk>[1][] = [
+      { type: 'text-start', payload: { id: '1' } },
+      { type: 'text-delta', payload: { id: '1', text: 'step one' } },
+      { type: 'text-end', payload: { id: '1' } },
+      { type: 'text-start', payload: { id: '1' } },
+      { type: 'text-delta', payload: { id: '1', text: 'step two' } },
+    ];
+
+    for (const chunk of chunks) {
+      await session.runEngine.processStreamChunk(state, chunk, requestContext);
+    }
+
+    const updates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(updates.at(-1)?.message.content.parts).toEqual([
+      { type: 'text', text: 'step one' },
+      { type: 'text', text: 'step two' },
+    ]);
+  });
+
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);

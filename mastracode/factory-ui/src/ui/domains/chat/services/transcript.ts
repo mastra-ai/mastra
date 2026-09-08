@@ -1,8 +1,9 @@
+import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 
-import { stripAnsi } from './ansi';
 import type { OMBudgets } from './runtime';
 import { sentByOther } from './message-author';
 
@@ -26,6 +27,11 @@ export interface ToolCall {
   output: string;
   /** Epoch ms the call began: the persisted part's stamp, or when the live `tool_start` arrived. */
   createdAt?: number;
+}
+
+/** The design-system status: a settled call reads as idle, so history never shimmers. */
+export function toolCallStatus(status: ToolCall['status']): ToolCallStatus {
+  return status === 'done' ? 'idle' : status;
 }
 
 /**

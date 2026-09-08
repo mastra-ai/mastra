@@ -2,6 +2,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
+import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -193,7 +194,7 @@ export class FactoryStartCoordinator {
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,
-        board: prepared.item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+        board: boardForWorkItem(prepared.item),
         stage: destinationStage,
         expectedRevision: prepared.item.revision,
         actor: { type: 'human', id: request.userId },

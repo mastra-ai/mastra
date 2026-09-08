@@ -271,11 +271,17 @@ const isTerminalPartForType = (partType: string, type: 'observation' | 'bufferin
       partType === 'data-om-buffering-failed' ||
       partType === 'data-om-activation';
 
+const isOmPart = (part: { type: string }) => part.type.startsWith('data-om-');
+
+// Runs over the whole thread per stream chunk: a copy per message would redraw every settled row each token.
 export const convertOmPartsInMastraMessage = (
   message: MastraDBMessage,
   globalOmParts: Map<string, OmCycleParts>,
 ): MastraDBMessage => {
   if (!message || !Array.isArray(message.content?.parts)) {
+    return message;
+  }
+  if (!message.content.parts.some(isOmPart)) {
     return message;
   }
 
@@ -323,7 +329,7 @@ export const convertOmPartsInMastraMessage = (
       const viewModel = normalizeOmCycle(cycleId, cycle, 'buffering');
       if (!viewModel) continue;
       convertedParts.push(toDynamicOmToolPart(cycleId, 'buffering', viewModel));
-    } else if (partType?.startsWith('data-om-')) {
+    } else if (isOmPart(part)) {
       continue;
     } else {
       convertedParts.push(part);
