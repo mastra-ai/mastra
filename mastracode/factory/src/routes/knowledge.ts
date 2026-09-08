@@ -896,13 +896,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     const requestedThreadId = c.req.query('threadId');
     const threadId = boundedThreadId(requestedThreadId);
     if (requestedThreadId !== undefined && !threadId) return { response: c.json({ error: 'thread_not_found' }, 404) };
-    const [existingOrg, existingResource, existingThread] = await Promise.all([
-      knowledge.resolveScopeAddress(`org:${tenant.orgId}`),
-      knowledge.resolveScopeAddress(`resource:${projectId}`),
-      threadId ? knowledge.resolveScopeAddress(`resource:${projectId}:thread:${threadId}`) : undefined,
-    ]);
-    if (!existingOrg || !existingResource) return { response: c.json({ error: 'knowledge_not_found' }, 404) };
-    if (threadId && !existingThread) return { response: c.json({ error: 'thread_not_found' }, 404) };
+    if (threadId && !(await knowledge.resolveScopeAddress(`resource:${projectId}:thread:${threadId}`))) {
+      return { response: c.json({ error: 'thread_not_found' }, 404) };
+    }
     const profile = await this.#resolveAccessProfile({
       c,
       knowledge,
@@ -2018,6 +2014,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const edges: KnowledgeGraphEdge[] = [];
           const boundaryNodes = new Map<string, { node: KnowledgeNode; scope?: KnowledgeNode }>();
           const edgeSeen = new Set<string>();
+          const recordNodeIds = new Map<string, Set<string>>();
+          const addRecordNode = (recordId: string, nodeId: string) => {
+            const ids = recordNodeIds.get(recordId) ?? new Set<string>();
+            ids.add(nodeId);
+            recordNodeIds.set(recordId, ids);
+          };
           let edgesTruncated = false;
           if (structuralLens) {
             for (const member of members) {
@@ -2044,6 +2046,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
               if (!targets.includes(target.id)) targets.push(target.id);
             }
+            for (const target of targets) addRecordNode(record.id, target);
             if (targets.length === 1 && !targetsTruncated) accented.add(targets[0]!);
             for (let a = 0; a < targets.length; a++) {
               for (let b = a + 1; b < targets.length; b++) {
@@ -2072,6 +2075,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               edgesTruncated = true;
               continue;
             }
+            addRecordNode(record.id, record.nodeId);
             for (const name of parseKnowledgeWikilinks(record.text)) {
               const target = await resolver.resolve(name, view.scopeIds);
               if (!target || target.id === record.nodeId) continue;
@@ -2096,6 +2100,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   boundaryNodes.set(target.id, { node: target, scope: targetScope });
                 }
               }
+              addRecordNode(record.id, target.id);
               const key = `${record.nodeId}\u0000${target.id}`;
               if (edgeSeen.has(key)) continue;
               if (edges.length >= this.#limits.maxEdges) {
@@ -2182,6 +2187,28 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               } satisfies KnowledgeGraphNode;
             }),
           );
+          const pinnedRecordIds = new Set(pinnedRecords.map(({ record }) => record.id));
+          const visibleRecords = new Map(recordWindow.map(record => [record.id, record]));
+          for (const { record } of pinnedRecords) visibleRecords.set(record.id, record);
+          const graphRecords: KnowledgeGraphRecord[] = [...visibleRecords.values()].flatMap(record => {
+            const nodeIds = [...(recordNodeIds.get(record.id) ?? [])];
+            if (nodeIds.length === 0) return [];
+            return [
+              {
+                id: this.#mintHandle(projectId, view.perspectiveKey, 'record', record.id),
+                nodeIds: nodeIds.map(nodeId =>
+                  this.#mintHandle(
+                    projectId,
+                    view.perspectiveKey,
+                    scopeNodeIdSet.has(nodeId) ? 'scope' : 'node',
+                    nodeId,
+                  ),
+                ),
+                pinned: pinnedRecordIds.has(record.id),
+                text: record.text.slice(0, 2_000),
+              },
+            ];
+          });
           const terminalBounds: KnowledgeGraphPayload['page']['terminalBounds'] = [
             ...(recordsTruncated ? ['record-window' as const] : []),
             ...(edgesTruncated ? ['edge-window' as const] : []),
@@ -2216,7 +2243,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ? { recordId: this.#mintHandle(projectId, view.perspectiveKey, 'record', edge.recordId) }
                 : {}),
             })),
-            records: [],
+            records: graphRecords,
             truncated: Boolean(last || terminalBounds.length),
             outOfWindow: [...boundaryNodes.values()].map(({ node }) => ({
               id: this.#mintHandle(projectId, view.perspectiveKey, 'node', node.id),

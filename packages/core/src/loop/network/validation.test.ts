@@ -43,6 +43,17 @@ describe('runCompletionScorers', () => {
     vi.clearAllMocks();
   });
 
+  it.each([true, false])('releases the completion deadline after scoring (parallel=%s)', async parallel => {
+    vi.useFakeTimers();
+    try {
+      const result = await runCompletionScorers([createMockScorer('complete', 1)], createMockContext(), { parallel });
+      expect(result.complete).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('strategy: all (default)', () => {
     it('returns complete when all scorers pass', async () => {
       const scorer1 = createMockScorer('scorer-1', 1, 'Passed');

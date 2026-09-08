@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
@@ -8,10 +8,12 @@ import {
   InMemoryStore,
   knowledgeImporterBindingKey,
   KnowledgeSchemaError,
+  MastraCompositeStore,
   TABLE_KNOWLEDGE_SCHEMA,
 } from '@mastra/core/storage';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { LibSQLStore } from '../..';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
 
 describe('InMemory canonical parity', () => {
@@ -74,6 +76,46 @@ describe('KnowledgeLibSQL atomic node and record creation', () => {
     } finally {
       client.close();
       await rm(path, { force: true });
+describe('LibSQLStore explicit Knowledge activation', () => {
+  it.each([false, true])('does not create Knowledge objects during ordinary startup (composed=%s)', async composed => {
+    const client = createClient({ url: ':memory:' });
+    const adapter = new LibSQLStore({ id: 'ordinary', client });
+    const store = composed ? new MastraCompositeStore({ id: 'composed', default: adapter }) : adapter;
+    try {
+      await store.init();
+      expect(await store.getStore('memory')).toBeDefined();
+      const tables = await client.execute("SELECT name FROM sqlite_master WHERE name GLOB 'mastra_knowledge_*'");
+      expect(tables.rows).toEqual([]);
+      expect(await store.getStore('knowledge')).toBeDefined();
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('leaves unknown Knowledge artifacts intact during startup and failed activation', async () => {
+    const client = createClient({ url: ':memory:' });
+    const store = new LibSQLStore({ id: 'unknown-artifacts', client });
+    try {
+      await client.execute('CREATE TABLE mastra_knowledge_nodes (id TEXT PRIMARY KEY, payload TEXT)');
+      await client.execute("INSERT INTO mastra_knowledge_nodes VALUES ('private', 'preserve')");
+      await client.execute('CREATE TABLE knowledge_documents_dimension_3 (id TEXT PRIMARY KEY, payload TEXT)');
+      await client.execute("INSERT INTO knowledge_documents_dimension_3 VALUES ('vector', 'preserve')");
+      await store.init();
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
+      await expect(store.getStore('knowledge')).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
+      expect((await client.execute('SELECT * FROM mastra_knowledge_nodes')).rows).toEqual([
+        { id: 'private', payload: 'preserve' },
+      ]);
+      expect((await client.execute('SELECT * FROM knowledge_documents_dimension_3')).rows).toEqual([
+        { id: 'vector', payload: 'preserve' },
+      ]);
+      await expect(store.init()).resolves.toBeUndefined();
+      expect(await store.getStore('memory')).toBeDefined();
+    } finally {
+      await store.close();
     }
   });
 });
@@ -144,6 +186,100 @@ describe('KnowledgeLibSQL replacement rollback', () => {
     } finally {
       client.close();
       await rm(path, { force: true });
+    }
+  });
+});
+
+describe('KnowledgeLibSQL recognized empty experimental schema', () => {
+  const seed = async (client: ReturnType<typeof createClient>) => {
+    const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
+    await client.batch(
+      sql
+        .split(';')
+        .map(statement => statement.trim())
+        .filter(Boolean),
+      'write',
+    );
+  };
+
+  it('replaces only the empty published layout and leaves vector state untouched', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seed(client);
+      await client.execute('CREATE TABLE knowledge_documents_dimension_3 (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO knowledge_documents_dimension_3 VALUES ('untouched')");
+      await Promise.all([new KnowledgeLibSQL({ client }).init(), new KnowledgeLibSQL({ client }).init()]);
+      const columns = await client.execute('PRAGMA table_info(mastra_knowledge_nodes)');
+      expect(columns.rows.map(row => row.name)).toContain('isScope');
+      expect(columns.rows.map(row => row.name)).not.toContain('type');
+      expect((await client.execute('SELECT * FROM knowledge_documents_dimension_3')).rows).toEqual([
+        { id: 'untouched' },
+      ]);
+    } finally {
+      client.close();
+    }
+  });
+
+  it.each(['nodes', 'records', 'mentions', 'cursors', 'activity', 'semantic_outbox'])(
+    'refuses replacement if %s contains data',
+    async suffix => {
+      const client = createClient({ url: ':memory:' });
+      try {
+        await seed(client);
+        const table = `mastra_knowledge_${suffix}`;
+        const columns = await client.execute(`PRAGMA table_info(${table})`);
+        const names = columns.rows.map(row => `"${row.name}"`).join(',');
+        await client.execute({
+          sql: `INSERT INTO ${table} (${names}) VALUES (${columns.rows.map(() => '?').join(',')})`,
+          args: columns.rows.map(row => (row.type === 'INTEGER' ? 1 : 'retained')),
+        });
+        const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
+        await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+        expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
+        expect((await client.execute(`SELECT * FROM ${table}`)).rows).toHaveLength(1);
+      } finally {
+        client.close();
+      }
+    },
+  );
+
+  it.each([
+    'CREATE TABLE mastra_knowledge_unknown (id TEXT)',
+    'CREATE TRIGGER custom_knowledge_trigger AFTER INSERT ON mastra_knowledge_nodes BEGIN SELECT 1; END',
+    'CREATE VIEW unrelated_view AS SELECT * FROM mastra_knowledge_nodes',
+  ])('rejects unrecognized or externally referenced layouts without mutation: %s', async sql => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seed(client);
+      await client.execute(sql);
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rolls back the empty legacy layout if canonical creation fails and permits a retry', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seed(client);
+      const before = await client.execute('SELECT * FROM sqlite_master ORDER BY name');
+      const execute = client.execute.bind(client);
+      const spy = vi.spyOn(client, 'execute').mockImplementation(async statement => {
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        if (sql.startsWith('CREATE TABLE') && sql.includes('mastra_knowledge_schema')) {
+          throw new Error('injected schema creation failure');
+        }
+        return execute(statement);
+      });
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toThrow();
+      spy.mockRestore();
+      expect((await client.execute('SELECT * FROM sqlite_master ORDER BY name')).rows).toEqual(before.rows);
+      await new KnowledgeLibSQL({ client }).init();
+      expect((await client.execute(`SELECT * FROM ${TABLE_KNOWLEDGE_SCHEMA}`)).rows).toHaveLength(1);
+    } finally {
+      client.close();
     }
   });
 });

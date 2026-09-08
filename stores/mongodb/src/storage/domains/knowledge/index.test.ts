@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
+  KnowledgeSchemaError,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
   TABLE_KNOWLEDGE_RECORDS,
@@ -8,8 +9,10 @@ import {
   TABLE_KNOWLEDGE_SCHEMA,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
+import { MongoClient } from 'mongodb';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { MongoDBStore } from '../..';
 import { resolveMongoDBConfig } from '../../db';
 import { KnowledgeMongoDB } from '.';
 
@@ -38,48 +41,56 @@ describe('MongoDB canonical Knowledge support', () => {
   });
 
   it('lists and claims scoped semantic work beyond a larger unrelated prefix', async () => {
-    const store = createStore();
-    await store.init();
-    const collection = await connector.getCollection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
-    const suffix = randomUUID();
-    const hiddenScopeId = '00000000-0000-4000-8000-000000000091';
-    const visibleScopeId = '00000000-0000-4000-8000-000000000092';
-    const createdAt = new Date('2026-01-01T00:00:00.000Z');
-    const entries = Array.from({ length: 1001 }, (_, index) => ({
-      id: `${suffix}-hidden-${String(index).padStart(4, '0')}`,
-      idempotencyKey: `${suffix}-hidden-${index}`,
-      documentId: `knowledge:node:${suffix}-hidden-${index}`,
-      documentType: 'node',
-      operation: 'delete',
-      scopeIds: [hiddenScopeId],
-      status: 'pending',
-      attempts: 0,
-      availableAt: createdAt,
-      createdAt,
-    }));
-    const visibleId = `${suffix}-visible-after-prefix`;
-    entries.push({
-      id: visibleId,
-      idempotencyKey: visibleId,
-      documentId: `knowledge:node:${visibleId}`,
-      documentType: 'node',
-      operation: 'delete',
-      scopeIds: [visibleScopeId],
-      status: 'pending',
-      attempts: 0,
-      availableAt: createdAt,
-      createdAt: new Date(createdAt.getTime() + 1),
-    });
+    const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+    const dbName = `knowledge-outbox-${randomUUID()}`;
+    const client = new MongoClient(uri);
+    const isolated = new KnowledgeMongoDB({ connector: resolveMongoDBConfig({ uri, dbName }) });
     try {
-      await collection.insertMany(entries);
-      await expect(store.listSemanticOutbox({ scopeIds: [visibleScopeId], limit: 1 })).resolves.toEqual([
-        expect.objectContaining({ id: visibleId }),
+      await client.connect();
+      await isolated.init();
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const hiddenScopeId = '00000000-0000-4000-8000-000000000091';
+      const visibleScopeId = '00000000-0000-4000-8000-000000000092';
+      const entries = Array.from({ length: 1001 }, (_, index) => ({
+        id: `hidden-${String(index).padStart(4, '0')}`,
+        idempotencyKey: `hidden-${index}`,
+        documentId: `knowledge:node:hidden-${index}`,
+        documentType: 'node',
+        operation: 'delete',
+        scopeIds: [hiddenScopeId],
+        status: 'pending',
+        attempts: 0,
+        availableAt: createdAt,
+        createdAt,
+      }));
+      entries.push({
+        id: 'visible-after-prefix',
+        idempotencyKey: 'visible-after-prefix',
+        documentId: 'knowledge:node:visible-after-prefix',
+        documentType: 'node',
+        operation: 'delete',
+        scopeIds: [visibleScopeId],
+        status: 'pending',
+        attempts: 0,
+        availableAt: createdAt,
+        createdAt: new Date(createdAt.getTime() + 1),
+      });
+      await client.db(dbName).collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX).insertMany(entries);
+
+      await expect(isolated.listSemanticOutbox({ scopeIds: [visibleScopeId], limit: 1 })).resolves.toEqual([
+        expect.objectContaining({ id: 'visible-after-prefix' }),
       ]);
       await expect(
-        store.claimSemanticOutbox({ workerId: 'scoped-worker', scopeIds: [visibleScopeId], limit: 1, now: createdAt }),
-      ).resolves.toEqual([expect.objectContaining({ id: visibleId, claimedBy: 'scoped-worker' })]);
+        isolated.claimSemanticOutbox({
+          workerId: 'scoped-worker',
+          scopeIds: [visibleScopeId],
+          limit: 1,
+          now: createdAt,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ id: 'visible-after-prefix', claimedBy: 'scoped-worker' })]);
     } finally {
-      await collection.deleteMany({ id: { $regex: `^${suffix}` } });
+      await client.db(dbName).dropDatabase();
+      await client.close();
     }
   });
 
@@ -167,6 +178,103 @@ describe('MongoDB canonical Knowledge support', () => {
       await nodes.deleteMany({ id: { $in: [hiddenScopeId, visibleScopeId, hiddenNodeId, visibleNodeId] } });
     }
   });
+
+  it('leaves incidental Knowledge collections untouched until explicit activation', async () => {
+    const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+    const dbName = `knowledge-rollout-${randomUUID()}`;
+    const client = new MongoClient(uri);
+    const isolated = resolveMongoDBConfig({ uri, dbName });
+    try {
+      await client.connect();
+      const db = client.db(dbName);
+      const nodes = db.collection('mastra_knowledge_nodes');
+      await nodes.createIndex({ type: 1, scopeKey: 1, canonicalName: 1 }, { unique: true });
+      await db.collection('unrelated_sentinel').insertOne({ value: 'preserved' });
+      const indexes = await nodes.listIndexes().toArray();
+      const storage = new MongoDBStore({ id: 'rollout', uri, dbName });
+      try {
+        await storage.init();
+      } finally {
+        await storage.close();
+      }
+      expect(await nodes.listIndexes().toArray()).toEqual(indexes);
+      expect(await db.listCollections({ name: TABLE_KNOWLEDGE_SCHEMA }).toArray()).toEqual([]);
+      await expect(new KnowledgeMongoDB({ connector: isolated }).init()).rejects.toThrow(KnowledgeSchemaError);
+      expect(await nodes.listIndexes().toArray()).toEqual(indexes);
+      expect(await db.listCollections({ name: TABLE_KNOWLEDGE_SCHEMA }).toArray()).toEqual([]);
+      expect(await db.collection('unrelated_sentinel').findOne({ value: 'preserved' })).not.toBeNull();
+    } finally {
+      await client.db(dbName).dropDatabase();
+      await isolated.close();
+      await client.close();
+    }
+  });
+
+  it.each([false, true])('restarts with default indexes disabled and custom indexes=%s', async customIndexes => {
+    const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+    const dbName = `knowledge-no-indexes-${randomUUID()}`;
+    const isolated = resolveMongoDBConfig({ uri, dbName });
+    const restarted = resolveMongoDBConfig({ uri, dbName });
+    const client = new MongoClient(uri);
+    const options = {
+      skipDefaultIndexes: true,
+      ...(customIndexes ? { indexes: [{ collection: 'mastra_knowledge_nodes', keys: { id: 1 as const } }] } : {}),
+    };
+    try {
+      await new KnowledgeMongoDB({ connector: isolated, ...options }).init();
+      expect((await isolated.listCollectionNames()).sort()).toEqual([...KnowledgeMongoDB.MANAGED_COLLECTIONS].sort());
+      await isolated.close();
+      await expect(new KnowledgeMongoDB({ connector: restarted, ...options }).init()).resolves.toBeUndefined();
+      const nodes = await restarted.getCollection('mastra_knowledge_nodes');
+      expect(Object.keys(await nodes.indexInformation()).sort()).toEqual(customIndexes ? ['_id_', 'id_1'] : ['_id_']);
+    } finally {
+      await client.connect();
+      await client.db(dbName).dropDatabase();
+      await Promise.all([isolated.close(), restarted.close(), client.close()]);
+    }
+  });
+
+  it.each([false, true])(
+    'converges under concurrent fresh activation with skipDefaultIndexes=%s',
+    async skipDefaultIndexes => {
+      const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+      const dbName = `knowledge-concurrent-init-${randomUUID()}`;
+      const connectors = [resolveMongoDBConfig({ uri, dbName }), resolveMongoDBConfig({ uri, dbName })];
+      const client = new MongoClient(uri);
+      let arrived = 0;
+      let release!: () => void;
+      const ready = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      try {
+        for (const current of connectors) {
+          const list = current.listCollectionNames.bind(current);
+          vi.spyOn(current, 'listCollectionNames').mockImplementationOnce(async () => {
+            const names = await list();
+            if (++arrived === connectors.length) release();
+            await ready;
+            return names;
+          });
+        }
+        const results = await Promise.allSettled(
+          connectors.map(connector => new KnowledgeMongoDB({ connector, skipDefaultIndexes }).init()),
+        );
+        expect(results).toEqual([
+          { status: 'fulfilled', value: undefined },
+          { status: 'fulfilled', value: undefined },
+        ]);
+        expect((await connectors[0]!.listCollectionNames()).sort()).toEqual(
+          [...KnowledgeMongoDB.MANAGED_COLLECTIONS].sort(),
+        );
+        const schema = await connectors[0]!.getCollection(TABLE_KNOWLEDGE_SCHEMA);
+        expect(await schema.countDocuments({ id: 'canonical', version: KNOWLEDGE_STORAGE_SCHEMA_VERSION })).toBe(1);
+      } finally {
+        await client.connect();
+        await client.db(dbName).dropDatabase();
+        await Promise.all([...connectors.map(connector => connector.close()), client.close()]);
+      }
+    },
+  );
 
   it('persists the schema completion marker', async () => {
     const store = createStore();
