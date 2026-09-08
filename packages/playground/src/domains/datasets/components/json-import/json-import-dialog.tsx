@@ -1,4 +1,3 @@
-'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -10,236 +9,213 @@ import {
   DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useJSONParser } from '../../hooks/use-json-parser';
-import type { ParsedJSON } from '../../hooks/use-json-parser';
-import { JSONPreviewTable } from './json-preview-table';
-import { JSONUploadStep } from './json-upload-step';
-import { JSONValidationSummary } from './json-validation-summary';
+import { validateImportJSON } from '../../utils/json-validation';
+import type { JSONImportValidation } from '../../utils/json-validation';
+import { JSONFormatPanel } from './json-format-panel';
+import { JSONSourcePanel } from './json-source-panel';
+import type { JSONSourceFile, JSONSourceTab } from './json-source-panel';
 
 export interface JSONImportDialogProps {
   datasetId: string;
+  datasetName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }
 
-type ImportStep = 'upload' | 'preview' | 'importing' | 'complete';
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
-interface ImportResult {
-  success: number;
-  errors: number;
-}
+const readFileText = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
 
-/**
- * Multi-step dialog for importing JSON data into a dataset.
- * Flow: upload -> preview -> import -> complete
- */
-export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: JSONImportDialogProps) {
-  // State machine for steps
-  const [step, setStep] = useState<ImportStep>('upload');
-
-  // Parsed JSON data
-  const [parsedJSON, setParsedJSON] = useState<ParsedJSON | null>(null);
-
-  // Import progress
-  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, onSuccess }: JSONImportDialogProps) {
+  const [tab, setTab] = useState<JSONSourceTab>('upload');
+  const [file, setFile] = useState<JSONSourceFile | null>(null);
+  const [fileText, setFileText] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [pastedText, setPastedText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
 
-  // Hooks
-  const { parseFile, isParsing, error: parseError } = useJSONParser();
   const { batchInsertItems } = useDatasetMutations();
 
-  // Handle file selection
-  const handleFileSelect = useCallback(
-    async (file: File) => {
-      try {
-        const result = await parseFile(file);
-        setParsedJSON(result);
-        setStep('preview');
-      } catch {
-        // Error is handled in useJSONParser
-      }
-    },
-    [parseFile],
-  );
+  const sourceText = tab === 'upload' ? fileText : pastedText;
+  const validation = useMemo<JSONImportValidation>(() => {
+    if (tab === 'upload' && fileError) {
+      return { status: 'error', kind: 'parse', message: fileError };
+    }
+    return validateImportJSON(sourceText);
+  }, [tab, fileError, sourceText]);
 
-  // Handle import
-  const handleImport = useCallback(async () => {
-    if (!parsedJSON || parsedJSON.items.length === 0) return;
-
-    setStep('importing');
-    setIsImporting(true);
-
-    const { items } = parsedJSON;
-
-    setImportProgress({ current: 0, total: items.length });
+  const handleFileSelect = useCallback(async (selected: File) => {
+    if (!selected.name.toLowerCase().endsWith('.json')) {
+      setFileError('Only .json files are supported');
+      return;
+    }
+    if (selected.size > MAX_FILE_SIZE) {
+      setFileError('File is larger than 20 MB');
+      return;
+    }
 
     try {
-      await batchInsertItems.mutateAsync({
-        datasetId,
-        items: items.map(item => ({
-          input: item.input,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-        })),
-      });
-      setImportResult({ success: items.length, errors: 0 });
+      const text = await readFileText(selected);
+      setFile({ name: selected.name, size: selected.size });
+      setFileText(text);
+      setFileError(null);
     } catch {
-      setImportResult({ success: 0, errors: items.length });
+      setFileError('Could not read the file');
     }
+  }, []);
 
-    setImportProgress({ current: items.length, total: items.length });
-    setIsImporting(false);
-    setStep('complete');
-  }, [parsedJSON, batchInsertItems, datasetId]);
+  const handleReplace = useCallback(() => {
+    setFile(null);
+    setFileText('');
+    setFileError(null);
+  }, []);
 
-  // Handle done - close dialog and notify
-  const handleDone = useCallback(() => {
-    onOpenChange(false);
-    onSuccess?.();
+  const resetState = useCallback(() => {
+    setTab('upload');
+    setFile(null);
+    setFileText('');
+    setFileError(null);
+    setPastedText('');
+  }, []);
 
-    if (importResult && importResult.success > 0) {
-      toast.success(`Imported ${importResult.success} item${importResult.success !== 1 ? 's' : ''}`);
-    }
-
-    // Reset state after close animation
-    setTimeout(() => {
-      setStep('upload');
-      setParsedJSON(null);
-      setImportProgress({ current: 0, total: 0 });
-      setImportResult(null);
-    }, 150);
-  }, [onOpenChange, onSuccess, importResult]);
-
-  // Handle dialog close
   const handleClose = useCallback(() => {
     if (isImporting) return;
-
     onOpenChange(false);
+    // Reset after the close animation
+    setTimeout(resetState, 150);
+  }, [isImporting, onOpenChange, resetState]);
 
-    // Reset state after close animation
-    setTimeout(() => {
-      setStep('upload');
-      setParsedJSON(null);
-      setImportProgress({ current: 0, total: 0 });
-      setImportResult(null);
-    }, 150);
-  }, [isImporting, onOpenChange]);
+  const handleImport = useCallback(async () => {
+    if (validation.status !== 'ready') return;
 
-  // Check if import is possible (has valid items with no errors)
-  const canImport = parsedJSON && parsedJSON.items.length > 0 && parsedJSON.errors.length === 0;
-
-  // Render step content
-  const renderStepContent = () => {
-    switch (step) {
-      case 'upload':
-        return <JSONUploadStep onFileSelect={handleFileSelect} isParsing={isParsing} error={parseError?.message} />;
-
-      case 'preview':
-        return parsedJSON ? (
-          <div className="flex flex-col gap-4">
-            {parsedJSON.errors.length > 0 ? (
-              <>
-                <JSONValidationSummary errors={parsedJSON.errors} />
-                <div className="text-neutral4 text-sm">Please fix the errors in your JSON file and try again.</div>
-              </>
-            ) : (
-              <>
-                <div className="text-neutral4 text-sm">
-                  Found {parsedJSON.items.length} valid item{parsedJSON.items.length !== 1 ? 's' : ''} to import.
-                </div>
-                <JSONPreviewTable items={parsedJSON.items} maxRows={5} />
-              </>
-            )}
-          </div>
-        ) : null;
-
-      case 'importing':
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Spinner />
-            <div className="text-center">
-              <div className="text-neutral1 text-lg font-medium">Importing items...</div>
-              <div className="text-neutral4 mt-1 text-sm">
-                {importProgress.current} of {importProgress.total}
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'complete':
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <div className="text-4xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
-            <div className="text-center">
-              <div className="text-neutral1 text-lg font-medium">Import Complete</div>
-              <div className="text-neutral4 mt-1 text-sm">
-                {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
-                {importResult && importResult.errors > 0 && (
-                  <span className="text-accent2">
-                    {' '}
-                    ({importResult.errors} error{importResult.errors !== 1 ? 's' : ''})
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
+    setIsImporting(true);
+    try {
+      await batchInsertItems.mutateAsync({ datasetId, items: validation.items });
+      toast.success(`Imported ${validation.total} item${validation.total !== 1 ? 's' : ''}`);
+      onSuccess?.();
+      onOpenChange(false);
+      setTimeout(resetState, 150);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to import items');
+    } finally {
+      setIsImporting(false);
     }
-  };
-
-  // Render footer buttons based on step
-  const renderFooter = () => {
-    switch (step) {
-      case 'upload':
-        return <Button onClick={handleClose}>Cancel</Button>;
-
-      case 'preview':
-        return (
-          <>
-            <Button onClick={() => setStep('upload')}>Back</Button>
-            <Button variant="primary" onClick={handleImport} disabled={!canImport}>
-              Import {parsedJSON?.items.length ?? 0} Item{parsedJSON?.items.length !== 1 ? 's' : ''}
-            </Button>
-          </>
-        );
-
-      case 'importing':
-        return null; // Cancel button is in the content
-
-      case 'complete':
-        return (
-          <Button variant="primary" onClick={handleDone}>
-            Done
-          </Button>
-        );
-    }
-  };
-
-  // Step titles
-  const stepTitles: Record<ImportStep, string> = {
-    upload: 'Import JSON',
-    preview: 'Preview Data',
-    importing: 'Importing',
-    complete: 'Import Complete',
-  };
+  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, resetState]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{stepTitles[step]}</DialogTitle>
-          <DialogDescription>Import dataset items from a JSON file.</DialogDescription>
+      <DialogContent className="flex max-h-[90vh] w-[960px] max-w-[calc(100vw-2rem)] flex-col gap-0 p-0">
+        <DialogHeader className="border-border1 border-b px-6 py-4">
+          <DialogTitle>Import into dataset</DialogTitle>
+          <DialogDescription className="text-ui-sm text-neutral3 not-sr-only">
+            Add items to{' '}
+            {datasetName ? (
+              <code className="bg-surface3 text-ui-xs text-neutral6 rounded px-1 font-mono">{datasetName}</code>
+            ) : (
+              'this dataset'
+            )}{' '}
+            from a JSON file or paste them directly.
+          </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[50vh] min-h-[200px] overflow-y-auto">{renderStepContent()}</DialogBody>
+        <DialogBody className="max-h-none min-h-0 flex-1 overflow-y-auto p-0">
+          <div className="divide-border1 grid divide-y md:grid-cols-[1.15fr_1fr] md:divide-x md:divide-y-0">
+            <div className="flex min-h-[360px] flex-col p-6">
+              <JSONSourcePanel
+                tab={tab}
+                onTabChange={setTab}
+                file={file}
+                onFileSelect={handleFileSelect}
+                onReplace={handleReplace}
+                pastedText={pastedText}
+                onPastedTextChange={setPastedText}
+                validation={validation}
+                isImporting={isImporting}
+              />
+            </div>
+            <div className="p-6">
+              <JSONFormatPanel />
+            </div>
+          </div>
+        </DialogBody>
 
-        <DialogFooter className="flex justify-end gap-2 px-6 pt-4">{renderFooter()}</DialogFooter>
+        <DialogFooter className="border-border1 items-center border-t px-6 py-3 sm:justify-between">
+          <JSONImportStatus validation={validation} />
+          <div className="flex gap-2">
+            <Button onClick={handleClose} disabled={isImporting}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleImport} disabled={validation.status !== 'ready' || isImporting}>
+              {isImporting && <Spinner />}
+              {validation.status === 'ready'
+                ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
+                : 'Import'}
+            </Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function JSONImportStatus({ validation }: { validation: JSONImportValidation }) {
+  const dotClassName = cn(
+    'size-1.5 shrink-0 rounded-full',
+    validation.status === 'idle' && 'bg-neutral3',
+    validation.status === 'ready' && 'bg-accent1',
+    validation.status === 'error' && 'bg-accent2',
+  );
+
+  let message: React.ReactNode;
+  switch (validation.status) {
+    case 'idle':
+      message = 'No items yet';
+      break;
+    case 'ready':
+      message = (
+        <>
+          <b className="text-neutral6 font-medium">{validation.total}</b> item{validation.total !== 1 ? 's' : ''} ready
+          {validation.missingGroundTruthCount > 0 && ` · ${validation.missingGroundTruthCount} without groundTruth`}
+        </>
+      );
+      break;
+    case 'error':
+      switch (validation.kind) {
+        case 'parse':
+          message = `Not valid JSON — ${validation.message}`;
+          break;
+        case 'not-array':
+          message = 'Top level must be an array of items';
+          break;
+        case 'missing-input':
+          message = (
+            <>
+              <b className="text-neutral6 font-medium">{validation.missingInputCount}</b> of {validation.total} item
+              {validation.total !== 1 ? 's' : ''} {validation.missingInputCount !== 1 ? 'have' : 'has'} no{' '}
+              <code className="font-mono">input</code>
+            </>
+          );
+          break;
+      }
+      break;
+  }
+
+  return (
+    <div role="status" className="text-ui-sm text-neutral4 flex min-w-0 items-center gap-2">
+      <span className={dotClassName} />
+      <span className="truncate">{message}</span>
+    </div>
   );
 }
