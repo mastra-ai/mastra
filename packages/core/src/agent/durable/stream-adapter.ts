@@ -682,6 +682,7 @@ export async function emitStepStartEvent(
   data: {
     stepId?: string;
     messageId?: string;
+    startedAt?: StepStartPayload['startedAt'];
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },

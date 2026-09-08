@@ -130,6 +130,7 @@ export function collectToolGroups(
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runtimeTools: MessageEntry['runtimeTools'],
   groupable: ReadonlySet<string>,
+  messageCreatedAt?: Date | string,
 ): { byFirstId: Map<string, ToolCall[]>; memberIds: Set<string> } {
   const byFirstId = new Map<string, ToolCall[]>();
   const memberIds = new Set<string>();
@@ -158,7 +159,7 @@ export function collectToolGroups(
       !UNGROUPABLE_TOOLS.has(part.toolInvocation.toolName) &&
       !suspensions.has(part.toolInvocation.toolCallId);
     if (joins) {
-      run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]));
+      run.push(toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId], messageCreatedAt));
     } else {
       flush();
     }
@@ -168,8 +169,19 @@ export function collectToolGroups(
   return { byFirstId, memberIds };
 }
 
-export function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
+/**
+ * Builds the row model for a tool call. `messageCreatedAt` is the containing message's
+ * timestamp, the fallback clock for parts core never stamped (live turns, older history).
+ */
+export function toolFromInvocationPart(
+  part: ToolInvocationPart,
+  runtime?: ToolCall,
+  messageCreatedAt?: Date | string,
+): ToolCall {
   const invocation = part.toolInvocation;
+  // Thread history arrives as JSON, so the typed Date is an ISO string at runtime.
+  const parsedCreatedAt = messageCreatedAt === undefined ? undefined : new Date(messageCreatedAt).getTime();
+  const fallbackCreatedAt = Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : undefined;
   const persistedResult = 'result' in invocation ? invocation.result : undefined;
   // Persisted terminal state beats the live overlay: `tool_end` can be lost in
   // an SSE gap (no server replay), and a terminal part never regresses — the
@@ -186,5 +198,6 @@ export function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolC
     status: terminalStatus ?? runtime?.status ?? 'running',
     result,
     output: runtime?.output ?? '',
+    createdAt: part.createdAt ?? runtime?.createdAt ?? fallbackCreatedAt,
   };
 }

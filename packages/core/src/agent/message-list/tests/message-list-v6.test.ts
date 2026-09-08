@@ -7,6 +7,135 @@ import type { MastraDBMessage } from '../../index';
 import { MessageList } from '../../index';
 
 describe('MessageList AI SDK v6 support', () => {
+  // Regression: the v5 bridge omits reasoning parts with no text and no details, but the v6
+  // adapter asserted its first converted part existed. Streaming emits exactly that shape on
+  // `reasoning-start`, before the first delta, so conversion threw mid-stream.
+  describe('empty reasoning parts', () => {
+    const emptyReasoningMessage = (id: string, parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts },
+    });
+
+    it('omits an opening empty reasoning part instead of throwing', () => {
+      const message = emptyReasoningMessage('opening-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]);
+
+      const result = new MessageList().add(message, 'memory').get.all.aiV6.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'opening-reasoning', role: 'assistant', parts: [] });
+      // the stored message must not be mutated by conversion
+      expect(message.content.parts).toEqual([{ type: 'reasoning', reasoning: '', details: [] }]);
+    });
+
+    it('omits an empty reasoning part at a non-opening index, keeping surrounding text in order', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('mid-reasoning', [
+            { type: 'text', text: 'Before' },
+            { type: 'reasoning', reasoning: '', details: [] },
+            { type: 'text', text: 'After' },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      expect(result[0]?.parts).toEqual([
+        { type: 'text', text: 'Before' },
+        { type: 'text', text: 'After' },
+      ]);
+    });
+
+    it('omits a reasoning part with no details key at all', () => {
+      const result = new MessageList()
+        .add(emptyReasoningMessage('no-details', [{ type: 'reasoning', reasoning: '' } as any]), 'memory')
+        .get.all.aiV6.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.parts).toEqual([]);
+    });
+
+    it('converts a whole thread when one message holds an empty reasoning part', () => {
+      const list = new MessageList().add(
+        [
+          {
+            id: 'user-1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'Question' }] },
+          },
+          emptyReasoningMessage('assistant-1', [{ type: 'text', text: 'First answer' }]),
+          emptyReasoningMessage('assistant-2', [{ type: 'reasoning', reasoning: '', details: [] }]),
+          emptyReasoningMessage('assistant-3', [{ type: 'text', text: 'Second answer' }]),
+        ] as MastraDBMessage[],
+        'memory',
+      );
+
+      // one bad part previously threw for the entire list, returning no messages at all
+      expect(list.get.all.aiV6.ui()).toHaveLength(list.get.all.aiV5.ui().length);
+      expect(list.get.all.aiV6.ui().map(m => m.id)).toEqual(['user-1', 'assistant-1', 'assistant-2', 'assistant-3']);
+    });
+
+    it('keeps reasoning metadata and tool approvals when an empty reasoning part is omitted', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('mixed-reasoning', [
+            { type: 'reasoning', reasoning: '', details: [] },
+            {
+              type: 'reasoning',
+              reasoning: 'Preparing the requested task.',
+              details: [{ type: 'text', text: 'Preparing the requested task.' }],
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'read-page',
+                toolName: 'readPage',
+                args: { url: 'https://example.com' },
+                state: 'approval-requested',
+                approval: { id: 'approve-page' },
+              },
+            } as any,
+            { type: 'text', text: 'After' },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      const parts = result[0]?.parts ?? [];
+      expect(parts).toContainEqual(
+        expect.objectContaining({ type: 'reasoning', text: 'Preparing the requested task.' }),
+      );
+      expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'After' }));
+      expect(parts).toContainEqual(
+        expect.objectContaining({ approval: expect.objectContaining({ id: 'approve-page' }) }),
+      );
+    });
+
+    it('omits an empty reasoning part on the v7 projection too', () => {
+      const result = new MessageList()
+        .add(emptyReasoningMessage('v7-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]), 'memory')
+        .get.all.aiV7.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.parts).toEqual([]);
+    });
+
+    it('still keeps a reasoning part whose details carry an empty text entry', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('empty-text-detail', [
+            { type: 'reasoning', reasoning: '', details: [{ type: 'text', text: '' }] },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      expect(result[0]?.parts).toEqual([expect.objectContaining({ type: 'reasoning', text: '' })]);
+    });
+  });
+
   it('projects MastraDBMessage records to AI SDK v6 UI messages', () => {
     const messages: MastraDBMessage[] = [
       {

@@ -1,4 +1,5 @@
 import type { FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
+import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
 type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
@@ -40,6 +41,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly phases: Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
   readonly rules: ReadonlyFactoryBoardRules;
+  readonly transitionPolicy?: BoardTransitionPolicy;
   allowsTransition(from: PhaseId, to: PhaseId): boolean;
 }
 
@@ -48,6 +50,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   title: string;
   initialPhase: keyof Phases & string;
   phases: Phases;
+  transitionPolicy?: BoardTransitionPolicy;
 };
 
 export class BoardDefinitionError extends Error {
@@ -58,6 +61,9 @@ export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
+  if (config.transitionPolicy !== undefined && typeof config.transitionPolicy !== 'function') {
+    throw new BoardDefinitionError('Board transitionPolicy must be a function.');
+  }
   const phaseIds = new Set(Object.keys(config.phases));
   if (phaseIds.size === 0) throw new BoardDefinitionError('A board must define at least one phase.');
   if (!phaseIds.has(config.initialPhase)) {
@@ -131,6 +137,7 @@ export function defineBoard<
     phases,
     transitions: Object.freeze(transitions),
     rules: Object.freeze(rules),
+    ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     allowsTransition(from: keyof Phases & string, to: keyof Phases & string) {
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },

@@ -468,6 +468,85 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(lastMessageEvent(events).id).toBe('response-2');
   });
 
+  it('separates a completed resumed tool result from the first model response (#23150)', async () => {
+    const { engine, events } = createHarness();
+    await engine.processStream({
+      fullStream: (async function* () {
+        yield chunk({ type: 'tool-result', payload: { toolCallId: 'ask-1', toolName: 'ask_user', result: 'Ada' } });
+        yield chunk({ type: 'step-finish', payload: {} });
+        yield chunk({ type: 'step-start', payload: { messageId: 'persisted-reply' } });
+        yield chunk({ type: 'text-start', payload: { id: 't1' } });
+        yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'DONE' } });
+        yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+      })(),
+    });
+
+    const ends = events.filter(event => event.type === 'message_end');
+    expect(ends).toHaveLength(2);
+    expect(ends[0]!.message.id).toBe('msg-1');
+    expect(ends[0]!.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: {},
+          result: 'Ada',
+          isError: false,
+        },
+      },
+    ]);
+    expect(ends[1]!.message.id).toBe('persisted-reply');
+    expect(textOf(ends[1]!.message)).toBe('DONE');
+  });
+
+  it.each(['unfinished tool', 'missing step-finish', 'text before step-finish', 'text after step-finish'])(
+    'preserves the observable ID for a prelude with %s',
+    async scenario => {
+      const { engine, events } = createHarness();
+      await engine.processStream({
+        fullStream: (async function* () {
+          yield chunk({
+            type: scenario === 'unfinished tool' ? 'tool-call' : 'tool-result',
+            payload: { toolCallId: 'ask-1', toolName: 'ask_user', args: {}, result: 'Ada' },
+          });
+          if (scenario === 'text before step-finish') {
+            yield chunk({ type: 'text-delta', payload: { id: 'prelude', text: 'Already visible' } });
+          }
+          if (scenario !== 'missing step-finish') yield chunk({ type: 'step-finish', payload: {} });
+          if (scenario === 'text after step-finish') {
+            yield chunk({ type: 'text-delta', payload: { id: 'prelude', text: 'Already visible' } });
+          }
+          yield chunk({ type: 'step-start', payload: { messageId: 'persisted-reply' } });
+          yield chunk({ type: 'text-delta', payload: { id: 'reply', text: 'DONE' } });
+          yield chunk({ type: 'finish', payload: { stepResult: { reason: 'stop' } } });
+        })(),
+      });
+      const ends = events.filter(event => event.type === 'message_end');
+      expect(ends).toHaveLength(1);
+      expect(ends[0]!.message.id).toBe('msg-1');
+    },
+  );
+
+  it('does not carry a completed prelude boundary across a signal message', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-result', payload: { toolCallId: 'ask-1', toolName: 'ask_user', result: 'Ada' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'step-finish', payload: {} }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'signal-1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    const observedId = lastMessageEvent(events).id;
+    await engine.processStreamChunk(state, chunk({ type: 'step-start', payload: { messageId: 'response-1' } }), ctx);
+    expect(lastMessageEvent(events).id).toBe(observedId);
+    expect(events.filter(event => event.type === 'message_end' && event.message.role === 'assistant')).toHaveLength(1);
+  });
+
   it('Given a rotated response id mid-turn, When the next step starts, Then the stream splits where the loop did', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

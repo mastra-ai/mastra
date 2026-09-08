@@ -1,5 +1,41 @@
 # @mastra/core
 
+## 1.65.0-alpha.7
+
+### Patch Changes
+
+- Added `MASTRA_MESSAGE_AUTHOR_KEY` to `@mastra/core/request-context`. Set it from your auth middleware to `{ id, name?, avatarUrl? }` and every message an agent-controller session sends on that request (`sendMessage`, `steer`, `followUp`) is stored with that sender under `providerMetadata.mastra.author`, so a thread several people share can show who wrote what. ([#23085](https://github.com/mastra-ai/mastra/pull/23085))
+
+  ```typescript
+  import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
+
+  requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+  ```
+
+- Added protected `getDatasetForMutation` and `listItemsForMutation` hooks to `DatasetsStorage`. The base `updateDataset`, `updateItem`, `deleteItem`, `batchInsertItems`, and `batchDeleteItems` flows now use these hooks for their pre-write dataset checks, so storage adapters that read from a replica can point those checks at the primary. Defaults are unchanged. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+## 1.65.0-alpha.6
+
+### Patch Changes
+
+- Fixed BrowserViewer connections for Browser Use stdin commands while preserving thread isolation. ([#23142](https://github.com/mastra-ai/mastra/pull/23142))
+
+- Fixed dataset experiments to pass request context when resolving dynamic agent models. ([#23152](https://github.com/mastra-ai/mastra/pull/23152))
+
+- Fixed AgentController reply IDs after a suspended tool resumes so streamed replies match their saved messages in Memory. ([#23151](https://github.com/mastra-ai/mastra/pull/23151))
+
+- Added inference start timestamps to step-start stream events for accurate time-to-first-token measurement. ([#23094](https://github.com/mastra-ai/mastra/pull/23094))
+
+- Fixed unnecessary streaming overhead for final-only output processors. ([#23147](https://github.com/mastra-ai/mastra/pull/23147))
+
+## 1.65.0-alpha.5
+
+### Patch Changes
+
+- Fixed a message history compatibility issue. ([#23093](https://github.com/mastra-ai/mastra/pull/23093))
+
+- Fixed AI SDK v6/v7 message conversion throwing on reasoning parts with no text and no details, which could crash message rendering while a reasoning model streamed. ([#23134](https://github.com/mastra-ai/mastra/pull/23134))
+
 ## 1.65.0-alpha.4
 
 ### Minor Changes
