@@ -34,6 +34,7 @@ export type ReasoningPartType = {
   type: 'reasoning';
   reasoning: string;
   details: Array<{ type: 'text' | 'redacted'; text?: string; data?: string }>;
+  providerMetadata?: Record<string, unknown>;
 };
 
 export type SourcePartType = {

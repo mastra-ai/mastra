@@ -725,6 +725,33 @@ describe('trailing assistant message protection', () => {
     expect(result).toBeDefined();
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
   });
+
+  it('omits assistant messages that become empty after stripping foreign reasoning', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'foreign thinking only',
+            providerOptions: { openai: { itemId: 'rs_123' } },
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'what is 2+2?' }] },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.length).toBe(2);
+    expect(result![0].role).toBe('user');
+    expect(result![1].role).toBe('user');
+  });
 });
 
 describe('azureSystemReminderTransform', () => {

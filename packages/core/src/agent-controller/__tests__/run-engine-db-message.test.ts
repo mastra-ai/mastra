@@ -39,6 +39,7 @@ function createHarness() {
 
   const machinery: SessionMachinery = {
     getAgent: () => ({ id: 'agent-stub' }) as unknown as ReturnType<SessionMachinery['getAgent']>,
+    getRunScope: () => undefined,
     subscribeToThread: async () => {
       throw new Error('subscribeToThread is not used by these stream-folding tests');
     },
@@ -112,6 +113,94 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     const message = lastMessageEvent(events);
     const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
     expect(reasoningPart).toMatchObject({ type: 'reasoning', reasoning: 'thinking…' });
+  });
+
+  it('Given a reasoning stream with reasoning-end providerMetadata, Then providerMetadata is preserved on the reasoning part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-end',
+        payload: { id: 'r1', providerMetadata: { anthropic: { signature: 'sig_test_123' } } },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
+    expect(reasoningPart).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'sig_test_123' } },
+    });
+  });
+
+  it('Given a reasoning stream with reasoning-signature chunk, Then signature is attached to providerMetadata', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-signature',
+        payload: { id: 'r1', signature: 'sig_chunk_456' },
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
+    expect(reasoningPart).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'sig_chunk_456' } },
+    });
+  });
+
+  it('Given a reasoning stream with an id-less reasoning-signature chunk, Then signature is attached to active reasoning part without creating an extra empty part', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(
+      state,
+      chunk({
+        type: 'reasoning-signature',
+        signature: 'top_level_sig_789',
+      }),
+      ctx,
+    );
+
+    const message = lastMessageEvent(events);
+    const reasoningParts = message.content.parts.filter(part => part.type === 'reasoning');
+    expect(reasoningParts).toHaveLength(1);
+    expect(reasoningParts[0]).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'thinking…',
+      providerMetadata: { anthropic: { signature: 'top_level_sig_789' } },
+    });
   });
 
   it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
