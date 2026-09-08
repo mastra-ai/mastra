@@ -45,6 +45,7 @@ describe('ItemDetailDialog', () => {
       );
       expect(screen.getByRole('alertdialog')).toBe(confirmation);
 
+      await waitFor(() => expect(resolveRequest).toBeTypeOf('function'));
       resolveRequest?.();
       await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     });

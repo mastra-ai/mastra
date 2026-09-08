@@ -10,6 +10,7 @@ import {
   EXPERIMENT_RESULTS_SCHEMA,
   ExperimentsStorage,
   calculatePagination,
+  hasErrorCode,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -225,9 +226,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
     try {
       await this.pool.execute(
-        `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ((COALESCE(${quoteIdentifier('attempt', 'column name')}, 0)))`,
+        `CREATE UNIQUE INDEX ${quoteIdentifier(indexName, 'index name')} ON ${tableName} (${quoteIdentifier('experimentId', 'column name')}(191), ${quoteIdentifier('itemId', 'column name')}(191), ((COALESCE(${quoteIdentifier('attempt', 'column name')}, 0))))`,
       );
     } catch (error) {
+      if (hasErrorCode(error, new Set([1061, 'ER_DUP_KEYNAME']))) return;
+      if (!hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) throw error;
+
       throw new MastraError(
         {
           id: 'MYSQL_EXPERIMENT_RESULT_NATURAL_KEY_MIGRATION_REQUIRED',

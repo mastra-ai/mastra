@@ -324,7 +324,7 @@ describe('MySQLStore tool mocks rejection', () => {
     expect(
       statements.some(sql =>
         sql.includes(
-          'CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt` ON `mastra_experiment_results` (`experimentId`(191), `itemId`(191), ((COALESCE(`attempt`, 0)))',
+          'CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt` ON `mastra_experiment_results` (`experimentId`(191), `itemId`(191), ((COALESCE(`attempt`, 0))))',
         ),
       ),
     ).toBe(true);
@@ -335,7 +335,7 @@ describe('MySQLStore tool mocks rejection', () => {
   it('fails without deleting rows when legacy experiment results violate the natural key', async () => {
     const store = newStore();
     const { pool } = poolInstances[poolInstances.length - 1];
-    const duplicateError = new Error('Duplicate entry');
+    const duplicateError = Object.assign(new Error('Duplicate entry'), { errno: 1062, code: 'ER_DUP_ENTRY' });
     pool.execute.mockImplementation(async sql => {
       if (String(sql).includes('CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt`')) {
         throw duplicateError;
@@ -352,6 +352,47 @@ describe('MySQLStore tool mocks rejection', () => {
     });
     const statements = pool.execute.mock.calls.map(([sql]) => String(sql));
     expect(statements.some(sql => /^\s*(DELETE|UPDATE)\s/i.test(sql))).toBe(false);
+
+    await store.close();
+  });
+
+  it('accepts concurrent creation of the experiment-result natural key', async () => {
+    const store = newStore();
+    const { pool } = poolInstances[poolInstances.length - 1];
+    const duplicateIndexError = Object.assign(new Error('Duplicate key name'), {
+      errno: 1061,
+      code: 'ER_DUP_KEYNAME',
+    });
+    pool.execute.mockImplementation(async sql => {
+      if (String(sql).includes('CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt`')) {
+        throw duplicateIndexError;
+      }
+      return [[]];
+    });
+
+    await expect(store.init()).resolves.toBeUndefined();
+
+    await store.close();
+  });
+
+  it('preserves unexpected experiment-result index creation failures', async () => {
+    const store = newStore();
+    const { pool } = poolInstances[poolInstances.length - 1];
+    const permissionError = Object.assign(new Error('CREATE command denied'), {
+      errno: 1142,
+      code: 'ER_TABLEACCESS_DENIED_ERROR',
+    });
+    pool.execute.mockImplementation(async sql => {
+      if (String(sql).includes('CREATE UNIQUE INDEX `idx_experiment_results_exp_item_attempt`')) {
+        throw permissionError;
+      }
+      return [[]];
+    });
+
+    await expect(store.init()).rejects.toMatchObject({
+      id: 'MYSQL_STORE_INIT_FAILED',
+      cause: permissionError,
+    });
 
     await store.close();
   });

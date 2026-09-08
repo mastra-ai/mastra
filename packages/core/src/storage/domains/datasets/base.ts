@@ -199,7 +199,7 @@ export abstract class DatasetsStorage extends StorageDomain {
     }
 
     const existing = await this.getItemById({ id: args.id });
-    if (existing?.metadata?.__purged === true) {
+    if (existing?.datasetId === args.datasetId && existing.metadata?.__purged === true) {
       throw new MastraError({
         id: 'DATASET_ITEM_PURGED',
         domain: ErrorDomain.STORAGE,

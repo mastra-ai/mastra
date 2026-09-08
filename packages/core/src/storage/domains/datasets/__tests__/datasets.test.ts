@@ -653,6 +653,18 @@ describe('DatasetsInMemory', () => {
       });
     });
 
+    it('does not disclose purge state when updating an item through another dataset', async () => {
+      const sourceDataset = await storage.createDataset({ name: 'source' });
+      const targetDataset = await storage.createDataset({ name: 'target' });
+      const item = await storage.addItem({ datasetId: sourceDataset.id, input: { patient: 'Alice' } });
+
+      await storage.purgeItem({ id: item.id, datasetId: sourceDataset.id });
+
+      await expect(
+        storage.updateItem({ id: item.id, datasetId: targetDataset.id, input: { patient: 'Alice' } }),
+      ).rejects.toThrow('does not belong to dataset');
+    });
+
     it('redacts in-memory experiment result writes submitted after item purge', async () => {
       const experiments = new ExperimentsInMemory({ db });
       const dataset = await storage.createDataset({ name: 'test' });

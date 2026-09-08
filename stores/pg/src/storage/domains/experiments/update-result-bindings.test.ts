@@ -65,4 +65,15 @@ describe('ExperimentsPG update result bindings', () => {
     expect(oneOrNone.mock.calls[1]?.[1]).toHaveLength(9);
     expect(oneOrNone.mock.calls[1]?.[1][8]).toBe('experiment-1');
   });
+
+  it('preserves an explicitly empty experiment ID as an update scope', async () => {
+    const { experiments, oneOrNone } = createExperiments();
+
+    await experiments.updateExperimentResult({ id: 'result-1', experimentId: '', status: 'reviewed' });
+
+    expect(oneOrNone.mock.calls[0]?.[0]).toContain('r."experimentId" = $2');
+    expect(oneOrNone.mock.calls[0]?.[1]).toEqual(['result-1', '']);
+    expect(oneOrNone.mock.calls[1]?.[0]).toContain('"experimentId" = $9');
+    expect(oneOrNone.mock.calls[1]?.[1][8]).toBe('');
+  });
 });

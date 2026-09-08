@@ -860,8 +860,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           `SELECT e."datasetId", r."itemId"
            FROM ${tableName} r
            JOIN ${experimentsTable} e ON e."id" = r."experimentId"
-           WHERE r."id" = $1${input.experimentId ? ' AND r."experimentId" = $2' : ''}`,
-          input.experimentId ? [input.id, input.experimentId] : [input.id],
+           WHERE r."id" = $1${input.experimentId !== undefined ? ' AND r."experimentId" = $2' : ''}`,
+          input.experimentId !== undefined ? [input.id, input.experimentId] : [input.id],
         );
         if (!owner) return null;
 
@@ -882,7 +882,7 @@ export class ExperimentsPG extends ExperimentsStorage {
            SET "status" = CASE WHEN $2 THEN $3 ELSE "status" END,
                "tags" = CASE WHEN $4 THEN NULL WHEN $5 THEN $6::jsonb ELSE "tags" END,
                "comment" = CASE WHEN $4 THEN NULL WHEN $7 THEN $8 ELSE "comment" END
-           WHERE "id" = $1${input.experimentId ? ' AND "experimentId" = $9' : ''}
+           WHERE "id" = $1${input.experimentId !== undefined ? ' AND "experimentId" = $9' : ''}
            RETURNING *`,
           [
             input.id,
@@ -893,7 +893,7 @@ export class ExperimentsPG extends ExperimentsStorage {
             input.tags === undefined ? null : JSON.stringify(input.tags),
             input.comment !== undefined,
             input.comment ?? null,
-            ...(input.experimentId ? [input.experimentId] : []),
+            ...(input.experimentId !== undefined ? [input.experimentId] : []),
           ],
         );
       });
