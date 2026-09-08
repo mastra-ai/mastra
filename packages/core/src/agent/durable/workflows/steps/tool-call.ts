@@ -1,9 +1,8 @@
 import { z } from 'zod';
-import { createBackgroundTask } from '../../../../background-tasks/create';
-import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
+import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -1043,280 +1042,231 @@ export function createDurableToolCallStep() {
         },
       };
 
-      // Resolve whether to run in background using the shared config resolver
-      if (bgManager && !bgConfig?.disabled && typeof cleanedArgs === 'object' && cleanedArgs !== null) {
-        const bgResolved = resolveBackgroundConfig({
-          llmBgOverrides,
-          toolName,
-          toolConfig: toolBgConfig,
-          agentConfig: bgConfig,
-          managerConfig: bgManager.config,
-        });
-
-        if (bgResolved.runInBackground) {
-          try {
-            const bgTask = createBackgroundTask(bgManager, {
-              toolName,
-              toolCallId,
-              args: cleanedArgs,
-              agentId: initData.agentId,
-              threadId: state?.threadId,
-              resourceId: state?.resourceId,
+      // Background task dispatch via the shared dispatch ladder (the
+      // checkIfRunning restart gate and fallback-to-sync now live in the core).
+      const bgOutcome = await dispatchBackgroundTool({
+        backgroundTaskManager: bgManager,
+        agentBackgroundConfig: bgConfig,
+        managerConfig: bgManager?.config,
+        toolBackgroundConfig: toolBgConfig,
+        llmBgOverrides,
+        args: cleanedArgs,
+        toolName,
+        toolCallId,
+        agentId: initData.agentId,
+        threadId: state?.threadId,
+        resourceId: state?.resourceId,
+        runId,
+        // Only a resume of a previously-suspended call may reattach to a
+        // suspended background task; a fresh call must dispatch its own.
+        resumeData: isResumingFromSuspension ? resumeData : undefined,
+        logger: logger as any,
+        emitTaskStarted: async task => {
+          // Emit background-task-started chunk via PubSub
+          if (pubsub) {
+            await emitChunkEvent(pubsub, runId, {
+              type: 'background-task-started' as any,
               runId,
-              timeoutMs: bgResolved.timeoutMs,
-              maxRetries: bgResolved.maxRetries,
-              context: {
-                executor: {
-                  execute: async (taskArgs: any, taskContext: any) => {
-                    return tool.execute!(taskArgs, {
-                      ...toolOptions,
-                      ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
-                      suspend: async (data?: unknown, options?: SuspendOptions) => {
-                        await toolOptions.suspend?.(data, options);
-                        return taskContext?.suspend?.(data, options);
-                      },
-                      outputWriter: async (chunk: any) => {
-                        await taskContext?.onProgress?.(chunk);
-                        return toolOptions.outputWriter?.(chunk);
-                      },
-                    });
-                  },
-                },
-                onChunk: (chunk: any) => {
-                  if (!pubsub) return;
-                  try {
-                    const bgRunId = chunk.payload.runId;
-                    // Emit tool-call chunk so UIs can render the invocation inline
-                    if (bgRunId !== runId || (bgRunId === runId && resumeData != null)) {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-call',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: cleanedArgs,
-                        },
-                      });
-                    }
-
-                    if (chunk.type === 'background-task-completed') {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-result',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          args: cleanedArgs,
-                          result: chunk.payload.result,
-                        },
-                      });
-                    } else if (chunk.type === 'background-task-failed') {
-                      void emitChunkEvent(pubsub, bgRunId, {
-                        type: 'tool-error',
-                        runId: bgRunId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          toolCallId: chunk.payload.toolCallId,
-                          toolName: chunk.payload.toolName,
-                          error: chunk.payload.error,
-                          args: cleanedArgs,
-                        },
-                      });
-                    }
-                  } catch {
-                    // PubSub may be closed — ignore
-                  }
-                },
-
-                onResult: async (params: any) => {
-                  if (!messageList) return;
-
-                  const result =
-                    params.status === 'failed'
-                      ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                      : params.result;
-
-                  const updated = messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        // A failed background task is recorded as `output-error` with the
-                        // message in `errorText`; a successful one keeps `state: 'result'`.
-                        ...(params.status === 'failed'
-                          ? { state: 'output-error' as const, errorText: result }
-                          : { state: 'result' as const, result }),
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args: cleanedArgs,
-                        // Preserve the approval decision for an approved approval-gated tool that
-                        // ran in the background so it round-trips on recall, matching the sync path.
-                        ...(approvalGrant ?? {}),
-                      },
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          completedAt: params.completedAt,
-                          taskId: params.taskId,
-                        },
-                      },
-                    },
-                  );
-
-                  if (!updated) {
-                    if (params.runId !== runId || (params.runId === runId && resumeData != null)) {
-                      messageList.add(
-                        [
-                          {
-                            role: 'tool' as const,
-                            type: 'tool-call',
-                            id: crypto.randomUUID(),
-                            createdAt: new Date(),
-                            content: [
-                              {
-                                type: 'tool-call' as const,
-                                toolCallId: params.toolCallId,
-                                toolName: params.toolName,
-                                args: cleanedArgs,
-                              },
-                            ],
-                          },
-                        ],
-                        'response',
-                      );
-                    }
-                    messageList.add(
-                      [
-                        {
-                          role: 'tool' as const,
-                          content: [
-                            {
-                              type: 'tool-result' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              result,
-                              isError: params.status === 'failed',
-                            },
-                          ],
-                        },
-                      ],
-                      'response',
-                    );
-                  }
-
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-                  }
-                },
-
-                onExecution: async (params: any) => {
-                  if (!messageList) return;
-
-                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-                    mode: 'stream',
-                    backgroundTasks: {
-                      [params.toolCallId]: {
-                        startedAt: params.startedAt,
-                        suspendedAt: params.suspendedAt,
-                        taskId: params.taskId,
-                      },
-                    },
-                  });
-
-                  // Flush to storage so the metadata update (especially suspendedAt)
-                  // is persisted. Unlike the regular agent which has a single long-lived
-                  // messageList, the durable agent's workflow state is serialized before
-                  // this async callback fires, so we must flush directly.
-                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-                  }
-                },
-
-                onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
-                onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
+              from: ChunkFrom.AGENT,
+              payload: {
+                taskId: task.id,
+                toolName,
+                toolCallId,
               },
             });
-
-            // If the agent is resuming this tool call and a previously-suspended
-            // bg task exists for this toolCallId+runId, resume the bg task with
-            // the agent-resume payload instead of dispatching a fresh one.
-            // Nullish, not truthy: a tool with a primitive resumeSchema can be resumed with
-            // `false` / `0` / `''`, and treating those as "no resume data" would fall through to
-            // `dispatch()` below, leaving the suspended task stranded and starting a second one.
-            const isSuspendedBgResume = isResumingFromSuspension && resumeData != null;
-            if (isSuspendedBgResume) {
-              const isSuspended = await bgTask.checkIfSuspended({
-                toolCallId,
-                runId,
-                agentId: initData.agentId,
-                threadId: state?.threadId,
-                resourceId: state?.resourceId,
-                toolName,
+          }
+        },
+        taskContext: () => ({
+          executor: {
+            execute: async (taskArgs: any, taskContext: any) => {
+              return tool.execute!(taskArgs, {
+                ...toolOptions,
+                ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                suspend: async (data?: unknown, options?: SuspendOptions) => {
+                  await toolOptions.suspend?.(data, options);
+                  return taskContext?.suspend?.(data, options);
+                },
+                outputWriter: async (chunk: any) => {
+                  await taskContext?.onProgress?.(chunk);
+                  return toolOptions.outputWriter?.(chunk);
+                },
               });
-              if (isSuspended) {
-                const task = await bgTask.resume(resumeData);
-                return {
-                  ...typedInput,
-                  args: cleanedArgs,
-                  result: `Background task resumed. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-                };
-              }
-            }
-
-            const isPreviouslyRunning = await bgTask.checkIfRunning({
-              toolCallId,
-              runId,
-              agentId: initData.agentId,
-              threadId: state?.threadId,
-              resourceId: state?.resourceId,
-              toolName,
-            });
-
-            if (isPreviouslyRunning) {
-              const task = await bgTask.restart();
-              return {
-                ...typedInput,
-                args: cleanedArgs,
-                result: `Background task restarted. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-              };
-            }
-
-            const { task, fallbackToSync } = await bgTask.dispatch();
-
-            if (!fallbackToSync) {
-              // Emit background-task-started chunk via PubSub
-              if (pubsub) {
-                await emitChunkEvent(pubsub, runId, {
-                  type: 'background-task-started' as any,
-                  runId,
+            },
+          },
+          onChunk: (chunk: any) => {
+            if (!pubsub) return;
+            try {
+              const bgRunId = chunk.payload.runId;
+              // Emit tool-call chunk so UIs can render the invocation inline
+              if (bgRunId !== runId || (bgRunId === runId && resumeData != null)) {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-call',
+                  runId: bgRunId,
                   from: ChunkFrom.AGENT,
                   payload: {
-                    taskId: task.id,
-                    toolName,
-                    toolCallId,
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: cleanedArgs,
                   },
                 });
               }
 
-              // Return placeholder result so the LLM can continue
-              return {
-                ...typedInput,
-                args: cleanedArgs,
-                result: `Background task started. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
-                ...(approvalGrant ?? {}),
-              };
+              if (chunk.type === 'background-task-completed') {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-result',
+                  runId: bgRunId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: cleanedArgs,
+                    result: chunk.payload.result,
+                  },
+                });
+              } else if (chunk.type === 'background-task-failed') {
+                void emitChunkEvent(pubsub, bgRunId, {
+                  type: 'tool-error',
+                  runId: bgRunId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    error: chunk.payload.error,
+                    args: cleanedArgs,
+                  },
+                });
+              }
+            } catch {
+              // PubSub may be closed — ignore
             }
-            // fallbackToSync: concurrency limit hit, fall through to synchronous execution
-          } catch (bgError) {
-            logger?.debug?.(
-              `[DurableAgent] Background task dispatch failed for ${toolName}, falling back to sync: ${bgError}`,
+          },
+
+          onResult: async (params: any) => {
+            if (!messageList) return;
+
+            const result =
+              params.status === 'failed'
+                ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                : params.result;
+
+            const updated = messageList.updateToolInvocation(
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  // A failed background task is recorded as `output-error` with the
+                  // message in `errorText`; a successful one keeps `state: 'result'`.
+                  ...(params.status === 'failed'
+                    ? { state: 'output-error' as const, errorText: result }
+                    : { state: 'result' as const, result }),
+                  toolCallId: params.toolCallId,
+                  toolName: params.toolName,
+                  args: cleanedArgs,
+                  // Preserve the approval decision for an approved approval-gated tool that
+                  // ran in the background so it round-trips on recall, matching the sync path.
+                  ...(approvalGrant ?? {}),
+                },
+              },
+              {
+                mode: 'stream',
+                backgroundTasks: {
+                  [params.toolCallId]: {
+                    startedAt: params.startedAt,
+                    completedAt: params.completedAt,
+                    taskId: params.taskId,
+                  },
+                },
+              },
             );
-          }
+
+            if (!updated) {
+              if (params.runId !== runId || (params.runId === runId && resumeData != null)) {
+                messageList.add(
+                  [
+                    {
+                      role: 'tool' as const,
+                      type: 'tool-call',
+                      id: crypto.randomUUID(),
+                      createdAt: new Date(),
+                      content: [
+                        {
+                          type: 'tool-call' as const,
+                          toolCallId: params.toolCallId,
+                          toolName: params.toolName,
+                          args: cleanedArgs,
+                        },
+                      ],
+                    },
+                  ],
+                  'response',
+                );
+              }
+              messageList.add(
+                [
+                  {
+                    role: 'tool' as const,
+                    content: [
+                      {
+                        type: 'tool-result' as const,
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        result,
+                        isError: params.status === 'failed',
+                      },
+                    ],
+                  },
+                ],
+                'response',
+              );
+            }
+
+            if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+              await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            }
+          },
+
+          onExecution: async (params: any) => {
+            if (!messageList) return;
+
+            messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+              mode: 'stream',
+              backgroundTasks: {
+                [params.toolCallId]: {
+                  startedAt: params.startedAt,
+                  suspendedAt: params.suspendedAt,
+                  taskId: params.taskId,
+                },
+              },
+            });
+
+            // Flush to storage so the metadata update (especially suspendedAt)
+            // is persisted. Unlike the regular agent which has a single long-lived
+            // messageList, the durable agent's workflow state is serialized before
+            // this async callback fires, so we must flush directly.
+            if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+              await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            }
+          },
+
+          onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
+          onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
+        }),
+      });
+
+      if (bgOutcome.status !== 'sync') {
+        if (bgOutcome.status === 'started') {
+          // Return placeholder result so the LLM can continue
+          return {
+            ...typedInput,
+            args: cleanedArgs,
+            result: bgOutcome.placeholder,
+            ...(approvalGrant ?? {}),
+          };
         }
+        return {
+          ...typedInput,
+          args: cleanedArgs,
+          result: bgOutcome.placeholder,
+        };
       }
 
       try {
