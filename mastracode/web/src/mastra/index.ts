@@ -34,6 +34,7 @@ import { GithubIntegration } from '@mastra/factory/integrations/github/integrati
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
+import { GitLabIntegration } from '@mastra/factory/integrations/gitlab/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -253,6 +254,7 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 // a stable signer. Unset → per-process random secret (single-process local dev
 // only).
 const stateSecret =
+  process.env.MASTRACODE_STATE_SECRET ||
   process.env.GITHUB_APP_WEBHOOK_SECRET ||
   process.env.WORKOS_COOKIE_PASSWORD ||
   process.env.SLACK_APP_SIGNING_SECRET ||
@@ -276,7 +278,34 @@ const slack = slackSigningSecret
     })
   : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
+// GitLab intake (issues in). GitLab does NOT provide the source-control
+// capability — the factory resolves its source-control owner by the literal
+// integration id `github` — so merge requests keep shipping through GitHub,
+// the same split Linear already runs under. Either credential path enables it:
+// a complete OAuth app (per-user connect flow) or a static group/personal
+// access token for single-team self-hosted installs.
+const gitlabClientId = process.env.GITLAB_CLIENT_ID?.trim();
+const gitlabClientSecret = process.env.GITLAB_CLIENT_SECRET?.trim();
+const gitlabAccessToken = process.env.GITLAB_ACCESS_TOKEN?.trim();
+const gitlab =
+  (gitlabClientId && gitlabClientSecret) || gitlabAccessToken
+    ? new GitLabIntegration({
+        baseUrl: process.env.GITLAB_BASE_URL?.trim(),
+        clientId: gitlabClientId,
+        clientSecret: gitlabClientSecret,
+        scope: process.env.GITLAB_OAUTH_SCOPE?.trim(),
+        accessToken: gitlabAccessToken,
+        publicUrl: process.env.MASTRACODE_PUBLIC_URL?.trim(),
+        webhookSecret: process.env.GITLAB_WEBHOOK_SECRET?.trim(),
+      })
+    : undefined;
+
+const integrations = [
+  ...(github ? [github] : []),
+  ...(linear ? [linear] : []),
+  ...(slack ? [slack] : []),
+  ...(gitlab ? [gitlab] : []),
+];
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 

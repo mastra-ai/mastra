@@ -23,6 +23,10 @@ export const server = setupServer(
   // Ambient provider catalog (read by the NewPage credential guard wherever
   // it renders); credential-specific tests override it with `server.use(...)`.
   http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
+  // Ambient GitLab status: the Intake section probes it wherever settings
+  // render. Reported as absent by default (no GitLab integration registered),
+  // so that section stays hidden; GitLab tests override it with `server.use(...)`.
+  http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.

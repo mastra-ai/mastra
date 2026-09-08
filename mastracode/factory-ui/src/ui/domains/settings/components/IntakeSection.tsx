@@ -8,8 +8,11 @@ import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject, LinearStatus } from '../../factory/services/linear';
+import { connectGitLab } from '../../factory/services/gitlab';
+import type { GitLabProject, GitLabStatus } from '../../factory/services/gitlab';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -74,6 +77,107 @@ function GithubIntakeSection({ config, busy, update, slugs }: SourceSectionProps
                 update({
                   ...config,
                   github: { ...config.github, sourceIds: toggleId(config.github.sourceIds, slug) },
+                })
+              }
+            />
+          ))}
+      </SettingsCard>
+    </SettingsSubsection>
+  );
+}
+
+/**
+ * GitLab, like Linear, needs a credential before anything can sync, so the
+ * connection state drives the header. Unlike Linear it has two credential
+ * paths: an OAuth connect flow, or a static access token set in the server's
+ * environment. When the server reports a working credential with no OAuth app
+ * (`oauthAvailable: false`), there is nothing for the user to click — the
+ * connection is already configuration, not an action.
+ */
+function GitlabIntakeSection({
+  config,
+  busy,
+  update,
+  status,
+  projects,
+  projectsError,
+  showPickers,
+  baseUrl,
+}: SourceSectionProps & {
+  status: GitLabStatus | undefined;
+  projects: GitLabProject[];
+  projectsError: unknown;
+  /** Projects can only be picked once GitLab answers with them. */
+  showPickers: boolean;
+  baseUrl: string;
+}) {
+  const serverConfigured = status?.serverConfigured !== false;
+  const connected = Boolean(status?.connected);
+  const host = status?.baseUrl?.replace(/^https?:\/\//, '');
+
+  const description = !serverConfigured
+    ? 'GitLab is not configured on this server.'
+    : !connected
+      ? status?.reason === 'credential_rejected'
+        ? `GitLab rejected the stored credential${status.detail ? `: ${status.detail}` : '.'}`
+        : `Connect ${host ?? 'GitLab'} to sync its issues.`
+      : `Open issues from the projects you select${status?.connectedAs ? `, as ${status.connectedAs}` : ''}. Teammates choose their own.`;
+
+  // Only offer the button when the server can actually start a flow; a
+  // token-only deployment that is already connected needs no action, and one
+  // that is misconfigured cannot be fixed from the browser.
+  const action =
+    serverConfigured && !connected && status?.oauthAvailable ? (
+      <Button size="sm" onClick={() => connectGitLab(baseUrl)}>
+        {status?.reason === 'credential_rejected' ? 'Reconnect GitLab' : 'Connect GitLab'}
+      </Button>
+    ) : undefined;
+
+  return (
+    <SettingsSubsection
+      scope="personal"
+      title={status?.instanceVersion ? `GitLab issues (${status.instanceVersion})` : 'GitLab issues'}
+      description={description}
+      action={action}
+    >
+      <SettingsCard>
+        <SettingsRow variant="factory" label="Sync GitLab issues">
+          <Switch
+            aria-label="Sync GitLab issues"
+            checked={config.gitlab.enabled}
+            disabled={busy || !connected}
+            onCheckedChange={enabled => update({ ...config, gitlab: { ...config.gitlab, enabled } })}
+          />
+        </SettingsRow>
+
+        {config.gitlab.enabled &&
+          connected &&
+          (projectsError ? (
+            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+              Could not load GitLab projects. Check the server can reach {host ?? 'the instance'}.
+            </Txt>
+          ) : !showPickers ? (
+            <SkeletonRows label="Loading GitLab projects" rows={3} />
+          ) : projects.length === 0 ? (
+            <Txt as="p" variant="ui-sm" className="text-icon3 px-4 py-3">
+              No projects visible to this credential — it needs at least Reporter access to a project.
+            </Txt>
+          ) : (
+            <SourcePicker
+              label="Projects"
+              groups={[
+                {
+                  id: 'projects',
+                  items: projects.map(project => ({ id: project.id, label: project.path ?? project.name })),
+                },
+              ]}
+              selectedIds={config.gitlab.sourceIds}
+              disabled={busy}
+              pending={busy}
+              onToggleItem={id =>
+                update({
+                  ...config,
+                  gitlab: { ...config.gitlab, sourceIds: toggleId(config.gitlab.sourceIds, id) },
                 })
               }
             />
@@ -177,6 +281,10 @@ export function IntakeSection() {
   const linearStatus = linearStatusQuery.data;
   const linearConnected = Boolean(linearStatus?.enabled && linearStatus.connected);
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
+  const gitlabStatusQuery = useGitLabStatusQuery();
+  const gitlabStatus = gitlabStatusQuery.data;
+  const gitlabConnected = Boolean(gitlabStatus?.serverConfigured && gitlabStatus.connected);
+  const gitlabProjectsQuery = useGitLabProjectsQuery(gitlabConnected);
 
   const config = configQuery.data;
   // The same repository can be linked to several factories; Intake picks it once.
@@ -190,7 +298,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3">
-        Intake configuration is unavailable. Connect GitHub or Linear first.
+        Intake configuration is unavailable. Connect GitHub, Linear, or GitLab first.
       </Txt>
     );
   }
@@ -206,6 +314,8 @@ export function IntakeSection() {
   const reauthRequired = isLinearReauthError(linearProjectsQuery.error);
   const routedProjectIds = config.linear.sourceIds ?? [];
   const linearReady = linearConnected && config.linear.enabled && !reauthRequired && linearProjects.length > 0;
+  const gitlabProjects = gitlabProjectsQuery.data ?? [];
+  const gitlabPickersReady = gitlabConnected && !gitlabProjectsQuery.isPending;
 
   return (
     <div className="flex flex-col gap-8">
@@ -240,6 +350,18 @@ export function IntakeSection() {
         showPickers={linearReady}
         baseUrl={baseUrl}
       />
+      {gitlabStatus?.serverConfigured && (
+        <GitlabIntakeSection
+          config={config}
+          busy={busy}
+          update={update}
+          status={gitlabStatus}
+          projects={gitlabProjects}
+          projectsError={gitlabProjectsQuery.error}
+          showPickers={gitlabPickersReady}
+          baseUrl={baseUrl}
+        />
+      )}
       {linearReady && routedProjectIds.length > 0 && (
         <SettingsSubsection
           scope="org"

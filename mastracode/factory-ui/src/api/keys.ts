@@ -44,6 +44,8 @@ export const queryKeys = {
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   linearIssue: (factoryProjectId: string | undefined, identifier: string | undefined) =>
     ['linear', 'issue', factoryProjectId ?? null, identifier ?? null] as const,
+  gitlabStatus: () => ['gitlab', 'status'] as const,
+  gitlabProjects: () => ['gitlab', 'projects'] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeLabelRoutes: (factoryProjectId: string | undefined) =>

@@ -2,9 +2,10 @@
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
  * The config is stored per `(org, user)` on the server. GitHub uses
- * `sourceIds` (connected source ids); Linear keeps `sourceIds`
- * (provider-owned source ids). `null` id lists mean
- * "nothing selected" — nothing syncs until the user picks entries.
+ * `sourceIds` (connected source ids); Linear and GitLab keep `sourceIds`
+ * (provider-owned source ids — Linear project ids, GitLab numeric project
+ * ids). `null` id lists mean "nothing selected" — nothing syncs until the
+ * user picks entries.
  */
 
 export interface IntakeSelection {
@@ -16,6 +17,13 @@ export interface IntakeSelection {
 export interface IntakeConfig {
   github: IntakeSelection;
   linear: IntakeSelection;
+  gitlab: IntakeSelection;
+  /**
+   * Selections for integrations this build has no UI for. Preserved verbatim
+   * across a read/write round-trip: the server replaces the whole config blob
+   * on save, so a key this UI drops on read is a key it deletes on write.
+   */
+  [integrationId: string]: IntakeSelection;
 }
 
 /**
@@ -27,9 +35,19 @@ export interface IntakeConfig {
  * off until it's connected and a project is selected.
  */
 function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
+  // Carry unrecognized integrations through untouched (see `IntakeConfig`),
+  // dropping only absent values so `config.x.enabled` is never `undefined`.
+  const passthrough = Object.fromEntries(
+    Object.entries(raw ?? {}).filter((entry): entry is [string, IntakeSelection] => Boolean(entry[1])),
+  );
   return {
+    ...passthrough,
     github: raw?.github ?? { enabled: true, sourceIds: null },
     linear: raw?.linear ?? { enabled: false, sourceIds: null },
+    // GitLab stays off until it is connected and a project is picked, matching
+    // Linear: an enabled-by-default source with no selection syncs nothing but
+    // reads as active in the UI.
+    gitlab: raw?.gitlab ?? { enabled: false, sourceIds: null },
   };
 }
 

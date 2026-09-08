@@ -6,6 +6,16 @@
 packages:
   - '.'
 overrides:
+  # onnxruntime-node dropped macOS Intel (darwin/x64) prebuilds after 1.23.0,
+  # and @mastra/fastembed pins 1.26.0, which then fails to load at dev-server
+  # start on an Intel Mac. 1.23.0 is the last release shipping that binary and
+  # uses the same napi-v6 ABI.
+  #
+  # NOTE: this only governs a standalone install of this app (published
+  # packages). In the monorepo the @mastra/* deps here are `link:`, so
+  # fastembed's own dependency resolves through the monorepo root — the
+  # override that actually takes effect in dev is the one in ../../pnpm-workspace.yaml.
+  onnxruntime-node: 1.23.0
   hono@<4.12.34: 4.12.34
   nanoid@>=3.0.0 <3.3.18: 3.3.18
   postcss@<8.5.23: 8.5.23
