@@ -40,8 +40,10 @@ export interface LoopIterationState<TStep = unknown> {
   /**
    * This run is a resume (e.g. after tool approval) and its first loop-back
    * must seal the already-flushed assistant message and rotate to a fresh
-   * response message (issue #19445). Main maintains this today; declared on
-   * the contract so the pending durable port (ledger L10) has its slot.
+   * response message (issue #19445). Main-only (ledger L10): the main loop
+   * reuses one response message id across iterations, so it needs this
+   * targeted seal; the durable loop rotates to a fresh response message on
+   * every loop-back, which subsumes the resume seal.
    */
   resumeContinuationPending?: boolean;
 }

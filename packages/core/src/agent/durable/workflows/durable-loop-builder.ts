@@ -3,6 +3,7 @@ import type { PubSub } from '../../../events/pubsub';
 import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
+import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
@@ -486,71 +487,21 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         return false;
       }
 
-      // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
-      // on the previous iteration, we allowed one more LLM turn with that feedback.
-      // Now that the turn has completed, stop the loop unconditionally.
-      let hasFinishedSteps = false;
-      // Hard-stop tracks reasons that onIterationComplete must NOT override.
-      // pendingFeedbackStop and delegationBailed are unconditional stops.
-      let hardStop = false;
-      if (state.pendingFeedbackStop) {
-        hasFinishedSteps = true;
-        hardStop = true;
-        state.pendingFeedbackStop = false;
-      }
-
-      // Continuation check. isTaskComplete (when configured) runs as a
-      // proper step inside singleIterationWorkflow and may have already
-      // flipped lastStepResult.isContinued by the time we get here.
-      // Declared as `let` because signal drain may force isContinued later.
-      let shouldContinue = state.lastStepResult?.isContinued === true;
-      const runMaxSteps = rt.maxSteps;
-      const underMaxSteps = state.iterationCount < runMaxSteps;
-
-      // Evaluate user-supplied stopWhen predicate(s) parked on the registry
-      // up-front so we can include them in the finality decision emitted on
-      // the iteration-complete event. The predicate is a closure and can't
-      // survive the wire, so we read it from in-process state. Cross-process
-      // engines (Inngest after worker restart) won't have the registry entry
-      // and fall back to maxSteps only.
-      let stopWhenMatched = false;
-      if (shouldContinue && underMaxSteps && !hasFinishedSteps) {
-        const stopWhen = rt.stopWhen;
-        if (stopWhen && state.accumulatedSteps.length > 0) {
-          const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
-          // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
-          // compatibility — the StepRecord we accumulate is sufficient at runtime.
-          const steps = state.accumulatedSteps as any;
-          const results = await Promise.all(conditions.map(condition => condition({ steps })));
-          stopWhenMatched = results.some(Boolean);
-        }
-      }
-
-      if (stopWhenMatched) {
-        hasFinishedSteps = true;
-      }
-
-      // Check if a delegation hook called ctx.bail() during this iteration.
-      // The flag was set by the mapping step and propagated via iteration state.
-      if (state.delegationBailed) {
-        hasFinishedSteps = true;
-        hardStop = true;
-        // Reset the flag so it doesn't carry forward
-        state.delegationBailed = false;
-      }
-
       // ── Inter-iteration signal drain ──────────────────────────────
       // Mirror the non-durable agentic-loop predicate: drain pending
       // signals that were queued while the previous iteration was
       // running. If signals are present, mark a response boundary,
       // rotate the messageId, add them to the transcript, emit them
       // to the stream, and force continuation so the LLM sees them.
+      // Runs before the continuation decision (matching the main loop) so
+      // stopWhen still applies to a signal-forced turn.
       // Behavior shared with the main-loop predicate via
       // `drainSignalsToTranscript`; this site owns the pubsub guard (don't
       // consume signals without a transport to emit them on) and the
       // serialize/deserialize glue. Drain is best-effort: failures inside the
       // core resolve to `drained: false` and the next iteration runs with the
       // un-drained state.
+      let drainForcedContinue = false;
       if (rt.pubsub && rt.drainPendingSignals) {
         try {
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
@@ -571,7 +522,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             if (state.lastStepResult) {
               state.lastStepResult.isContinued = true;
             }
-            shouldContinue = true;
+            drainForcedContinue = true;
           }
         } catch {
           // serialize() is best-effort too; state keeps the pre-drain
@@ -579,27 +530,49 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         }
       }
 
-      let isFinal = !shouldContinue || !underMaxSteps || hasFinishedSteps;
+      const runMaxSteps = rt.maxSteps;
 
-      // Call onIterationComplete hook if provided (for every iteration, not
-      // just continued ones). Mirrors the regular agentic-loop predicate:
-      // the handler can return { continue: false } to stop, { continue: true }
-      // to force-continue (if under maxSteps), and/or { feedback } to inject
-      // a message before the next turn.
-      const onIterationComplete = rt.onIterationComplete;
-      if (onIterationComplete && !state.backgroundTaskPending) {
-        const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
-
-        try {
-          // Deserialize messageList for the callback's messages snapshot
-          const callbackMessageList = createRunMessageList({ mastra: rt.mastra });
+      // Lazy message-list rehydration for the onIterationComplete hook: the
+      // callback's messages snapshot and any injected feedback share one
+      // instance, re-serialized into state when feedback lands. Only
+      // deserialized when the hook actually runs.
+      let callbackListInstance: ReturnType<typeof createRunMessageList> | undefined;
+      const callbackList = () => {
+        if (!callbackListInstance) {
+          callbackListInstance = createRunMessageList({ mastra: rt.mastra });
           try {
-            callbackMessageList.deserialize(state.messageListState);
+            callbackListInstance.deserialize(state.messageListState);
           } catch {
             // If deserialization fails, callback sees empty messages
           }
+        }
+        return callbackListInstance;
+      };
 
-          const iterationContext = {
+      // Shared continuation decision: two-phase feedback stop, stopWhen (read
+      // from the in-process registry — the predicate is a closure and can't
+      // survive the wire; cross-process engines fall back to maxSteps only),
+      // delegation bail, and the onIterationComplete ladder (see
+      // `decideContinuation` for the semantics and adjudications).
+      const decision = await decideContinuation({
+        pendingFeedbackStop: state.pendingFeedbackStop ?? false,
+        llmWantsToContinue: state.lastStepResult?.isContinued === true || drainForcedContinue,
+        underMaxSteps: state.iterationCount < runMaxSteps,
+        steps: state.accumulatedSteps,
+        stopWhen: rt.stopWhen,
+        consumeDelegationBail: () => {
+          if (state.delegationBailed) {
+            // Reset the flag so it doesn't carry forward
+            state.delegationBailed = false;
+            return true;
+          }
+          return false;
+        },
+        backgroundTaskPending: state.backgroundTaskPending,
+        onIterationComplete: rt.onIterationComplete,
+        buildIterationContext: isFinal => {
+          const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+          return {
             iteration: state.accumulatedSteps.length,
             maxIterations: runMaxSteps,
             text: lastStep?.text ?? '',
@@ -621,73 +594,43 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             resourceId: rt.resourceId,
             agentId: rt.agentId,
             agentName: rt.agentName ?? rt.agentId,
-            messages: callbackMessageList.get.all.db(),
+            messages: callbackList().get.all.db(),
           };
+        },
+        injectFeedback: feedback => {
+          // Inject feedback as a synthetic assistant message so the LLM
+          // sees it on the next turn. Mirror the regular agent: mark it
+          // with completionResult.suppressFeedback so isTaskComplete
+          // scorers skip it.
+          const feedbackId = rt.mastra?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
+          callbackList().add(
+            {
+              id: feedbackId,
+              createdAt: new Date(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [{ type: 'text', text: feedback }],
+                metadata: {
+                  mode: 'stream',
+                  completionResult: { suppressFeedback: true },
+                },
+                format: 2,
+              },
+            } as any,
+            'response',
+          );
+          // Re-serialize the updated messageList
+          state.messageListState = callbackList().serialize();
+        },
+        logger: rt.logger,
+      });
 
-          const iterationResult = await onIterationComplete(iterationContext);
-
-          if (iterationResult) {
-            // Determine whether we can run another turn. Hard stops
-            // (pendingFeedbackStop, delegationBailed) are unconditional —
-            // onIterationComplete cannot override them.
-            const canRunAnotherTurn =
-              !hardStop && underMaxSteps && (shouldContinue || iterationResult.continue === true);
-
-            if (iterationResult.feedback && canRunAnotherTurn) {
-              // Inject feedback as a synthetic assistant message so the LLM
-              // sees it on the next turn. Mirror the regular agent: mark it
-              // with completionResult.suppressFeedback so isTaskComplete
-              // scorers skip it.
-              const feedbackId = rt.mastra?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
-              callbackMessageList.add(
-                {
-                  id: feedbackId,
-                  createdAt: new Date(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [{ type: 'text', text: iterationResult.feedback }],
-                    metadata: {
-                      mode: 'stream',
-                      completionResult: { suppressFeedback: true },
-                    },
-                    format: 2,
-                  },
-                } as any,
-                'response',
-              );
-              // Re-serialize the updated messageList
-              state.messageListState = callbackMessageList.serialize();
-
-              if (iterationResult.continue === false) {
-                // Two-phase stop: let one more LLM turn run with the feedback,
-                // then stop on the next predicate evaluation.
-                state.pendingFeedbackStop = true;
-                isFinal = false;
-              } else if (!hasFinishedSteps && underMaxSteps) {
-                isFinal = false;
-                if (state.lastStepResult) {
-                  state.lastStepResult.isContinued = true;
-                }
-              }
-            } else if (iterationResult.continue === false && !hasFinishedSteps) {
-              hasFinishedSteps = true;
-              isFinal = true;
-            } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
-              if (underMaxSteps || !runMaxSteps) {
-                hasFinishedSteps = false;
-                isFinal = false;
-                if (state.lastStepResult) {
-                  state.lastStepResult.isContinued = true;
-                }
-              }
-            }
-          }
-        } catch (error) {
-          // Log error but don't fail the iteration
-          rt.logger?.error('Error in onIterationComplete hook:', error);
-        }
+      state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
+      if (decision.forceContinue && state.lastStepResult) {
+        state.lastStepResult.isContinued = true;
       }
+      const isFinal = decision.isFinal;
 
       // Each iteration's assistant response is a distinct message, mirroring
       // the non-durable agentic loop. The mutated state.messageId flows into

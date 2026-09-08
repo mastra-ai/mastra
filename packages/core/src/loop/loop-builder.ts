@@ -14,6 +14,7 @@ import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from './run-scope-keys';
+import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
@@ -365,7 +366,6 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return async (predicateParams: any) => {
       const rt = this.resolveRuntime(predicateParams);
       const typedInputData = predicateParams.inputData as LLMIterationData<Tools, OUTPUT>;
-      let hasFinishedSteps = false;
 
       // First loop-back after a resume: the suspended run flushed its
       // in-progress assistant message (reasoning + text + the pending
@@ -411,11 +411,6 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      if (state.pendingFeedbackStop) {
-        hasFinishedSteps = true;
-        state.pendingFeedbackStop = false;
-      }
-
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
@@ -458,26 +453,25 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.accumulatedSteps.push(currentStep);
 
-      // Only call stopWhen if we're continuing (not on the final step)
-      if (rt.stopWhen && typedInputData.stepResult?.isContinued && state.accumulatedSteps.length > 0) {
-        // Cast steps to any for v5/v6 StopCondition compatibility
-        // v5 and v6 StepResult types have minor differences (e.g., rawFinishReason, finishReason format)
-        // but are compatible at runtime for stop condition evaluation
-        const steps = state.accumulatedSteps as any;
-        const conditions = await Promise.all(
-          (Array.isArray(rt.stopWhen) ? rt.stopWhen : [rt.stopWhen]).map(condition => {
-            return condition({ steps });
-          }),
-        );
-
-        const hasStopped = conditions.some(condition => condition);
-        hasFinishedSteps = hasFinishedSteps || hasStopped;
-      }
-
-      // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
-      if (rt.onIterationComplete && !typedInputData.backgroundTaskPending) {
-        const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
-        const iterationContext = {
+      // Shared continuation decision: two-phase feedback stop, stopWhen,
+      // delegation bail, and the onIterationComplete ladder (see
+      // `decideContinuation` for the semantics and adjudications).
+      const decision = await decideContinuation({
+        pendingFeedbackStop: state.pendingFeedbackStop,
+        llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
+        underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,
+        steps: state.accumulatedSteps,
+        stopWhen: rt.stopWhen,
+        consumeDelegationBail: () => {
+          const bailed = !!readScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed');
+          if (bailed) {
+            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', false);
+          }
+          return bailed;
+        },
+        backgroundTaskPending: typedInputData.backgroundTaskPending,
+        onIterationComplete: rt.onIterationComplete,
+        buildIterationContext: isFinal => ({
           iteration: state.accumulatedSteps.length,
           maxIterations: rt.maxSteps,
           text: typedInputData.output.text || '',
@@ -499,72 +493,44 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           agentId: rt.agentId,
           agentName: rt.agentName || rt.agentId,
           messages: messageList.get.all.db(),
-        };
-
-        try {
-          const iterationResult = await rt.onIterationComplete(iterationContext);
-
-          if (iterationResult) {
-            if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
-              messageList.add(
-                {
-                  id: rt.mastra?.generateId() || randomUUID(),
-                  createdAt: new Date(),
-                  type: 'text',
-                  role: 'assistant',
-                  content: {
-                    parts: [
-                      {
-                        type: 'text',
-                        text: iterationResult.feedback,
-                      },
-                    ],
-                    metadata: {
-                      mode: 'stream',
-                      completionResult: {
-                        suppressFeedback: true,
-                      },
-                    },
-                    format: 2,
+        }),
+        injectFeedback: feedback => {
+          messageList.add(
+            {
+              id: rt.mastra?.generateId() || randomUUID(),
+              createdAt: new Date(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: feedback,
                   },
-                } as MastraDBMessage,
-                'response',
-              );
+                ],
+                metadata: {
+                  mode: 'stream',
+                  completionResult: {
+                    suppressFeedback: true,
+                  },
+                },
+                format: 2,
+              },
+            } as MastraDBMessage,
+            'response',
+          );
+        },
+        logger: rt.logger,
+      });
 
-              if (iterationResult.continue === false) {
-                state.pendingFeedbackStop = true;
-              } else if (!hasFinishedSteps && rt.maxSteps && state.accumulatedSteps.length < rt.maxSteps) {
-                hasFinishedSteps = false;
-                typedInputData.stepResult.isContinued = true;
-              }
-            } else if (iterationResult.continue === false && !hasFinishedSteps) {
-              hasFinishedSteps = true;
-            } else if (
-              iterationResult.continue === true &&
-              (hasFinishedSteps || !typedInputData.stepResult?.isContinued)
-            ) {
-              if ((rt.maxSteps && state.accumulatedSteps.length < rt.maxSteps) || !rt.maxSteps) {
-                hasFinishedSteps = false;
-                if (typedInputData.stepResult) {
-                  typedInputData.stepResult.isContinued = true;
-                }
-              }
-            }
-          }
-        } catch (error) {
-          // Log error but don't fail the iteration
-          rt.logger?.error('Error in onIterationComplete hook:', error);
-        }
-      }
-
-      // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
-      if (!hasFinishedSteps && readScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed')) {
-        hasFinishedSteps = true;
-        writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', false);
-      }
-
+      state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
-        typedInputData.stepResult.isContinued = hasFinishedSteps ? false : typedInputData.stepResult.isContinued;
+        if (decision.forceContinue) {
+          typedInputData.stepResult.isContinued = true;
+        }
+        if (decision.isFinal) {
+          typedInputData.stepResult.isContinued = false;
+        }
       }
 
       // Emit step-finish for all cases except tripwire without any steps
