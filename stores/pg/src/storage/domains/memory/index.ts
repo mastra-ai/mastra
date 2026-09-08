@@ -1094,7 +1094,7 @@ export class MemoryPG extends MemoryStorage {
     // occupy $n+1 and $n+2 and are not referenced by the count.
     const rows =
       (await this.#db.readClient.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
-        `SELECT page.*, count_row.__total FROM (${pageSelect}) page CROSS JOIN (SELECT COUNT(*)::int AS "__total" FROM ${tableName} ${whereClause}) count_row`,
+        `SELECT page.*, count_row.__total FROM (${pageSelect}) page CROSS JOIN (SELECT COUNT(*) AS "__total" FROM ${tableName} ${whereClause}) count_row`,
         dataParams,
       )) || [];
 

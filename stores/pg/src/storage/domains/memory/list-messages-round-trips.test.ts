@@ -97,6 +97,7 @@ describe('MemoryPG message paging round-trips', () => {
     expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
     expect(pageQuery!.query).toContain('AS "__total"');
     expect(pageQuery!.query).toContain('COUNT(*)');
+    expect(pageQuery!.query).not.toContain('::int');
     expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
     expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
     expect(pageQuery!.query).not.toContain('COALESCE("createdAtZ"');

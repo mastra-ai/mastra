@@ -1849,6 +1849,7 @@ ${workingMemory}`;
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+          includeTotal: false,
         });
         messages = result.messages.reverse(); // DESC → chronological order
       }
@@ -2437,6 +2438,7 @@ Notes:
         resourceId,
         perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
         page,
+        includeTotal: false,
       });
       if (batch.length === 0) break;
 
