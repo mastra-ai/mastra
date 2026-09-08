@@ -226,7 +226,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle handlers; only tool-result configuration remains global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -263,7 +263,7 @@ const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
 
 Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
 
-The global rule version remains shared audit metadata for Linear evaluations. Update the deployment-owned version when handler behavior changes; it does not change ingress identity or replay semantics.
+`MastraFactory({ configVersion })` is the deployment-owned label stamped on Linear evaluations and audit records. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
 ### GitHub review commands
 

@@ -68,13 +68,13 @@ Runtime reads the installed board's declarations for consent arming, the externa
 
 To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Decision and tool-input validation still accept only built-in board IDs and phase names, so custom-board handlers cannot emit `transition` decisions into custom phases yet.
 
-## Apply supported overrides
+## Change a built-in handler
 
-Tool-result overrides replace the exact handler leaf. Integration overrides replace one event handler. Neither composes with the built-in handler; siblings remain unchanged. Board handlers belong to their definitions, not this override mechanism.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`src/boards/work.ts`, handler in `src/boards/work-tool-rules.ts`) or install a custom board that declares its own `tools`.
 
-Before replacing a built-in leaf:
+Before changing a built-in handler:
 
-1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and Work's tool-result handler in `src/boards/work-tool-rules.ts` within the Factory package. Inspect Work and Review defaults in `src/boards/work.ts` and `src/boards/review.ts`, and custom handlers in their installed definitions.
+1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work and Review lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/review.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.
