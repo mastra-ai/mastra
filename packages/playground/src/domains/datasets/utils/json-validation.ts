@@ -13,10 +13,19 @@ export interface JSONPreviewRow {
   hasGroundTruth: boolean;
 }
 
+/**
+ * Upper bound on the JSON text we accept. Items are sent in a single request and the
+ * default server body limit is 4.5 MB, so anything larger would be rejected before the handler.
+ */
+export const MAX_IMPORT_BYTES = 4 * 1024 * 1024;
+export const MAX_IMPORT_LABEL = '4 MB';
+
 export type JSONImportValidation =
   | { status: 'idle' }
+  | { status: 'error'; kind: 'too-large' }
   | { status: 'error'; kind: 'parse'; message: string }
   | { status: 'error'; kind: 'not-array' }
+  | { status: 'error'; kind: 'empty' }
   | { status: 'error'; kind: 'missing-input'; rows: JSONPreviewRow[]; missingInputCount: number; total: number }
   | {
       status: 'ready';
@@ -43,6 +52,10 @@ export function validateImportJSON(text: string): JSONImportValidation {
     return { status: 'idle' };
   }
 
+  if (new TextEncoder().encode(text).byteLength > MAX_IMPORT_BYTES) {
+    return { status: 'error', kind: 'too-large' };
+  }
+
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -50,8 +63,11 @@ export function validateImportJSON(text: string): JSONImportValidation {
     return { status: 'error', kind: 'parse', message: err instanceof Error ? err.message : String(err) };
   }
 
-  if (!Array.isArray(data) || data.length === 0) {
+  if (!Array.isArray(data)) {
     return { status: 'error', kind: 'not-array' };
+  }
+  if (data.length === 0) {
+    return { status: 'error', kind: 'empty' };
   }
 
   const rows: JSONPreviewRow[] = data.map((element, index) => {

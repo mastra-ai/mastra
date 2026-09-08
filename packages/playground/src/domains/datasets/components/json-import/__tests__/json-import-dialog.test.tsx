@@ -1,3 +1,5 @@
+import type { RouteResponse } from '@mastra/client-js';
+import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,7 +8,7 @@ import { JSONImportDialog } from '../json-import-dialog';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
-type CodeEditorProps = { value?: string; language?: string };
+type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'>;
 
 // CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
@@ -88,6 +90,9 @@ describe('JSONImportDialog', () => {
     pasteJSON('{}');
     expect(screen.getByRole('status').textContent).toBe('Top level must be an array of items');
 
+    pasteJSON('[]');
+    expect(screen.getByRole('status').textContent).toBe('The array has no items');
+
     pasteJSON('[{"x":1}]');
     expect(screen.getByRole('status').textContent).toBe('1 of 1 item has no input');
 
@@ -126,6 +131,37 @@ describe('JSONImportDialog', () => {
     expect(screen.getByRole('status').textContent).toBe('Not valid JSON — Only .json files are supported');
   });
 
+  it('discards a file read that resolves after a newer selection', async () => {
+    renderDialog();
+
+    const OriginalFileReader = globalThis.FileReader;
+    let releaseRead: (() => void) | undefined;
+    class DelayedFileReader extends OriginalFileReader {
+      readAsText(file: Blob) {
+        releaseRead = () => super.readAsText(file);
+      }
+    }
+    vi.stubGlobal('FileReader', DelayedFileReader);
+
+    try {
+      const slow = new File([VALID_ITEMS], 'slow.json', { type: 'application/json' });
+      fireEvent.change(screen.getByLabelText('Choose a JSON file'), { target: { files: [slow] } });
+      expect(releaseRead).toBeDefined();
+
+      vi.stubGlobal('FileReader', OriginalFileReader);
+      await uploadFile('fast.json', '[{"input":"only"}]');
+      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+
+      releaseRead!();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(screen.getByText('fast.json')).not.toBeNull();
+      expect(screen.queryByText('slow.json')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('keeps each tab validation independent when switching', async () => {
     renderDialog();
 
@@ -144,7 +180,8 @@ describe('JSONImportDialog', () => {
     server.use(
       http.post(BATCH_URL, async ({ request }) => {
         onPost(await request.json());
-        return HttpResponse.json({ items: [], count: 3 });
+        const response: BatchInsertResponse = { items: [], count: 3 };
+        return HttpResponse.json(response);
       }),
     );
 

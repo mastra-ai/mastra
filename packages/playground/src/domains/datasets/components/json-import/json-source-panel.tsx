@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, Upload } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
+import { MAX_IMPORT_LABEL } from '../../utils/json-validation';
 import type { JSONImportValidation, JSONPreviewRow } from '../../utils/json-validation';
 
 export type JSONSourceTab = 'upload' | 'paste';
@@ -147,7 +148,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
           or <span className="underline">choose a file</span> from your computer
         </p>
       </div>
-      <p className="text-ui-xs text-neutral3">.json · an array of items · up to 20 MB</p>
+      <p className="text-ui-xs text-neutral3">.json · an array of items · up to {MAX_IMPORT_LABEL}</p>
     </div>
   );
 }

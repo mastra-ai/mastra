@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateImportJSON } from '../json-validation';
+import { MAX_IMPORT_BYTES, validateImportJSON } from '../json-validation';
 
 describe('validateImportJSON', () => {
   it('is idle for empty or whitespace text', () => {
@@ -15,10 +15,18 @@ describe('validateImportJSON', () => {
     expect(result.message.length).toBeGreaterThan(0);
   });
 
-  it('rejects non-array and empty-array top levels', () => {
+  it('rejects non-array top levels', () => {
     expect(validateImportJSON('{}')).toEqual({ status: 'error', kind: 'not-array' });
     expect(validateImportJSON('"x"')).toEqual({ status: 'error', kind: 'not-array' });
-    expect(validateImportJSON('[]')).toEqual({ status: 'error', kind: 'not-array' });
+  });
+
+  it('reports an empty array separately', () => {
+    expect(validateImportJSON('[]')).toEqual({ status: 'error', kind: 'empty' });
+  });
+
+  it('rejects text larger than the request limit before parsing', () => {
+    const text = `["${'x'.repeat(MAX_IMPORT_BYTES)}"]`;
+    expect(validateImportJSON(text)).toEqual({ status: 'error', kind: 'too-large' });
   });
 
   it('flags items without input while keeping preview rows', () => {

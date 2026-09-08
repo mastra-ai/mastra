@@ -11,10 +11,10 @@ import {
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { validateImportJSON } from '../../utils/json-validation';
+import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
 import type { JSONImportValidation } from '../../utils/json-validation';
 import { JSONFormatPanel } from './json-format-panel';
 import { JSONSourcePanel } from './json-source-panel';
@@ -27,8 +27,6 @@ export interface JSONImportDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 const readFileText = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -45,6 +43,8 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   const [fileError, setFileError] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  // Incremented whenever the selection changes so a slow file read can't restore a discarded file.
+  const readIdRef = useRef(0);
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -57,32 +57,38 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   }, [tab, fileError, sourceText]);
 
   const handleFileSelect = useCallback(async (selected: File) => {
+    const readId = ++readIdRef.current;
+
     if (!selected.name.toLowerCase().endsWith('.json')) {
       setFileError('Only .json files are supported');
       return;
     }
-    if (selected.size > MAX_FILE_SIZE) {
-      setFileError('File is larger than 20 MB');
+    if (selected.size > MAX_IMPORT_BYTES) {
+      setFileError(`File is larger than ${MAX_IMPORT_LABEL}`);
       return;
     }
 
     try {
       const text = await readFileText(selected);
+      if (readId !== readIdRef.current) return;
       setFile({ name: selected.name, size: selected.size });
       setFileText(text);
       setFileError(null);
     } catch {
+      if (readId !== readIdRef.current) return;
       setFileError('Could not read the file');
     }
   }, []);
 
   const handleReplace = useCallback(() => {
+    readIdRef.current++;
     setFile(null);
     setFileText('');
     setFileError(null);
   }, []);
 
   const resetState = useCallback(() => {
+    readIdRef.current++;
     setTab('upload');
     setFile(null);
     setFileText('');
@@ -198,6 +204,12 @@ function JSONImportStatus({ validation }: { validation: JSONImportValidation }) 
           break;
         case 'not-array':
           message = 'Top level must be an array of items';
+          break;
+        case 'empty':
+          message = 'The array has no items';
+          break;
+        case 'too-large':
+          message = `JSON is larger than ${MAX_IMPORT_LABEL}`;
           break;
         case 'missing-input':
           message = (
