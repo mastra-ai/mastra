@@ -5,6 +5,7 @@ import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-ou
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
+import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -31,7 +32,6 @@ import type {
   AgentSuspendedEventData,
   RunRegistryEntry,
 } from '../../types';
-import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import {
   rebuildRunToolsFromMastra,
   resolveTool,
@@ -687,14 +687,24 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
-        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
+        // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue).
+        // Apply the tool payload transform first so display targets never see raw
+        // args on the approval prompt (parity with the main loop's approval chunk).
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-call-approval',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, resumeSchema },
-          });
+          const approvalChunk = await applyToolPayloadTransformToChunk(
+            {
+              type: 'tool-call-approval' as const,
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, resumeSchema },
+            },
+            {
+              policy: registryEntry?.toolPayloadTransform,
+              tools: registryEntry?.tools,
+              logger: logger as any,
+            },
+          );
+          await emitChunkEvent(pubsub, runId, approvalChunk);
         }
 
         // Emit suspended event for the stream adapter
@@ -938,17 +948,25 @@ export function createDurableToolCallStep() {
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
-              await emitChunkEvent(pubsub, runId, {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId,
-                  toolName: approvalToolName,
-                  args: approvalArgs,
-                  resumeSchema: approvalResumeSchema,
+              const approvalChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-call-approval' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId,
+                    toolName: approvalToolName,
+                    args: approvalArgs,
+                    resumeSchema: approvalResumeSchema,
+                  },
                 },
-              });
+                {
+                  policy: registryEntry?.toolPayloadTransform,
+                  tools: registryEntry?.tools,
+                  logger: logger as any,
+                },
+              );
+              await emitChunkEvent(pubsub, runId, approvalChunk);
             }
 
             if (pubsub) {
@@ -996,18 +1014,26 @@ export function createDurableToolCallStep() {
             };
 
             if (pubsub) {
-              await emitChunkEvent(pubsub, runId, {
-                type: 'tool-call-suspended',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId,
-                  toolName,
-                  suspendPayload,
-                  args,
-                  resumeSchema: suspendOptions?.resumeSchema,
+              const suspensionChunk = await applyToolPayloadTransformToChunk(
+                {
+                  type: 'tool-call-suspended' as const,
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    toolCallId,
+                    toolName,
+                    suspendPayload,
+                    args,
+                    resumeSchema: suspendOptions?.resumeSchema,
+                  },
                 },
-              });
+                {
+                  policy: registryEntry?.toolPayloadTransform,
+                  tools: registryEntry?.tools,
+                  logger: logger as any,
+                },
+              );
+              await emitChunkEvent(pubsub, runId, suspensionChunk);
 
               await emitSuspendedEvent(pubsub, runId, suspendedEventData);
             }

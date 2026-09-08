@@ -11,8 +11,6 @@ import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
-  transformToolPayloadForTargets,
-  withToolPayloadTransformMetadata,
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
@@ -42,6 +40,7 @@ import {
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
+import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -105,53 +104,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
         toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
       };
-      const transformChunk = async (
-        chunk: ChunkType<OUTPUT>,
-        phase: 'input-available' | 'approval' | 'suspend' | 'output-available' | 'error',
-        extra?: { output?: unknown; error?: unknown; suspendPayload?: unknown },
-      ): Promise<ChunkType<OUTPUT>> => {
-        const payload = 'payload' in chunk ? (chunk.payload as Record<string, any>) : {};
-        const transformInput = payload.args ?? inputData.args;
-        const transformToolName = typeof payload.toolName === 'string' ? payload.toolName : inputData.toolName;
-        const transformToolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : inputData.toolCallId;
-        const transformProviderMetadata =
-          (payload.providerMetadata as Record<string, unknown> | undefined) ??
-          (inputData.providerMetadata as Record<string, unknown> | undefined);
-
-        const inputTransform = await transformToolPayloadForTargets(
-          {
-            phase: 'input-available',
-            toolName: transformToolName,
-            toolCallId: transformToolCallId,
-            input: transformInput,
-            providerMetadata: transformProviderMetadata,
-          },
-          transformSource,
+      const transformChunk = async (chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT>> =>
+        applyToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT> & { payload?: any }, {
+          policy: transformSource.policy,
+          toolTransform: transformSource.toolTransform,
           logger,
-        );
-        const transform =
-          phase === 'input-available'
-            ? undefined
-            : await transformToolPayloadForTargets(
-                {
-                  phase,
-                  toolName: transformToolName,
-                  toolCallId: transformToolCallId,
-                  input: transformInput,
-                  output: extra?.output,
-                  error: extra?.error,
-                  suspendPayload: extra?.suspendPayload,
-                  providerMetadata: transformProviderMetadata,
-                },
-                transformSource,
-                logger,
-              );
-
-        return withToolPayloadTransformMetadata(
-          withToolPayloadTransformMetadata(chunk, inputTransform),
-          transform,
-        ) as ChunkType<OUTPUT>;
-      };
+          transformInput: {
+            providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+          },
+        }) as Promise<ChunkType<OUTPUT>>;
 
       const addToolMetadata = ({
         toolCallId,
@@ -585,20 +546,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
-            const approvalChunk = await transformChunk(
-              {
-                type: 'tool-call-approval',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  toolCallId: inputData.toolCallId,
-                  toolName: inputData.toolName,
-                  args: inputData.args,
-                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-                },
+            const approvalChunk = await transformChunk({
+              type: 'tool-call-approval',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                args: inputData.args,
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
               },
-              'approval',
-            );
+            });
             if (outputWriter) {
               await outputWriter(approvalChunk);
             } else {
@@ -718,20 +676,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 runId,
                 now: readScoped(scopeCtx, NOW_KEY, 'now'),
               });
-              const approvalChunk = await transformChunk(
-                {
-                  type: 'tool-call-approval',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: approvalToolName,
-                    args: approvalArgs,
-                    resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
-                  },
+              const approvalChunk = await transformChunk({
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                 },
-                'approval',
-              );
+              });
               if (outputWriter) {
                 await outputWriter(approvalChunk);
               } else {
@@ -788,22 +743,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
               );
             } else {
-              const suspensionChunk = await transformChunk(
-                {
-                  type: 'tool-call-suspended',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId: inputData.toolCallId,
-                    toolName: inputData.toolName,
-                    suspendPayload,
-                    args: inputData.args,
-                    resumeSchema: options?.resumeSchema,
-                  },
+              const suspensionChunk = await transformChunk({
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
                 },
-                'suspend',
-                { suspendPayload },
-              );
+              });
               safeEnqueue(controller, suspensionChunk);
 
               // Add suspension metadata to message before persisting
@@ -1074,21 +1025,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     ) {
                       safeEnqueue(
                         controller,
-                        await transformChunk(
-                          {
-                            type: 'tool-call',
-                            runId: bgRunId,
-                            from: ChunkFrom.AGENT,
-                            payload: {
-                              toolCallId: chunk.payload.toolCallId,
-                              toolName: chunk.payload.toolName,
-                              args: inputData.args,
-                              providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                              providerExecuted: inputData.providerExecuted,
-                            },
+                        await transformChunk({
+                          type: 'tool-call',
+                          runId: bgRunId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            toolCallId: chunk.payload.toolCallId,
+                            toolName: chunk.payload.toolName,
+                            args: inputData.args,
+                            providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                            providerExecuted: inputData.providerExecuted,
                           },
-                          'input-available',
-                        ),
+                        }),
                       );
                       emittedReplayedToolCalls.add(replayKey);
                     }
@@ -1096,44 +1044,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     if (chunk.type === 'background-task-completed') {
                       safeEnqueue(
                         controller,
-                        await transformChunk(
-                          {
-                            type: 'tool-result',
-                            runId: bgRunId,
-                            from: ChunkFrom.AGENT,
-                            payload: {
-                              toolCallId: chunk.payload.toolCallId,
-                              toolName: chunk.payload.toolName,
-                              args: inputData.args,
-                              result: chunk.payload.result,
-                              providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                              providerExecuted: inputData.providerExecuted,
-                            },
+                        await transformChunk({
+                          type: 'tool-result',
+                          runId: bgRunId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            toolCallId: chunk.payload.toolCallId,
+                            toolName: chunk.payload.toolName,
+                            args: inputData.args,
+                            result: chunk.payload.result,
+                            providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                            providerExecuted: inputData.providerExecuted,
                           },
-                          'output-available',
-                          { output: chunk.payload.result },
-                        ),
+                        }),
                       );
                     } else if (chunk.type === 'background-task-failed') {
                       safeEnqueue(
                         controller,
-                        await transformChunk(
-                          {
-                            type: 'tool-error',
-                            runId: bgRunId,
-                            from: ChunkFrom.AGENT,
-                            payload: {
-                              toolCallId: chunk.payload.toolCallId,
-                              toolName: chunk.payload.toolName,
-                              error: chunk.payload.error,
-                              args: inputData.args,
-                              providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
-                              providerExecuted: inputData.providerExecuted,
-                            },
+                        await transformChunk({
+                          type: 'tool-error',
+                          runId: bgRunId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            toolCallId: chunk.payload.toolCallId,
+                            toolName: chunk.payload.toolName,
+                            error: chunk.payload.error,
+                            args: inputData.args,
+                            providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                            providerExecuted: inputData.providerExecuted,
                           },
-                          'error',
-                          { error: chunk.payload.error },
-                        ),
+                        }),
                       );
                     }
                   })
@@ -1167,35 +1107,25 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   approvalGrant: approvalGrant as Record<string, unknown> | undefined,
                   baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
                   transformForTranscript: async result => {
-                    let transformCarrier = withToolPayloadTransformMetadata(
-                      { metadata: {} as Record<string, any> },
-                      await transformToolPayloadForTargets(
-                        {
-                          phase: 'input-available',
-                          toolName: params.toolName,
+                    const transformCarrier = await applyToolPayloadTransformToChunk(
+                      {
+                        type: params.status === 'failed' ? 'tool-error' : 'tool-result',
+                        payload: {
                           toolCallId: params.toolCallId,
-                          input: args,
+                          toolName: params.toolName,
+                          args,
+                          ...(params.status === 'failed' ? { error: params.error } : { result: params.result }),
+                        },
+                        metadata: {} as Record<string, any>,
+                      },
+                      {
+                        policy: transformSource.policy,
+                        toolTransform: transformSource.toolTransform,
+                        logger,
+                        transformInput: {
                           providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
                         },
-                        transformSource,
-                        logger,
-                      ),
-                    );
-                    transformCarrier = withToolPayloadTransformMetadata(
-                      transformCarrier,
-                      await transformToolPayloadForTargets(
-                        {
-                          phase: params.status === 'failed' ? 'error' : 'output-available',
-                          toolName: params.toolName,
-                          toolCallId: params.toolCallId,
-                          input: args,
-                          output: params.status === 'failed' ? undefined : params.result,
-                          error: params.status === 'failed' ? params.error : undefined,
-                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                        },
-                        transformSource,
-                        logger,
-                      ),
+                      },
                     );
                     const transcriptArgsTransform = getTransformedToolPayload(
                       transformCarrier.metadata,
