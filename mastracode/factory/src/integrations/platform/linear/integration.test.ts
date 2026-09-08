@@ -1,8 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -527,11 +527,10 @@ describe('PlatformLinearIntegration', () => {
         projects: seed.projects,
         intake: seed.intake,
       },
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
       stateSigner: {},
       baseUrl: 'https://factory.example',
@@ -581,7 +580,7 @@ describe('PlatformLinearIntegration', () => {
       projects: { listAll: async () => [] },
       intake: {},
     },
-    rules: { config: {}, workItems: {} },
+    runtime: { configVersion: 'test-v1', workItems: {} },
   };
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {

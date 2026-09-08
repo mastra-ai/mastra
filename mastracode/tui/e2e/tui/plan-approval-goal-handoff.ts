@@ -92,7 +92,7 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Resumed plan output before goal startup\./i, terminal, 10_000);
-    if (readGoalObjective(dbPath) || /Goal \(judge:/.test(terminal.serialize().view)) {
+    if (readGoalObjective(dbPath) || /Goal \(3 max attempts, judge:/.test(terminal.serialize().view)) {
       throw new Error('Goal started before the resumed plan run finished');
     }
     releaseResume();

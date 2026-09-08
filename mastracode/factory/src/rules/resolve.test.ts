@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
-import { defaultFactoryRules } from './defaults.js';
-import { resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
+import { resolveFactoryStageRules } from './resolve.js';
 
 describe('Factory rule resolution', () => {
   const onExit = vi.fn(() => undefined);
@@ -92,12 +91,5 @@ describe('Factory rule resolution', () => {
     });
     expect(resolveFactoryStageRules(other, input)).toEqual([]);
     expect(resolveFactoryStageRules(boards, input)).toHaveLength(2);
-  });
-
-  it('resolves open tool names', () => {
-    const onResult = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({ version: 'resolve-v3', overrides: { tools: { submit_plan: { onResult } } } });
-    expect(resolveFactoryToolRule(rules, 'submit_plan')).toBe(onResult);
-    expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
   });
 });

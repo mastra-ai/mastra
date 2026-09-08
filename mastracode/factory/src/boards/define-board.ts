@@ -1,9 +1,19 @@
-import type { FactoryRuleHandler, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
-import { IDENTIFIER_RE, MAX_ROLE_LENGTH } from '../rules/validation.js';
+import type {
+  FactoryRuleHandler,
+  FactoryRuleSource,
+  FactoryStageRuleContext,
+  FactoryToolResultRuleContext,
+} from '../rules/types.js';
+import { IDENTIFIER_RE, MAX_ROLE_LENGTH, MAX_TOOL_NAME_LENGTH } from '../rules/validation.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
 type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
+
+/** Runs when an agent seated on this board completes the named tool. */
+export type BoardToolResultRuleHandler = FactoryRuleHandler<FactoryToolResultRuleContext>;
+export type BoardToolRule = { readonly onResult: BoardToolResultRuleHandler };
+export type BoardToolRules = Readonly<Record<string, BoardToolRule>>;
 
 type ReadonlyFactoryBoardRules = Readonly<
   Record<
@@ -55,6 +65,8 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly phases: Readonly<Record<PhaseId, BoardPhaseDefinition<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
   readonly rules: ReadonlyFactoryBoardRules;
+  /** Tool-result rules keyed by tool name; empty when the board declares none. */
+  readonly tools: BoardToolRules;
   readonly transitionPolicy?: BoardTransitionPolicy;
   allowsTransition(from: PhaseId, to: PhaseId): boolean;
   /** Declared kind of a phase, or undefined when the board has no such phase. */
@@ -72,6 +84,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   title: string;
   initialPhase: keyof Phases & string;
   phases: Phases;
+  tools?: Record<string, BoardToolRule>;
   transitionPolicy?: BoardTransitionPolicy;
 };
 
@@ -95,6 +108,31 @@ function validatePhaseSemantics(phaseId: string, phase: BoardPhaseDefinition<str
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function validateToolRules(tools: unknown): BoardToolRules {
+  if (tools === undefined) return Object.freeze({});
+  if (!isPlainObject(tools)) throw new BoardDefinitionError('Board tools must be a plain object.');
+  const frozen: Record<string, BoardToolRule> = {};
+  for (const [toolName, leaf] of Object.entries(tools)) {
+    if (toolName.length === 0 || toolName.length > MAX_TOOL_NAME_LENGTH || !IDENTIFIER_RE.test(toolName)) {
+      throw new BoardDefinitionError(`Tool rule "${toolName}" has an invalid tool name.`);
+    }
+    if (!isPlainObject(leaf) || Object.keys(leaf).some(key => key !== 'onResult')) {
+      throw new BoardDefinitionError(`Tool rule "${toolName}" must be an object with only onResult.`);
+    }
+    if (typeof leaf.onResult !== 'function') {
+      throw new BoardDefinitionError(`Tool rule "${toolName}" must declare an onResult function.`);
+    }
+    frozen[toolName] = Object.freeze({ onResult: leaf.onResult as BoardToolResultRuleHandler });
+  }
+  return Object.freeze(frozen);
+}
+
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
@@ -103,6 +141,7 @@ export function defineBoard<
   if (config.transitionPolicy !== undefined && typeof config.transitionPolicy !== 'function') {
     throw new BoardDefinitionError('Board transitionPolicy must be a function.');
   }
+  const tools = validateToolRules(config.tools);
   const phaseIds = new Set(Object.keys(config.phases));
   if (phaseIds.size === 0) throw new BoardDefinitionError('A board must define at least one phase.');
   if (!phaseIds.has(config.initialPhase)) {
@@ -193,6 +232,7 @@ export function defineBoard<
     phases,
     transitions: Object.freeze(transitions),
     rules: Object.freeze(rules),
+    tools,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;

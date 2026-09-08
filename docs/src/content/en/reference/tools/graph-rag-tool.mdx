@@ -160,8 +160,9 @@ The tool returns an object with:
   content={[
   {
     name: 'relevantContext',
-    type: 'string',
-    description: 'Combined text from the most relevant document chunks, retrieved using graph-based ranking',
+    type: 'string[]',
+    description:
+      "Array of chunk text strings for the most relevant document chunks, in rank order, retrieved using graph-based ranking. Text is read from the `text` field of each chunk's metadata.",
   },
   {
     name: 'sources',
@@ -183,6 +184,8 @@ The tool returns an object with:
   document: string;   // Full chunk/document text (if available)
 }
 ```
+
+The graph is built from the `text` field of each result's metadata, so `document` (and `relevantContext`) contain that text. Store the chunk text under `metadata.text` when upserting.
 
 ## Default tool description
 

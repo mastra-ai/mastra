@@ -1,5 +1,13 @@
 # @mastra/elysia
 
+## 0.1.5-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`5840309`](https://github.com/mastra-ai/mastra/commit/5840309bd781c3b332da6f2efb73c8fca4696b39), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`0562460`](https://github.com/mastra-ai/mastra/commit/056246057cfabe243b65ffa16c55eff53ac28907), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/server@1.65.0-alpha.9
+  - @mastra/core@1.65.0-alpha.9
+
 ## 0.1.5-alpha.8
 
 ### Patch Changes
