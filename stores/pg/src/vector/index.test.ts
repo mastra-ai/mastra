@@ -173,7 +173,8 @@ describe('PgVector', () => {
 
     describe('long table names (issue #23273)', () => {
       // 63 chars: the Postgres identifier limit. `${name}_namespace_vector_id_idx` would be 87 chars.
-      const longLegacyIndex = 'test_ns_legacy_0123456789abcdef0123456789abcdef0123456789abcdef';
+      const legacyIndexes = [39, 40, 63].map(length => 'test_ns_legacy_'.padEnd(length, 'x'));
+      legacyIndexes.push(`${legacyIndexes[2]!.slice(0, -1)}y`);
       const longFreshIndex = 'test_ns_fresh_00123456789abcdef0123456789abcdef0123456789abcdef';
       const longHalfIndex = 'test_ns_half_000123456789abcdef0123456789abcdef0123456789abcdef';
 
@@ -182,7 +183,7 @@ describe('PgVector', () => {
         try {
           const result = await client.query<{ indexdef: string }>(
             `SELECT indexdef FROM pg_indexes
-             WHERE tablename = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexdef NOT LIKE '%_pkey%'`,
+             WHERE schemaname = 'public' AND tablename = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexdef NOT LIKE '%_pkey%'`,
             [table],
           );
           return result.rows.map(row => row.indexdef);
@@ -192,13 +193,12 @@ describe('PgVector', () => {
       };
 
       afterAll(async () => {
-        for (const indexName of [longLegacyIndex, longFreshIndex, longHalfIndex]) {
+        for (const indexName of [...legacyIndexes, longFreshIndex, longHalfIndex]) {
           await vectorDB.deleteIndex({ indexName });
         }
       });
 
-      it('migrates a legacy table whose name is at the identifier limit', async () => {
-        expect(longLegacyIndex).toHaveLength(63);
+      it.each(legacyIndexes)('migrates a legacy table named %s', async longLegacyIndex => {
         const client = await vectorDB.pool.connect();
         try {
           await client.query(`
@@ -213,10 +213,17 @@ describe('PgVector', () => {
           client.release();
         }
 
+        await vectorDB.pool.query(`INSERT INTO ${longLegacyIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
         await vectorDB.createIndex({ indexName: longLegacyIndex, dimension: 3 });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
 
         const defs = await uniqueIndexDefs(longLegacyIndex);
         expect(defs).toHaveLength(1);
+        const indexName = defs[0]!.split(' ')[3]!;
+        expect(indexName.length).toBeLessThanOrEqual(63);
+        if (longLegacyIndex.length === 39) {
+          expect(indexName).toBe(`${longLegacyIndex}_namespace_vector_id_idx`);
+        }
         expect(defs[0]).toContain('(namespace, vector_id)');
 
         await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[1, 0, 0]], ids: ['a'] });
@@ -230,8 +237,12 @@ describe('PgVector', () => {
       it('creates a fresh index whose name is at the identifier limit', async () => {
         expect(longFreshIndex).toHaveLength(63);
         await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
-        // createIndex must be idempotent (IF NOT EXISTS must match the hashed name)
-        await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        const reopened = new PgVector({ connectionString, id: 'pg-namespace-reopened' });
+        try {
+          await reopened.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        } finally {
+          await reopened.disconnect();
+        }
 
         const defs = await uniqueIndexDefs(longFreshIndex);
         expect(defs).toHaveLength(1);
@@ -259,6 +270,7 @@ describe('PgVector', () => {
         } finally {
           client.release();
         }
+        await vectorDB.pool.query(`INSERT INTO ${longHalfIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
         expect(await uniqueIndexDefs(longHalfIndex)).toHaveLength(0);
 
         await vectorDB.createIndex({ indexName: longHalfIndex, dimension: 3 });
@@ -267,6 +279,73 @@ describe('PgVector', () => {
         expect(defs).toHaveLength(1);
         expect(defs[0]).toContain('(namespace, vector_id)');
         await vectorDB.upsert({ indexName: longHalfIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longHalfIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+      });
+
+      it('preserves legacy uniqueness when replacement creation fails and allows retry', async () => {
+        const indexName = 'test_ns_failure'.padEnd(63, 'x');
+        await vectorDB.pool.query(`
+          CREATE TABLE ${indexName} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(3),
+            metadata JSONB DEFAULT '{}'::jsonb
+          )
+        `);
+        await vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        const originalQuery = pg.Client.prototype.query;
+        const querySpy = vi.spyOn(pg.Client.prototype, 'query').mockImplementation(function (query, ...args) {
+          if (typeof query === 'string' && query.startsWith('CREATE UNIQUE INDEX') && query.includes(indexName)) {
+            throw new Error('Injected namespace index failure');
+          }
+          return originalQuery.call(this, query, ...args);
+        });
+        try {
+          await expect(vectorDB.createIndex({ indexName, dimension: 3 })).rejects.toThrow();
+          querySpy.mockRestore();
+          const legacyDefs = await uniqueIndexDefs(indexName);
+          expect(legacyDefs).toHaveLength(1);
+          expect(legacyDefs[0]).toContain('(vector_id)');
+          await expect(vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id) VALUES ('a')`)).rejects.toMatchObject({
+            code: '23505',
+          });
+          await vectorDB.createIndex({ indexName, dimension: 3 });
+          const reopened = new PgVector({ connectionString, id: 'pg-namespace-retry' });
+          try {
+            await reopened.createIndex({ indexName, dimension: 3 });
+            await reopened.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          } finally {
+            await reopened.disconnect();
+          }
+          const defs = await uniqueIndexDefs(indexName);
+          expect(defs).toHaveLength(1);
+          expect(defs[0]).toContain('(namespace, vector_id)');
+        } finally {
+          querySpy.mockRestore();
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it('creates a long-named index in an explicit schema', async () => {
+        const schemaName = 'test_ns_long_schema';
+        const indexName = 'test_ns_schema'.padEnd(63, 'x');
+        const scoped = new PgVector({ connectionString, schemaName, id: 'pg-namespace-schema' });
+        try {
+          await scoped.createIndex({ indexName, dimension: 3 });
+          await scoped.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+          await scoped.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          expect(await scoped.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+          const indexes = await scoped.pool.query<{ indexname: string; indexdef: string }>(
+            "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2 AND indexdef LIKE '%(namespace, vector_id)'",
+            [schemaName, indexName],
+          );
+          expect(indexes.rows).toHaveLength(1);
+          expect(indexes.rows[0]!.indexname.length).toBeLessThanOrEqual(63);
+          expect(indexes.rows[0]!.indexdef).toContain('CREATE UNIQUE INDEX');
+        } finally {
+          await scoped.disconnect();
+          await vectorDB.pool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+        }
       });
 
       it('keeps the unhashed index name for short table names', async () => {
