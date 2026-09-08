@@ -6,8 +6,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
-import type { RequestContext } from '../request-context';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { ChunkFrom } from '../stream/types';
@@ -1404,6 +1403,18 @@ export class AgentThreadStreamRuntime {
 
     if (state.abortedRunIds.has(options.runId)) {
       abort();
+    }
+
+    const requestContext = options.requestContext;
+    const controllerContext = requestContext?.get('controller');
+    if (requestContext && typeof controllerContext === 'object' && controllerContext !== null) {
+      const preparedRequestContext = new RequestContext(requestContext.entries());
+      preparedRequestContext.set('controller', { ...controllerContext, abortSignal: abortController.signal });
+      return {
+        ...options,
+        abortSignal: abortController.signal,
+        requestContext: preparedRequestContext,
+      };
     }
 
     return {
