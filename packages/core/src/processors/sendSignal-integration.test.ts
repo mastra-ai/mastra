@@ -135,7 +135,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     );
   });
 
-  it('sendSignal emits a data part to the stream writer', async () => {
+  it('sendSignal does not emit reactive signals to the stream writer', async () => {
     const chunks: unknown[] = [];
     const writer: ProcessorStreamWriter = {
       custom: async chunk => {
@@ -171,17 +171,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
       writer,
     });
 
-    expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toEqual(
-      expect.objectContaining({
-        type: 'data-signal',
-        data: expect.objectContaining({
-          type: 'reactive',
-          tagName: 'system-reminder',
-          contents: 'stream test',
-        }),
-      }),
-    );
+    expect(chunks).toEqual([]);
   });
 
   it('sendSignal rotates the response message ID and updates the step result', async () => {

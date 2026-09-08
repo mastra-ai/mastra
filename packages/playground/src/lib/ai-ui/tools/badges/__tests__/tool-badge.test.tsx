@@ -97,3 +97,24 @@ describe('ToolBadge', () => {
     expect(screen.getByTestId('tool-result').textContent).toBe('false');
   });
 });
+
+describe('ToolBadge edit body', () => {
+  it('shows an edit-style call as a diff instead of raw arguments', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="mastra_workspace_edit_file"
+        args={{ path: 'a.ts', old_string: 'x', new_string: 'y' }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-3"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Edit'));
+
+    expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
+    expect(screen.queryByTestId('tool-args')).toBeNull();
+  });
+});

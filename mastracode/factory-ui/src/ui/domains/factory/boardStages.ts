@@ -6,7 +6,7 @@ import type { BoardStage, BoardStageId } from './stages';
 
 export type BoardKind = FactoryRuleBoard;
 
-const REVIEW_BOARD_STAGE_VISIBILITY = {
+const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> = {
   intake: true,
   triage: false,
   planning: false,
@@ -14,7 +14,7 @@ const REVIEW_BOARD_STAGE_VISIBILITY = {
   review: true,
   done: true,
   canceled: true,
-} satisfies Record<FactoryRuleStage, boolean>;
+};
 
 const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
   if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];

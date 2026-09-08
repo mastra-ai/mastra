@@ -11,89 +11,27 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-Processor methods run at different points in the agent execution lifecycle:
+For a conceptual walkthrough of preparation, the agent loop, tool execution, and finalization, see the [agent lifecycle guide](/docs/guides/agent-lifecycle).
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                        Agent Execution Flow                        │
-├────────────────────────────────────────────────────────────────────┤
-│                                                                    │
-│  User Input                                                        │
-│      │                                                             │
-│      ▼                                                             │
-│  ┌────────────────────────┐                                        │
-│  │  processInput          │  ← Runs ONCE at start                  │
-│  └───────────┬────────────┘                                        │
-│              │                                                     │
-│              ▼                                                     │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                        Agentic Loop                          │  │
-│  │                                                              │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processInputStep      │  ← Runs at EACH step             │  │
-│  │  └───────────┬────────────┘                                  │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processLLMRequest     │  ← Before provider call          │  │
-│  │  └───────────┬────────────┘                                  │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │        LLM Execution ──── API Error? ───┐                    │  │
-│  │              │                          │                    │  │
-│  │              │              ┌───────────┴──────────┐         │  │
-│  │              │              │  processAPIError     │         │  │
-│  │              │              └──────────────────────┘         │  │
-│  │              │                (retry loops back to LLM)      │  │
-│  │              ▼                                               │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processOutputStream   │  ← Runs on EACH stream chunk     │  │
-│  │  └───────────┬────────────┘                                  │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processLLMResponse    │  ← After stream completes        │  │
-│  │  └───────────┬────────────┘                                  │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processOutputStep     │  ← Runs after EACH LLM step      │  │
-│  │  └───────────┬────────────┘                                  │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │        Tool Execution (if needed)                            │  │
-│  │              │                                               │  │
-│  │              ▼                                               │  │
-│  │  ┌────────────────────────┐                                  │  │
-│  │  │  processToolResult     │  ← Runs per tool, after each     │  │
-│  │  └───────────┬────────────┘    tool.execute() returns        │  │
-│  │              │                                               │  │
-│  │              └──────── Loop back if tools called ────────────│  │
-│  │                                                              │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│              │                                                     │
-│              ▼                                                     │
-│  ┌────────────────────────┐                                        │
-│  │  processOutputResult   │  ← Runs ONCE after completion          │
-│  └────────────────────────┘                                        │
-│              │                                                     │
-│              ▼                                                     │
-│        Final Response                                              │
-│                                                                    │
-└────────────────────────────────────────────────────────────────────┘
-```
+## Callback timing
 
-| Method | When it runs | Use case |
+| Callback or operation | Frequency | Position and visibility |
 | - | - | - |
-| `processInput` | Once at the start, before the agentic loop | Validate/transform initial user input, add context |
-| `processInputStep` | At each step of the agentic loop, before each LLM call | Transform messages between steps, handle tool results |
-| `processLLMRequest` | After LLM request conversion, before the provider call | Rewrite the outbound `LanguageModelV2Prompt` for the current call without persisting changes |
-| `processAPIError` | When an LLM API call fails | Inspect API rejections, optionally mutate state/messages, and request a retry |
-| `processOutputStream` | On each streaming chunk during LLM response | Filter/modify streaming content, detect patterns in real-time |
-| `processLLMResponse` | After the LLM step completes and stream chunks are collected | Capture or cache the full response, run post-call side effects paired with `processLLMRequest` |
-| `processOutputStep` | After each LLM response, before tool execution | Validate output quality, implement guardrails with retry |
-| `processToolResult` | Per tool, after a locally executed tool returns or a provider-executed result arrives, before the raw result is persisted to `messageList` | Inspect tool output and enforce security policies |
-| `processOutputResult` | Once after generation completes | Post-process final response, log results |
+| `processInput` | Once per initial request | During input preparation before the loop. Resuming from a durable snapshot may skip it. |
+| `processInputStep` | Once per model step | Before the provider request. It sees messages and tool results accumulated so far. |
+| `processLLMRequest` | Once per provider call | Last processor stage for rewriting the provider-facing prompt. Its prompt changes aren't written back to the message list. |
+| `processOutputStream` | Per streamed chunk | Runs while model output arrives. Data chunks are included when the processor opts in. |
+| `processLLMResponse` | Once per completed provider stream | Receives the completed response for the current model step. |
+| `processOutputStep` | Once per model step | Runs after the model response and before locally executed tools. |
+| Tool [`onInputStart`](/reference/tools/create-tool#oninputstart) | When streamed tool input begins | Runs before complete tool arguments are available. |
+| Tool [`onInputDelta`](/reference/tools/create-tool#oninputdelta) | Per streamed tool-input chunk | Observes incremental tool arguments. |
+| Tool [`onInputAvailable`](/reference/tools/create-tool#oninputavailable) | Once when tool input is complete | Runs after arguments are parsed and validated, before execution. |
+| Tool execution | Once per local tool call | Receives the live [`RequestContext`](/docs/server/request-context). Approval or suspension can delay execution. |
+| Tool [`onOutput`](/reference/tools/create-tool#onoutput) | Once after successful local execution | Receives the tool output. |
+| `processToolResult` | Per local/client result, or when a deferred provider result arrives | Can inspect, redact, or abort before a raw tool result enters the message list. |
+| `processAPIError` | On eligible provider API errors | Can update request state and request another provider attempt. |
+| [`onIterationComplete`](/reference/agents/generate#parameters) | Once after each completed loop iteration | Observes the iteration result and can influence whether execution continues. |
+| `processOutputResult` | Once at finalization | Post-processes the completed agent result before it's returned. |
 
 ## Interface definition
 

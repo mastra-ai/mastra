@@ -2,13 +2,13 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { boardForWorkItem } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
-import type { FactoryRuleBoard } from './types.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
 
@@ -31,10 +31,6 @@ const transitionInputSchema = z
 const triageTransitionInputSchema = transitionInputSchema.extend({
   triageType: z.enum(FACTORY_TRIAGE_TYPES),
 });
-
-function boardForSource(type: string | undefined): FactoryRuleBoard {
-  return type === 'pull-request' ? 'review' : 'work';
-}
 
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
@@ -90,7 +86,7 @@ export async function createFactoryTransitionTools(options: {
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
           workItemId: binding.workItemId,
-          board: boardForSource(item.externalSource?.type),
+          board: boardForWorkItem(item),
           stage,
           expectedRevision,
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },

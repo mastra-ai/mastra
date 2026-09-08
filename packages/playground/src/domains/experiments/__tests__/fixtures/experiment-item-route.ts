@@ -119,7 +119,14 @@ const baseResult: DatasetExperimentResult = {
 /** Three results, itemIds item-1..item-3, result ids res-1..res-3. */
 export const results: DatasetExperimentResult[] = [
   baseResult,
-  { ...baseResult, id: 'res-2', itemId: 'item-2', input: { q: 'second question' }, output: { a: 'second answer' } },
+  {
+    ...baseResult,
+    id: 'res-2',
+    itemId: 'item-2',
+    input: { q: 'second question' },
+    output: { a: 'second answer' },
+    tags: ['alpha'],
+  },
   {
     ...baseResult,
     id: 'res-3',

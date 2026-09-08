@@ -30,7 +30,6 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
@@ -279,9 +278,7 @@ const slack = slackSigningSecret
 
 const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
 
-export const factoryRules = defaultFactoryRules({
-  version: 'mastracode-web-v1',
-});
+export const factoryConfigVersion = 'mastracode-web-v1';
 
 const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
   key => Boolean(process.env[key]?.trim()),
@@ -290,7 +287,7 @@ export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
-  rules: factoryRules,
+  configVersion: factoryConfigVersion,
   sandbox: ctx => {
     if (hasPlatformSandboxEnv) {
       return new PlatformSandbox({

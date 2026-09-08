@@ -1,5 +1,76 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.11
+
+### Patch Changes
+
+- `ChatShell.Column` accepts a `ref`, and the shell's track is now the positioning context for overlays that must span the scrolled height, such as a sticky thread rail. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+  ```tsx
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  <ChatShell.Column ref={columnRef}>
+    <ThreadRail scrollerRef={columnRef} />
+    {messages}
+  </ChatShell.Column>;
+  ```
+
+- Added the shared chat pieces both transcripts draw from. `ChatShell.Turn` reserves the reply room for a live turn, `groupTurns` folds a message list into turns, and `ai/tool-call` gains `ToolCallEdit` (an edit as removed and added lines, a written file as code), `ToolCallCommand`, `ToolCallGroup`, `toolEdit`, `stripAnsi` and `stripSerializedAnsi`. `Code` now exposes its `useHighlight` hook and `tokenStyle`, and `languageForPath` resolves a highlight language from a file path. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+  ```tsx
+  const turns = groupTurns(messages, { key: message => message.id, opensTurn: message => message.role === 'user' });
+
+  turns.map((turn, index) => (
+    <ChatShell.Turn key={turn.key} opensTurn={turn.opensTurn} holdsRoom={turn === turns.at(-1) && running && index > 0}>
+      {turn.entries.map(renderMessage)}
+    </ChatShell.Turn>
+  ));
+
+  const edit = toolEdit(toolName, args);
+  edit ? <ToolCallEdit edit={edit} /> : <ToolCallMono copyText={argsText}>{argsText}</ToolCallMono>;
+  ```
+
+- Fixed unreadable row labels in `HorizontalBars` when a bar has a bright fill in dark mode. The label now uses a dark tone over yellow, orange, red and green fills, so dataset names in the Studio "Experiments by Dataset" and "Review Pipeline" cards are readable again. ([#23326](https://github.com/mastra-ai/mastra/pull/23326))
+
+- Added `groupConsecutive`, `TOOL_GROUP_MIN` and `isTaskTool` to `components/ai/tool-call`. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+  `groupConsecutive` cuts a list into runs of consecutive items that belong together and keys each run by its first member, so a chat can collapse a burst of tool calls into a single `ToolCallGroup` row instead of one row per call. Runs shorter than `TOOL_GROUP_MIN` (3) are left alone; pass `min` to change that.
+
+  ```tsx
+  import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
+  import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+
+  const isToolCall = (part: MessageFactoryPart): part is ToolInvocationPart => part.type === 'tool-invocation';
+
+  const toolGroups = (parts: readonly MessageFactoryPart[]) =>
+    groupConsecutive(parts, { key: part => part.toolInvocation.toolCallId, joins: isToolCall });
+
+  // byFirstKey.get(id) -> the run to draw as one group row
+  // memberKeys.has(id) -> already drawn inside a group row
+  ```
+
+  `isTaskTool` names the tools that belong in a docked task list rather than in the transcript, so a chat can hide them consistently.
+
+  ```tsx
+  import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  isTaskTool('task_update'); // true
+  ```
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/client-js@1.44.0-alpha.10
+  - @mastra/react@1.4.11-alpha.10
+
+## 53.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+  - @mastra/client-js@1.44.0-alpha.9
+  - @mastra/react@1.4.11-alpha.9
+
 ## 53.0.0-alpha.9
 
 ### Patch Changes
