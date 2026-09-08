@@ -12,6 +12,7 @@ import type { ParkedRun } from '../session/live-sessions.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -170,6 +171,7 @@ describe('supervisor finding attention items', () => {
       ],
       kinds: { 'supervisor-finding': { open: 1, unread: 1, latest: { unread: true } } },
     });
+    expect(FACTORY_ROUTE_CONTRACTS.attentionList.responseSchema.safeParse(open).success).toBe(true);
 
     const receiptPath = `/web/factory/projects/${PROJECT_ID}/attention/supervisor-finding/${encodeURIComponent(`decision-stuck:${item.id}`)}/0`;
     expect((await request('POST', `${receiptPath}/read`)).status).toBe(200);
@@ -830,6 +832,12 @@ describe('activity attention items', () => {
     ).json();
     expect(requested.items).toMatchObject([{ kind: 'mention', commentId: mention.id }]);
     expect(requested.kinds).toMatchObject({ mention: { unread: 1 }, activity: { unread: 2 } });
+  });
+
+  it('rejects an invalid cursor', async () => {
+    const response = await request('GET', `/web/factory/projects/${PROJECT_ID}/attention?before=not-a-cursor`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_cursor' });
   });
 
   it('rejects an unknown kind', async () => {

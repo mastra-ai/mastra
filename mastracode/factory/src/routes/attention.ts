@@ -23,7 +23,6 @@ import type {
   AttentionProvider,
   AttentionScope,
   AttentionStreamPosition,
-  FactoryAttentionView,
 } from './attention-providers.js';
 import {
   DecisionAttentionProvider,
@@ -31,13 +30,9 @@ import {
   MentionAttentionProvider,
   SupervisorFindingAttentionProvider,
 } from './attention-providers.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 
 export { factoryDecisionType } from './attention-providers.js';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SUPERVISOR_FINDING_KEY_RE = /^[a-z0-9:_-]{1,256}$/i;
-const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGE_SIZE = 50;
 
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
@@ -48,87 +43,12 @@ interface AttentionRouteDependencies {
 
 type AttentionCursorMap = Map<FactoryAttentionKind, AttentionStreamPosition | undefined>;
 
-function parseAttentionView(raw: string | undefined): FactoryAttentionView | undefined {
-  if (!raw || raw === 'open') return 'open';
-  if (raw === 'unread' || raw === 'archived') return raw;
-  return undefined;
-}
-
-function parseAttentionLimit(raw: string | undefined): number {
-  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_PAGE_SIZE;
-  if (!Number.isFinite(parsed)) return DEFAULT_PAGE_SIZE;
-  return Math.max(1, Math.min(MAX_PAGE_SIZE, parsed));
-}
-
-function isAttentionKind(value: string): value is FactoryAttentionKind {
-  return (
-    value === 'automation-failed' ||
-    value === 'automation-proposed' ||
-    value === 'mention' ||
-    value === 'activity' ||
-    value === 'supervisor-finding' ||
-    value === 'agent-waiting'
-  );
-}
-
-function parseAttentionKinds(
-  raw: string[] | undefined,
-  every: FactoryAttentionKind[],
-): FactoryAttentionKind[] | undefined {
-  if (raw === undefined) return every;
-  return raw.every(isAttentionKind) ? raw : undefined;
-}
-
 function encodeAttentionCursor(cursors: AttentionCursorMap): string {
   const wire: Record<string, [string, string] | null> = {};
   for (const [kind, position] of cursors) {
     wire[kind] = position ? [position.occurredAt.toISOString(), position.id] : null;
   }
   return Buffer.from(JSON.stringify(wire), 'utf8').toString('base64url');
-}
-
-function parseStreamPosition(value: unknown): AttentionStreamPosition | undefined {
-  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string' || typeof value[1] !== 'string') {
-    return undefined;
-  }
-  const occurredAt = new Date(value[0]);
-  if (Number.isNaN(occurredAt.getTime()) || !UUID_RE.test(value[1])) return undefined;
-  return { occurredAt, id: value[1] };
-}
-
-function parseAttentionCursor(raw: string | undefined): AttentionCursorMap | undefined {
-  if (!raw) return undefined;
-  try {
-    const decoded: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-    // Cursors minted before the inbox merged kinds are a bare position over the
-    // only stream there was. Held by anyone mid-list when this deploys, so they
-    // resume that stream rather than 400: mentions arrive on their next load.
-    if (Array.isArray(decoded)) {
-      const legacy = parseStreamPosition(decoded);
-      return legacy ? new Map([['automation-failed', legacy]]) : undefined;
-    }
-    if (!decoded || typeof decoded !== 'object') return undefined;
-    const cursors: AttentionCursorMap = new Map();
-    for (const [kind, value] of Object.entries(decoded)) {
-      if (!isAttentionKind(kind)) return undefined;
-      if (value === null) {
-        cursors.set(kind, undefined);
-        continue;
-      }
-      const position = parseStreamPosition(value);
-      if (!position) return undefined;
-      cursors.set(kind, position);
-    }
-    return cursors.size > 0 ? cursors : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function parseOccurrence(raw: string | undefined): number | undefined {
-  if (!raw || !/^(0|[1-9]\d*)$/.test(raw)) return undefined;
-  const occurrence = Number(raw);
-  return Number.isSafeInteger(occurrence) ? occurrence : undefined;
 }
 
 interface MergedAttentionPage {
@@ -196,20 +116,26 @@ function receiptRoute(
   verb: 'read' | 'archive' | 'restore',
   action: FactoryAttentionReceiptAction,
 ): ApiRoute {
-  return registerApiRoute(`/web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/${verb}`, {
-    method: 'POST',
+  const contract =
+    verb === 'read'
+      ? FACTORY_ROUTE_CONTRACTS.attentionRead
+      : verb === 'archive'
+        ? FACTORY_ROUTE_CONTRACTS.attentionArchive
+        : FACTORY_ROUTE_CONTRACTS.attentionRestore;
+  return registerApiRoute(contract.path, {
+    method: contract.method,
     requiresAuth: false,
     handler: async context => {
       const resolved = await dependencies.resolveProject(context);
       if ('response' in resolved) return resolved.response;
-      const kind = context.req.param('kind');
-      const sourceId = context.req.param('sourceId');
-      const occurrence = parseOccurrence(context.req.param('occurrence'));
-      const validSourceId =
-        kind === 'supervisor-finding' ? SUPERVISOR_FINDING_KEY_RE.test(sourceId) : UUID_RE.test(sourceId);
-      if (!kind || !isAttentionKind(kind) || !sourceId || !validSourceId || occurrence === undefined) {
-        return context.json({ error: 'invalid_attention_item' }, 422);
-      }
+      const parsedPath = contract.pathSchema.safeParse({
+        id: resolved.factoryProjectId,
+        kind: context.req.param('kind'),
+        sourceId: context.req.param('sourceId'),
+        occurrence: context.req.param('occurrence'),
+      });
+      if (!parsedPath.success) return context.json({ error: 'invalid_attention_item' }, 422);
+      const { kind, sourceId, occurrence } = parsedPath.data;
       const stillParked =
         kind !== 'agent-waiting' || dependencies.liveSessions.parked(sourceId)?.suspendedAt === occurrence;
       if (!stillParked) return context.json({ error: 'attention_item_not_current' }, 409);
@@ -247,27 +173,38 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
   ];
 
   return [
-    registerApiRoute('/web/factory/projects/:id/attention', {
-      method: 'GET',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionList.path, {
+      method: FACTORY_ROUTE_CONTRACTS.attentionList.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        const view = parseAttentionView(context.req.query('view'));
-        if (view === undefined) return context.json({ error: 'invalid_attention_view' }, 400);
-        const kinds = parseAttentionKinds(
-          context.req.queries('kind'),
-          providers.map(provider => provider.kind),
-        );
-        if (kinds === undefined) return context.json({ error: 'invalid_attention_kind' }, 400);
-        const cursorRaw = context.req.query('before');
-        const before = parseAttentionCursor(cursorRaw);
-        if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
+        const query = FACTORY_ROUTE_CONTRACTS.attentionList.querySchema.safeParse({
+          view: context.req.query('view'),
+          kind: context.req.queries('kind'),
+          before: context.req.query('before'),
+          limit: context.req.query('limit'),
+          search: context.req.query('search'),
+        });
+        if (!query.success) {
+          const field = query.error.issues[0]?.path[0];
+          return context.json(
+            {
+              error:
+                field === 'kind'
+                  ? 'invalid_attention_kind'
+                  : field === 'before'
+                    ? 'invalid_cursor'
+                    : 'invalid_attention_view',
+            },
+            400,
+          );
+        }
+        const { view, before, search, limit } = query.data;
+        const kinds = query.data.kind ?? providers.map(provider => provider.kind);
         await workItems.ensureReady();
         await comments.ensureReady();
 
-        const search = context.req.query('search')?.trim().toLowerCase().slice(0, 200);
-        const limit = parseAttentionLimit(context.req.query('limit'));
         const active = providers.filter(
           provider => kinds.includes(provider.kind) && (!before || before.has(provider.kind)),
         );
@@ -312,15 +249,17 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         });
       },
     }),
-    registerApiRoute('/web/factory/projects/:id/attention/read-all', {
-      method: 'POST',
+    registerApiRoute(FACTORY_ROUTE_CONTRACTS.attentionReadAll.path, {
+      method: FACTORY_ROUTE_CONTRACTS.attentionReadAll.method,
       requiresAuth: false,
       handler: async context => {
         const resolved = await dependencies.resolveProject(context);
         if ('response' in resolved) return resolved.response;
-        const cursorRaw = context.req.query('before');
-        const before = parseAttentionCursor(cursorRaw);
-        if (cursorRaw && !before) return context.json({ error: 'invalid_cursor' }, 400);
+        const query = FACTORY_ROUTE_CONTRACTS.attentionReadAll.querySchema.safeParse({
+          before: context.req.query('before'),
+        });
+        if (!query.success) return context.json({ error: 'invalid_cursor' }, 400);
+        const { before } = query.data;
         await workItems.ensureReady();
         await comments.ensureReady();
 
