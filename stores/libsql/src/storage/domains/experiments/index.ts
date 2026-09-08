@@ -40,6 +40,12 @@ import { buildScopedWhere, tenancyWhere } from '../utils';
 
 const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
+// Is the `tags` column safe to pass to json_each()/json_extract()?
+// LibSQLDB writes jsonb columns through jsonb(), so a BLOB is always valid JSONB;
+// only legacy TEXT rows need json_valid(). The 1-arg form is used on purpose:
+// json_valid(x, flags) requires SQLite >= 3.45 and is missing from older libsql builds.
+const TAGS_IS_JSON = `CASE typeof(tags) WHEN 'blob' THEN 1 WHEN 'text' THEN json_valid(tags) ELSE 0 END`;
+
 export class ExperimentsLibSQL extends ExperimentsStorage {
   /**
    * An experiment is pruned as a whole unit: when `experiments.completedAt` is
@@ -142,15 +148,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     // LibSQLDB.insert, which encodes jsonb columns again. Those rows hold a JSON
     // string wrapping an array (e.g. '"[\"a\"]"'), which json_each() can't match.
     // Unwrap only string values whose decoded payload is a JSON array; idempotent.
-    // json_valid(x, 6) accepts text or binary JSONB (LibSQLDB writes jsonb columns via jsonb()).
     // CASE guarantees validity is checked before json_type()/json_extract() run.
     await this.#client.execute({
       sql: `UPDATE "${TABLE_EXPERIMENT_RESULTS}"
         SET "tags" = jsonb(json_extract("tags", '$'))
         WHERE CASE
-          WHEN "tags" IS NULL OR NOT json_valid("tags", 6) THEN 0
+          WHEN NOT ${TAGS_IS_JSON} THEN 0
           WHEN json_type("tags") <> 'text' THEN 0
-          WHEN NOT json_valid(json_extract("tags", '$'), 6) THEN 0
+          WHEN NOT json_valid(json_extract("tags", '$')) THEN 0
           ELSE json_type(json_extract("tags", '$')) = 'array'
         END`,
       args: [],
@@ -865,9 +870,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       // All requested tags must be present (AND semantics)
       for (const tag of args.tags ?? []) {
         // CASE guards json_each() so a NULL or malformed tags value excludes the row instead of erroring.
-        // json_valid(x, 6) accepts text or binary JSONB.
         conditions.push(
-          `CASE WHEN tags IS NOT NULL AND json_valid(tags, 6) THEN EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?) ELSE 0 END`,
+          `CASE WHEN ${TAGS_IS_JSON} THEN EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?) ELSE 0 END`,
         );
         queryParams.push(tag);
       }
