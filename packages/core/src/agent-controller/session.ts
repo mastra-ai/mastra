@@ -2725,17 +2725,8 @@ export class SessionBus {
   }
 
   subscribe(listener: AgentControllerEventListener): () => void {
-    // Replay buffered workspace lifecycle events so late subscribers learn the
-    // current workspace status regardless of when initialization occurs.
-    for (const event of this.#lastWorkspaceEvents) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
-      }
+    for (const event of [...this.#lastWorkspaceEvents, ...this.#inFlightMessageEvents()]) {
+      this.#deliver(listener, event);
     }
     this.#listeners.push(listener);
     return () => {
@@ -2821,16 +2812,27 @@ export class SessionBus {
     }
   }
 
+  /** Nothing once the run ended: history carries the message then. */
+  #inFlightMessageEvents(): AgentControllerEvent[] {
+    const displayState = this.#displayState?.get();
+    if (!displayState?.isRunning || !displayState.currentMessage) return [];
+    return [{ type: 'message_update', message: displayState.currentMessage }];
+  }
+
   #dispatch(event: AgentControllerEvent): void {
     for (const listener of [...this.#listeners]) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in session event listener:', err);
+      this.#deliver(listener, event);
+    }
+  }
+
+  #deliver(listener: AgentControllerEventListener, event: AgentControllerEvent): void {
+    try {
+      const result = listener(event);
+      if (result && typeof result === 'object' && 'catch' in result) {
+        (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
       }
+    } catch (err) {
+      console.error('Error in session event listener:', err);
     }
   }
 }

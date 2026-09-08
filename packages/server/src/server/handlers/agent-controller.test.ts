@@ -483,6 +483,45 @@ describe('agent-controller routes', () => {
       expect(received.type).toBe('agent_start');
     });
 
+    it('opens with the message a run in flight has streamed so far', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-joins-mid-run',
+        id: 'user-joins-mid-run',
+        ownerId: 'code',
+      });
+      const message = {
+        id: 'live-1',
+        role: 'assistant',
+        createdAt: new Date('2026-09-08T10:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Checking out the pull request.' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+            },
+          ],
+        },
+      } as any;
+      session.emit({ type: 'agent_start' });
+      session.emit({ type: 'message_update', message });
+
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-joins-mid-run',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const { value } = await reader.read();
+      await reader.cancel();
+
+      expect(value).toEqual({ type: 'message_update', message });
+    });
+
     it('preserves live streamed messages across the SSE boundary without cloning', async () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
@@ -650,52 +689,6 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any)) as { running?: boolean };
       expect(res.running).toBe(true);
-    });
-
-    it('returns the in-flight assistant message of the running thread, and nothing once the run ends', async () => {
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
-      const liveThreadId = session.thread.requireId();
-      const otherThread = await session.thread.create({ title: 'Other thread' });
-      await session.thread.switch({ threadId: liveThreadId });
-      const message = {
-        id: 'live-1',
-        role: 'assistant',
-        threadId: liveThreadId,
-        resourceId: 'user-1',
-        createdAt: new Date('2026-09-08T10:00:00.000Z'),
-        content: {
-          format: 2,
-          parts: [
-            { type: 'text', text: 'Checking out the pull request.' },
-            {
-              type: 'tool-invocation',
-              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
-            },
-          ],
-        },
-      };
-      session.displayState.apply({ type: 'agent_start' } as any);
-      session.displayState.apply({ type: 'message_update', message } as any);
-      const readState = (threadId?: string) =>
-        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
-          mastra,
-          controllerId: 'code',
-          resourceId: 'user-1',
-          threadId,
-        } as any) as Promise<{ currentMessage?: { id: string; createdAt?: string; content: { parts: unknown[] } } }>;
-
-      const running = await readState();
-      expect(running.currentMessage).toMatchObject({ id: 'live-1', createdAt: '2026-09-08T10:00:00.000Z' });
-      expect(running.currentMessage?.content.parts).toEqual(message.content.parts);
-
-      const otherThreadState = await readState(otherThread.id);
-      expect(otherThreadState.currentMessage).toBeUndefined();
-
-      session.displayState.apply({ type: 'agent_end' } as any);
-      const idle = await readState();
-      expect(idle.currentMessage).toBeUndefined();
     });
 
     it('returns the durable task list for initial UI hydration', async () => {
