@@ -233,7 +233,17 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS MATERIALIZED (
-    SELECT s."traceId", s."scorerId", s."score"
+    SELECT
+      s."traceId",
+      s."spanId",
+      s."timestamp",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)

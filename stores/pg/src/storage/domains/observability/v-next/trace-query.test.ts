@@ -59,6 +59,19 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).not.toContain("factuality' OR TRUE --");
     expect(compiled.values).toContain("factuality' OR TRUE --");
+    expect(compiled.text).toContain(`current_scores AS MATERIALIZED (
+    SELECT
+      s."traceId",
+      s."spanId",
+      s."timestamp",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
+    FROM`);
     expect(compiled.text.match(/EXISTS \(/g)).toHaveLength(3);
     expect(compiled.text).toContain('s."traceId" = r."traceId"');
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
