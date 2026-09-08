@@ -258,6 +258,37 @@ describe('factory_transition_work_item', () => {
     ).toBe(true);
   });
 
+  it('accepts and drops triageType from a non-triage binding instead of rejecting the call', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage);
+    const transition = vi.fn(async () => ({
+      status: 'accepted' as const,
+      transitionId: 'transition-1',
+      itemId: prepared.item.id,
+      revision: 2,
+      stage: 'execute' as const,
+      decisions: [],
+    }));
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition },
+    });
+    const tool = tools.factory_transition_work_item as ExecutableTool;
+    expect(
+      tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' })
+        .success,
+    ).toBe(true);
+    expect(tool.inputSchema.safeParse({ stage: 'execute', expectedRevision: 1, rationale: 'Done.' }).success).toBe(
+      true,
+    );
+
+    await execute(tool, context, { stage: 'execute', expectedRevision: 1, rationale: 'Done.', triageType: 'bug' });
+    expect(transition).toHaveBeenCalledTimes(1);
+    expect(transition.mock.calls[0]?.[0]).not.toHaveProperty('triageType');
+  });
+
   it('propagates a triage binding classification to the transition service', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage, 'github-issue', 'triage');

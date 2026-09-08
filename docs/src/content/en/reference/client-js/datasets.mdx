@@ -352,6 +352,21 @@ await client.deleteExperiment('experiment-id', {
 
 Returns `Promise<{ success: boolean }>`. An unscoped request returns a `404` response when the experiment doesn't exist. A tenancy-scoped request that doesn't match the experiment returns success without deleting it.
 
+## purgeDatasetItem()
+
+Scrubs an item's content from existing dataset history and linked experiment results, including result tags and comments, while preserving version history, experiment counters, and review status. Later result submissions for the item are stored with redacted content, and later dataset item updates are rejected.
+
+```typescript
+await client.purgeDatasetItem('dataset-id', 'item-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+The optional third argument scopes the purge to a tenant organization and project. The server returns `404` when the dataset doesn't belong to that scope.
+
+Returns `Promise<{ success: boolean }>`. The operation is idempotent and can't be undone. Don't run it concurrently with dataset item updates or deletions because a write that started before purge can commit a stale revision afterward. MongoDB storage requires a replica set or sharded deployment with transaction support. See [`dataset.purgeItem()`](/reference/datasets/purgeItem) for the complete purge behavior.
+
 ## Related
 
 - [Running experiments](/docs/evals/experiments#caller-driven-experiments)
