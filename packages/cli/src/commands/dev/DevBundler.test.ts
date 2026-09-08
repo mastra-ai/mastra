@@ -18,6 +18,7 @@ vi.mock('commander', () => {
     version: any;
     addHelpText: any;
     action: any;
+    alias: any;
     argument: any;
     command: any;
     description: any;
@@ -31,6 +32,7 @@ vi.mock('commander', () => {
       this.version = vi.fn().mockReturnThis();
       this.addHelpText = vi.fn().mockReturnThis();
       this.action = vi.fn().mockReturnThis();
+      this.alias = vi.fn().mockReturnThis();
       this.argument = vi.fn().mockReturnThis();
       this.command = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();

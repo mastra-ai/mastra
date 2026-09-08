@@ -309,8 +309,9 @@ deployCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   deployCommand
-    .command('suggestions [deploy-id]')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnose [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy')
     .action(wrapAction(suggestionsAction));
 }
 
@@ -387,8 +388,9 @@ const serverDeployCommand = serverCommand
 
 if (coreFeatures.has('deploy-diagnosis')) {
   serverDeployCommand
-    .command('suggestions [deploy-id]')
-    .description('Show deploy suggestions for a failed deploy')
+    .command('diagnose [deploy-id]')
+    .alias('suggestions')
+    .description('Diagnose a failed deploy')
     .option('--org <id>', 'Organization ID')
     .action(wrapAction(serverSuggestionsAction));
 }

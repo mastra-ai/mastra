@@ -18,7 +18,7 @@ async function resolveDeployId(
   const { project } = await fetchServerProjectDetail(token, orgId, projectId);
   if (!project.latestDeployId) {
     throw new Error(
-      `No deploys found for linked Server project ${project.name}. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with \`mastra server deploy suggestions <deploy-id>\` or \`mastra server deploy suggestions\`.`,
+      `No deploys found for linked Server project ${project.name}. The diagnose command helps debug failed deployments, and you can run it after a deployment fails with \`mastra server deploy diagnose <deploy-id>\` or \`mastra server deploy diagnose\`.`,
     );
   }
 
@@ -32,7 +32,7 @@ function buildLogsUrl(orgId: string, projectId: string | undefined, deployId: st
 }
 
 export async function serverSuggestionsAction(deployId: string | undefined, opts: { org?: string }) {
-  p.intro('mastra server deploy suggestions');
+  p.intro('mastra server deploy diagnose');
   try {
     const { token, orgId } = await resolveAuth(opts.org);
     const resolved = await resolveDeployId(token, orgId, deployId);

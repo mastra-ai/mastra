@@ -15,7 +15,7 @@ function getLatestProjectDeploy(projects: Project[], linkedProjectId?: string) {
     }
 
     throw new Error(
-      `No deploys found for linked Studio project ${linkedProject.name}. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with \`mastra studio deploy suggestions <deploy-id>\` or \`mastra studio deploy suggestions\`.`,
+      `No deploys found for linked Studio project ${linkedProject.name}. The diagnose command helps debug failed deployments, and you can run it after a deployment fails with \`mastra studio deploy diagnose <deploy-id>\` or \`mastra studio deploy diagnose\`.`,
     );
   }
 
@@ -66,7 +66,7 @@ async function resolveDeployId(
 }
 
 export async function suggestionsAction(deployId?: string) {
-  p.intro('mastra studio deploy suggestions');
+  p.intro('mastra studio deploy diagnose');
 
   try {
     const token = await getToken();
