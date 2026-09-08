@@ -7,8 +7,8 @@
  * Design note — schema namespacing: every Nango action file typically declares
  * its own local `InputSchema` / `OutputSchema` / `ProviderResponseSchema` /
  * etc. Concatenating those consts across actions would collide on name, so
- * the extractor renames every top-level schema const in a source file to
- * `<actionCamel>_<OriginalName>` and rewrites references in both the vendored
+ * the extractor prefixes every top-level schema const with the camel-cased
+ * action name (`InputSchema` → `createMessageInputSchema`) and rewrites references in both the vendored
  * schema declarations and the exec body. That gives us a self-consistent
  * `schemas.ts` per provider and a `tools.ts` that imports the namespaced
  * names directly.
@@ -185,7 +185,7 @@ function extractAction(
   const renames = new Map<string, string>();
   for (const name of declarationOrder) {
     if (!includedNames.has(name)) continue;
-    renames.set(name, `${actionCamel}_${name}`);
+    renames.set(name, `${actionCamel}${name}`);
   }
   for (const [name, exportedName] of renames) {
     topLevelDecls.get(name)!.rename(exportedName);
