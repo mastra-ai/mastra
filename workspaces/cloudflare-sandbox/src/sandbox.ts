@@ -55,7 +55,9 @@ function buildArgv(command: string, args: string[] | undefined, env: Record<stri
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
     return `${key}=${value}`;
   });
-  const invocation = [command, ...(args ?? [])];
+  // Workspace tools supply a complete command line without a separate argv.
+  // A non-login shell preserves the sandbox image's PATH and environment.
+  const invocation = args?.length ? [command, ...args] : ['bash', '-c', command];
   return assignments.length ? ['env', ...assignments, ...invocation] : invocation;
 }
 

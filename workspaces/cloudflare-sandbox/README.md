@@ -22,6 +22,19 @@ const sandbox = new CloudflareSandbox({
 const workspace = new Workspace({ sandbox });
 ```
 
+Commands without a separate argument list run through a non-login shell, so
+pipes, redirects and command chains work with the workspace command tool:
+
+```typescript
+await sandbox.executeCommand('mkdir -p output && python3 render.py');
+```
+
+When arguments are supplied, they remain separate literal values:
+
+```typescript
+await sandbox.executeCommand('printf', ['%s', 'a value with spaces']);
+```
+
 ## Documentation
 
 - [Cloudflare Sandbox integration guide](https://mastra.ai/integrations/sandboxes/cloudflare-sandbox)
