@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import type { FeedbackRecord } from './feedback';
 import type { ScoreRecord } from './scores';
 import type { SpanRecord } from './tracing';
 
@@ -229,17 +230,7 @@ export type TraceQueryField =
 type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
 export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
 export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
-export type TraceQueryFeedbackField =
-  | 'feedbackType'
-  | 'feedbackSource'
-  | 'feedbackUserId'
-  | 'sourceId'
-  | 'entityVersionId'
-  | 'parentEntityVersionId'
-  | 'rootEntityVersionId'
-  | 'value'
-  | 'timestamp'
-  | 'comment';
+export type TraceQueryFeedbackField = keyof typeof FEEDBACK_FIELD_RULES;
 export type TraceQueryCanonicalField =
   | TraceQueryField
   | TraceQuerySpanField
@@ -419,7 +410,7 @@ const SCORE_FIELD_RULES = {
   rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
 } as const satisfies Partial<Record<Extract<keyof ScoreRecord, string>, FieldRule>>;
 
-const FEEDBACK_FIELD_RULES: Record<TraceQueryFeedbackField, FieldRule> = {
+const FEEDBACK_FIELD_RULES = {
   feedbackType: { type: 'string', operators: STRING_OPERATORS },
   feedbackSource: { type: 'string', operators: STRING_OPERATORS },
   feedbackUserId: { type: 'string', operators: STRING_OPERATORS },
@@ -430,7 +421,7 @@ const FEEDBACK_FIELD_RULES: Record<TraceQueryFeedbackField, FieldRule> = {
   value: { type: 'stringOrNumber', operators: ORDERED_OPERATORS },
   timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
   comment: { type: 'presence', operators: PRESENCE_OPERATORS },
-};
+} as const satisfies Partial<Record<Extract<keyof FeedbackRecord, string>, FieldRule>>;
 
 type PredicateContext = 'trace' | 'spans' | 'scores' | 'feedback';
 
