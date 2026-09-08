@@ -205,8 +205,19 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           result: toolCall.result,
           existingProviderMetadata: toolCall.providerMetadata,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
-          // No onMappingError: mapping failures propagate — this loop's current policy
-          // (durable warns and keeps the raw result; see PHASE3 ledger).
+          onMappingError: (error: unknown) => {
+            // toModelOutput errors are non-fatal: the raw result is still recorded
+            // and the model reads that instead. Matches the durable loop and the
+            // background-task result path — this sync path was the only one that
+            // failed the whole run over a presentation-layer mapping.
+            rest.logger?.warn?.(
+              `toModelOutput failed for tool "${toolCall.toolName}" — falling back to the raw result`,
+              {
+                toolCallId: toolCall.toolCallId,
+                error,
+              },
+            );
+          },
         });
       }
 
