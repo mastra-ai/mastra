@@ -220,7 +220,10 @@ async function processChunkThroughOutputProcessors(
  * downstream tool-result stream chunk. Mirrors the regular agent's
  * readToolResultFromMessageList in llm-mapping-step.ts.
  */
-function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
+function readToolResultFromMessageList(
+  messageList: MessageList,
+  toolCallId: string,
+): { found: true; result: unknown } | { found: false } {
   const messages: MastraDBMessage[] = messageList.get.all.db();
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -231,11 +234,11 @@ function readToolResultFromMessageList(messageList: MessageList, toolCallId: str
         part.toolInvocation?.toolCallId === toolCallId &&
         part.toolInvocation?.state === 'result'
       ) {
-        return part.toolInvocation.result;
+        return { found: true, result: part.toolInvocation.result };
       }
     }
   }
-  return undefined;
+  return { found: false };
 }
 
 /**
@@ -300,8 +303,8 @@ async function runToolResultProcessorsForChunk(
     // the post-processor value, not the raw tool return.
     if (messageList) {
       const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
-      if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
-        (chunk.payload as { result: unknown }).result = postProcessorResult;
+      if (postProcessorResult.found) {
+        (chunk.payload as { result?: unknown }).result = postProcessorResult.result;
       }
     }
     return chunk;

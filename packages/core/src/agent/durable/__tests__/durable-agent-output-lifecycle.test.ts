@@ -467,6 +467,102 @@ describe('DurableAgent output processor lifecycle', () => {
     expect(seenRetryCounts).toEqual([0, 1]);
   });
 
+  it('passes the incremented retryCount to every processor hook on retry', async () => {
+    const callCount = { value: 0 };
+    const seen: Record<string, number[]> = { input: [], request: [], response: [], step: [] };
+    let outputStepCalls = 0;
+
+    const hookProcessor = {
+      id: 'all-hooks-processor',
+      name: 'All Hooks Processor',
+      processInputStep: vi.fn(async ({ retryCount }: any) => {
+        seen.input!.push(retryCount);
+      }),
+      processLLMRequest: vi.fn(async ({ retryCount }: any) => {
+        seen.request!.push(retryCount);
+      }),
+      processLLMResponse: vi.fn(async ({ retryCount }: any) => {
+        seen.response!.push(retryCount);
+      }),
+      processOutputStep: vi.fn(async ({ abort, retryCount }: any) => {
+        seen.step!.push(retryCount);
+        outputStepCalls++;
+        if (outputStepCalls === 1) {
+          abort('not good enough', { retry: true });
+        }
+      }),
+    };
+
+    const baseAgent = new Agent({
+      id: 'all-hooks-agent',
+      name: 'All Hooks Agent',
+      instructions: 'You are a helpful agent.',
+      model: createTwoTextModel(callCount, ['REJECTED', 'ACCEPTED']) as unknown as LanguageModelV2,
+      inputProcessors: [hookProcessor as any],
+      outputProcessors: [hookProcessor as any],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'all-hooks-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.stream('Say something.', { maxProcessorRetries: 1 });
+    await drain(result.fullStream);
+
+    // Every hook on the retried attempt must see the incremented count, not
+    // the value the step was entered with.
+    expect(seen.step).toEqual([0, 1]);
+    expect(seen.input).toEqual([0, 1]);
+    expect(seen.request).toEqual([0, 1]);
+    expect(seen.response).toEqual([0, 1]);
+  });
+
+  it('syncs a tool result cleared to undefined by processToolResult into the emitted chunk', async () => {
+    const processToolResult = vi.fn(async ({ messageList, toolCallId, toolName, toolArgs }: any) => {
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId, toolName, args: toolArgs, result: undefined },
+      });
+    });
+
+    const secretTool = createTool({
+      id: 'getSecret',
+      description: 'Get secret',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => ({ secret: 'do-not-leak' }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'clear-result-agent',
+      name: 'Clear Result Agent',
+      instructions: 'You are a helpful agent.',
+      model: createToolCallingModel('getSecret', { city: 'NYC' }) as LanguageModelV2,
+      tools: { getSecret: secretTool },
+      outputProcessors: [{ id: 'clearing-processor', name: 'Clearing Processor', processToolResult } as any],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'clear-result-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.stream('What is the secret?', { maxSteps: 3 });
+    const chunks = await drain(result.fullStream);
+
+    expect(processToolResult).toHaveBeenCalledTimes(1);
+    const toolResultChunks = chunks.filter((c: any) => c.type === 'tool-result');
+    expect(toolResultChunks.length).toBe(1);
+    // A processor that redacts the result to undefined must not leak the raw value.
+    expect(toolResultChunks[0]?.payload?.result).toBeUndefined();
+  });
+
   it('carries the processor retry count across tool-call iterations', async () => {
     const callCount = { value: 0 };
     const seenRetryCounts: number[] = [];
