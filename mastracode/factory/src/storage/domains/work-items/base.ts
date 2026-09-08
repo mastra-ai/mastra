@@ -1291,7 +1291,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       { org_id: input.orgId, factory_project_id: input.factoryProjectId, resolved_at: null },
       {
         orderBy: [
-          ['updated_at', 'desc'],
+          ['opened_at', 'desc'],
           ['id', 'desc'],
         ],
         limit: input.limit + 1,

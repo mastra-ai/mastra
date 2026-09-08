@@ -143,7 +143,7 @@ describe('supervisor finding attention items', () => {
           workItemNumber: null,
           title: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
-          ageMs: 600_000,
+          since: '2029-12-31T23:50:00.000Z',
           suggestedRepair: null,
         },
       ],
@@ -178,6 +178,38 @@ describe('supervisor finding attention items', () => {
     await expect((await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject(
       { items: [], openCount: 0 },
     );
+  });
+
+  it('keeps a finding at the moment it opened when a later tick refreshes its evidence', async () => {
+    const item = await seedWorkItem('Repair stuck card');
+    const finding = {
+      id: `decision-stuck:${item.id}`,
+      kind: 'decision-stuck' as const,
+      workItemId: item.id,
+      workItemNumber: null,
+      title: 'A decision is stuck',
+      evidence: 'decision-1 has retried 2 times.',
+      since: '2029-12-31T23:50:00.000Z',
+      suggestedRepair: null,
+    };
+    const openedAt = new Date('2030-01-01T00:00:00.000Z');
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [finding],
+      now: openedAt,
+    });
+    await seed.workItems.syncSupervisorFindings({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      findings: [{ ...finding, evidence: 'decision-1 has retried 3 times.' }],
+      now: new Date('2030-01-01T00:05:00.000Z'),
+    });
+
+    const open = await (await request('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json();
+    expect(open.items).toMatchObject([
+      { evidence: 'decision-1 has retried 3 times.', occurredAt: openedAt.toISOString() },
+    ]);
   });
 });
 
