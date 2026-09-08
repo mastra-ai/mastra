@@ -159,6 +159,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'notification_delivery_failed',
   'plan_awaiting_approval',
   'run_awaiting_input',
+  'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
