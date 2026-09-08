@@ -4589,6 +4589,31 @@ describe('Agent signals', () => {
     await pubsub.releaseLease(key, winnerRunId);
   });
 
+  it('drains queued messages when a pre-registration reservation is released', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'released-reservation-resource';
+    const threadId = 'released-reservation-thread';
+    const agent = {
+      id: 'released-reservation-agent',
+      stream: vi.fn(async (_signal, options) => ({ runId: options.runId })),
+    } as any;
+
+    await runtime.waitForCrossAgentThreadRun(agent, {
+      runId: 'reservation-run',
+      memory: { resource: resourceId, thread: threadId },
+    });
+    const queued = runtime.queueMessage(agent, { contents: 'queued after reservation' }, { resourceId, threadId });
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    runtime.releaseThreadRunReservation('reservation-run');
+    await waitForCondition(() => agent.stream.mock.calls.length === 1);
+
+    expect(agent.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'queued after reservation' }),
+      expect.objectContaining({ memory: expect.objectContaining({ resource: resourceId, thread: threadId }) }),
+    );
+  });
+
   it('updates the controller request context with the prepared run abort signal', () => {
     const runtime = new AgentThreadStreamRuntime();
     const requestContext = new RequestContext();

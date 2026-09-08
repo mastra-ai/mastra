@@ -2096,9 +2096,9 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId);
     if (!key) return;
     state.threadKeysByRunId.delete(runId);
-    if (state.activeThreadRunIds.get(key) === runId) {
-      state.activeThreadRunIds.delete(key);
-    }
+    if (state.activeThreadRunIds.get(key) !== runId) return;
+    state.activeThreadRunIds.delete(key);
+    void this.#drainPendingIdleSignals(state, pubsub, key);
   }
 
   async #waitForRemoteRunToFinish(pubsub: PubSub | undefined, key: string, runId: string) {
