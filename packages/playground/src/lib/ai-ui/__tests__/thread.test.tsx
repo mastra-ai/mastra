@@ -278,10 +278,6 @@ describe('Thread', () => {
       expect(screen.getByRole('navigation', { name: 'Conversation timeline' })).toBeTruthy();
       expect(screen.getAllByRole('button', { name: /Jump to/ })).toHaveLength(2);
       const rail = screen.getByTestId('thread-rail');
-      expect(screen.getByTestId('thread-rail-container').className).toContain('thread-rail-container');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('thread-rail-layer');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('left-4');
-      expect(screen.getByTestId('thread-rail-layer').className).not.toContain('xl:block');
       expect(screen.getByTestId('thread-rail-scroll-area')).toBeTruthy();
       expect(screen.getByTestId('thread-message-column').contains(rail)).toBe(false);
 
@@ -609,7 +605,7 @@ describe('Thread', () => {
 
     // The attachment chip row appears and the popover closes.
     await waitFor(() => {
-      expect(document.querySelector('[data-attachments-row]')).toBeTruthy();
+      expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();

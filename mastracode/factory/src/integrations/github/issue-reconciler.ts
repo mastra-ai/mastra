@@ -163,7 +163,7 @@ export function attachGithubIssueReconciler(
   context: IntegrationContext,
   fetchIssue: GithubIssueFetcher,
 ): GithubIssueReconciler | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   const options = githubRulesOptions(github, context);
   if (!options) return undefined;
   return createGithubIssueReconciler(options, fetchIssue);
