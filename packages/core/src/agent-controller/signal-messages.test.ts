@@ -819,6 +819,19 @@ describe('AgentController signal messages', () => {
     expect(session.displayState.get().queuedFollowUps).toBe(0);
   });
 
+  it('returns when target preparation turns an idle queueMessage into a queued delivery', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const agent = session.machinery.getAgent();
+    vi.spyOn(session.stream, 'isActive').mockReturnValue(false);
+    vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued after preparation' }),
+    } as any);
+    await session.thread.create();
+
+    await expect(session.queueMessage({ content: 'queued after preparation' })).resolves.toBeUndefined();
+  });
+
   it.each(['cleanup', 'switch'] as const)(
     'preserves submitted follow-ups when %s happens before acceptance resolves',
     async action => {
