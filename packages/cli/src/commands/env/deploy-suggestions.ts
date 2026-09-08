@@ -4,6 +4,7 @@ import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import { resolveCurrentOrg } from '../auth/orgs.js';
 import { pollForDiagnosis, printDeploySuggestions } from '../deploy-suggestions.js';
+import { serverSuggestionsAction } from '../server/deploy-suggestions.js';
 import type { Environment, EnvironmentDeploy } from './platform-api.js';
 import {
   fetchEnvironmentDeployDiagnosis,
@@ -114,6 +115,15 @@ function buildLogsUrl(orgId: string, projectId: string, envId: string, deployId:
 }
 
 export async function envSuggestionsAction(deployId: string | undefined, opts: SuggestionsOptions = {}) {
+  // Bare deploy id with no project context: delegate to the flat
+  // server-diagnosis endpoint, which server-side dual-looks-up across the
+  // server and environment deploy tables and doesn't need project/env in the
+  // URL. Keeps `mastra env diagnosis <id>` working without a linked project.
+  if (deployId && !opts.project && !opts.environment && !process.env.MASTRA_PROJECT_ID) {
+    await serverSuggestionsAction(deployId, { org: undefined });
+    return;
+  }
+
   p.intro('mastra env suggestions');
   try {
     const token = await getToken();
