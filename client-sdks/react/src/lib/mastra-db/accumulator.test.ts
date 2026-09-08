@@ -468,6 +468,53 @@ describe('accumulateChunk - lifecycle', () => {
     expect(out[0].id.startsWith(`start-${RUN_ID}`)).toBe(true);
   });
 
+  it.each([{}, null])('start chunk with payload %j uses a fallback message id', payload => {
+    const out = reduce([{ type: 'start', runId: RUN_ID, payload } as unknown as ChunkType]);
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe('assistant');
+    expect(out[0].id.startsWith(`start-${RUN_ID}`)).toBe(true);
+  });
+
+  it.each(['legacy', 'corrected'] as const)(
+    '%s persisted-signal sequence preserves the user message on replay',
+    shape => {
+      const signalId = 'signal-1';
+      const start =
+        shape === 'legacy'
+          ? ({ type: 'start', runId: RUN_ID } as unknown as ChunkType)
+          : startChunk(`persisted-signal:${signalId}`);
+      const chunks = [
+        start,
+        dataUserMessageChunk(signalId, 'persist without waking'),
+        {
+          type: 'finish',
+          runId: RUN_ID,
+          from: 'AGENT',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          },
+        } as ChunkType,
+      ];
+      const persisted = reduce([dataUserMessageChunk(signalId, 'persist without waking')]);
+      for (const initial of [[], persisted]) {
+        const out = reduce(chunks, streamMeta(), initial);
+        const replayed = reduce(chunks, streamMeta(), out);
+        for (const conversation of [out, replayed]) {
+          expect(conversation.filter(message => message.role === 'user')).toEqual([
+            expect.objectContaining({
+              id: signalId,
+              content: expect.objectContaining({ parts: [{ type: 'text', text: 'persist without waking' }] }),
+            }),
+          ]);
+          expect(
+            conversation.filter(message => message.role === 'assistant').every(message => message.id !== signalId),
+          ).toBe(true);
+        }
+      }
+    },
+  );
+
   it('start chunk dedupes by messageId', () => {
     const out = reduce([startChunk('asst-1'), startChunk('asst-1')]);
     expect(out).toHaveLength(1);

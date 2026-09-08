@@ -3804,8 +3804,11 @@ describe('Agent signals', () => {
         type: 'start',
         runId: expect.any(String),
         from: 'AGENT',
-        payload: { id: 'idle-persist-agent', messageId: expect.stringMatching(/^persisted-signal:/) },
+        payload: { id: 'idle-persist-agent', messageId: `persisted-signal:${recalled.messages[0]?.id}` },
       });
+      expect(new Set(subscribedRun.value.parts.map(part => part.runId))).toEqual(
+        new Set([subscribedRun.value.part.runId]),
+      );
       expect((subscribedRun.value.parts[0] as any).payload.messageId).not.toBe(recalled.messages[0]?.id);
       // Stash dropped; payload lives in content.parts now.
       expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
