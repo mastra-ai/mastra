@@ -591,6 +591,7 @@ export class Memory extends MastraMemory {
       vectorSearchString,
       includeSystemReminders,
       filter,
+      includeTotal,
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
@@ -736,6 +737,7 @@ export class Memory extends MastraMemory {
         page,
         orderBy: effectiveOrderBy,
         filter,
+        includeTotal,
         ...(filteredVectorResults?.length
           ? {
               include: filteredVectorResults.map(r => ({

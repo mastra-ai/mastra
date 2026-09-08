@@ -133,6 +133,7 @@ export class MessageHistory implements Processor {
           page: 0,
           perPage: this.lastMessages,
           orderBy: { field: 'createdAt', direction: 'DESC' },
+          includeTotal: false,
         });
         return result.messages;
       };

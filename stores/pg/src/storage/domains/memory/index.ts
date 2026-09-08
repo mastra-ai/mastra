@@ -1030,14 +1030,19 @@ export class MemoryPG extends MemoryStorage {
   }
 
   /**
-   * Reads one page of messages together with the total row count.
+   * Reads one page of messages, optionally with the total row count, in one
+   * round-trip.
    *
-   * `COUNT(*) OVER ()` reports the count over the whole WHERE result on the same
-   * statement as the page, so the page costs one database round-trip instead of
-   * two. The page and the count also come from one snapshot, so the count always
-   * describes the returned rows. A separate `COUNT(*)` runs only when the page is
-   * empty and the caller asked for a page after the last row, because a window
-   * function has no row to carry the count on.
+   * `COUNT(*) OVER ()` on the full SELECT list made Postgres heap-fetch
+   * `content` for every matching row before applying LIMIT, so the default
+   * `(thread_id, createdAt)` index could not stop after N rows. A nested LIMIT
+   * plus a skinny `COUNT(*)` keeps one statement and one pool connection while
+   * letting the index serve the page. Callers that only consume `messages`
+   * pass `includeTotal: false` and skip the count.
+   *
+   * A separate `COUNT(*)` runs only when the page is empty and the caller
+   * asked for a page after the last row, because an empty inner SELECT has no
+   * row to carry the count on.
    */
   async #fetchMessagePage({
     selectStatement,
@@ -1048,6 +1053,7 @@ export class MemoryPG extends MemoryStorage {
     perPageInput,
     perPage,
     offset,
+    includeTotal = true,
   }: {
     selectStatement: string;
     tableName: string;
@@ -1057,29 +1063,55 @@ export class MemoryPG extends MemoryStorage {
     perPageInput: number | false | undefined;
     perPage: number;
     offset: number;
-  }): Promise<{ total: number; messages: MessageRowFromDB[] }> {
-    // `perPageInput === false` means "every row", so no LIMIT is applied.
-    const limitClause =
-      perPageInput === false ? '' : ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
-    const dataParams = perPageInput === false ? queryParams : [...queryParams, perPage, offset];
+    includeTotal?: boolean;
+  }): Promise<{ total: number; messages: MessageRowFromDB[]; hasMore?: boolean }> {
+    // `perPageInput === false` means "every row", so no LIMIT is applied and
+    // the returned length is the total.
+    if (perPageInput === false) {
+      const allRows =
+        (await this.#db.readClient.manyOrNone<MessageRowFromDB>(
+          `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
+          queryParams,
+        )) || [];
+      return { total: allRows.length, messages: allRows, hasMore: false };
+    }
+
+    const limitPlaceholder = `$${queryParams.length + 1}`;
+    const offsetPlaceholder = `$${queryParams.length + 2}`;
+    const dataParams = [...queryParams, perPage, offset];
+    const pageSelect = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`;
+
+    if (!includeTotal) {
+      // Peek one extra row so hasMore is real without counting the thread.
+      const peekParams = [...queryParams, perPage + 1, offset];
+      const peeked = (await this.#db.readClient.manyOrNone<MessageRowFromDB>(pageSelect, peekParams)) || [];
+      const hasMore = peeked.length > perPage;
+      const pageRows = hasMore ? peeked.slice(0, perPage) : peeked;
+      return { total: offset + pageRows.length, messages: pageRows, hasMore };
+    }
+
+    // Reuse the WHERE placeholders ($1..$n) in the count subquery. LIMIT/OFFSET
+    // occupy $n+1 and $n+2 and are not referenced by the count.
     const rows =
       (await this.#db.readClient.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
-        `${selectStatement}, COUNT(*) OVER () AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+        `SELECT page.*, count_row.__total FROM (${pageSelect}) page CROSS JOIN (SELECT COUNT(*)::int AS "__total" FROM ${tableName} ${whereClause}) count_row`,
         dataParams,
       )) || [];
 
     if (rows.length > 0) {
-      return { total: Number(rows[0]!.__total), messages: rows };
+      const total = Number(rows[0]!.__total);
+      return { total, messages: rows, hasMore: offset + perPage < total };
     }
     if (offset === 0) {
-      return { total: 0, messages: [] };
+      return { total: 0, messages: [], hasMore: false };
     }
     const countResult = await this.#db.readClient.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
-    return { total: parseInt(countResult.count, 10), messages: [] };
+    const total = parseInt(countResult.count, 10);
+    return { total, messages: [], hasMore: offset < total };
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy, includeTotal } = args;
 
     const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
       (id): id is string => typeof id === 'string',
@@ -1116,7 +1148,11 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Use `createdAt` directly so `(thread_id, createdAt DESC)` covers last-N
+      // LIMIT. COALESCE("createdAtZ", "createdAt") is not the indexed expression;
+      // `_getIncludedMessages` already documents that the two timestamps store
+      // the same instant. Returned timestamps still prefer createdAtZ in parseRow.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1181,6 +1217,7 @@ export class MemoryPG extends MemoryStorage {
 
       let total: number;
       let messages: MessageRowFromDB[];
+      let pageHasMore: boolean | undefined;
       if (metadataFilter) {
         const rows = await this.#db.readClient.manyOrNone(
           `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
@@ -1191,8 +1228,9 @@ export class MemoryPG extends MemoryStorage {
         );
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+        pageHasMore = perPageInput !== false && offset + messages.length < total;
       } else {
-        ({ total, messages } = await this.#fetchMessagePage({
+        ({ total, messages, hasMore: pageHasMore } = await this.#fetchMessagePage({
           selectStatement,
           tableName,
           whereClause,
@@ -1201,6 +1239,7 @@ export class MemoryPG extends MemoryStorage {
           perPageInput,
           perPage,
           offset,
+          includeTotal,
         }));
       }
       const primaryPageCount = messages.length;
@@ -1239,9 +1278,12 @@ export class MemoryPG extends MemoryStorage {
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = metadataFilter
-        ? perPageInput !== false && offset + primaryPageCount < total
-        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore =
+        includeTotal === false && pageHasMore !== undefined
+          ? pageHasMore
+          : metadataFilter
+            ? perPageInput !== false && offset + primaryPageCount < total
+            : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -1276,7 +1318,7 @@ export class MemoryPG extends MemoryStorage {
   public async listMessagesByResourceId(
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
-    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy, includeTotal } = args;
 
     // Validate that resourceId is provided
     const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
@@ -1314,7 +1356,11 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Use `createdAt` directly so `(thread_id, createdAt DESC)` covers last-N
+      // LIMIT. COALESCE("createdAtZ", "createdAt") is not the indexed expression;
+      // `_getIncludedMessages` already documents that the two timestamps store
+      // the same instant. Returned timestamps still prefer createdAtZ in parseRow.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1389,6 +1435,7 @@ export class MemoryPG extends MemoryStorage {
 
       let total: number;
       let messages: MessageRowFromDB[];
+      let pageHasMore: boolean | undefined;
       if (metadataFilter) {
         const rows = await this.#db.readClient.manyOrNone(
           `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
@@ -1399,8 +1446,9 @@ export class MemoryPG extends MemoryStorage {
         );
         total = filteredRows.length;
         messages = perPageInput === false ? filteredRows : filteredRows.slice(offset, offset + perPage);
+        pageHasMore = perPageInput !== false && offset + messages.length < total;
       } else {
-        ({ total, messages } = await this.#fetchMessagePage({
+        ({ total, messages, hasMore: pageHasMore } = await this.#fetchMessagePage({
           selectStatement,
           tableName,
           whereClause,
@@ -1409,6 +1457,7 @@ export class MemoryPG extends MemoryStorage {
           perPageInput,
           perPage,
           offset,
+          includeTotal,
         }));
       }
 
@@ -1441,7 +1490,10 @@ export class MemoryPG extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
       const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
-      const hasMore = perPageInput !== false && offset + perPage < total;
+      const hasMore =
+        includeTotal === false && pageHasMore !== undefined
+          ? pageHasMore
+          : perPageInput !== false && offset + perPage < total;
 
       return {
         messages: finalMessages,

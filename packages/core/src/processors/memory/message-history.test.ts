@@ -213,6 +213,7 @@ describe('MessageHistory', () => {
       }
 
       expect(listMessages).toHaveBeenCalledTimes(1);
+      expect(listMessages).toHaveBeenCalledWith(expect.objectContaining({ includeTotal: false }));
     });
 
     it('should merge historical messages with new messages', async () => {

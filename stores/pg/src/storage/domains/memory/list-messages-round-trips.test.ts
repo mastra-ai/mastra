@@ -4,9 +4,9 @@ import { RecordingDbClientBase } from './test-utils';
 import { MemoryPG } from './index';
 
 /**
- * Fake client that answers the three queries the message paging code can send:
- * the page query with the window count, the fallback `COUNT(*)`, and the two
- * queries of the include (semantic recall) read.
+ * Fake client that answers the queries the message paging code can send:
+ * the page query (with or without a skinny COUNT), the fallback `COUNT(*)`,
+ * and the two queries of the include (semantic recall) read.
  *
  * `block()` holds every `manyOrNone` result until `release()`. A test uses that
  * to look at the queries that are in flight at the same time.
@@ -38,15 +38,18 @@ class MessageQueryClient extends RecordingDbClientBase {
   override async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     this.queries.push({ query, values });
     await this.#gate;
-    if (query.includes('COUNT(*) OVER ()')) {
-      return this.pageRows.map(row => ({ ...row, __total: String(this.windowTotal) })) as T[];
-    }
     if (query.includes('thread_id, "createdAt" FROM')) {
       return this.includeRows.map(row => ({
         id: row.id,
         thread_id: row.threadId,
         createdAt: row.createdAt,
       })) as T[];
+    }
+    if (query.includes('__total') || query.includes('COUNT(*) OVER ()')) {
+      return this.pageRows.map(row => ({ ...row, __total: String(this.windowTotal) })) as T[];
+    }
+    if (query.includes('thread_id IN') || query.includes('"resourceId" =')) {
+      return this.pageRows as T[];
     }
     return this.includeRows as T[];
   }
@@ -88,12 +91,19 @@ describe('MemoryPG message paging round-trips', () => {
 
     expect(client.queries).toHaveLength(1);
     const [pageQuery] = client.queries;
-    expect(pageQuery!.query).toContain('COUNT(*) OVER () AS "__total"');
+    // One statement still returns the page and the total. The count is a
+    // skinny COUNT(*), not COUNT(*) OVER () on the content-bearing SELECT,
+    // so last-N LIMIT can use (thread_id, createdAt).
+    expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
+    expect(pageQuery!.query).toContain('AS "__total"');
+    expect(pageQuery!.query).toContain('COUNT(*)');
     expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.query).not.toContain('COALESCE("createdAtZ"');
     expect(pageQuery!.values).toEqual(['thread-1', 10, 0]);
     expect(result.total).toBe(7);
     expect(result.messages).toHaveLength(2);
-    // The window count must not reach the caller as a message field.
+    // The count column must not reach the caller as a message field.
     expect(result.messages[0]).not.toHaveProperty('__total');
   });
 
@@ -107,7 +117,8 @@ describe('MemoryPG message paging round-trips', () => {
 
     expect(client.queries).toHaveLength(1);
     const [pageQuery] = client.queries;
-    expect(pageQuery!.query).toContain('COUNT(*) OVER () AS "__total"');
+    expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
+    expect(pageQuery!.query).toContain('AS "__total"');
     expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
     expect(pageQuery!.values).toEqual(['resource-1', 10, 0]);
     expect(result.total).toBe(7);
@@ -125,6 +136,7 @@ describe('MemoryPG message paging round-trips', () => {
     expect(client.queries).toHaveLength(1);
     const [pageQuery] = client.queries;
     expect(pageQuery!.query).not.toContain('LIMIT');
+    expect(pageQuery!.query).not.toContain('COUNT(*)');
     expect(pageQuery!.values).toEqual(['thread-1']);
     expect(result.total).toBe(2);
     expect(result.messages).toHaveLength(2);
@@ -150,7 +162,8 @@ describe('MemoryPG message paging round-trips', () => {
     const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 2 });
 
     expect(client.queries).toHaveLength(2);
-    expect(client.queries[0]!.query).toContain('COUNT(*) OVER () AS "__total"');
+    expect(client.queries[0]!.query).toContain('AS "__total"');
+    expect(client.queries[0]!.query).not.toContain('COUNT(*) OVER ()');
     expect(client.queries[1]!.query).toContain('SELECT COUNT(*) FROM');
     expect(result.total).toBe(5);
     expect(result.messages).toEqual([]);
@@ -176,8 +189,42 @@ describe('MemoryPG message paging round-trips', () => {
     const result = await pending;
 
     expect(inFlight).toHaveLength(2);
-    expect(inFlight.some(query => query.includes('COUNT(*) OVER () AS "__total"'))).toBe(true);
+    expect(inFlight.some(query => query.includes('AS "__total"') && !query.includes('COUNT(*) OVER ()'))).toBe(true);
     expect(inFlight.some(query => query.includes('thread_id, "createdAt" FROM'))).toBe(true);
     expect(result.messages.map(message => message.id)).toEqual(['message-1', 'message-2', 'message-9']);
+  });
+
+  it('skips the count when includeTotal is false', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = pageRows;
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 0, includeTotal: false });
+
+    expect(client.queries).toHaveLength(1);
+    const [pageQuery] = client.queries;
+    expect(pageQuery!.query).not.toContain('COUNT(*)');
+    expect(pageQuery!.query).not.toContain('__total');
+    expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.values).toEqual(['thread-1', 11, 0]);
+    expect(result.messages).toHaveLength(2);
+    expect(result.total).toBe(2);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('sets hasMore from a peeked extra row when includeTotal is false', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = [
+      createRow('message-1', '2025-01-01T00:00:00.000Z'),
+      createRow('message-2', '2025-01-01T00:00:01.000Z'),
+    ];
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 1, page: 0, includeTotal: false });
+
+    expect(client.queries[0]!.values).toEqual(['thread-1', 2, 0]);
+    expect(result.messages).toHaveLength(1);
+    expect(result.hasMore).toBe(true);
   });
 });
