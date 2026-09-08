@@ -128,6 +128,14 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          // An aborted call was cancelled mid-flight, not completed: recording it
+          // would fake-complete the call (`result: undefined` reads as success on
+          // resume), so leave the invocation incomplete. Mirrors the non-durable
+          // llm-mapping-step's aborted exclusion (ledger L7).
+          if (toolResult.aborted) {
+            continue;
+          }
+
           if (isDeniedApproval(toolResult)) {
             messageList.updateToolInvocation({
               type: 'tool-invocation' as const,

@@ -4,6 +4,7 @@ import { resolveBackgroundConfig } from '../../../../background-tasks/resolve-co
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
+import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -61,6 +62,10 @@ const durableToolCallInputSchema = z.object({
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   result: z.any().optional(),
   modelOutputComputed: z.boolean().optional(),
+  // Set when execution was interrupted by request abort (not a tool error); no result/error
+  // so the mapping step leaves the call incomplete. Must be declared or Zod strips it.
+  // Mirrors the non-durable tool-call output schema (ledger L7).
+  aborted: z.boolean().optional(),
   error: z
     .object({
       name: z.string(),
@@ -1315,30 +1320,40 @@ export function createDurableToolCallStep() {
       }
 
       try {
-        const releaseRunActivity = markRunActive(runId);
-        let result: unknown;
-        try {
-          result = await tool.execute(cleanedArgs, toolOptions);
-        } finally {
-          releaseRunActivity();
+        const outcome = await executeToolCall({
+          tool: tool as any,
+          args: cleanedArgs,
+          toolOptions,
+          toolCallId,
+          toolName,
+          abortSignal: toolAbortSignal,
+          // Run-activity tracking brackets live execution (durable-only bookkeeping).
+          acquireExecution: () => markRunActive(runId),
+          logger: logger as any,
+        });
+
+        if (outcome.status === 'aborted') {
+          // Mid-flight cancellation: leave the call incomplete (no result/error,
+          // no chunk emission) so the mapping step doesn't fake-complete it on
+          // resume. Mirrors the non-durable tool-call step (ledger L7).
+          return {
+            ...typedInput,
+            aborted: true,
+          };
         }
 
-        // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
-        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
-          try {
-            await (tool as any).onOutput({
-              toolCallId,
-              toolName,
-              output: result,
-            });
-          } catch (hookError) {
-            logger?.error?.('Error calling onOutput', hookError);
-          }
+        if (outcome.status === 'error') {
+          // Route through the catch below so error serialization and the
+          // tool-error chunk emission stay on the single existing path.
+          throw outcome.error;
         }
+
+        const result = outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
-        // other non-JSON side channels used by tools such as MCP structured-output tools.
+        // other non-JSON side channels used by tools such as MCP structured-output tools. Map from
+        // the raw pre-serialization result for the same reason.
         let providerMetadata = typedInput.providerMetadata;
         let modelOutputComputed: boolean | undefined;
         const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
@@ -1351,14 +1366,14 @@ export function createDurableToolCallStep() {
             entityType: EntityType.TOOL,
             entityId: toolName,
             entityName: toolName,
-            input: result,
+            input: outcome.rawResult,
             attributes: {
               mappingType: 'toModelOutput',
               toolCallId,
             },
           });
           try {
-            const modelOutput = normalizeModelOutput(await toModelOutput(result));
+            const modelOutput = normalizeModelOutput(await toModelOutput(outcome.rawResult));
             mappingSpan?.end({ output: modelOutput });
 
             if (modelOutput != null) {

@@ -21,7 +21,6 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
-import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -44,6 +43,7 @@ import {
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { normalizeModelOutput } from '../../shared/normalize-model-output';
+import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -1409,24 +1409,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const rawResult = await tool.execute(args, toolOptions);
-        const result = ensureSerializable(rawResult);
-
-        // Call onOutput hook after successful execution
-        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
-          try {
-            await (tool as any).onOutput({
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              output: result,
-              abortSignal: options?.abortSignal,
-            });
-          } catch (error) {
-            logger?.error('Error calling onOutput', error);
-          }
+        const outcome = await executeToolCall({
+          tool: tool as any,
+          args,
+          toolOptions,
+          toolCallId: inputData.toolCallId,
+          toolName: inputData.toolName,
+          abortSignal: options?.abortSignal,
+          logger,
+        });
+        if (outcome.status === 'aborted') {
+          return { aborted: true, ...inputData };
+        }
+        if (outcome.status === 'error') {
+          return { error: serializeToolError(outcome.error), ...inputData };
         }
 
-        return { result, ...inputData, ...(approvalGrant ?? {}) };
+        return { result: outcome.result, ...inputData, ...(approvalGrant ?? {}) };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {

@@ -363,6 +363,11 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   result?: unknown;
   /** Whether toModelOutput was evaluated before the result crossed the durable boundary */
   modelOutputComputed?: boolean;
+  /**
+   * Set when execution was interrupted by request abort (not a tool error).
+   * The call carries no result/error so the mapping step leaves it incomplete.
+   */
+  aborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
