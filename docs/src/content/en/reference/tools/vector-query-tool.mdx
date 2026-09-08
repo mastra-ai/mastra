@@ -286,7 +286,7 @@ The tool returns an object with:
 }
 ```
 
-`document` is only populated by vector stores whose `query()` returns document content, such as Chroma, Elasticsearch, LanceDB, and MongoDB. For other stores, such as PgVector, it is an empty string; read the chunk text from `sources[i].metadata.text` (or whichever metadata key you stored it under).
+`document` is only populated by vector stores whose `query()` returns document content, such as Chroma, Elasticsearch, LanceDB, and MongoDB. For other stores, such as PgVector, it's an empty string. Read the chunk text from `sources[i].metadata.text` (or whichever metadata key you stored it under).
 
 ## Default tool description
 
