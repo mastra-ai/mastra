@@ -4589,6 +4589,30 @@ describe('Agent signals', () => {
     await pubsub.releaseLease(key, winnerRunId);
   });
 
+  it('updates the controller request context with the prepared run abort signal', () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const requestContext = new RequestContext();
+    const upstreamAbortController = new AbortController();
+    requestContext.set('controller', { abortSignal: upstreamAbortController.signal });
+
+    const prepared = runtime.prepareRunOptions({
+      runId: 'controller-abort-run',
+      memory: { resource: 'controller-abort-resource', thread: 'controller-abort-thread' },
+      abortSignal: upstreamAbortController.signal,
+      requestContext,
+    } as any);
+    const controller = prepared.requestContext?.get('controller') as { abortSignal: AbortSignal };
+
+    expect(controller.abortSignal).toBe(prepared.abortSignal);
+    expect(controller.abortSignal).not.toBe(upstreamAbortController.signal);
+    expect((requestContext.get('controller') as { abortSignal: AbortSignal }).abortSignal).toBe(
+      upstreamAbortController.signal,
+    );
+
+    expect(runtime.abortRun('controller-abort-run')).toBe(true);
+    expect(controller.abortSignal.aborted).toBe(true);
+  });
+
   it('preserves abort intent for a thread reserved by a signal wake before its run is prepared', async () => {
     const pubsub = new ControlledLeasePubSub();
     const runtime = new AgentThreadStreamRuntime();
