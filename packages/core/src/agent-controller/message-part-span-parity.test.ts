@@ -26,7 +26,10 @@ const CHUNKS: Chunk[] = [
   { type: 'text-delta', payload: { id: '1', text: 'Done.' } },
   { type: 'text-end', payload: { id: '1' } },
   { type: 'reasoning-start', payload: { id: '2', providerMetadata: { anthropic: { redactedData: 'xx' } } } },
-  { type: 'redacted-reasoning', payload: { id: '4', data: 'yy', providerMetadata: { anthropic: { redactedData: 'yy' } } } },
+  {
+    type: 'redacted-reasoning',
+    payload: { id: '4', data: 'yy', providerMetadata: { anthropic: { redactedData: 'yy' } } },
+  },
   { type: 'reasoning-end', payload: { id: '3' } },
 ];
 
