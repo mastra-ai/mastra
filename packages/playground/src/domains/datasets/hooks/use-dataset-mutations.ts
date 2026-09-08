@@ -138,6 +138,15 @@ export const useDatasetMutations = () => {
     },
   });
 
+  const deleteExperiment = useMutation({
+    mutationFn: (experimentId: string) => client.deleteExperiment(experimentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
+    },
+  });
+
   const updateExperiment = useMutation({
     mutationFn: (params: UpdateDatasetExperimentParams) => client.updateDatasetExperiment(params),
     onSuccess: (_, variables) => {
@@ -174,6 +183,7 @@ export const useDatasetMutations = () => {
     batchDeleteItems,
     generateItems,
     triggerExperiment,
+    deleteExperiment,
     updateExperiment,
     updateExperimentResult,
   };

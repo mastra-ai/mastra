@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.38.1-alpha.14
+
+### Patch Changes
+
+- Disabled native subagents by default and added enable, disable, and model configuration controls to the /subagents command. ([#23335](https://github.com/mastra-ai/mastra/pull/23335))
+
+- Updated dependencies [[`b7b6ce0`](https://github.com/mastra-ai/mastra/commit/b7b6ce0d9a84e4322e1314bcdf07db81485d6ba2)]:
+  - @mastra/code-sdk@1.7.0-alpha.13
+
 ## 0.38.1-alpha.13
 
 ### Patch Changes

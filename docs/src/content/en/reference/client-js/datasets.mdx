@@ -2,12 +2,12 @@
 title: "Reference: Datasets API | Client SDK"
 description: "The Datasets API exposes Mastra's dataset and experiment routes from MastraClient."
 packages:
-  - '@mastra/client-js'
+  - "@mastra/client-js"
 ---
 
 # Datasets API
 
-The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. This page covers the caller-driven experiment methods, which let an orchestrator you own (for example a Temporal workflow) drive the experiment loop while Mastra acts as the system of record. Create the experiment, then either have Mastra execute each item server-side with `runExperimentItem` or ingest results you computed yourself with `submitExperimentResult`, and call finalize when the run is done.
+The Datasets API exposes Mastra's dataset and experiment routes from `MastraClient`. It includes caller-driven experiment methods and experiment deletion methods. The caller-driven methods let an orchestrator you own (for example a Temporal workflow) drive the experiment loop while Mastra acts as the system of record. Create the experiment, then either have Mastra execute each item server-side with `runExperimentItem` or ingest results you computed yourself with `submitExperimentResult`, and call finalize when the run is done.
 
 Item runs, result submission, and finalization are safe to retry. Creation is safe to retry only when the request includes a caller-supplied `id`; without one, each retry creates a new experiment.
 
@@ -276,6 +276,81 @@ Marks a caller-driven experiment completed. The server computes per-item counts 
 />
 
 Returns `Promise<DatasetExperiment>`, the updated experiment record.
+
+## deleteDatasetExperiment()
+
+Deletes an experiment through its dataset. The server deletes the experiment's result records and attempts to delete its observability traces, including their spans and trace-linked signals, but unsupported storage leaves the traces in place and causes the server to log a warning. If trace cleanup fails after an earlier batch succeeds, the promise rejects and preserves the experiment and result records even though some traces may already have been removed.
+
+```typescript
+await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'datasetId',
+    type: 'string',
+    description: 'ID of the dataset that owns the experiment.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to delete.',
+  },
+  {
+    name: 'tenancy.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the dataset lookup.',
+  },
+  {
+    name: 'tenancy.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the dataset lookup.',
+  },
+]}
+/>
+
+Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment associated with another dataset, or a dataset outside the supplied tenancy returns a `404` response.
+
+## deleteExperiment()
+
+Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's result records and attempts to delete its observability traces, but unsupported storage leaves the traces in place and causes the server to log a warning. If trace cleanup fails after an earlier batch succeeds, the promise rejects and preserves the experiment and result records even though some traces may already have been removed.
+
+```typescript
+await client.deleteExperiment('experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to delete.',
+  },
+  {
+    name: 'options.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the deletion.',
+  },
+  {
+    name: 'options.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the deletion.',
+  },
+]}
+/>
+
+Returns `Promise<{ success: boolean }>`. An unscoped request returns a `404` response when the experiment doesn't exist. A tenancy-scoped request that doesn't match the experiment returns success without deleting it.
 
 ## purgeDatasetItem()
 

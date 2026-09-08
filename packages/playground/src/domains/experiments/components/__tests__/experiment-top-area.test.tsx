@@ -1,6 +1,6 @@
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExperimentTopArea } from '../experiment-top-area';
 import { experiments, noAgents, noProcessors, noWorkflows, noScorers } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -144,6 +144,35 @@ describe('ExperimentTopArea', () => {
 
     expect(await screen.findByText(`Experiment #${unnamedExperiment.id.slice(0, 8)}`)).toBeDefined();
     expect(screen.queryByText(namedExperiment.description!)).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('omits the delete action when no callback is provided', async () => {
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    expect(await screen.findByRole('heading', { name: namedExperiment.name! })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Delete experiment' })).toBeNull();
+
+    await waitForMutationsIdle(queryClient);
+  });
+
+  it('calls the delete handler from the delete action', async () => {
+    const onDeleteClick = vi.fn();
+    const { queryClient } = renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentTopArea experiment={namedExperiment} onDeleteClick={onDeleteClick} />
+      </TestLinkProvider>,
+      { router: true },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete experiment' }));
+    expect(onDeleteClick).toHaveBeenCalledOnce();
 
     await waitForMutationsIdle(queryClient);
   });
