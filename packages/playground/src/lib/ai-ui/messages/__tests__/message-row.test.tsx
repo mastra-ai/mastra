@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
-import type { MastraTextPart } from '@mastra/react';
+import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
@@ -329,17 +329,17 @@ describe('MessageRow', () => {
   });
 
   describe('when plain tool calls run back to back', () => {
-    const toolCall = (toolCallId: string, toolName = 'genericTool', state = 'result') =>
-      ({
-        type: 'tool-invocation',
-        toolInvocation: {
-          toolName,
-          toolCallId,
-          state,
-          args: { q: toolCallId },
-          ...(state === 'result' ? { result: { ok: true } } : {}),
-        },
-      }) as never;
+    const toolCall = (
+      toolCallId: string,
+      toolName = 'genericTool',
+      state: 'result' | 'call' = 'result',
+    ): ToolInvocationPart =>
+      state === 'result'
+        ? {
+            type: 'tool-invocation',
+            toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId }, result: { ok: true } },
+          }
+        : { type: 'tool-invocation', toolInvocation: { state, toolName, toolCallId, args: { q: toolCallId } } };
     const withCalls = (parts: MastraDBMessage['content']['parts'], metadata: Record<string, unknown> = {}) =>
       baseMessage({ role: 'assistant', content: { format: 2, metadata: { mode: 'stream', ...metadata }, parts } });
 
