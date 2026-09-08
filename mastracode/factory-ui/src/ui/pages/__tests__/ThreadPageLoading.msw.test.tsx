@@ -4,14 +4,14 @@
  * mounted with a centered spinner in the main slot only — clicking around the
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
-import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
@@ -53,13 +53,20 @@ function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
   messages = [],
+  sessionState = {},
+  streamed = [],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
+  /** What the session-state snapshot adds: a run in flight. */
+  sessionState?: Record<string, unknown>;
+  /** What the session stream delivers on subscribe: the step a run in flight has streamed so far. */
+  streamed?: AgentControllerEvent[];
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
+  const encoder = new TextEncoder();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
   let activeThreadId = initialThreadId;
 
@@ -115,6 +122,7 @@ function stubThreadRoute({
         modelId: 'openai/gpt-4o-mini',
         threadId: activeThreadId,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        ...sessionState,
       }),
     ),
     http.post(`${AC}/sessions/:resourceId/thread`, async ({ request }) => {
@@ -129,9 +137,15 @@ function stubThreadRoute({
     http.get(
       `${AC}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              for (const event of streamed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
@@ -147,6 +161,17 @@ function stubThreadRoute({
   );
 
   return { sessionGate, messagesGate, onSwitchThread };
+}
+
+function observeEmptyPrompt() {
+  let drawn = false;
+  const observer = new MutationObserver(records => {
+    drawn ||= records.some(record =>
+      Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
+    );
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  return { wasDrawn: () => drawn, disconnect: () => observer.disconnect() };
 }
 
 function renderThreadRoute(path = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`) {
@@ -198,23 +223,73 @@ describe('ThreadPage loading shell', () => {
 
   it('reveals loaded history without briefly rendering the empty thread state', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ messages: assistantOnlyThreadMessages });
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
     sessionGate.resolve();
     await screen.findByRole('status', { name: 'Preparing session' });
 
-    let renderedEmptyState = false;
-    const observer = new MutationObserver(records => {
-      renderedEmptyState ||= records.some(record =>
-        Array.from(record.addedNodes).some(node => node.textContent?.includes('What can I help you build?')),
-      );
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    const emptyPrompt = observeEmptyPrompt();
 
     messagesGate.resolve();
     await screen.findByText('There are no user turns in this thread.');
-    observer.disconnect();
+    await waitForMutationsIdle(client);
+    emptyPrompt.disconnect();
 
-    expect(renderedEmptyState).toBe(false);
+    expect(emptyPrompt.wasDrawn()).toBe(false);
+  });
+
+  it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({
+      sessionState: { running: true },
+      streamed: [
+        {
+          type: 'display_state_changed',
+          displayState: {
+            isRunning: true,
+            currentMessage: {
+              id: 'live-1',
+              role: 'assistant',
+              createdAt: new Date('2026-09-08T10:00:00.000Z'),
+              content: {
+                format: 2,
+                parts: [
+                  { type: 'text', text: 'Checking out the pull request.' },
+                  {
+                    type: 'tool-invocation',
+                    toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+    const { client } = renderThreadRoute();
+    const emptyPrompt = observeEmptyPrompt();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    expect(await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 4000 })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    emptyPrompt.disconnect();
+
+    expect(document.body).toHaveTextContent('Checking out the pull request.');
+    expect(emptyPrompt.wasDrawn()).toBe(false);
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+  });
+
+  it('shows the run thinking, never the empty prompt, while a joined run has streamed nothing yet', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute({ sessionState: { running: true } });
+    const { client } = renderThreadRoute();
+    const emptyPrompt = observeEmptyPrompt();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    expect(await screen.findByText('Thinking')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    emptyPrompt.disconnect();
+
+    expect(emptyPrompt.wasDrawn()).toBe(false);
   });
 
   it('reveals the complete loaded transcript when preparation finishes', async () => {

@@ -497,7 +497,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   pathParamSchema: sessionPathParams,
   queryParamSchema: sessionScopeQuerySchema,
   summary: 'Stream controller session events',
-  description: 'Subscribes to a session\u2019s event bus and streams events to the client over SSE.',
+  description: 'Sends the current display state, then streams session events to the client over SSE.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
@@ -532,6 +532,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       // through verbatim.
       return new ReadableStream<unknown>({
         start(controller) {
+          controller.enqueue(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
           const scheduleHeartbeat = () => {
             if (cleanedUp) return;
             clearHeartbeat();

@@ -303,6 +303,8 @@ describe('AgentController Resource', () => {
       { type: 'message_start', message },
       { type: 'message_update', message },
       { type: 'message_end', message },
+      { type: 'display_state_changed', displayState: { isRunning: true, currentMessage: message } },
+      { type: 'display_state_changed', displayState: { isRunning: false, currentMessage: null } },
     ];
     mockSse([
       `data: ${JSON.stringify(events[0])}\n\n`,
@@ -320,14 +322,19 @@ describe('AgentController Resource', () => {
         },
       });
 
-    // Allow the async pump to drain the (already-closed) stream.
-    await new Promise(r => setTimeout(r, 10));
+    await vi.waitFor(() => expect(received).toHaveLength(events.length));
     sub.unsubscribe();
 
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
-    expect(received.map(e => e.type)).toEqual(['agent_start', 'message_start', 'message_update', 'message_end']);
+    expect(received.map(e => e.type)).toEqual(events.map(event => event.type));
     for (const event of received.slice(1)) {
+      if (event.type === 'display_state_changed') {
+        expect(event.displayState.currentMessage?.createdAt).toEqual(
+          event.displayState.isRunning ? new Date(createdAt) : undefined,
+        );
+        continue;
+      }
       if (event.type !== 'message_start' && event.type !== 'message_update' && event.type !== 'message_end') continue;
       expect(event.message.createdAt).toBeInstanceOf(Date);
       expect(event.message.createdAt.toISOString()).toBe(createdAt);

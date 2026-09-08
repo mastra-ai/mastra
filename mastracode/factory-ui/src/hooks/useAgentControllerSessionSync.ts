@@ -1,9 +1,46 @@
-import type { AgentControllerTaskSnapshot } from '@mastra/client-js';
+import type { AgentControllerSessionState, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import type { RefObject } from 'react';
 
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
+
+interface LiveTasks {
+  threadId?: string;
+  tasks: AgentControllerTaskSnapshot[];
+}
+
+/** What the stream reported, stamped with the generation it arrived at, so it outranks a state response it overtook. */
+export interface LiveEvents {
+  generation: number;
+  running?: { value: boolean; at: number };
+  tasks?: LiveTasks & { at: number };
+}
+
+/** Stamps what an event changed; returns the generation before it, to overlay the cached snapshot from. */
+export function recordLiveEvent(live: LiveEvents, event: { running?: boolean; tasks?: LiveTasks }): number {
+  const since = live.generation;
+  const at = since + 1;
+  live.generation = at;
+  if (event.tasks) live.tasks = { ...event.tasks, at };
+  if (event.running !== undefined) live.running = { value: event.running, at };
+  return since;
+}
+
+/** The snapshot with everything the stream reported after `since` laid over it. */
+export function overlayLiveEvents(
+  state: AgentControllerSessionState,
+  live: LiveEvents,
+  since: number,
+  threadId?: string,
+): AgentControllerSessionState {
+  const { tasks, running } = live;
+  return {
+    ...state,
+    ...(tasks && tasks.at > since && tasks.threadId === threadId ? { tasks: tasks.tasks } : {}),
+    ...(running && running.at > since ? { running: running.value } : {}),
+  };
+}
 
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
@@ -13,8 +50,7 @@ interface UseAgentControllerSessionSyncArgs {
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
-  taskEventGeneration: RefObject<number>;
-  liveTasks: RefObject<{ threadId?: string; tasks: AgentControllerTaskSnapshot[] } | undefined>;
+  liveEvents: RefObject<LiveEvents>;
 }
 
 export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
@@ -31,8 +67,7 @@ export function useAgentControllerSessionSync({
   baseUrl = '',
   enabled = true,
   sseConnected,
-  taskEventGeneration,
-  liveTasks,
+  liveEvents,
 }: UseAgentControllerSessionSyncArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
@@ -45,13 +80,9 @@ export function useAgentControllerSessionSync({
   return useQuery({
     queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
     queryFn: async () => {
-      const generationAtRequestStart = taskEventGeneration.current;
+      const since = liveEvents.current.generation;
       const state = await session!.state({ threadId });
-      const latestTasks = liveTasks.current;
-      const liveEventOvertookRequest = generationAtRequestStart !== taskEventGeneration.current;
-      return liveEventOvertookRequest && latestTasks && latestTasks.threadId === threadId
-        ? { ...state, tasks: latestTasks.tasks }
-        : state;
+      return overlayLiveEvents(state, liveEvents.current, since, threadId);
     },
     enabled: enabled && Boolean(session),
     staleTime: Infinity,

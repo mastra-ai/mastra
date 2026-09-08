@@ -1,11 +1,11 @@
-import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
-import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
+import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 
-import type { OMBudgets } from './runtime';
 import { sentByOther } from './message-author';
+import type { OMBudgets } from './runtime';
 
 /**
  * Transcript model + reducer.
@@ -290,9 +290,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       // would otherwise zero it before it could be read.
       return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
-      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
-      // decode window so a stale start can't bleed into the next turn.
-      return { ...state, pending: false, _decodeStartedAt: 0 };
+      return finishStreamingMessages({ ...state, pending: false, _decodeStartedAt: 0 });
 
     case 'message_start':
     case 'message_update': {
@@ -489,12 +487,19 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       };
     }
 
-    // Canonical display-state snapshot — carries the status-line figures
-    // (OM msg/mem budgets and cumulative token usage).
     case 'display_state_changed': {
       const ds = event.displayState;
+      const currentEntry = state.entries.find(
+        entry => entry.kind === 'message' && entry.message.id === ds.currentMessage?.id,
+      );
+      const streaming = ds.isRunning && (currentEntry?.kind === 'message' ? currentEntry.streaming : true);
+      const withMessage = ds.currentMessage
+        ? upsertMessage(state, ds.currentMessage, Boolean(streaming), viewerId)
+        : state;
+      const next = ds.isRunning ? withMessage : finishStreamingMessages(withMessage);
       return {
-        ...state,
+        ...next,
+        pending: ds.isRunning ? next.pending : false,
         omProgress: ds.omProgress ?? state.omProgress,
         usage: ds.tokenUsage ?? state.usage,
       };
@@ -538,6 +543,15 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     default:
       return state;
   }
+}
+
+function finishStreamingMessages(state: TranscriptState): TranscriptState {
+  return {
+    ...state,
+    entries: state.entries.map(entry =>
+      entry.kind === 'message' && entry.streaming ? { ...entry, streaming: false } : entry,
+    ),
+  };
 }
 
 /**
