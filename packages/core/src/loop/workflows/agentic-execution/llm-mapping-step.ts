@@ -13,6 +13,7 @@ import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
@@ -83,73 +84,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
   // Helper function to process a chunk through output processors and enqueue it.
   // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  // No onProcessorError policy: processor failures propagate and fail the request —
+  // in this engine the run and stream share a lifecycle, so the client sees the error.
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
-    if (processorRunner && rest.processorStates) {
-      const {
-        part: processed,
-        blocked,
-        reason,
-        tripwireOptions,
-        processorId,
-      } = await processorRunner.processPart(
-        chunk,
-        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        observabilityContext,
-        rest.requestContext,
-        rest.messageList,
-        0,
-        streamWriter,
-      );
-
-      const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
-        rest.controller.enqueue({
-          type: 'tripwire',
-          payload: {
-            reason: r || 'Output processor blocked content',
-            retry: opts?.retry,
-            metadata: opts?.metadata,
-            processorId: pid,
-          },
-        } as ChunkType<OUTPUT>);
-      };
-
-      if (blocked) {
-        // Emit a tripwire chunk so downstream knows about the abort
-        enqueueTripwire(reason, tripwireOptions, processorId);
-        return null;
-      }
-
-      if (processed) {
-        rest.controller.enqueue(processed as ChunkType<OUTPUT>);
-      }
-
-      // Emit any parts a processor stashed for reprocessing (e.g. the non-text
-      // part that triggered a BatchPartsProcessor flush), pushing each back
-      // through the whole chain so it gets downstream processing.
-      const reprocessed = await processorRunner.drainReprocessParts(
-        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        observabilityContext,
-        rest.requestContext,
-        rest.messageList,
-        0,
-        streamWriter,
-      );
-      for (const r of reprocessed) {
-        if (r.blocked) {
-          enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
-          return processed ? (processed as ChunkType<OUTPUT>) : null;
-        }
-        if (r.part != null) {
-          rest.controller.enqueue(r.part as ChunkType<OUTPUT>);
-        }
-      }
-
-      return processed ? (processed as ChunkType<OUTPUT>) : null;
-    } else {
-      // No processor runner, just enqueue the chunk directly
-      rest.controller.enqueue(chunk);
-      return chunk;
-    }
+    return processAndEmitChunk<OUTPUT>(chunk, {
+      runner: processorRunner,
+      processorStates: rest.processorStates as Map<string, ProcessorState<OUTPUT>> | undefined,
+      observabilityContext,
+      requestContext: rest.requestContext,
+      messageList: rest.messageList,
+      streamWriter,
+      emitChunk: c => rest.controller.enqueue(c),
+    });
   }
 
   /**

@@ -5,6 +5,7 @@ import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-ou
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
+import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -138,11 +139,12 @@ async function flushMessagesBeforeSuspension({
 }
 
 /**
- * Run a tool-result or tool-error chunk through the run's output processor pipeline.
- * Returns the processed chunk (possibly modified), or `null` if a processor blocked it
- * (in which case a tripwire chunk is emitted instead).
+ * Run a tool-result or tool-error chunk through the run's output processor
+ * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
+ * processed chunk, or `null` if a processor blocked it.
  *
- * Mirrors the regular agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
+ * Thin glue over the shared per-chunk pipeline core; mirrors the regular
+ * agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
  */
 async function processChunkThroughOutputProcessors(
   chunk: ChunkType,
@@ -154,67 +156,46 @@ async function processChunkThroughOutputProcessors(
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
 ): Promise<ChunkType | null> {
-  if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
-    return chunk;
-  }
+  const runner =
+    registryEntry?.outputProcessors?.length && registryEntry.processorStates
+      ? new ProcessorRunner({
+          inputProcessors: [],
+          outputProcessors: registryEntry.outputProcessors,
+          logger,
+          agentName,
+          processorStates: registryEntry.processorStates,
+        })
+      : undefined;
 
-  const runner = new ProcessorRunner({
-    inputProcessors: [],
-    outputProcessors: registryEntry.outputProcessors,
-    logger,
-    agentName,
-    processorStates: registryEntry.processorStates,
-  });
-
-  try {
-    const {
-      part: processed,
-      blocked,
-      reason,
-      tripwireOptions,
-      processorId,
-    } = await runner.processPart(
-      chunk,
-      registryEntry.processorStates as Map<string, ProcessorState>,
-      observabilityContext,
-      registryEntry.requestContext,
-      messageList,
-      0,
-      pubsub
-        ? {
-            custom: async (data: { type: string }) => {
-              await emitChunkEvent(pubsub, runId, data as ChunkType);
-            },
-          }
-        : undefined,
-    );
-
-    if (blocked) {
-      // Emit a tripwire chunk so downstream knows about the block
-      if (pubsub) {
-        await emitChunkEvent(pubsub, runId, {
-          type: 'tripwire',
-          payload: {
-            reason: reason || 'Output processor blocked content',
-            retry: tripwireOptions?.retry,
-            metadata: tripwireOptions?.metadata,
-            processorId,
+  return processAndEmitChunk(chunk, {
+    runner,
+    processorStates: registryEntry?.processorStates as Map<string, ProcessorState> | undefined,
+    observabilityContext,
+    requestContext: registryEntry?.requestContext,
+    messageList,
+    streamWriter: pubsub
+      ? {
+          custom: async (data: { type: string }) => {
+            await emitChunkEvent(pubsub, runId, data as ChunkType);
           },
-        } as ChunkType);
+        }
+      : undefined,
+    emitChunk: async c => {
+      if (pubsub) {
+        await emitChunkEvent(pubsub, runId, c);
       }
-      return null;
-    }
-
-    return (processed as ChunkType) ?? null;
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
-    // Fall through: emit the original chunk if processor fails
-    return chunk;
-  } finally {
+    },
+    onProcessorError: (error, original) => {
+      logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
+      // Fall through: emit the original chunk if a processor fails. (Ledger:
+      // this leaks the unprocessed value past a throwing redaction processor —
+      // to be fixed deliberately with its own test.)
+      return original;
+    },
     // The finish chunk that normally ends stream-processor spans never reaches
     // this pipeline, so end the spans opened for this chunk here.
-    runner.endStreamProcessorSpans(registryEntry.processorStates as Map<string, ProcessorState>);
-  }
+    endSpansAfterProcessing: true,
+  });
 }
 
 /**
@@ -774,7 +755,8 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              const processed = await processChunkThroughOutputProcessors(
+              // Processes through output processors and emits (or emits a tripwire when blocked).
+              await processChunkThroughOutputProcessors(
                 deniedChunk as ChunkType,
                 registryEntry,
                 pubsub,
@@ -784,9 +766,6 @@ export function createDurableToolCallStep() {
                 messageList,
                 processorObservabilityContext,
               );
-              if (processed) {
-                await emitChunkEvent(pubsub, runId, processed);
-              }
             } catch (emitError) {
               logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
             }
@@ -1329,8 +1308,8 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            // Run through output processors (tripwire/blocking/redaction)
-            const processed = await processChunkThroughOutputProcessors(
+            // Runs through output processors (tripwire/blocking/redaction) and emits
+            await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
               pubsub,
@@ -1340,9 +1319,6 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
             );
-            if (processed) {
-              await emitChunkEvent(pubsub, runId, processed);
-            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
@@ -1381,8 +1357,8 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            // Run through output processors (tripwire/blocking/redaction)
-            const processed = await processChunkThroughOutputProcessors(
+            // Runs through output processors (tripwire/blocking/redaction) and emits
+            await processChunkThroughOutputProcessors(
               errorChunk,
               registryEntry,
               pubsub,
@@ -1392,9 +1368,6 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
             );
-            if (processed) {
-              await emitChunkEvent(pubsub, runId, processed);
-            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
