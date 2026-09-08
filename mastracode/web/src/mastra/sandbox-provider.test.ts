@@ -95,20 +95,28 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     expect((sandbox as unknown as { _template?: unknown })._template).toBeDefined();
   });
 
-  it(
-    'does not select PlatformSandbox on MASTRA_PLATFORM_SECRET_KEY alone (integrations credential, not the sandbox one)',
-    { timeout: 60_000 },
-    async () => {
-      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
-      vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
-      vi.stubEnv('E2B_API_KEY', 'direct-e2b');
-      const callback = await importSandboxCallback();
+  it.each([
+    ['', 'sk_secret', 'sk_secret'],
+    ['jwt_platform', 'sk_secret', 'jwt_platform'],
+    ['  ', ' sk_secret ', 'sk_secret'],
+  ])('selects PlatformSandbox with access token %j and secret key %j', { timeout: 60_000 }, async (token, key, expected) => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
+    vi.stubEnv('E2B_API_KEY', 'direct-e2b');
+    const callback = await importSandboxCallback();
 
-      const sandbox = callback({ sessionId: 'session-sk', repoFullName: 'acme/widgets' });
+    const sandbox = callback({ sessionId: 'session-sk', repoFullName: 'acme/widgets' });
 
-      expect(sandbox).toMatchObject({ provider: 'e2b' });
-    },
-  );
+    expect(sandbox).toMatchObject({ provider: 'platform', _client: { accessToken: expected } });
+  });
+
+  it('requires an environment ID even with a secret key', { timeout: 60_000 }, async () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    const callback = await importSandboxCallback();
+
+    expect(callback({ sessionId: 'session-no-env' })).toMatchObject({ provider: 'local' });
+  });
 
   it('selects direct E2BSandbox when only E2B_API_KEY is configured', { timeout: 60_000 }, async () => {
     vi.stubEnv('E2B_API_KEY', 'direct-e2b');

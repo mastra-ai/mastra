@@ -2,4 +2,4 @@
 'create-factory': patch
 ---
 
-Fixed newly scaffolded factories to use PlatformSandbox locally by writing MASTRA_PLATFORM_ACCESS_TOKEN and resolving or creating their production environment for MASTRA_ENVIRONMENT_ID.
+Fixed newly scaffolded factories to use PlatformSandbox locally by resolving or creating their production environment for MASTRA_ENVIRONMENT_ID. Restored sandbox selection with a local MASTRA_PLATFORM_SECRET_KEY, while preferring the deployed MASTRA_PLATFORM_ACCESS_TOKEN when present.

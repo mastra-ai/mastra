@@ -159,7 +159,7 @@ export async function create(args: CreateArgs): Promise<void> {
 
   // ── Git init ─────────────────────────────────────────────────────────────
   // Ensure `.env` is ignored before staging so the platform secrets we just
-  // wrote (MASTRA_PLATFORM_ACCESS_TOKEN, DATABASE_URL) never enter git history.
+  // wrote (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never enter git history.
   // Idempotent: only appends if the pattern isn't already covered.
   //
   // If we can't write `.gitignore` (permission denied, disk full, …) we must
@@ -308,7 +308,7 @@ async function runPlatformProvisioning({
     }
     envAccumulator.MASTRA_PROJECT_ID = project.id;
 
-    // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_ACCESS_TOKEN.
+    // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_SECRET_KEY.
     //    The platform shows this secret exactly once, so we record it into
     //    the env accumulator immediately after minting.
     const keySpinner = p.spinner();
@@ -325,7 +325,7 @@ async function runPlatformProvisioning({
       keySpinner.stop('API key creation failed.');
       throw err;
     }
-    envAccumulator.MASTRA_PLATFORM_ACCESS_TOKEN = secretKey;
+    envAccumulator.MASTRA_PLATFORM_SECRET_KEY = secretKey;
 
     const environmentSpinner = p.spinner();
     environmentSpinner.start('Configuring production environment…');
@@ -420,7 +420,7 @@ function sanitizeDatabaseName(projectName: string): string {
 /**
  * Append `.env` to the scaffolded project's `.gitignore` if it isn't already
  * ignored. Runs before the initial `git add -A` so freshly-provisioned platform
- * credentials (MASTRA_PLATFORM_ACCESS_TOKEN, DATABASE_URL) never reach the
+ * credentials (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never reach the
  * initial commit.
  *
  * Throws if `.gitignore` cannot be written. Callers MUST treat this as fatal

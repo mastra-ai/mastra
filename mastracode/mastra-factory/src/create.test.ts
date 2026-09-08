@@ -228,8 +228,8 @@ describe('create (platform provisioning)', () => {
     expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
-    expect(env).toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=sk_live_test$/m);
-    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).toMatch(/^DATABASE_URL=postgres:\/\/user:pass@host\/neon$/m);
 
     expect(env).toMatch(/^MASTRA_ENVIRONMENT_ID=env_production$/m);
@@ -285,11 +285,11 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('https://projects.mastra.ai');
   });
 
-  it('preserves the minted access token when environment setup fails', async () => {
+  it('preserves the minted secret key when environment setup fails', async () => {
     platform.ensureProductionEnvironment.mockRejectedValue(new platform.PlatformApiError(403, 'forbidden'));
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
-    expect(env).toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=sk_live_test$/m);
+    expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).not.toMatch(/^MASTRA_ENVIRONMENT_ID=/m);
     expect(platform.attachNeonDatabase).not.toHaveBeenCalled();
@@ -311,8 +311,8 @@ describe('create (platform provisioning)', () => {
     // one-time `sk_` secret isn't lost. Only DATABASE_URL is missing.
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
-    expect(env).toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=sk_live_test$/m);
-    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
   });
 
@@ -329,8 +329,8 @@ describe('create (platform provisioning)', () => {
     expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
-    expect(env).toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=sk_live_test$/m);
-    expect(env).not.toMatch(/^MASTRA_PLATFORM_SECRET_KEY=/m);
+    expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
+    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
 
     const note = clack.note.mock.calls[0]![0] as string;
