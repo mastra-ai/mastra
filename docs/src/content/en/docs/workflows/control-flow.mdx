@@ -373,7 +373,17 @@ export const testWorkflow = createWorkflow({
 
 When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
-![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
+```mermaid
+flowchart LR
+  accTitle: Mapping data between workflow steps
+  accDescr: The workflow runs step1, which invokes an agent and outputs foo. The map operation transforms foo into an object with a bar property before the workflow commits and ends.
+  start(( start )) -->|".then(step1)"<br/>in| step1([step1])
+  step1 -- ".map()"<br/>out --> mapping["&quot;foo&quot; → { bar: &quot;foo&quot; }"]
+  mapping -->|".commit()<br/>out"| endNode(( end ))
+  step1 <--> agent([agent])
+
+  class endNode accent
+```
 
 ```typescript {9} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
 const step1 = createStep({...});
