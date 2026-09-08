@@ -331,9 +331,33 @@ agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`.
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it is neither serialized with the message nor an authorization mechanism.
 
-Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages before execution begins. It returns the signal IDs that were actually cancelled. It does not cancel an already-running message, messages owned by another process, or provide crash-durable delivery.
+Use `subscribeQueuedMessages({ resourceId, threadId }, listener)` to observe all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives a synchronous initial `{ count }` snapshot, then only receives later snapshots when its count changes. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict observation to that owner's messages submitted by the calling Agent.
+
+```typescript
+const scope = {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+}
+
+const unsubscribe = agent.subscribeQueuedMessages(scope, ({ count }) => {
+  console.log(`${count} messages are pending`)
+})
+
+agent.queueMessage('Review the failing test.', {
+  ...scope,
+  ifIdle: { streamOptions: { maxSteps: 3 } },
+})
+
+unsubscribe()
+```
+
+AgentController Sessions observe the shared thread count when they subscribe, even before submitting a follow-up. `session.steer()` aborts the current run before sending the new input, without clearing queued follow-ups. Session cleanup stops observation and cancels unfinished local preparation, but leaves submitted messages in the Agent queue.
+
+The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure—not when model generation completes. An idle `queueMessage()` handoff is immediate and is not represented as a cancellable pending slot.
+
+Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages, or pass `{ resourceId, threadId, queueOwnerId }` to remove an owner group. Supply exactly one selector. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID. They do not cancel already-running, remote-owner, or crash-persisted work, and do not provide durable queue delivery.
 
 ### `sendSignal(signal, options)`
 

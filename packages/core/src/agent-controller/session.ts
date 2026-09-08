@@ -543,7 +543,7 @@ export class SessionThread {
 
   /** Tear down the current agent subscription and reset the run tracker. */
   cleanupSubscription(): void {
-    this.#owner.clearQueuedFollowUps();
+    this.#owner.cleanupFollowUpBinding();
     this.#owner.stream.cleanup();
     this.#owner.run.reset();
   }
@@ -556,11 +556,15 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    if (session.stream.matches({ key })) return;
+    if (session.stream.matches({ key })) {
+      session.ensureFollowUpBinding(agent, resourceId, threadId);
+      return;
+    }
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
     session.stream.attach({ subscription, agent, key });
+    session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);
   }
 
@@ -2817,21 +2821,12 @@ export class Session<TState = unknown> {
   readonly stream = new SessionStream();
   /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
   readonly suspensions = new SessionSuspensions();
-  /** Queued Agent run IDs mapped to session-owned signal IDs for start reconciliation. */
-  readonly #queuedFollowUpsByRunId = new Map<string, string>();
-  /** Session-owned Agent queue entries, retained by signal id until they start, fail, or are cancelled. */
-  readonly #queuedFollowUpsBySignalId = new Map<
-    string,
-    { agent: Agent; resourceId: string; threadId: string; runId?: string }
-  >();
-  /** Runs that began before their Agent acceptance result was observed. */
-  readonly #startedQueuedFollowUpRunIds = new Set<string>();
+  /** Captured Agent queue scope for this session binding. */
+  #followUpBinding?: { agent: Agent; resourceId: string; threadId: string; unsubscribe?: () => void };
   /** Follow-up preparation that can finish after the session's active run changes. */
-  readonly #preparingFollowUps = new Map<number, { generation: number; controller: AbortController }>();
-  /** Invalidates asynchronous follow-up preparation on steering and thread lifecycle changes. */
+  readonly #preparingFollowUps = new Set<{ generation: number; controller: AbortController }>();
+  /** Invalidates asynchronous follow-up preparation when the session unbinds. */
   #followUpGeneration = 0;
-  /** Monotonic key for preparation records. */
-  #nextFollowUpOperationId = 0;
   /** The interactive tool-approval gate the current run parks on. */
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
@@ -3670,117 +3665,81 @@ export class Session<TState = unknown> {
     }
   }
 
-  /**
-   * Steer the agent mid-stream: aborts the current run and sends a new message.
-   */
+  /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
-    this.clearQueuedFollowUps();
     await this.sendMessage({ content, requestContext });
+  }
+
+  ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
+    const existing = this.#followUpBinding;
+    if (existing?.agent === agent && existing.resourceId === resourceId && existing.threadId === threadId)
+      return existing;
+    this.cleanupFollowUpBinding();
+    const binding: {
+      agent: Agent;
+      resourceId: string;
+      threadId: string;
+      unsubscribe?: () => void;
+    } = {
+      agent,
+      resourceId,
+      threadId,
+    };
+    this.#followUpBinding = binding;
+    try {
+      const unsubscribe = agent.subscribeQueuedMessages({ resourceId, threadId }, ({ count }) => {
+        if (this.#followUpBinding === binding) this.emit({ type: 'follow_up_queued', count });
+      });
+      binding.unsubscribe = unsubscribe;
+      if (this.#followUpBinding !== binding) {
+        unsubscribe();
+        return undefined;
+      }
+      return binding;
+    } catch (error) {
+      if (this.#followUpBinding === binding) this.#followUpBinding = undefined;
+      throw error;
+    }
   }
 
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (!this.run.isRunning()) {
-      await this.sendMessage({ content, requestContext });
-      return;
-    }
-
+    if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
     const threadId = this.thread.getId();
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
     const agent = this.machinery.getAgent();
-    const operationId = ++this.#nextFollowUpOperationId;
+    const binding = this.ensureFollowUpBinding(agent, resourceId, threadId);
+    if (!binding) return;
     const operation = { generation: this.#followUpGeneration, controller: new AbortController() };
-    let queuedSignalId: string | undefined;
-    this.#preparingFollowUps.set(operationId, operation);
-
+    this.#preparingFollowUps.add(operation);
     try {
       const streamOptions = await this.machinery.buildStreamOptions({
         requestContext,
         abortSignal: operation.controller.signal,
       });
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
-
-      const result = agent.queueMessage(this.createMessageInput({ content }), {
+      // Once submitted, the Agent owns this work independently of the Session.
+      this.#preparingFollowUps.delete(operation);
+      await agent.queueMessage(this.createMessageInput({ content }), {
         resourceId,
         threadId,
         ifIdle: { streamOptions: streamOptions as any },
-      });
-      queuedSignalId = result.signal.id;
-      this.#queuedFollowUpsBySignalId.set(result.signal.id, { agent, resourceId, threadId });
-      this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size });
-
-      const accepted = await result.accepted;
-      const queued = this.#queuedFollowUpsBySignalId.get(result.signal.id);
-      if (!queued) return;
-      if (accepted.action !== 'deliver' && accepted.action !== 'wake') {
-        this.#queuedFollowUpsBySignalId.delete(result.signal.id);
-        this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size });
-        return;
-      }
-      queued.runId = accepted.runId;
-      if (this.#startedQueuedFollowUpRunIds.delete(accepted.runId)) {
-        this.#queuedFollowUpsBySignalId.delete(result.signal.id);
-      } else {
-        this.#queuedFollowUpsByRunId.set(accepted.runId, result.signal.id);
-      }
-      this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size });
-    } catch (error) {
-      if (queuedSignalId) {
-        const queued = this.#queuedFollowUpsBySignalId.get(queuedSignalId);
-        if (queued?.runId) this.#queuedFollowUpsByRunId.delete(queued.runId);
-        this.#queuedFollowUpsBySignalId.delete(queuedSignalId);
-        this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size });
-      }
-      throw error;
+      }).accepted;
     } finally {
-      this.#preparingFollowUps.delete(operationId);
+      this.#preparingFollowUps.delete(operation);
     }
   }
 
-  markQueuedFollowUpStarted(runId: string): void {
-    const signalId = this.#queuedFollowUpsByRunId.get(runId);
-    if (!signalId) {
-      this.#startedQueuedFollowUpRunIds.add(runId);
-      return;
-    }
-    this.#queuedFollowUpsByRunId.delete(runId);
-    this.#queuedFollowUpsBySignalId.delete(signalId);
-    this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size, runId });
-  }
-
-  clearQueuedFollowUps(): void {
+  cleanupFollowUpBinding(): void {
     this.#followUpGeneration += 1;
-    for (const operation of this.#preparingFollowUps.values()) {
-      operation.controller.abort();
-    }
+    for (const operation of this.#preparingFollowUps) operation.controller.abort();
     this.#preparingFollowUps.clear();
-
-    const groups = new Map<Agent, Map<string, { resourceId: string; threadId: string; signalIds: string[] }>>();
-    for (const [signalId, queued] of this.#queuedFollowUpsBySignalId) {
-      const scopeKey = `${queued.resourceId}\u0000${queued.threadId}`;
-      const agentGroups = groups.get(queued.agent) ?? new Map();
-      const group = agentGroups.get(scopeKey) ?? {
-        resourceId: queued.resourceId,
-        threadId: queued.threadId,
-        signalIds: [],
-      };
-      group.signalIds.push(signalId);
-      agentGroups.set(scopeKey, group);
-      groups.set(queued.agent, agentGroups);
-    }
-    for (const [agent, agentGroups] of groups) {
-      for (const group of agentGroups.values()) {
-        const cancelled = agent.cancelQueuedMessages(group).cancelledSignalIds;
-        for (const signalId of cancelled) {
-          const queued = this.#queuedFollowUpsBySignalId.get(signalId);
-          if (queued?.runId) this.#queuedFollowUpsByRunId.delete(queued.runId);
-          this.#queuedFollowUpsBySignalId.delete(signalId);
-        }
-      }
-    }
-    this.emit({ type: 'follow_up_queued', count: this.#queuedFollowUpsBySignalId.size });
+    const binding = this.#followUpBinding;
+    this.#followUpBinding = undefined;
+    binding?.unsubscribe?.();
+    this.emit({ type: 'follow_up_queued', count: 0 });
   }
 
   /**

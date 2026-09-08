@@ -257,7 +257,10 @@ export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUT
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT> & {
+  /** Local grouping metadata for queue observation and cancellation. It is not serialized or authorization. */
+  queueOwnerId?: string;
+};
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
@@ -267,11 +270,32 @@ export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OU
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export interface CancelQueuedAgentMessagesOptions {
+export interface SubscribeQueuedAgentMessagesOptions {
   resourceId: string;
   threadId: string;
-  signalIds: string[];
+  /** Omit to observe all locally pending messages on the shared thread. */
+  queueOwnerId?: string;
 }
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export interface QueuedAgentMessagesSnapshot {
+  /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
+  count: number;
+}
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueuedAgentMessagesListener = (snapshot: QueuedAgentMessagesSnapshot) => void;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type CancelQueuedAgentMessagesOptions =
+  | { resourceId: string; threadId: string; signalIds: string[]; queueOwnerId?: never }
+  | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
