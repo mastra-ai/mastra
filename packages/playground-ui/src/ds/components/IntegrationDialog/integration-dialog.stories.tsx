@@ -45,7 +45,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Searchable integration picker built on DialogNew, mirroring the Platform "Add connection" dialog. Search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional logo, badge and disabled flag; a parenthesized suffix in the name such as "Render (MCP)" becomes a badge. The Default story uses a snapshot of the integrations.mastra.ai catalog with its Nango logos. Selection is left to the caller.',
+          'Searchable integration picker built on the Dialog "new" variant, mirroring the Platform "Add connection" dialog. Search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional logo, badge and disabled flag; a parenthesized suffix in the name such as "Render (MCP)" becomes a badge. The Default story uses a snapshot of the integrations.mastra.ai catalog with its Nango logos. Selection is left to the caller.',
       },
     },
   },

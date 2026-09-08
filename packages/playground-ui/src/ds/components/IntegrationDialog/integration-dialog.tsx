@@ -3,8 +3,16 @@ import { useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { parseIntegrationName } from './parse-integration-name';
 import { Badge } from '@/ds/components/Badge';
-import { DialogNew } from '@/ds/components/DialogNew';
-import type { DialogNewProps } from '@/ds/components/DialogNew';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/ds/components/Dialog';
+import type { DialogProps } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { controlFocusBorderVisible } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
@@ -45,7 +53,7 @@ function isMcpAuthType(authType: string | undefined) {
   return authType?.toUpperCase().startsWith('MCP') ?? false;
 }
 
-export type IntegrationDialogProps = Omit<DialogNewProps, 'variant' | 'children'> & {
+export type IntegrationDialogProps = Omit<DialogProps, 'variant' | 'intent' | 'children'> & {
   title: ReactNode;
   description?: ReactNode;
   items: IntegrationDialogItem[];
@@ -75,9 +83,9 @@ function IntegrationDialog({
 }: IntegrationDialogProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   return (
-    <DialogNew {...props}>
+    <Dialog variant="new" {...props}>
       {children}
-      <DialogNew.Content className={cn('max-w-lg', className)} initialFocus={searchRef}>
+      <DialogContent className={cn('max-w-lg', className)} initialFocus={searchRef}>
         <IntegrationDialogContent
           searchRef={searchRef}
           title={title}
@@ -88,8 +96,8 @@ function IntegrationDialog({
           searchLabel={searchLabel}
           emptyMessage={emptyMessage}
         />
-      </DialogNew.Content>
-    </DialogNew>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -117,10 +125,10 @@ function IntegrationDialogContent({
 
   return (
     <>
-      <DialogNew.Header>
-        <DialogNew.Title>{title}</DialogNew.Title>
-        {description ? <DialogNew.Description>{description}</DialogNew.Description> : null}
-      </DialogNew.Header>
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        {description ? <DialogDescription>{description}</DialogDescription> : null}
+      </DialogHeader>
       <div className="shrink-0 px-5 py-2">
         <SearchFieldBlock
           inputRef={searchRef}
@@ -135,7 +143,7 @@ function IntegrationDialogContent({
           size="md"
         />
       </div>
-      <DialogNew.Body className="pt-2 pb-5">
+      <DialogBody className="pt-2 pb-5">
         {visibleItems.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {visibleItems.map(item => {
@@ -178,11 +186,11 @@ function IntegrationDialogContent({
             {emptyMessage ?? (normalizedQuery ? `No integrations match “${query}”.` : 'No integrations are available.')}
           </p>
         )}
-      </DialogNew.Body>
+      </DialogBody>
     </>
   );
 }
 
-IntegrationDialog.Trigger = DialogNew.Trigger;
+IntegrationDialog.Trigger = DialogTrigger;
 
 export { IntegrationDialog };

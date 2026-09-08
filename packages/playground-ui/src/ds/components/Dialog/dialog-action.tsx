@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
-import { useDialogNew } from './dialog-new-context';
+import { useDialogContext } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 
-export type DialogNewActionProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type'> & {
+export type DialogActionProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type'> & {
   onConfirm: () => void;
   confirmation?: 'click' | 'hold';
   holdSeconds?: number;
@@ -11,9 +11,9 @@ export type DialogNewActionProps = Omit<ComponentProps<typeof Button>, 'onClick'
 
 const ARM_WINDOW_MS = 4000;
 
-const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'confirmation'>>(
+const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confirmation'>>(
   ({ onConfirm, children, disabled, holdSeconds = 1.5, ...props }, ref) => {
-    const { variant, pending } = useDialogNew();
+    const { intent, pending } = useDialogContext();
     const [holding, setHolding] = useState(false);
     const [completed, setCompleted] = useState(false);
     const [armed, setArmed] = useState(false);
@@ -93,7 +93,7 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
           {...props}
           ref={ref}
           type="button"
-          variant={variant === 'destructive' ? 'destructive-ghost' : 'ghost'}
+          variant={intent === 'destructive' ? 'destructive-ghost' : 'ghost'}
           disabled={disabled}
           aria-describedby={[props['aria-describedby'], hintId].filter(Boolean).join(' ')}
           data-holding={holding || undefined}
@@ -145,11 +145,11 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogNewActionProps, 'con
     );
   },
 );
-HoldAction.displayName = 'DialogNewHoldAction';
+HoldAction.displayName = 'DialogHoldAction';
 
-export const DialogNewAction = forwardRef<HTMLButtonElement, DialogNewActionProps>(
+export const DialogAction = forwardRef<HTMLButtonElement, DialogActionProps>(
   ({ confirmation = 'click', holdSeconds = 1.5, onConfirm, disabled, ...props }, ref) => {
-    const { variant, pending } = useDialogNew();
+    const { intent, pending } = useDialogContext();
     const isDisabled = disabled || pending;
     if (confirmation === 'hold') {
       return (
@@ -170,11 +170,11 @@ export const DialogNewAction = forwardRef<HTMLButtonElement, DialogNewActionProp
         {...props}
         ref={ref}
         type="button"
-        variant={variant === 'destructive' ? 'destructive' : 'primary'}
+        variant={intent === 'destructive' ? 'destructive' : 'primary'}
         disabled={isDisabled}
         onClick={onConfirm}
       />
     );
   },
 );
-DialogNewAction.displayName = 'DialogNewAction';
+DialogAction.displayName = 'DialogAction';

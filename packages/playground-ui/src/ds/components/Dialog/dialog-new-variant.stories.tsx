@@ -1,6 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useRef, useState } from 'react';
-import { DialogNew } from './dialog-new';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './dialog';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
@@ -10,7 +21,7 @@ import { Notice } from '@/ds/components/Notice';
 function ConfirmationExample({
   holdSeconds = 1.5,
   buttonSize = 'md',
-  variant = 'default',
+  intent = 'default',
   confirmation = 'click',
   title = 'Unlink repository?',
   description = 'You can link this repository to the Factory again later.',
@@ -21,7 +32,7 @@ function ConfirmationExample({
 }: {
   holdSeconds?: number;
   buttonSize?: TextButtonSize;
-  variant?: 'default' | 'destructive';
+  intent?: 'default' | 'destructive';
   confirmation?: 'click' | 'hold';
   title?: string;
   description?: string;
@@ -54,14 +65,14 @@ function ConfirmationExample({
   return (
     <div className="flex max-w-sm flex-col gap-4">
       <p className="text-ui-sm text-neutral4">Factory confirmation preview. No data is deleted.</p>
-      <DialogNew variant={variant} pending={pending} open={open} onOpenChange={setOpen}>
-        <DialogNew.Trigger render={<Button>Open dialog</Button>} />
-        <DialogNew.Content>
-          <DialogNew.Header>
-            <DialogNew.Title>{title}</DialogNew.Title>
-          </DialogNew.Header>
-          <DialogNew.Body>
-            <DialogNew.Description>{description}</DialogNew.Description>
+      <Dialog variant="new" intent={intent} pending={pending} open={open} onOpenChange={setOpen}>
+        <DialogTrigger render={<Button>Open dialog</Button>} />
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <DialogDescription>{description}</DialogDescription>
             {longBody && (
               <div className="flex flex-col gap-4">
                 {Array.from({ length: 8 }, (_, index) => (
@@ -77,20 +88,15 @@ function ConfirmationExample({
                 <Notice variant="destructive">The workspace could not be deleted. Try again.</Notice>
               </div>
             )}
-          </DialogNew.Body>
-          <DialogNew.Footer>
-            <DialogNew.Cancel size={buttonSize}>{cancelLabel}</DialogNew.Cancel>
-            <DialogNew.Action
-              holdSeconds={holdSeconds}
-              size={buttonSize}
-              confirmation={confirmation}
-              onConfirm={confirm}
-            >
+          </DialogBody>
+          <DialogFooter>
+            <DialogCancel size={buttonSize}>{cancelLabel}</DialogCancel>
+            <DialogAction holdSeconds={holdSeconds} size={buttonSize} confirmation={confirmation} onConfirm={confirm}>
               {pending ? 'Working…' : actionLabel}
-            </DialogNew.Action>
-          </DialogNew.Footer>
-        </DialogNew.Content>
-      </DialogNew>
+            </DialogAction>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <p role="status" className="text-ui-sm text-neutral4">
         {confirmed ? 'Confirmed. Preview complete.' : 'Waiting for confirmation.'}
       </p>
@@ -99,27 +105,27 @@ function ConfirmationExample({
 }
 
 const meta = {
-  title: 'Feedback/DialogNew',
+  title: 'Feedback/Dialog/New variant',
   component: ConfirmationExample,
   parameters: {
     layout: 'centered',
     docs: {
       description: {
         component:
-          'Additive dialog system based on Factory workspace and session confirmations. Compose Header, Title, Description, built-in fading scroll Body, and Footer with Cancel and Action. Intent belongs to the root; confirmation="hold" belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. Pending blocks dismissal. Destructive dialogs ignore outside clicks and initially focus Close. Escape cancels before submission. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it. Existing Dialog and AlertDialog are unchanged.',
+          'The `variant="new"` shell of Dialog, based on Factory workspace and session confirmations. The default variant is unchanged. Compose Header, Title, Description, built-in fading scroll Body, and Footer with Cancel and Action. Intent belongs to the root; confirmation="hold" belongs to the action. Actions never close automatically: the caller owns pending, errors, and closing after success. Pending blocks dismissal. Destructive dialogs ignore outside clicks and initially focus Close. Escape cancels before submission. Hold supports primary pointer, Space, and Enter; releasing, leaving, blur, and hiding the tab cancel it. The body always renders inside a bounded, fading ScrollArea, so long copy needs no special variant.',
       },
     },
   },
   argTypes: {
     holdSeconds: { control: { type: 'number', min: 0.1, step: 0.1 } },
     buttonSize: { control: 'inline-radio', options: ['xs', 'sm', 'md', 'lg'] },
-    variant: { control: 'inline-radio', options: ['default', 'destructive'] },
+    intent: { control: 'inline-radio', options: ['default', 'destructive'] },
     confirmation: { control: 'inline-radio', options: ['click', 'hold'] },
   },
   args: {
     holdSeconds: 1.5,
     buttonSize: 'md',
-    variant: 'default',
+    intent: 'default',
     confirmation: 'click',
     failFirst: false,
     longBody: false,
@@ -133,7 +139,7 @@ export const Default: Story = {};
 
 export const Destructive: Story = {
   args: {
-    variant: 'destructive',
+    intent: 'destructive',
     title: 'Delete workspace?',
     description:
       'This deletes the checkout and its uncommitted changes. This can’t be undone. Threads from this workspace are kept.',
@@ -157,9 +163,9 @@ export const PressAndHold: Story = {
   },
 };
 
-export const LongCopy: Story = {
+export const LongTitleAndLabels: Story = {
   args: {
-    variant: 'destructive',
+    intent: 'destructive',
     title: 'Delete the workspace for jal/pltfrm-1401-unify-dialogs-including-destructive-and-press-and-hold?',
     description:
       'This permanently deletes the local checkout and all uncommitted changes for this workspace. Conversations and remote branches are kept. Other members of your Factory will lose access to this checkout. Commit and push any work you want to keep before continuing.',
@@ -169,13 +175,13 @@ export const LongCopy: Story = {
   },
 };
 
-export const ScrollableContent: Story = {
+export const ScrollingBody: Story = {
   args: { ...PressAndHold.args, longBody: true },
   parameters: {
     docs: {
       description: {
         story:
-          'Body includes a bounded ScrollArea with overflow fades. Long copy scrolls independently of the title and actions.',
+          'Every new-variant body is a bounded ScrollArea with overflow fades, so long copy scrolls independently of the title and actions without a dedicated variant.',
       },
     },
   },
@@ -199,9 +205,9 @@ function FactoryForm() {
   const [saved, setSaved] = useState('');
   return (
     <div className="flex flex-col gap-4">
-      <DialogNew open={open} onOpenChange={setOpen}>
-        <DialogNew.Trigger render={<Button>Rename Factory</Button>} />
-        <DialogNew.Content>
+      <Dialog variant="new" open={open} onOpenChange={setOpen}>
+        <DialogTrigger render={<Button>Rename Factory</Button>} />
+        <DialogContent>
           <form
             onSubmit={event => {
               event.preventDefault();
@@ -211,11 +217,11 @@ function FactoryForm() {
               }
             }}
           >
-            <DialogNew.Header>
-              <DialogNew.Title>Rename Factory</DialogNew.Title>
-              <DialogNew.Description>Choose a name your team will recognize.</DialogNew.Description>
-            </DialogNew.Header>
-            <DialogNew.Body>
+            <DialogHeader>
+              <DialogTitle>Rename Factory</DialogTitle>
+              <DialogDescription>Choose a name your team will recognize.</DialogDescription>
+            </DialogHeader>
+            <DialogBody>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="dialog-new-factory-name">Factory name</Label>
                 <Input
@@ -225,16 +231,16 @@ function FactoryForm() {
                   required
                 />
               </div>
-            </DialogNew.Body>
-            <DialogNew.Footer>
-              <DialogNew.Cancel>Cancel</DialogNew.Cancel>
+            </DialogBody>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
               <Button size="md" type="submit" variant="primary" disabled={!name.trim()}>
                 Save name
               </Button>
-            </DialogNew.Footer>
+            </DialogFooter>
           </form>
-        </DialogNew.Content>
-      </DialogNew>
+        </DialogContent>
+      </Dialog>
       <p role="status" className="text-ui-sm text-neutral4">
         {saved ? `Factory renamed to ${saved}.` : 'No changes saved.'}
       </p>
