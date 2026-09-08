@@ -20,12 +20,10 @@ const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 function report(findings: FactoryHealthReport['findings']): FactoryHealthReport {
   const counts = {
-    'decision-failed': 0,
     'decision-stuck': 0,
     'start-stalled': 0,
     'seat-orphaned': 0,
     'seat-missing': 0,
-    'proposal-waiting': 0,
     'held-waiting': 0,
     'label-drift': 0,
   };
@@ -112,19 +110,19 @@ describe('SupervisorPage', () => {
     });
   });
 
-  describe('when failed decision findings are available', () => {
+  describe('when stuck decision findings are available', () => {
     it('keeps the panel bounded and links to the complete Attention inbox', async () => {
       stubSupervisorRoute(
         report(
           Array.from({ length: 6 }, (_, index) => ({
-            kind: 'decision-failed' as const,
+            kind: 'decision-stuck' as const,
             id: `dec-${index + 1}`,
             workItemId: `wi-${index + 1}`,
             workItemNumber: 22874 + index,
-            title: `Failed decision ${index + 1}`,
+            title: `Stuck decision ${index + 1}`,
             evidence: 'The decision exhausted its retry attempts.',
             since: '2026-09-03T04:00:00.000Z',
-            suggestedRepair: { action: 'retry-decision' as const, decisionId: `dec-${index + 1}` },
+            suggestedRepair: null,
           })),
         ),
       );
@@ -132,10 +130,10 @@ describe('SupervisorPage', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
       const findings = screen.getByRole('region', { name: 'Supervisor findings' });
-      await userEvent.click(within(findings).getByRole('button', { name: /Failed decisions/ }));
+      await userEvent.click(within(findings).getByRole('button', { name: /Stuck decisions/ }));
 
-      expect(within(findings).getByText('Failed decision 5')).toBeInTheDocument();
-      expect(within(findings).queryByText('Failed decision 6')).not.toBeInTheDocument();
+      expect(within(findings).getByText('Stuck decision 5')).toBeInTheDocument();
+      expect(within(findings).queryByText('Stuck decision 6')).not.toBeInTheDocument();
       expect(within(findings).getByRole('link', { name: 'View all in Attention' })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/attention`,
@@ -146,14 +144,14 @@ describe('SupervisorPage', () => {
       stubSupervisorRoute(
         report([
           {
-            kind: 'decision-failed',
+            kind: 'decision-stuck',
             id: 'dec-1',
             workItemId: 'wi-1',
             workItemNumber: 22874,
             title: 'Plan step could not start',
             evidence: 'invokeSkill plan failed after 5 attempts: No active Factory binding for role plan.',
             since: '2026-09-03T04:00:00.000Z',
-            suggestedRepair: { action: 'retry-decision', decisionId: 'dec-1' },
+            suggestedRepair: null,
           },
         ]),
       );
@@ -161,7 +159,7 @@ describe('SupervisorPage', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Supervisor findings' }));
       const findings = screen.getByRole('region', { name: 'Supervisor findings' });
-      await userEvent.click(within(findings).getByRole('button', { name: /Failed decisions/ }));
+      await userEvent.click(within(findings).getByRole('button', { name: /Stuck decisions/ }));
       await userEvent.click(within(findings).getByRole('button', { name: 'Ask supervisor' }));
 
       const composer = screen.getByRole('region', { name: 'Supervisor composer' });

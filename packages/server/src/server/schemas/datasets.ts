@@ -718,6 +718,7 @@ export const itemVersionResponseSchema = z.object({
   toolMocks: toolMocksSchema,
   unmockedToolPolicy: unmockedToolPolicySchema,
   scorerIds: z.array(z.string()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),

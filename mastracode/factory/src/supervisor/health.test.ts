@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { createBoardRegistry, defineBoard, workItemPhaseSemantics } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import { NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -110,12 +112,15 @@ function pendingStart(
   };
 }
 
-const empty = { items: [], decisions: [], bindings: [], pendingStarts: [] };
+const boards = createBoardRegistry();
+const phaseSemantics = (row: WorkItemRow) => workItemPhaseSemantics(boards, row);
+const empty = { items: [], decisions: [], bindings: [], pendingStarts: [], phaseSemantics };
 
 describe('computeFactoryHealth', () => {
   it('reports nothing for a healthy factory', () => {
     const report = computeFactoryHealth(
       {
+        phaseSemantics,
         items: [item({ id: 'item-1' })],
         decisions: [decision({ id: 'd-ok', status: 'succeeded' })],
         bindings: [binding({ id: 'b-1' })],
@@ -128,7 +133,20 @@ describe('computeFactoryHealth', () => {
     expect(report.checkedAt).toBe(NOW.toISOString());
   });
 
-  it('flags a terminally failed decision with its error and a retry repair', () => {
+  it('leaves a failed decision to the board and the inbox: it is not a finding', () => {
+    const report = computeFactoryHealth(
+      {
+        ...empty,
+        items: [item({ id: 'item-1' })],
+        bindings: [binding({ id: 'b-1' })],
+        decisions: [decision({ id: 'd-fail', status: 'failed', attempts: 5, failureCode: 'session_unavailable' })],
+      },
+      NOW,
+    );
+    expect(report.findings).toEqual([]);
+  });
+
+  it('leaves a proposal to the board and the inbox: it is not a finding', () => {
     const report = computeFactoryHealth(
       {
         ...empty,
@@ -136,28 +154,15 @@ describe('computeFactoryHealth', () => {
         bindings: [binding({ id: 'b-1' })],
         decisions: [
           decision({
-            id: 'd-fail',
-            status: 'failed',
-            attempts: 5,
-            failureCode: 'session_unavailable',
-            lastError: 'No active Factory binding for role plan.',
+            id: 'd-old',
+            status: 'proposed',
+            createdAt: ago(DEFAULT_HEALTH_THRESHOLDS.waitingOnPersonMs + 1),
           }),
         ],
       },
       NOW,
     );
-    expect(report.findings).toEqual([
-      expect.objectContaining({
-        kind: 'decision-failed',
-        id: 'decision-failed:d-fail',
-        workItemId: 'item-1',
-        workItemNumber: 42,
-        suggestedRepair: { action: 'retry-decision', decisionId: 'd-fail' },
-      }),
-    ]);
-    expect(report.findings[0]!.evidence).toContain('invokeSkill (plan)');
-    expect(report.findings[0]!.evidence).toContain('[session_unavailable]');
-    expect(report.findings[0]!.evidence).toContain('No active Factory binding');
+    expect(report.findings).toEqual([]);
   });
 
   it('flags retry decisions the dispatcher never picked up, but not ones inside their backoff', () => {
@@ -286,27 +291,6 @@ describe('computeFactoryHealth', () => {
     expect(report.findings[0]!.evidence).toContain('feature request');
   });
 
-  it('flags a proposal a person has left waiting', () => {
-    const report = computeFactoryHealth(
-      {
-        ...empty,
-        items: [item({ id: 'item-1' })],
-        bindings: [binding({ id: 'b-1' })],
-        decisions: [
-          decision({
-            id: 'd-old',
-            status: 'proposed',
-            createdAt: ago(DEFAULT_HEALTH_THRESHOLDS.waitingOnPersonMs + 1),
-          }),
-          decision({ id: 'd-new', status: 'proposed', createdAt: ago(1_000) }),
-        ],
-      },
-      NOW,
-    );
-    expect(report.findings.map(f => f.id)).toEqual(['proposal-waiting:d-old']);
-    expect(report.findings[0]!.suggestedRepair).toEqual({ action: 'resolve-proposal', decisionId: 'd-old' });
-  });
-
   it('flags an accepted card that still wears the needs-approval label', () => {
     const report = computeFactoryHealth(
       {
@@ -340,14 +324,14 @@ describe('computeFactoryHealth', () => {
         items: [item({ id: 'item-1' })],
         bindings: [binding({ id: 'b-1' })],
         decisions: [
-          decision({ id: 'd-recent', status: 'failed', updatedAt: ago(1_000) }),
-          decision({ id: 'd-older', status: 'failed', updatedAt: ago(HOUR) }),
+          decision({ id: 'd-recent', status: 'retry', availableAt: ago(HOUR) }),
+          decision({ id: 'd-older', status: 'retry', availableAt: ago(2 * HOUR) }),
         ],
       },
       NOW,
     );
-    expect(report.findings.map(f => f.id)).toEqual(['decision-failed:d-older', 'decision-failed:d-recent']);
-    expect(report.counts['decision-failed']).toBe(2);
+    expect(report.findings.map(f => f.id)).toEqual(['decision-stuck:d-older', 'decision-stuck:d-recent']);
+    expect(report.counts['decision-stuck']).toBe(2);
     expect(report.counts['seat-missing']).toBe(0);
   });
 
@@ -361,6 +345,84 @@ describe('computeFactoryHealth', () => {
     const first = computeFactoryHealth(inputs, NOW);
     const later = computeFactoryHealth(inputs, new Date(NOW.getTime() + HOUR));
     expect(later.findings).toEqual(first.findings);
+  });
+});
+
+describe('computeFactoryHealth with installed boards', () => {
+  const custom = createBoardRegistry({ boards: [createTestBoard()] });
+  const customSemantics = (row: WorkItemRow) => workItemPhaseSemantics(custom, row);
+
+  it('reads seats and roles from a custom board, not from Work', () => {
+    const report = computeFactoryHealth(
+      {
+        ...empty,
+        phaseSemantics: customSemantics,
+        items: [
+          item({ id: 'stranded', board: 'release', stages: ['shipping'] }),
+          item({ id: 'queued', board: 'release', stages: ['queued'] }),
+          item({ id: 'finished', board: 'release', stages: ['shipped'] }),
+        ],
+        bindings: [binding({ id: 'b-finished', workItemId: 'finished' })],
+      },
+      NOW,
+    );
+    expect(report.findings.map(f => f.id).sort()).toEqual(['seat-missing:stranded', 'seat-orphaned:b-finished']);
+    expect(report.findings.find(f => f.kind === 'seat-missing')?.suggestedRepair).toEqual({
+      action: 'start-run',
+      workItemId: 'stranded',
+      role: 'release',
+    });
+  });
+
+  it('keeps held-waiting a Work finding even when another board names a phase triage', () => {
+    const board = createBoardRegistry({
+      boards: [
+        createTestBoard({ id: 'other' }),
+        // A custom board with a working `triage` phase: never "held" — that gate is Work's.
+        defineBoard({
+          id: 'bot',
+          title: 'Bot',
+          initialPhase: 'intake',
+          phases: {
+            intake: { title: 'Intake', kind: 'resting', next: 'triage' },
+            triage: { title: 'Triage', kind: 'working', role: 'bot', next: 'intake' },
+          },
+        }),
+      ],
+    });
+    const stale = item({
+      id: 'bot-triage',
+      board: 'bot',
+      stages: ['triage'],
+      triageType: 'feature request',
+      stageHistory: [{ stage: 'triage', enteredAt: ago(3 * HOUR).toISOString(), by: 'user-1' }],
+    });
+    const report = computeFactoryHealth(
+      { ...empty, phaseSemantics: row => workItemPhaseSemantics(board, row), items: [stale] },
+      NOW,
+    );
+    expect(report.findings.map(f => f.kind)).toEqual(['seat-missing']);
+  });
+
+  it('neither revokes nor starts anything when the phase semantics are unknown', () => {
+    const report = computeFactoryHealth(
+      {
+        ...empty,
+        phaseSemantics: () => undefined,
+        items: [
+          item({ id: 'unknown-board', board: 'missing', stages: ['execute'] }),
+          item({ id: 'unknown-phase', board: 'work', stages: ['shipped'] }),
+          item({ id: 'multi', board: 'work', stages: ['review', 'done'] }),
+        ],
+        bindings: [
+          binding({ id: 'b-unknown', workItemId: 'unknown-board' }),
+          binding({ id: 'b-multi', workItemId: 'multi' }),
+          binding({ id: 'b-gone', workItemId: 'missing-1' }),
+        ],
+      },
+      NOW,
+    );
+    expect(report.findings.map(f => f.id)).toEqual(['seat-orphaned:b-gone']);
   });
 });
 
@@ -402,10 +464,10 @@ describe('runFactoryHealthCheck', () => {
       now,
     );
 
-    expect((await runFactoryHealthCheck(workItems, scope, { now })).findings).toEqual([]);
+    expect((await runFactoryHealthCheck(workItems, boards, scope, { now })).findings).toEqual([]);
 
     await workItems.revokeRunBinding({ ...scope, bindingId: prepared.binding.id, revokedAt: now });
-    const report = await runFactoryHealthCheck(workItems, scope, { now });
+    const report = await runFactoryHealthCheck(workItems, boards, scope, { now });
     expect(report.findings.map(f => f.kind)).toEqual(['seat-missing']);
     expect(report.findings[0]!.workItemNumber).toBe(9);
   });

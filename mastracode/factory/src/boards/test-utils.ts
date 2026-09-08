@@ -50,9 +50,11 @@ export function createTestBoard(
     title: 'Release',
     initialPhase: 'queued',
     phases: {
-      queued: { title: 'Queued', next: 'shipped' },
+      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipping', skip: 'shipped' } },
+      shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
       shipped: {
         title: 'Shipped',
+        kind: 'terminal',
         onEnter: options.onShipped ? { issue: options.onShipped } : undefined,
       },
     },

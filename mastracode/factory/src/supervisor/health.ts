@@ -8,12 +8,9 @@
  * write tools) would apply.
  */
 
-import {
-  FACTORY_ROLE_STAGES,
-  factoryRuleStage,
-  isTerminalFactoryRuleStage,
-  NEEDS_APPROVAL_LABEL,
-} from '../rules/types.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import type { BoardRegistry, PhaseSemantics } from '../boards/index.js';
+import { factoryRuleStage, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -23,19 +20,14 @@ import type {
 } from '../storage/domains/work-items/base.js';
 
 export type FactoryHealthFindingKind =
-  | 'decision-failed'
   | 'decision-stuck'
   | 'start-stalled'
   | 'seat-orphaned'
   | 'seat-missing'
-  | 'proposal-waiting'
   | 'held-waiting'
   | 'label-drift';
 
 export type FactoryHealthRepair =
-  | { action: 'retry-decision'; decisionId: string }
-  | { action: 'dismiss-decision'; decisionId: string }
-  | { action: 'resolve-proposal'; decisionId: string }
   | { action: 'revoke-binding'; bindingId: string }
   | { action: 'accept-work-item'; workItemId: string }
   | { action: 'start-run'; workItemId: string; role: string }
@@ -69,7 +61,7 @@ export interface FactoryHealthThresholds {
   expiredLeaseMs: number;
   /** A pending start this old is not "booting", it is stalled. */
   stalledStartMs: number;
-  /** Proposals and held cards older than this are worth nudging a person about. */
+  /** Held cards older than this are worth nudging a maintainer about. */
   waitingOnPersonMs: number;
 }
 
@@ -81,20 +73,15 @@ export const DEFAULT_HEALTH_THRESHOLDS: FactoryHealthThresholds = {
 };
 
 const FINDING_KINDS: FactoryHealthFindingKind[] = [
-  'decision-failed',
   'decision-stuck',
   'start-stalled',
   'seat-orphaned',
   'seat-missing',
-  'proposal-waiting',
   'held-waiting',
   'label-drift',
 ];
 
 const IN_FLIGHT_DECISION_STATUSES = new Set(['pending', 'retry', 'leased', 'proposed']);
-
-/** Working lane → the role whose seat carries a card through it. */
-const ROLE_FOR_LANE = new Map<string, string>(Object.entries(FACTORY_ROLE_STAGES).map(([role, lane]) => [lane, role]));
 
 function itemNumber(item: WorkItemRow | undefined): number | null {
   const number = item?.metadata?.number ?? item?.metadata?.githubIssueNumber ?? item?.metadata?.githubPullRequestNumber;
@@ -140,6 +127,12 @@ interface HealthInputs {
   decisions: FactoryDeferredDecisionRecord[];
   bindings: FactoryRunBindingRecord[];
   pendingStarts: FactoryPendingStartRecord[];
+  /**
+   * What the item's installed board says its current phase means. Undefined when the
+   * board is not installed, the phase is undeclared, or the row spans several stages;
+   * the check then neither revokes nor starts anything on a guess.
+   */
+  phaseSemantics: (item: WorkItemRow) => PhaseSemantics | undefined;
 }
 
 /** Pure: findings from rows. Exported so tests can feed fixtures directly. */
@@ -157,17 +150,6 @@ export function computeFactoryHealth(
 
   for (const decision of inputs.decisions) {
     const base = subject(decision.workItemId);
-    if (decision.status === 'failed') {
-      findings.push({
-        kind: 'decision-failed',
-        id: `decision-failed:${decision.id}`,
-        ...base,
-        evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
-        since: decision.updatedAt.toISOString(),
-        suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
-      });
-      continue;
-    }
     if (decision.status === 'retry' || decision.status === 'pending') {
       const overdue = now.getTime() - decision.availableAt.getTime();
       if (overdue > thresholds.stuckDecisionMs) {
@@ -192,20 +174,6 @@ export function computeFactoryHealth(
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) is still leased by ${decision.leaseOwner ?? 'unknown'} though the lease expired at ${decision.leaseExpiresAt.toISOString()}; the worker likely died mid-dispatch.`,
           since: decision.leaseExpiresAt.toISOString(),
           suggestedRepair: null,
-        });
-      }
-      continue;
-    }
-    if (decision.status === 'proposed') {
-      const waiting = now.getTime() - decision.createdAt.getTime();
-      if (waiting > thresholds.waitingOnPersonMs) {
-        findings.push({
-          kind: 'proposal-waiting',
-          id: `proposal-waiting:${decision.id}`,
-          ...base,
-          evidence: `Proposed run ${decision.id} (${describeDecision(decision)}) has waited for a person since ${decision.createdAt.toISOString()}.`,
-          since: decision.createdAt.toISOString(),
-          suggestedRepair: { action: 'resolve-proposal', decisionId: decision.id },
         });
       }
     }
@@ -234,7 +202,7 @@ export function computeFactoryHealth(
     if (binding.status !== 'active') continue;
     const item = itemsById.get(binding.workItemId);
     const stage = item ? factoryRuleStage(item.stages) : undefined;
-    if (!item || !stage || isTerminalFactoryRuleStage([stage])) {
+    if (!item || inputs.phaseSemantics(item)?.kind === 'terminal') {
       findings.push({
         kind: 'seat-orphaned',
         id: `seat-orphaned:${binding.id}`,
@@ -257,12 +225,20 @@ export function computeFactoryHealth(
   );
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
-    if (!stage || stage === 'intake' || isTerminalFactoryRuleStage([stage])) continue;
+    const semantics = stage ? inputs.phaseSemantics(item) : undefined;
+    if (!stage || semantics?.kind !== 'working') continue;
     const base = subject(item.id);
     const enteredAt = stageEnteredAt(item);
     const inStageMs = enteredAt ? now.getTime() - enteredAt.getTime() : null;
 
-    const held = stage === 'triage' && item.triageType !== null && item.triageType !== 'bug' && !item.acceptedAt;
+    // Work's triage seat holds a classified non-bug until a maintainer accepts it. Only
+    // Work has that gate, so this is keyed on the board, not on the phase name.
+    const held =
+      boardForWorkItem(item) === 'work' &&
+      stage === 'triage' &&
+      item.triageType !== null &&
+      item.triageType !== 'bug' &&
+      !item.acceptedAt;
     if (held) {
       if (inStageMs !== null && inStageMs > thresholds.waitingOnPersonMs) {
         findings.push({
@@ -275,7 +251,7 @@ export function computeFactoryHealth(
         });
       }
     } else if (!activeSeatsByItem.has(item.id) && !inFlightByItem.has(item.id)) {
-      const role = ROLE_FOR_LANE.get(stage);
+      const role = semantics.role;
       findings.push({
         kind: 'seat-missing',
         id: `seat-missing:${item.id}`,
@@ -306,6 +282,7 @@ export function computeFactoryHealth(
 
 export async function runFactoryHealthCheck(
   workItems: WorkItemsStorage,
+  boards: BoardRegistry,
   scope: { orgId: string; factoryProjectId: string },
   options: { now?: Date; thresholds?: FactoryHealthThresholds } = {},
 ): Promise<FactoryHealthReport> {
@@ -316,7 +293,7 @@ export async function runFactoryHealthCheck(
     workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
   ]);
   return computeFactoryHealth(
-    { items, decisions, bindings, pendingStarts },
+    { items, decisions, bindings, pendingStarts, phaseSemantics: item => workItemPhaseSemantics(boards, item) },
     options.now ?? new Date(),
     options.thresholds,
   );
