@@ -155,10 +155,18 @@ export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 /** Non-enumerable result-level `_meta` attached to structured tool execute results. */
 export const MCP_CALL_TOOL_META = Symbol.for('mastra.mcp.callToolMeta');
 
+/**
+ * Non-enumerable `isError` flag attached to structured tool execute results.
+ * Lets non-LLM consumers (`onToolError: 'return'`) detect an in-band tool failure
+ * without changing the enumerable shape of `structuredContent`.
+ */
+export const MCP_CALL_TOOL_IS_ERROR = Symbol.for('mastra.mcp.callToolIsError');
+
 function attachMcpCallToolContent(
   structuredContent: unknown,
   content: unknown,
   _meta?: Record<string, unknown>,
+  isError?: boolean,
 ): unknown {
   if (structuredContent !== null && typeof structuredContent === 'object') {
     Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
@@ -169,6 +177,13 @@ function attachMcpCallToolContent(
     if (_meta !== undefined) {
       Object.defineProperty(structuredContent, MCP_CALL_TOOL_META, {
         value: _meta,
+        enumerable: false,
+        configurable: true,
+      });
+    }
+    if (isError !== undefined) {
+      Object.defineProperty(structuredContent, MCP_CALL_TOOL_IS_ERROR, {
+        value: isError,
         enumerable: false,
         configurable: true,
       });
@@ -194,6 +209,16 @@ export function getMcpCallToolContent(output: unknown): unknown {
 export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | undefined {
   if (output === null || typeof output !== 'object') return undefined;
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
+}
+
+/**
+ * Read the MCP `isError` flag preserved on a structured tool execute result.
+ * Lets non-LLM consumers (`onToolError: 'return'`) detect an in-band tool failure.
+ * Returns `undefined` for scalar results or successful results without the flag.
+ */
+export function getMcpCallToolIsError(output: unknown): boolean | undefined {
+  if (output === null || typeof output !== 'object') return undefined;
+  return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_IS_ERROR] as boolean | undefined;
 }
 
 function createStructuredToolToModelOutput(): (output: unknown) =>
@@ -1514,25 +1539,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                // Non-LLM consumers (`onToolError: 'return'`) need the failure signal to survive
-                // regardless of response shape. Returning bare `structuredContent` below would drop
-                // `isError`, so an error result is only detectable when the tool has no
-                // `structuredContent`. Return the full CallToolResult envelope for every error
-                // result so `isError`, `content`, and `structuredContent` are all reachable.
-                // (The `onToolError: 'throw'` case already returned above, so reaching here with
-                // `res.isError` implies `onToolError === 'return'`.)
-                if (res.isError) {
-                  return res;
-                }
-
                 if (res.structuredContent !== undefined) {
                   // Enforce the server-advertised outputSchema before the result reaches the
                   // model. This covers both live-discovered tools and tools hydrated from a
                   // cached catalog (which never populate the MCP SDK's tools/list output-schema
                   // cache, so the SDK's own AJV check does not fire for them). On mismatch,
                   // return the same structured ValidationError shape createTool produces so
-                  // the model can self-correct. Skipped for isError results, which are handled
-                  // above / by the `onToolError: 'return'` envelope path.
+                  // the model can self-correct. Skipped for isError results, whose failure
+                  // signal is preserved via the hidden `isError` symbol channel below.
                   if (!res.isError && outputValidator) {
                     const validation = validateToolOutput(outputValidator, res.structuredContent, tool.name);
                     if (validation.error) {
@@ -1543,11 +1557,15 @@ export class InternalMastraMCPClient extends MastraBase {
                     }
                   }
                   // Attach content metadata to the original structuredContent reference so the
-                  // hidden symbol channels (content/_meta) are preserved.
+                  // hidden symbol channels (content/_meta/isError) are preserved. Returning the
+                  // bare `structuredContent` keeps the existing enumerable shape intact for
+                  // consumers reading fields directly, while non-LLM consumers can recover the
+                  // in-band failure signal via `getMcpCallToolIsError()`.
                   return attachMcpCallToolContent(
                     res.structuredContent,
                     res.content,
                     res._meta ? this.stampServerIdInMeta(res._meta) : undefined,
+                    res.isError ? true : undefined,
                   );
                 }
 

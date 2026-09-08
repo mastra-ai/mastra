@@ -16,7 +16,7 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 
-import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta, getMcpCallToolIsError } from './client.js';
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -684,11 +684,11 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
       const result = await calculateTool.execute?.({ expression: '1 + 1' });
-      // The isError result returns the full CallToolResult envelope (not bare structuredContent)
-      // so non-LLM consumers can detect the failure via `isError`, and it is not masked by a
-      // schema validation error.
-      expect(result).toEqual(callToolResult);
-      expect((result as any).isError).toBe(true);
+      // The isError result keeps the bare structuredContent shape (non-breaking) so consumers
+      // reading fields directly still work, and it is not masked by a schema validation error.
+      expect(result).toEqual(callToolResult.structuredContent);
+      // Non-LLM consumers detect the failure via the hidden isError symbol channel.
+      expect(getMcpCallToolIsError(result)).toBe(true);
       expect((result as any).error).toBeUndefined();
     } finally {
       await returnClient.disconnect().catch(() => {});
@@ -790,7 +790,7 @@ describe('MastraMCPClient - isError handling', () => {
     await client.disconnect().catch(() => {});
   });
 
-  it('returns the full envelope (isError reachable) when onToolError is "return" and structuredContent is present', async () => {
+  it('preserves the isError signal (non-breaking) when onToolError is "return" and structuredContent is present', async () => {
     const client = new InternalMastraMCPClient({
       name: 'iserror-return-structured-client',
       server: { url: testServer.baseUrl, onToolError: 'return' },
@@ -813,10 +813,11 @@ describe('MastraMCPClient - isError handling', () => {
 
     const tools = await client.tools();
     const result = (await tools['submitRecipe'].execute?.({})) as any;
-    // The failure signal must survive even though structuredContent is present.
-    expect(result.isError).toBe(true);
-    expect(result.structuredContent).toEqual(errorResult.structuredContent);
-    expect(result.content).toEqual(errorResult.content);
+    // The enumerable shape is unchanged (non-breaking): bare structuredContent with fields top-level.
+    expect(result).toEqual(errorResult.structuredContent);
+    // The failure signal survives via the hidden symbol channels, alongside content/_meta.
+    expect(getMcpCallToolIsError(result)).toBe(true);
+    expect(getMcpCallToolContent(result)).toEqual(errorResult.content);
 
     await client.disconnect().catch(() => {});
   });
