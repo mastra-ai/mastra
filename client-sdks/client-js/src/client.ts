@@ -841,7 +841,9 @@ export class MastraClient extends BaseResource {
   public readMcpServerResource(
     serverId: string,
     uri: string,
-  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  ): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
       method: 'POST',
       body: { uri },
