@@ -1032,12 +1032,13 @@ export class MemoryPG extends MemoryStorage {
   /**
    * Reads one page of messages together with the total row count.
    *
-   * `COUNT(*) OVER ()` reports the count over the whole WHERE result on the same
-   * statement as the page, so the page costs one database round-trip instead of
-   * two. The page and the count also come from one snapshot, so the count always
-   * describes the returned rows. A separate `COUNT(*)` runs only when the page is
-   * empty and the caller asked for a page after the last row, because a window
-   * function has no row to carry the count on.
+   * Every page query carries a skinny scalar `(SELECT COUNT(*) ...)` subquery that
+   * reports the total over the whole WHERE result on the same statement as the page,
+   * so the page costs one database round-trip instead of two. The page and the count
+   * also come from one snapshot, so the count always describes the returned rows. A
+   * separate `COUNT(*)` runs only as a fallback when the page is empty and the caller
+   * asked for a page after the last row, because there is then no row to carry the
+   * count on.
    */
   async #fetchMessagePage({
     selectStatement,
