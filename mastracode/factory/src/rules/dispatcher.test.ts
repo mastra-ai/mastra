@@ -1973,6 +1973,41 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('approves a plan written by the in-flight run the kickoff was queued onto, instead of redelivering', async () => {
+    // Same landed-check miss, but the run stops on submit_plan with plan
+    // review off: the park goes to the approval loop, never to a redelivery.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-delivered-then-planned',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      suspendsOnPlan: true,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      autoApprovePlans: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+      resumeData: { action: 'approved' },
+      toolCallId: 'call-plan',
+    });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+  });
+
   it('redelivers a kickoff dropped onto an ending run once that run finishes', async () => {
     // The condition that frees the session is the in-flight run ending, which
     // takes as long as a turn takes. Retrying on the generic backoff spends all
