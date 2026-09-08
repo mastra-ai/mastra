@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
 import type { ScoreRecord } from './scores';
+import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
 export const TRACE_QUERY_MAX_NODES = 100;
@@ -217,22 +218,8 @@ export type TraceQueryField =
   | 'entityType'
   | 'environment'
   | 'status';
-export type TraceQuerySpanField =
-  | 'name'
-  | 'spanType'
-  | 'model'
-  | 'provider'
-  | 'startedAt'
-  | 'endedAt'
-  | 'durationMs'
-  | 'status'
-  | 'error'
-  | 'entityType'
-  | 'entityId'
-  | 'entityName'
-  | 'entityVersionId'
-  | 'parentEntityVersionId'
-  | 'rootEntityVersionId';
+type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
+export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
 export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
 export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
@@ -373,7 +360,7 @@ const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
   status: { type: 'string', operators: STRING_OPERATORS },
 };
 
-const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
+const SPAN_FIELD_RULES = {
   name: { type: 'string', operators: STRING_OPERATORS },
   spanType: { type: 'string', operators: STRING_OPERATORS },
   model: { type: 'string', operators: STRING_OPERATORS },
@@ -389,7 +376,7 @@ const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
   entityVersionId: { type: 'string', operators: STRING_OPERATORS },
   parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
   rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
-};
+} as const satisfies Partial<Record<Extract<keyof SpanRecord, string> | TraceQueryDerivedSpanField, FieldRule>>;
 
 const SCORE_FIELD_RULES = {
   scorerId: { type: 'string', operators: STRING_OPERATORS },
