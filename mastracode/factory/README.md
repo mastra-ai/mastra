@@ -29,6 +29,32 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Product telemetry
+
+Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
+
+| Property                              | Meaning                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `activity`                            | `page_view` for a visible screen, or `interaction` for pointer/keyboard activity |
+| `page`                                | A bounded category such as `work`, `review`, or `settings`; never a URL          |
+| `platform_user_id`, `platform_org_id` | Opaque IDs from the authenticated platform account                               |
+| `platform_project_id`                 | `MASTRA_PROJECT_ID`, when configured                                             |
+| `platform_hosted`                     | Whether a nonempty `MASTRA_DEPLOYMENT_ID` is present                             |
+| `deployment_id`, `platform_region`    | `MASTRA_DEPLOYMENT_ID` and `MASTRA_PLATFORM_REGION`, when configured             |
+| `schema_version`                      | `1`                                                                              |
+
+The person ID is `factory:platform:<user ID>`, consistent across local and hosted servers. This does not merge existing CLI or platform analytics profiles. A local server can have a platform project ID and use platform services while `platform_hosted` remains `false`. Non-platform hosting includes both local and other self-hosted servers; this event does not distinguish them.
+
+Count unique people per day for visitors, and filter to `activity = interaction` for engaged users. Group by `platform_project_id` for project adoption. Interaction events are limited to once per minute per mounted browser app, and the server caps captures at 60 per minute per account/organization per process. Hidden tabs do not capture activity, and there is no background heartbeat. These are best-effort usage signals, not a record of successful product actions.
+
+To disable collection, set this on the Factory Server:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=true
+```
+
+`1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
+
 ### Board lifecycle rules
 
 Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
@@ -65,14 +91,55 @@ Handlers return one typed decision or `undefined`. Supported sources are `issue`
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. The web deployment now uses the guarded Work default rather than its former unconditional intake handler, so noncandidate or manual arrivals no longer start merely from entering Intake.
 
-Global rules now contain only the shared audit `version` and tool-result handlers:
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
+
+### Board tool-result rules
+
+A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:
 
 ```typescript
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import { defineBoard } from '@mastra/factory/boards';
+import type { BoardToolResultRuleHandler } from '@mastra/factory/boards';
 
-const rules = defaultFactoryRules({ version: 'deployment-v2' });
-// Pass rules to MastraFactory. Optional tool overrides remain under overrides.tools.
+const shipIt: BoardToolResultRuleHandler = context => {
+  if (context.result.status !== 'success' || context.item.stages[0] !== 'queued') return;
+  return { type: 'notify', idempotencyKey: `${context.ingress.id}:shipped`, title: 'Release shipped' };
+};
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+  tools: { ship_it: { onResult: shipIt } },
+});
 ```
+
+The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
+
+Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+
+### Config version
+
+`configVersion` is an operator-maintained deployment label stamped onto transition audit rows, deferred decisions, reconciler audit, and the session kickoff header (`Config: …`). Nothing branches on it; it exists so an audit row can be traced back to the deployment that produced it. It defaults to `factory-config-v1` and must be a non-empty bounded string. The storage column keeps its shipped name, `rule_set_version`.
+
+```typescript
+new MastraFactory({ storage, configVersion: 'deployment-v2' });
+```
+
+**Migration:** The `rules` option, `FactoryRules`, `defaultFactoryRules`, and the `@mastra/factory/rules/defaults` subpath are gone. Passing `rules` throws at construction with a pointer to the replacements.
+
+```typescript
+// before
+new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrides: { tools: { my_tool: { onResult } } } }) });
+// after
+new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
+```
+
+Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
 
 ### Board transition policy
 
@@ -185,7 +252,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle handlers; only tool-result configuration remains global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -222,7 +289,7 @@ const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
 
 Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
 
-The global rule version remains shared audit metadata for Linear evaluations. Update the deployment-owned version when handler behavior changes; it does not change ingress identity or replay semantics.
+`MastraFactory({ configVersion })` is the deployment-owned label stamped on Linear evaluations and audit records. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
 ### GitHub review commands
 

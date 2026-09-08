@@ -1,5 +1,5 @@
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
-import type { BoardPhaseKind } from './define-board.js';
+import type { BoardPhaseKind, BoardToolResultRuleHandler } from './define-board.js';
 import type { BoardRegistry } from './registry.js';
 
 export interface PhaseSemantics {
@@ -32,6 +32,18 @@ export function resolvePhaseSemantics(
   if (!board || !kind) return undefined;
   const role = board.roleForPhase(phase);
   return role === undefined ? { kind } : { kind, role };
+}
+
+/**
+ * Tool-result rule the installed board declares for `toolName`. Undefined when the board is
+ * not installed or declares no rule for the tool; callers must run nothing in that case.
+ */
+export function resolveBoardToolRule(
+  boards: BoardRegistry,
+  boardId: string,
+  toolName: string,
+): BoardToolResultRuleHandler | undefined {
+  return boards.get(boardId)?.tools[toolName]?.onResult;
 }
 
 /** Semantics of the single stage a work item currently occupies; undefined for multi-stage rows. */

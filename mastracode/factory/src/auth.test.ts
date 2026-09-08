@@ -597,6 +597,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       // No-org accounts are bootstrapped into a personal org during /auth/me.
       user: {
         userId: 'user_me',
@@ -622,6 +623,7 @@ describe('mountFactoryAuth /auth routes (enabled)', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       user: { email: 'user@example.com', name: 'User', organizationId: 'org_a', userId: 'user_1' },
       provider: 'workos',
     });

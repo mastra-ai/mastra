@@ -79,13 +79,39 @@ function getToolNameFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolU
   return part.type === 'dynamic-tool' ? sanitizeToolName(part.toolName) : getToolNameFromType(part.type);
 }
 
+/**
+ * v6 splits tool provider metadata across `callProviderMetadata` and
+ * `resultProviderMetadata`, but a Mastra part has one slot. Reading only the call half
+ * dropped the `toModelOutput` projection prompt building looks for (issue #22012).
+ * The result half wins on conflict, being the later of the two.
+ */
+function mergeToolUIPartProviderMetadata(
+  part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart,
+): MastraProviderMetadata | undefined {
+  const callMetadata = 'callProviderMetadata' in part ? part.callProviderMetadata : undefined;
+  const resultMetadata = 'resultProviderMetadata' in part ? part.resultProviderMetadata : undefined;
+
+  if (!resultMetadata) return toMastraProviderMetadata(callMetadata);
+  if (!callMetadata) return toMastraProviderMetadata(resultMetadata);
+
+  // Merge per provider namespace so a result that only sets `mastra.modelOutput` keeps
+  // the call-time keys sitting beside it.
+  const merged: AIV6Type.ProviderMetadata = { ...callMetadata };
+  for (const [providerKey, resultValue] of Object.entries(resultMetadata)) {
+    const callValue = merged[providerKey];
+    merged[providerKey] = callValue ? { ...callValue, ...resultValue } : resultValue;
+  }
+
+  return toMastraProviderMetadata(merged);
+}
+
 function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type.DynamicToolUIPart) {
   const base = {
     toolCallId: part.toolCallId,
     toolName: getToolNameFromUIPart(part),
     args: normalizeToolArgs(part.input),
     approval: 'approval' in part ? toMastraApproval(part.approval) : undefined,
-    providerMetadata: 'callProviderMetadata' in part ? toMastraProviderMetadata(part.callProviderMetadata) : undefined,
+    providerMetadata: mergeToolUIPartProviderMetadata(part),
     providerExecuted: part.providerExecuted,
     title: part.title,
     preliminary: 'preliminary' in part ? part.preliminary : undefined,

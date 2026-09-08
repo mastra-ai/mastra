@@ -4,7 +4,6 @@ import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';
@@ -110,7 +109,7 @@ async function githubSetup(
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
       storage: seeded.workItems,
-      rules: builtInFactoryRules(),
+      configVersion: 'factory-config-v1',
       boards: input.boards ?? createBoardRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
@@ -328,7 +327,7 @@ describe('issue reconcilers', () => {
         },
         {
           storage: { projects: seeded.projects },
-          rules: { config: builtInFactoryRules(), workItems: seeded.workItems, boards: createBoardRegistry() },
+          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
         } as never,
       );
 

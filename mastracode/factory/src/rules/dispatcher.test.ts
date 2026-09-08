@@ -6,7 +6,6 @@ import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../route
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -199,6 +198,8 @@ function createSession(
   const controller = {
     createSession: vi.fn(async () => session),
     getSessionByResource: vi.fn(async (): Promise<typeof session | undefined> => session),
+    // Empty registry by default: the level-triggered timeout check sees no run.
+    listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
   };
   return {
     controller,
@@ -218,9 +219,9 @@ async function queueDecision(
   options?: { sourceKey?: string; ingress?: string },
 ) {
   const item = await createItem(storage, options?.sourceKey);
-  const rules = defaultFactoryRules({ version: 'rules-v1' });
+  const configVersion = 'rules-v1';
   const boards = createLifecycleTestRegistry({ execute: { issue: { onEnter: () => decision } } });
-  const transitionService = new FactoryTransitionService({ storage, rules, boards });
+  const transitionService = new FactoryTransitionService({ storage, configVersion, boards });
   const result = await transitionService.transition({
     orgId: 'org-1',
     factoryProjectId: PROJECT_ID,
@@ -252,7 +253,7 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
     destinationStage: item.stages[0]!,
     actorId: 'user-1',
     ingress: { identity: `arm-${armCount}`, triggerType: 'human', transitionId: `arm-${armCount}` },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     causalChain: [],
     evaluation: { outcome: 'accepted', decisions: [] },
     autonomy: 'arm',
@@ -315,7 +316,7 @@ async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprove
   return {
     item,
     transitionService: new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     }),
   };
@@ -332,7 +333,7 @@ describe('FactoryDecisionDispatcher', () => {
     const reconcileToolResults = vi.fn(async () => {});
     const { controller } = createSession();
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -362,7 +363,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
       reconcileIntervalMs: 30_000,
@@ -397,7 +398,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       staleBindingSweepIntervalMs: 10 * 60_000,
       staleBindingTtlMs: 24 * 60 * 60_000,
@@ -433,7 +434,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
     });
@@ -752,7 +753,7 @@ describe('FactoryDecisionDispatcher', () => {
     const item = await createItem(storage);
     await bindWorkRun(storage, item.id);
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
-    const transitionService = new FactoryTransitionService({ storage, rules: builtInFactoryRules() });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'factory-config-v1' });
     const transitioned = await transitionService.transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
@@ -1726,7 +1727,7 @@ describe('FactoryDecisionDispatcher', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.skillCompletionObservationTimeoutMs);
+      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
 
       // An unobserved run end is the silent-stall failure mode: the decision
@@ -1736,6 +1737,139 @@ describe('FactoryDecisionDispatcher', () => {
         attempts: 1,
         lastError: expect.stringContaining('terminal event was not observed'),
       });
+      expect(getAgentEndListenerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps observing past the window while the registry still shows the run in flight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'long-run-still-active',
+      });
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      const dispatch = dispatcher.runOnce();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+
+      // Two heartbeats elapse; the run is slow, not stalled.
+      await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs * 2);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'leased' });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await vi.advanceTimersByTimeAsync(0);
+      await dispatch;
+
+      // No false retry, so no delivery-generation bump and no duplicate kickoff.
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        deliveryGeneration: 0,
+      });
+      expect(getAgentEndListenerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails a run terminally once it outlives the observation timeout, without a duplicate kickoff', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: 'long-run-overdue',
+      });
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: 'thread-1' }]);
+      const heartbeat = FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs;
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        isAutoRunEnabled: async () => true,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        skillCompletionObservationTimeoutMs: heartbeat * 3,
+      });
+
+      const dispatch = dispatcher.runOnce();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(heartbeat * 3);
+      await dispatch;
+
+      // Terminal: a hung run must not be retried into the same busy session,
+      // and the lease and in-flight slot must come back.
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'failed',
+        failureCode: 'run_overdue',
+        lastError: expect.stringContaining('still in flight'),
+      });
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
       expect(getAgentEndListenerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -2110,7 +2244,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2118,7 +2252,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2149,7 +2283,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2157,7 +2291,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-2', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2185,7 +2319,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage, false);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2193,7 +2327,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-3', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2237,7 +2371,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2245,7 +2379,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2274,7 +2408,7 @@ describe('FactoryDecisionDispatcher', () => {
     // Work is not installed here, so `work/canceled` has no declared semantics: fail closed and ask.
     const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
       storage,
     });
@@ -2283,7 +2417,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2324,7 +2458,7 @@ describe('FactoryDecisionDispatcher', () => {
       })
     ).item;
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     // The PR closes after its review card already settled: the mirrored move has nowhere to go.
@@ -2333,7 +2467,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-after-done', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2384,7 +2518,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2392,7 +2526,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'external-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2438,7 +2572,7 @@ describe('FactoryDecisionDispatcher', () => {
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         planning: {
           issue: {
@@ -2501,7 +2635,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2509,7 +2643,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'legacy-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2549,7 +2683,7 @@ describe('FactoryDecisionDispatcher', () => {
       })
     ).item;
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2557,7 +2691,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'factory-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'factory[bot]', trusted: false, factoryAuthored: true },
       outcome: { status: 'accepted' },
@@ -2598,7 +2732,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     const item = await createItem(storage);
@@ -2654,7 +2788,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     const item = await createItem(storage);
@@ -2718,7 +2852,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
-  it('fails the run loudly when plan review is on and nobody answers the plan', async () => {
+  it('leaves a plan parked for review and calls the kickoff done', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2739,25 +2873,14 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    // The pause is a designed checkpoint, not a crash — but it must be visible:
-    // the decision lands in Needs attention with its reason attached.
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
-
-    // Not just the row: the surface a person actually reads.
+    expect(record).toMatchObject({ status: 'succeeded', failureCode: null });
     const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
-    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
-    expect(await provider.counts(scope)).toMatchObject({ open: 1, unread: 1 });
-    const page = await provider.page(scope, { view: 'open', search: undefined, before: undefined, limit: 10 });
-    expect(page.entries[0]?.item).toMatchObject({
-      kind: 'automation-failed',
-      failureCode: 'plan_awaiting_approval',
-      workItemId: record?.workItemId,
-    });
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
-  it('escalates a run parked on a question nobody is there to answer', async () => {
+  it('leaves a run parked on a question to whoever reads the inbox', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2780,7 +2903,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+    expect(record).toMatchObject({ status: 'succeeded' });
   });
 
   it('auto-approve answers plans, never questions', async () => {
@@ -2808,7 +2931,7 @@ describe('FactoryDecisionDispatcher', () => {
     // the project's behalf would be inventing the answer.
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+    expect(record).toMatchObject({ status: 'succeeded' });
 
     // And never into failing a person's pause: a person-started run parked on
     // ask_user is that person's question to answer, not a stall.
@@ -2943,7 +3066,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.respondToToolSuspension).toHaveBeenCalledTimes(3);
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+    expect(record).toMatchObject({ status: 'succeeded' });
   });
 
   it('never runs a dismissed proposal', async () => {
@@ -2995,7 +3118,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session, emitAgentEnd } = createSession();
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: {
           issue: {
@@ -3027,7 +3150,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'failed-before-manual-run', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: beforeManualRun.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3171,7 +3294,7 @@ describe('FactoryDecisionDispatcher', () => {
       kickoffMessage: null,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) },
+      controller: { getSessionByResource: vi.fn(async () => undefined), listActiveThreadRuns: vi.fn(() => []) },
       isAutoRunEnabled: async () => true,
       transitionService,
       storage,
@@ -3601,7 +3724,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3637,7 +3760,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: null,
       ingress: { identity: 'github:pull-request:2:opened', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3660,7 +3783,7 @@ describe('FactoryDecisionDispatcher', () => {
     const resolveLinkedWorkItemParentId = vi.fn().mockResolvedValue(parent.id);
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3712,7 +3835,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
       ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3734,7 +3857,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3779,7 +3902,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
       ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3801,7 +3924,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3846,7 +3969,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3917,7 +4040,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3977,7 +4100,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -4023,7 +4146,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -4200,7 +4323,7 @@ describe('FactoryDecisionDispatcher', () => {
     return {
       transitionService: new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
       }),
     };
   }
@@ -4350,7 +4473,7 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller } = createSession();
       const transitionService = new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,
