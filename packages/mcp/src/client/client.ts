@@ -1493,16 +1493,37 @@ export class InternalMastraMCPClient extends MastraBase {
                 if (res.isError && this.onToolError === 'throw') {
                   const errorText = extractToolErrorText(res.content);
                   this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+                  // Preserve the server's structured error data (validation codes, field-level
+                  // details, etc.) so a caller that catches this error can still recover it.
+                  // `details` values must be scalars, so serialize to a JSON string; consumers
+                  // JSON.parse it back. Omitted entirely when the server sent no structuredContent.
                   throw new MastraError({
                     id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
                     domain: ErrorDomain.MCP,
                     category: ErrorCategory.THIRD_PARTY,
                     text: errorText,
-                    details: { toolName: tool.name, serverName: this.name },
+                    details: {
+                      toolName: tool.name,
+                      serverName: this.name,
+                      ...(res.structuredContent !== undefined
+                        ? { structuredContent: JSON.stringify(res.structuredContent) }
+                        : {}),
+                    },
                   });
                 }
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
+
+                // Non-LLM consumers (`onToolError: 'return'`) need the failure signal to survive
+                // regardless of response shape. Returning bare `structuredContent` below would drop
+                // `isError`, so an error result is only detectable when the tool has no
+                // `structuredContent`. Return the full CallToolResult envelope for every error
+                // result so `isError`, `content`, and `structuredContent` are all reachable.
+                // (The `onToolError: 'throw'` case already returned above, so reaching here with
+                // `res.isError` implies `onToolError === 'return'`.)
+                if (res.isError) {
+                  return res;
+                }
 
                 if (res.structuredContent !== undefined) {
                   // Enforce the server-advertised outputSchema before the result reaches the

@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import { MastraError } from '@mastra/core/error';
 import { toStandardSchema } from '@mastra/schema-compat';
 import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
@@ -683,7 +684,11 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
       const result = await calculateTool.execute?.({ expression: '1 + 1' });
-      expect(result).toEqual(callToolResult.structuredContent);
+      // The isError result returns the full CallToolResult envelope (not bare structuredContent)
+      // so non-LLM consumers can detect the failure via `isError`, and it is not masked by a
+      // schema validation error.
+      expect(result).toEqual(callToolResult);
+      expect((result as any).isError).toBe(true);
       expect((result as any).error).toBeUndefined();
     } finally {
       await returnClient.disconnect().catch(() => {});
@@ -781,6 +786,73 @@ describe('MastraMCPClient - isError handling', () => {
     const tools = await client.tools();
     const result = await tools['fetch'].execute?.({});
     expect(result).toEqual(failingResult);
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('returns the full envelope (isError reachable) when onToolError is "return" and structuredContent is present', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-return-structured-client',
+      server: { url: testServer.baseUrl, onToolError: 'return' },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'submitRecipe', description: 'Submits a recipe', inputSchema: { type: 'object' as const } }],
+    });
+    const errorResult = {
+      content: [{ type: 'text', text: 'Recipe validation failed.' }],
+      structuredContent: {
+        code: 'VALIDATION_FAILED',
+        validationResults: [{ code: 'MISSING_INGREDIENTS', level: 'ERROR', message: 'Ingredient list is required.' }],
+      },
+      isError: true,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(errorResult);
+
+    const tools = await client.tools();
+    const result = (await tools['submitRecipe'].execute?.({})) as any;
+    // The failure signal must survive even though structuredContent is present.
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toEqual(errorResult.structuredContent);
+    expect(result.content).toEqual(errorResult.content);
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('includes structuredContent in the thrown MastraError details when onToolError is "throw"', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-throw-structured-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'submitRecipe', description: 'Submits a recipe', inputSchema: { type: 'object' as const } }],
+    });
+    const structuredContent = {
+      code: 'VALIDATION_FAILED',
+      validationResults: [{ code: 'MISSING_INGREDIENTS', level: 'ERROR', message: 'Ingredient list is required.' }],
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'Recipe validation failed.' }],
+      structuredContent,
+      isError: true,
+    });
+
+    const tools = await client.tools();
+    let caught: any;
+    try {
+      await tools['submitRecipe'].execute?.({});
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(MastraError);
+    expect(caught.message).toContain('Recipe validation failed.');
+    // structuredContent is serialized to a JSON string so it survives on the scalar-only details.
+    expect(JSON.parse(caught.details.structuredContent)).toEqual(structuredContent);
 
     await client.disconnect().catch(() => {});
   });
