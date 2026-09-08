@@ -4,7 +4,7 @@ import { ARRIVING_CLASS } from '@mastra/playground-ui/tokens';
 import type { MastraTextPart } from '@mastra/react';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -326,6 +326,58 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  describe('when plain tool calls run back to back', () => {
+    const toolCall = (toolCallId: string, toolName = 'genericTool', state = 'result') =>
+      ({
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName,
+          toolCallId,
+          state,
+          args: { q: toolCallId },
+          ...(state === 'result' ? { result: { ok: true } } : {}),
+        },
+      }) as never;
+    const withCalls = (parts: MastraDBMessage['content']['parts'], metadata: Record<string, unknown> = {}) =>
+      baseMessage({ role: 'assistant', content: { format: 2, metadata: { mode: 'stream', ...metadata }, parts } });
+
+    it('folds three of them into one group row that opens onto the cards', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3')]));
+
+      const group = screen.getByRole('group', { name: 'Tool group: 3 steps' });
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(0);
+
+      fireEvent.click(within(group).getByRole('button'));
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(3);
+    });
+
+    it('leaves two of them as their own rows', () => {
+      const { container } = renderRow(withCalls([toolCall('call-1'), toolCall('call-2')]));
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(2);
+    });
+
+    it('keeps a call waiting on approval out of the fold', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('call-2'), toolCall('call-3', 'dangerousTool', 'call')], {
+          requireApprovalMetadata: { 'call-3': { toolCallId: 'call-3', toolName: 'dangerousTool', args: {} } },
+        }),
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(screen.getByText('Approve')).toBeTruthy();
+    });
+
+    it('lets a docked task update sit inside the run without breaking it', () => {
+      renderRow(
+        withCalls([toolCall('call-1'), toolCall('task-1', 'task_update'), toolCall('call-2'), toolCall('call-3')]),
+      );
+
+      expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
+    });
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {
