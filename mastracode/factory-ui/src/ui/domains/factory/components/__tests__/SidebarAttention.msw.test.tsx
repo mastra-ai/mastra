@@ -122,7 +122,7 @@ function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
     findingKey: `decision-stuck:${DECISION_ID}`,
     findingTitle: 'A decision is stuck',
     evidence: 'The decision has been retrying past its backoff.',
-    since: '2026-09-03T04:45:00.000Z',
+    beganAt: '2026-09-03T04:45:00.000Z',
     suggestedRepair: null,
     occurrence: 0,
     workItemId: 'item-1',

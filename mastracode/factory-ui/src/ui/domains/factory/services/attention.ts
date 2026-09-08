@@ -58,7 +58,7 @@ export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionI
   findingKey: string;
   findingTitle: string;
   evidence: string;
-  since: string | null;
+  beganAt: string | null;
   suggestedRepair: FactoryHealthRepair | null;
 }
 

@@ -21,7 +21,7 @@ describe('supervisor prompts', () => {
       workItemId: 'item-1',
       workItemNumber: 123,
       evidence: 'The decision failed.',
-      since: '2026-09-03T04:59:59.000Z',
+      beganAt: '2026-09-03T04:59:59.000Z',
       suggestedRepair: null,
     });
 

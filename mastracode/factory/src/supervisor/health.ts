@@ -44,7 +44,7 @@ export interface FactoryHealthFinding {
   /** One sentence of grounded evidence: ids, timestamps, error text. */
   evidence: string;
   /** ISO instant the condition began, when it is age-based. */
-  since: string | null;
+  beganAt: string | null;
   suggestedRepair: FactoryHealthRepair | null;
 }
 
@@ -119,7 +119,7 @@ function stageEnteredAt(item: WorkItemRow): Date | null {
 }
 
 function beganAtMs(finding: FactoryHealthFinding): number {
-  return finding.since === null ? Number.MAX_SAFE_INTEGER : Date.parse(finding.since);
+  return finding.beganAt === null ? Number.MAX_SAFE_INTEGER : Date.parse(finding.beganAt);
 }
 
 interface HealthInputs {
@@ -158,7 +158,7 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) has been ${decision.status} since ${decision.availableAt.toISOString()} with ${decision.attempts} attempt(s) and was never leased; is the dispatcher running?`,
-          since: decision.availableAt.toISOString(),
+          beganAt: decision.availableAt.toISOString(),
           suggestedRepair: null,
         });
       }
@@ -172,7 +172,7 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) is still leased by ${decision.leaseOwner ?? 'unknown'} though the lease expired at ${decision.leaseExpiresAt.toISOString()}; the worker likely died mid-dispatch.`,
-          since: decision.leaseExpiresAt.toISOString(),
+          beganAt: decision.leaseExpiresAt.toISOString(),
           suggestedRepair: null,
         });
       }
@@ -191,7 +191,7 @@ export function computeFactoryHealth(
         id: `start-stalled:${start.id}`,
         ...base,
         evidence: `Pending start ${start.id}${binding ? ` for the ${binding.role} seat` : ''} is ${start.status} since ${start.createdAt.toISOString()} after ${start.attempts} attempt(s)${start.lastError ? `: ${truncate(start.lastError)}` : '.'}`,
-        since: start.createdAt.toISOString(),
+        beganAt: start.createdAt.toISOString(),
         suggestedRepair: binding ? { action: 'revoke-binding', bindingId: binding.id } : null,
       });
     }
@@ -210,7 +210,7 @@ export function computeFactoryHealth(
         evidence: item
           ? `Binding ${binding.id} (${binding.role}) is still active though the card is in ${stage ?? item.stages.join('+')}.`
           : `Binding ${binding.id} (${binding.role}) is active for work item ${binding.workItemId}, which no longer exists.`,
-        since: item ? (stageEnteredAt(item)?.toISOString() ?? null) : null,
+        beganAt: item ? (stageEnteredAt(item)?.toISOString() ?? null) : null,
         suggestedRepair: { action: 'revoke-binding', bindingId: binding.id },
       });
       continue;
@@ -246,7 +246,7 @@ export function computeFactoryHealth(
           id: `held-waiting:${item.id}`,
           ...base,
           evidence: `Triaged as "${item.triageType}" and waiting for a maintainer's decision since ${enteredAt!.toISOString()}.`,
-          since: enteredAt!.toISOString(),
+          beganAt: enteredAt!.toISOString(),
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
@@ -257,7 +257,7 @@ export function computeFactoryHealth(
         id: `seat-missing:${item.id}`,
         ...base,
         evidence: `In ${stage} since ${enteredAt?.toISOString() ?? 'unknown'} with no active seat and no decision in flight; nothing will move it.`,
-        since: enteredAt?.toISOString() ?? null,
+        beganAt: enteredAt?.toISOString() ?? null,
         suggestedRepair: role ? { action: 'start-run', workItemId: item.id, role } : null,
       });
     }
@@ -268,7 +268,7 @@ export function computeFactoryHealth(
         id: `label-drift:${item.id}`,
         ...base,
         evidence: `Accepted at ${item.acceptedAt.toISOString()} but the last observed labels still include "${NEEDS_APPROVAL_LABEL}".`,
-        since: item.acceptedAt.toISOString(),
+        beganAt: item.acceptedAt.toISOString(),
         suggestedRepair: { action: 'reconcile-labels', workItemId: item.id },
       });
     }

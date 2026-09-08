@@ -150,7 +150,7 @@ describe('supervisor finding attention items', () => {
           workItemNumber: null,
           title: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
-          since: '2029-12-31T23:50:00.000Z',
+          beganAt: '2029-12-31T23:50:00.000Z',
           suggestedRepair: null,
         },
       ],
@@ -194,7 +194,7 @@ describe('supervisor finding attention items', () => {
       workItemNumber: null,
       title: 'A decision is stuck',
       evidence: 'decision-1 has retried 2 times.',
-      since: '2029-12-31T23:50:00.000Z',
+      beganAt: '2029-12-31T23:50:00.000Z',
       suggestedRepair: null,
     };
     const openedAt = new Date('2030-01-01T00:00:00.000Z');

@@ -101,9 +101,9 @@ function FindingsContent({
                               {finding.evidence}
                             </Txt>
                           </div>
-                          {finding.since !== null && (
+                          {finding.beganAt !== null && (
                             <Txt variant="ui-xs" className="text-neutral3 shrink-0">
-                              {relativeTime(finding.since)}
+                              {relativeTime(finding.beganAt)}
                             </Txt>
                           )}
                         </div>
