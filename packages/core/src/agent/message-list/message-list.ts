@@ -1284,6 +1284,80 @@ export class MessageList {
   }
 
   /**
+   * Reconcile provider-executed tool calls that can no longer produce a result
+   * because the model stream terminated with an error. Rewrites matching
+   * `state: 'call' | 'partial-call'` parts on the given assistant message to a
+   * terminal `state: 'output-error'` (preserving args, providerExecuted, and
+   * providerMetadata) so they are no longer indistinguishable from a live
+   * pending tool — see issue #23315.
+   *
+   * Leaves client-executed tools (`providerExecuted !== true`), suspended /
+   * approval parts, and already-resolved (`result` / `output-error`) parts
+   * untouched, as well as any preceding text or successful results. Keeps the
+   * legacy AIV4 `content.toolInvocations` array in sync and moves the message
+   * to the `response` source so it is re-saved. Returns `true` if any part
+   * was reconciled.
+   */
+  public reconcileAbandonedProviderToolCalls(messageId: string, errorText?: string): boolean {
+    if (!messageId) {
+      return false;
+    }
+
+    const resolvedErrorText =
+      errorText ?? 'Provider tool call did not complete: the model stream terminated with an error.';
+
+    const msg = this.messages.find(m => m.id === messageId && m.role === 'assistant');
+    if (!msg?.content?.parts) {
+      return false;
+    }
+
+    let changed = false;
+    const reconciledToolCallIds: string[] = [];
+
+    for (let i = 0; i < msg.content.parts.length; i++) {
+      const part = msg.content.parts[i];
+      if (part?.type !== 'tool-invocation') continue;
+      // Cast to access providerExecuted which exists at runtime but isn't in the base type
+      const candidate = part as typeof part & { providerExecuted?: boolean };
+      const state = candidate.toolInvocation?.state;
+      if (candidate.providerExecuted !== true || (state !== 'call' && state !== 'partial-call')) {
+        continue;
+      }
+
+      candidate.toolInvocation = {
+        ...candidate.toolInvocation,
+        state: 'output-error',
+        errorText: resolvedErrorText,
+      };
+      reconciledToolCallIds.push(candidate.toolInvocation.toolCallId);
+      changed = true;
+    }
+
+    if (!changed) {
+      return false;
+    }
+
+    // The legacy AIV4 `content.toolInvocations` array has no `output-error`
+    // state (its union is partial-call | call | result), so drop the abandoned
+    // entries instead of leaving them as a dangling `call` in AIV4 transcripts.
+    if (Array.isArray(msg.content.toolInvocations)) {
+      msg.content.toolInvocations = msg.content.toolInvocations.filter(
+        invocation => !reconciledToolCallIds.includes(invocation.toolCallId),
+      );
+    }
+
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+    this.updateLastCreatedAt(msg);
+
+    if (!this.stateManager.isResponseMessage(msg)) {
+      this.stateManager.removeMessage(msg);
+      this.stateManager.addToSource(msg, 'response');
+    }
+
+    return true;
+  }
+
+  /**
    * Merge a tool-result `inputPart` into the stored tool-invocation part at
    * `msg.content.parts[i]`: preserves the original call args, merges
    * providerExecuted/providerMetadata, merges per-toolCallId `backgroundTasks`
