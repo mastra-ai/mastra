@@ -25,8 +25,8 @@ function checkoutHint(item: FactoryRuleItemContext): string {
       : '';
   if (number === undefined) return `Check out the PR in this worktree first.${headBranch}`;
   const sessionBranch = workItemBranch(item);
-  const deepen = `git rev-parse --is-shallow-repository | grep -qx true && git fetch --unshallow --filter=blob:none origin`;
-  const refresh = `${deepen}; git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
+  const deepen = `if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi`;
+  const refresh = `${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
   return (
     `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +
