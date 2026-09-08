@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../events/pubsub';
 import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
+import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
@@ -88,7 +89,27 @@ const iterationStateSchema = baseIterationStateSchema.extend({
   modelList: z.array(z.any()).optional(),
 });
 
-type IterationState = z.infer<typeof iterationStateSchema>;
+/**
+ * Compile-time contract check: the durable between-iterations state must stay
+ * assignable to the engine-agnostic {@link LoopIterationState} shape that
+ * shared continuation logic operates on (both loops converge on it).
+ */
+type SatisfiesLoopIterationState<T extends LoopIterationState> = T;
+
+type IterationState = SatisfiesLoopIterationState<z.infer<typeof iterationStateSchema>>;
+
+/**
+ * Durable resolution of the shared {@link LoopRuntime} contract. Live handles
+ * (abort signal, `stopWhen`/`onIterationComplete` closures, the pre-bound
+ * signal drain) come from the in-process run registry — closures can't cross
+ * the wire — and the transport comes from the engine's predicate params.
+ */
+interface DurableLoopRuntime extends LoopRuntime {
+  /** Always resolved on the durable loop: run options ?? builder default. */
+  maxSteps: number;
+  /** Present when the run streams through a pubsub transport. */
+  pubsub?: PubSub;
+}
 
 /**
  * Builds the durable agent loop on the shared `AgenticLoopBuilder` topology.
@@ -124,6 +145,50 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    */
   protected override workflowFactory(): typeof createWorkflow {
     return this.#options?.engine === 'evented' ? createEventedWorkflow : createWorkflow;
+  }
+
+  // ── Runtime hooks ──────────────────────────────────────────────────────
+
+  /**
+   * Resolve the runtime from serialized iteration state + the run registry
+   * (see {@link DurableLoopRuntime}). Cross-process engines (e.g. Inngest
+   * after a worker restart) won't have a registry entry; every
+   * registry-derived field is then undefined and the loop falls back to
+   * maxSteps-only continuation.
+   */
+  protected override resolveRuntime(predicateParams: any): DurableLoopRuntime {
+    const state = predicateParams.inputData as IterationState;
+    const initData = predicateParams.getInitData() as DurableAgenticWorkflowInput;
+    const mastra = predicateParams.mastra as Mastra | undefined;
+    const registryEntry = globalRunRegistry.get(state.runId);
+    return {
+      runId: state.runId,
+      agentId: state.agentId,
+      agentName: state.agentName,
+      threadId: initData?.state?.threadId,
+      resourceId: initData?.state?.resourceId,
+      maxSteps: state.options?.maxSteps ?? this.#maxSteps,
+      mastra,
+      logger: mastra?.getLogger?.(),
+      abortSignal: registryEntry?.abortSignal,
+      stopWhen: registryEntry?.stopWhen,
+      onIterationComplete: registryEntry?.onIterationComplete,
+      // runId is pre-bound at registry-entry creation; scope defaults to
+      // 'pending' in the underlying stream runtime (ledger L13).
+      drainPendingSignals: registryEntry?.drainPendingSignals,
+      pubsub: predicateParams[PUBSUB_SYMBOL] as PubSub | undefined,
+    };
+  }
+
+  /**
+   * Chunk transport: publish through pubsub instead of enqueueing onto a live
+   * stream controller. No-op when the run has no pubsub transport — callers
+   * that must not consume input without a transport (signal drain) guard on
+   * `pubsub` before draining.
+   */
+  protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown): void | Promise<void> {
+    if (!runtime.pubsub) return;
+    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -349,14 +414,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * iteration-complete observability event.
    */
   protected override buildContinuationPredicate(): LoopContinuationPredicate {
-    const maxSteps = this.#maxSteps;
-
     return async (params: any) => {
-      const { inputData, mastra } = params;
-      const state = inputData as IterationState;
+      const state = params.inputData as IterationState;
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
-      const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const rt = this.resolveRuntime(params);
 
       // ── Abort check ────────────────────────────────────────────────
       // If the abort signal has fired, stop the loop immediately.
@@ -365,7 +426,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // between steps (e.g. inside a tool). Override the stepResult
       // reason so the FINISH event carries 'abort' and the client sees
       // the correct finishReason.
-      if (registryEntry?.abortSignal?.aborted) {
+      if (rt.abortSignal?.aborted) {
         if (state.lastStepResult) {
           state.lastStepResult.reason = 'abort';
           state.lastStepResult.isContinued = false;
@@ -391,7 +452,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // flipped lastStepResult.isContinued by the time we get here.
       // Declared as `let` because signal drain may force isContinued later.
       let shouldContinue = state.lastStepResult?.isContinued === true;
-      const runMaxSteps = state.options?.maxSteps ?? maxSteps;
+      const runMaxSteps = rt.maxSteps;
       const underMaxSteps = state.iterationCount < runMaxSteps;
 
       // Evaluate user-supplied stopWhen predicate(s) parked on the registry
@@ -402,7 +463,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // and fall back to maxSteps only.
       let stopWhenMatched = false;
       if (shouldContinue && underMaxSteps && !hasFinishedSteps) {
-        const stopWhen = registryEntry?.stopWhen;
+        const stopWhen = rt.stopWhen;
         if (stopWhen && state.accumulatedSteps.length > 0) {
           const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
           // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
@@ -419,12 +480,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
       // Check if a delegation hook called ctx.bail() during this iteration.
       // The flag was set by the mapping step and propagated via iteration state.
-      const delegationBailed = !!(state as any).delegationBailed;
-      if (delegationBailed) {
+      if (state.delegationBailed) {
         hasFinishedSteps = true;
         hardStop = true;
         // Reset the flag so it doesn't carry forward
-        (state as any).delegationBailed = false;
+        state.delegationBailed = false;
       }
 
       // ── Inter-iteration signal drain ──────────────────────────────
@@ -433,19 +493,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // running. If signals are present, mark a response boundary,
       // rotate the messageId, add them to the transcript, emit them
       // to the stream, and force continuation so the LLM sees them.
-      if (pubsub && registryEntry?.drainPendingSignals) {
+      if (rt.pubsub && rt.drainPendingSignals) {
         try {
-          const pendingSignals = registryEntry.drainPendingSignals('pending');
+          const pendingSignals = rt.drainPendingSignals();
           if (pendingSignals.length > 0) {
-            const drainList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
-              state.messageListState,
-            );
+            const drainList = createRunMessageList({ mastra: rt.mastra }).deserialize(state.messageListState);
             const nextMessageId = drainList.rotateResponseMessageId();
             state.messageId = nextMessageId;
 
             for (const pendingSignal of pendingSignals) {
               const signalForTranscript = drainList.addSignal(pendingSignal);
-              await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+              await this.emitChunk(rt, signalForTranscript.toDataPart());
             }
 
             state.messageListState = drainList.serialize();
@@ -471,13 +529,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // the handler can return { continue: false } to stop, { continue: true }
       // to force-continue (if under maxSteps), and/or { feedback } to inject
       // a message before the next turn.
-      const onIterationComplete = registryEntry?.onIterationComplete;
+      const onIterationComplete = rt.onIterationComplete;
       if (onIterationComplete && !state.backgroundTaskPending) {
         const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
 
         try {
           // Deserialize messageList for the callback's messages snapshot
-          const callbackMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined });
+          const callbackMessageList = createRunMessageList({ mastra: rt.mastra });
           try {
             callbackMessageList.deserialize(state.messageListState);
           } catch {
@@ -502,10 +560,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             isFinal,
             finishReason: lastStep?.finishReason ?? 'unknown',
             runId: state.runId,
-            threadId: initData.state?.threadId,
-            resourceId: initData.state?.resourceId,
-            agentId: state.agentId,
-            agentName: state.agentName ?? state.agentId,
+            threadId: rt.threadId,
+            resourceId: rt.resourceId,
+            agentId: rt.agentId,
+            agentName: rt.agentName ?? rt.agentId,
             messages: callbackMessageList.get.all.db(),
           };
 
@@ -523,10 +581,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               // sees it on the next turn. Mirror the regular agent: mark it
               // with completionResult.suppressFeedback so isTaskComplete
               // scorers skip it.
-              const feedbackId =
-                (mastra as Mastra | undefined)?.generateId?.() ??
-                globalThis.crypto?.randomUUID?.() ??
-                `msg_${Date.now()}`;
+              const feedbackId = rt.mastra?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
               callbackMessageList.add(
                 {
                   id: feedbackId,
@@ -573,8 +628,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           }
         } catch (error) {
           // Log error but don't fail the iteration
-          const logger = (mastra as Mastra | undefined)?.getLogger?.();
-          logger?.error('Error in onIterationComplete hook:', error);
+          rt.logger?.error('Error in onIterationComplete hook:', error);
         }
       }
 
@@ -582,9 +636,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // the non-durable agentic loop. The mutated state.messageId flows into
       // the next singleIterationWorkflow input via map-to-llm-input.
       if (!isFinal) {
-        const boundaryList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
-          state.messageListState,
-        );
+        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(state.messageListState);
         state.messageId = boundaryList.rotateResponseMessageId();
         state.messageListState = boundaryList.serialize();
       }
@@ -594,9 +646,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // (via stream-adapter) can track progress. The in-process callback
       // above has already been evaluated and its result applied to the
       // continuation decision.
-      if (pubsub) {
+      if (rt.pubsub) {
         const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
-        await emitIterationCompleteEvent(pubsub, state.runId, {
+        await emitIterationCompleteEvent(rt.pubsub, state.runId, {
           iteration: state.iterationCount,
           maxIterations: runMaxSteps,
           text: lastStep?.text,
@@ -605,8 +657,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           isFinal,
           finishReason: lastStep?.finishReason,
           runId: state.runId,
-          threadId: initData.state?.threadId,
-          resourceId: initData.state?.resourceId,
+          threadId: rt.threadId,
+          resourceId: rt.resourceId,
           agentId: initData.agentId,
           agentName: initData.agentName,
         });

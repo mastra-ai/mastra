@@ -9,6 +9,7 @@ import { createEventedWorkflow, createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
+import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from './run-scope-keys';
@@ -109,6 +110,49 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    */
   protected workflowFactory(): typeof createWorkflow | typeof createEventedWorkflow {
     return createWorkflow;
+  }
+
+  // ── Runtime hooks ──────────────────────────────────────────────────────
+  // The plumbing seams engine subclasses override once, for every consumer,
+  // instead of once per step (PHASE3 Step 2 contracts).
+
+  /**
+   * Resolve the live, non-serializable view of the run that predicate (and,
+   * as they hoist, step) bodies operate through — see {@link LoopRuntime}.
+   * The main loop resolves everything from per-run params and RunScope; the
+   * durable subclass resolves from serialized iteration state + the run
+   * registry.
+   *
+   * `drainPendingSignals` is normalized here (ledger L13): each engine
+   * pre-binds `runId`, so consumers call `rt.drainPendingSignals?.()` and the
+   * underlying runtime defaults the scope to `'pending'`.
+   */
+  protected resolveRuntime(_predicateParams: unknown): LoopRuntime {
+    const { _internal, runId, ...rest } = this.params;
+    const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId, _internal };
+    const drainPendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals');
+    return {
+      runId,
+      agentId: rest.agentId,
+      agentName: rest.agentName,
+      threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+      resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+      maxSteps: rest.maxSteps,
+      mastra: rest.mastra,
+      logger: rest.logger,
+      stopWhen: rest.stopWhen,
+      onIterationComplete: rest.onIterationComplete,
+      drainPendingSignals: drainPendingSignals ? scope => drainPendingSignals(runId, scope) : undefined,
+    };
+  }
+
+  /**
+   * Transport hook: deliver a chunk to the run's client-facing stream. The
+   * main loop enqueues onto the live stream controller (closed-controller
+   * safe); the durable subclass publishes through pubsub.
+   */
+  protected emitChunk(_runtime: LoopRuntime, chunk: unknown): void | Promise<void> {
+    safeEnqueue(this.params.controller, chunk as ChunkType<OUTPUT>);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -252,24 +296,31 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * bail, and step accumulation.
    */
   protected buildContinuationPredicate(): LoopContinuationPredicate {
-    const { _internal, runId, messageList, controller, outputWriter, ...rest } = this.params;
+    const { _internal, runId, messageList, outputWriter, ...rest } = this.params;
 
     const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId, _internal };
 
-    // Track accumulated steps across iterations to pass to stopWhen
-    const accumulatedSteps: StepResult<Tools>[] = [];
-    // Track previous content to determine what's new in each step
-    let previousContentLength = 0;
-    // When continue:false + feedback, allow one more LLM turn then stop
-    let pendingFeedbackStop = false;
-    // When this loop is a resume (e.g. after tool approval), the suspended run
-    // already flushed its in-progress assistant message to storage. The first
-    // continuation must start a fresh response message instead of merging into
-    // that persisted row — see the guard in the predicate below (issue #19445).
-    let isResumeContinuationPending = !!rest.resumeContext;
+    // Between-iterations loop state, converged onto the engine-agnostic
+    // contract shape (the durable loop flows the same shape through workflow
+    // input/output as serialized state; here it stays in memory, owned by
+    // this predicate closure).
+    const state: MainLoopIterationState<StepResult<Tools>> = {
+      // Steps accumulated across iterations, passed to stopWhen
+      accumulatedSteps: [],
+      // Content length seen so far — determines what's new in each step
+      previousContentLength: 0,
+      // When continue:false + feedback, allow one more LLM turn then stop
+      pendingFeedbackStop: false,
+      // When this loop is a resume (e.g. after tool approval), the suspended run
+      // already flushed its in-progress assistant message to storage. The first
+      // continuation must start a fresh response message instead of merging into
+      // that persisted row — see the guard in the predicate below (issue #19445).
+      resumeContinuationPending: !!rest.resumeContext,
+    };
 
-    return async ({ inputData }) => {
-      const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
+    return async (predicateParams: any) => {
+      const rt = this.resolveRuntime(predicateParams);
+      const typedInputData = predicateParams.inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
       // First loop-back after a resume: the suspended run flushed its
@@ -283,8 +334,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // then reject the next turn ("thinking blocks in the latest assistant
       // message cannot be modified"). Seal the flushed message and rotate to a
       // fresh response message for the continuation. See issue #19445.
-      if (isResumeContinuationPending) {
-        isResumeContinuationPending = false;
+      if (state.resumeContinuationPending) {
+        state.resumeContinuationPending = false;
         const nextMessageId = rest.rotateResponseMessageId(
           typedInputData.stepResult?.messageId ?? typedInputData.messageId,
         );
@@ -295,7 +346,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         }
       }
 
-      const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
+      const pendingSignals = rt.drainPendingSignals?.() ?? [];
       if (pendingSignals.length > 0) {
         const nextMessageId = rest.rotateResponseMessageId(
           typedInputData.stepResult?.messageId ?? typedInputData.messageId,
@@ -303,7 +354,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         typedInputData.messageId = nextMessageId;
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = messageList.addSignal(pendingSignal);
-          safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          await this.emitChunk(rt, signalForTranscript.toDataPart());
         }
         if (typedInputData.stepResult) {
           typedInputData.stepResult.messageId = nextMessageId;
@@ -316,9 +367,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      if (pendingFeedbackStop) {
+      if (state.pendingFeedbackStop) {
         hasFinishedSteps = true;
-        pendingFeedbackStop = false;
+        state.pendingFeedbackStop = false;
       }
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
@@ -326,8 +377,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       );
 
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(previousContentLength);
-      previousContentLength = allContent.length;
+      const currentContent = allContent.slice(state.previousContentLength);
+      state.previousContentLength = allContent.length;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
@@ -361,16 +412,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
-      accumulatedSteps.push(currentStep);
+      state.accumulatedSteps.push(currentStep);
 
       // Only call stopWhen if we're continuing (not on the final step)
-      if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
+      if (rt.stopWhen && typedInputData.stepResult?.isContinued && state.accumulatedSteps.length > 0) {
         // Cast steps to any for v5/v6 StopCondition compatibility
         // v5 and v6 StepResult types have minor differences (e.g., rawFinishReason, finishReason format)
         // but are compatible at runtime for stop condition evaluation
-        const steps = accumulatedSteps as any;
+        const steps = state.accumulatedSteps as any;
         const conditions = await Promise.all(
-          (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
+          (Array.isArray(rt.stopWhen) ? rt.stopWhen : [rt.stopWhen]).map(condition => {
             return condition({ steps });
           }),
         );
@@ -380,11 +431,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
-      if (rest.onIterationComplete && !typedInputData.backgroundTaskPending) {
+      if (rt.onIterationComplete && !typedInputData.backgroundTaskPending) {
         const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
         const iterationContext = {
-          iteration: accumulatedSteps.length,
-          maxIterations: rest.maxSteps,
+          iteration: state.accumulatedSteps.length,
+          maxIterations: rt.maxSteps,
           text: typedInputData.output.text || '',
           toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
             id: tc.toolCallId || tc.id || '',
@@ -399,21 +450,21 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
           runId: runId,
-          threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
-          resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
-          agentId: rest.agentId,
-          agentName: rest.agentName || rest.agentId,
+          threadId: rt.threadId,
+          resourceId: rt.resourceId,
+          agentId: rt.agentId,
+          agentName: rt.agentName || rt.agentId,
           messages: messageList.get.all.db(),
         };
 
         try {
-          const iterationResult = await rest.onIterationComplete(iterationContext);
+          const iterationResult = await rt.onIterationComplete(iterationContext);
 
           if (iterationResult) {
             if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
               messageList.add(
                 {
-                  id: rest.mastra?.generateId() || randomUUID(),
+                  id: rt.mastra?.generateId() || randomUUID(),
                   createdAt: new Date(),
                   type: 'text',
                   role: 'assistant',
@@ -437,8 +488,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
               );
 
               if (iterationResult.continue === false) {
-                pendingFeedbackStop = true;
-              } else if (!hasFinishedSteps && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+                state.pendingFeedbackStop = true;
+              } else if (!hasFinishedSteps && rt.maxSteps && state.accumulatedSteps.length < rt.maxSteps) {
                 hasFinishedSteps = false;
                 typedInputData.stepResult.isContinued = true;
               }
@@ -448,7 +499,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
               iterationResult.continue === true &&
               (hasFinishedSteps || !typedInputData.stepResult?.isContinued)
             ) {
-              if ((rest.maxSteps && accumulatedSteps.length < rest.maxSteps) || !rest.maxSteps) {
+              if ((rt.maxSteps && state.accumulatedSteps.length < rt.maxSteps) || !rt.maxSteps) {
                 hasFinishedSteps = false;
                 if (typedInputData.stepResult) {
                   typedInputData.stepResult.isContinued = true;
@@ -458,7 +509,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           }
         } catch (error) {
           // Log error but don't fail the iteration
-          rest.logger?.error('Error in onIterationComplete hook:', error);
+          rt.logger?.error('Error in onIterationComplete hook:', error);
         }
       }
 
