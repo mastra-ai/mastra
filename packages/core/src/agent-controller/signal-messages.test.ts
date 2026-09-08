@@ -1323,6 +1323,27 @@ describe('AgentController signal messages', () => {
     expect(JSON.stringify(prompts[2])).toContain('run the second queued task after that');
   });
 
+  it('waits for the accepted run instead of an unrelated terminal event', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const completion = (session as any).waitForAcceptedRunCompletion(
+      Promise.resolve({ action: 'deliver', runId: 'submitted-run' }),
+    );
+    let settled = false;
+    void completion.then(() => {
+      settled = true;
+    });
+
+    session.run.setRunId({ runId: 'unrelated-run' });
+    await session.finishAgentRun('complete');
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    session.run.setRunId({ runId: 'submitted-run' });
+    await session.finishAgentRun('complete');
+    await completion;
+    expect(settled).toBe(true);
+  });
+
   it('tags a message sent into a live run as a while-active interjection', async () => {
     const releases: Array<() => void> = [];
     const prompts: unknown[] = [];
