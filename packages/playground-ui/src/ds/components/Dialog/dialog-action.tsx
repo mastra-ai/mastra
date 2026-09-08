@@ -1,9 +1,12 @@
 import { forwardRef, useEffect, useId, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
-import { useDialogContext } from './dialog-context';
+import { dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import { Button } from '@/ds/components/Button';
+import type { TextButtonSize } from '@/ds/components/Button';
+import { cn } from '@/lib/utils';
 
-export type DialogActionProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type'> & {
+export type DialogActionProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type' | 'size'> & {
+  size?: TextButtonSize;
   onConfirm: () => void;
   confirmation?: 'click' | 'hold';
   holdSeconds?: number;
@@ -86,11 +89,16 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confir
     }
 
     return (
-      <div className="dialog-new-hold contents">
+      <>
         <Button
           size="md"
-          data-dialog-size={props.size ?? 'md'}
           {...props}
+          className={cn(
+            'group/hold relative isolate touch-none overflow-hidden select-none',
+            dialogActionLayoutClasses,
+            dialogActionSizeClasses[props.size ?? 'md'],
+            props.className,
+          )}
           ref={ref}
           type="button"
           variant={intent === 'destructive' ? 'destructive-ghost' : 'ghost'}
@@ -128,8 +136,14 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confir
           <span>{children}</span>
           <span
             aria-hidden="true"
-            className="dialog-new-hold-progress"
-            style={{ animationDuration: `${holdSeconds}s` }}
+            className={cn(
+              'pointer-events-none absolute inset-0 flex items-center justify-center px-[inherit] [clip-path:inset(0_100%_0_0)]',
+              'transition-[clip-path] ease-linear motion-reduce:transition-none',
+              'group-data-[holding]/hold:[clip-path:inset(0)] motion-reduce:group-data-[holding]/hold:[clip-path:inset(0_50%_0_0)]',
+              'group-data-[completed]/hold:[clip-path:inset(0)]',
+              intent === 'destructive' ? 'bg-accent2 text-white' : 'bg-neutral6 text-surface1',
+            )}
+            style={{ transitionDuration: holding ? `${holdSeconds}s` : '0s' }}
           >
             {children}
           </span>
@@ -141,7 +155,7 @@ const HoldAction = forwardRef<HTMLButtonElement, Omit<DialogActionProps, 'confir
         <span role="status" className="sr-only">
           {armed ? 'Activate again to confirm.' : ''}
         </span>
-      </div>
+      </>
     );
   },
 );
@@ -166,8 +180,8 @@ export const DialogAction = forwardRef<HTMLButtonElement, DialogActionProps>(
     return (
       <Button
         size="md"
-        data-dialog-size={props.size ?? 'md'}
         {...props}
+        className={cn(dialogActionLayoutClasses, dialogActionSizeClasses[props.size ?? 'md'], props.className)}
         ref={ref}
         type="button"
         variant={intent === 'destructive' ? 'destructive' : 'primary'}

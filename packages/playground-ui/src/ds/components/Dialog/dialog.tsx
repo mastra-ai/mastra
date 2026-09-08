@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { DialogAction } from './dialog-action';
-import { DialogContext, useDialogContext } from './dialog-context';
+import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import type { DialogIntent, DialogVariant } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
@@ -80,7 +80,9 @@ const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(({ cl
     <DialogPrimitive.Backdrop
       ref={ref}
       className={cn(
-        variant === 'new' ? 'dialog-new-backdrop' : 'dialog-overlay-anim',
+        variant === 'new'
+          ? 'transition-opacity duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none'
+          : 'dialog-overlay-anim',
         'fixed inset-0 z-50 bg-overlay backdrop-blur-xs',
         className,
       )}
@@ -113,7 +115,8 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             initialFocus={initialFocus ?? (intent === 'destructive' ? closeRef : true)}
             aria-busy={pending || undefined}
             className={cn(
-              'dialog-new-content fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col rounded-xl border border-border1/40 bg-surface2 shadow-dialog outline-hidden',
+              'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-sm translate-[-50%] flex-col overflow-y-auto overscroll-contain rounded-xl border border-border1/40 bg-surface2 shadow-dialog outline-hidden',
+              'data-[ending-style]:scale-0.98 data-[starting-style]:scale-0.98 transition-[opacity,scale] duration-normal ease-out data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none',
               className,
             )}
             {...props}
@@ -192,7 +195,7 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         variant === 'new'
-          ? 'dialog-new-footer flex shrink-0 flex-wrap justify-end gap-2 px-5 pt-2 pb-4'
+          ? 'flex shrink-0 flex-wrap justify-end gap-2 px-5 pt-2 pb-4'
           : 'flex flex-col-reverse gap-1.5 px-4 py-2.5 sm:flex-row sm:justify-end',
         className,
       )}
@@ -279,8 +282,14 @@ const DialogCancel = React.forwardRef<HTMLButtonElement, DialogCancelProps>(
     return (
       <DialogPrimitive.Close
         ref={ref}
-        data-dialog-size={size}
-        render={<Button size={size} variant="ghost" children={props.children} />}
+        render={
+          <Button
+            size={size}
+            variant="ghost"
+            className={cn(dialogActionLayoutClasses, dialogActionSizeClasses[size])}
+            children={props.children}
+          />
+        }
         {...props}
         disabled={disabled || pending}
       />
