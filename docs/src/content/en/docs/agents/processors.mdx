@@ -450,7 +450,7 @@ Caching is implemented as the [`ResponseCache`](/reference/processors/response-c
 
 ### When to use response caching
 
-Reach for it when the same request shape repeats across users or sessions, for example prompt templates, suggested-prompt buttons, agentic search re-asks, or guardrail LLMs that classify the same input over and over. Skip it when calls trigger external side effects through tools, since cache hits replay tool calls without re-executing them.
+Use caching when identical requests recur across users or sessions. Examples include suggested-prompt buttons and repeated searches, or guardrail LLMs that classify the same input. Skip it when calls trigger external side effects through tools, since cache hits replay tool calls without re-executing them.
 
 ### Quickstart
 

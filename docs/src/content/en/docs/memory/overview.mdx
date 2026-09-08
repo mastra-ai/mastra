@@ -13,7 +13,7 @@ import MemoryContextWindowImage from "@site/src/components/MemoryContextWindowIm
 
 # Memory
 
-Memory enables your agent to remember user messages and agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, plus produce better answers over time.
+Memory gives your agent access to earlier messages and tool results. The agent can use this context to answer follow-up questions and recall information from previous interactions.
 
 Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
@@ -144,7 +144,7 @@ To list all threads for a resource, or retrieve a specific thread, [use the memo
 
 ## Observational Memory
 
-For long-running conversations, raw message history grows until it fills the context window, degrading agent performance. [Observational Memory](../memory/observational-memory) solves this by running background agents that compress old messages into dense observations, keeping the context window small while preserving long-term memory.
+Long conversations can fill the context window with raw message history and reduce agent performance. [Observational Memory](../memory/observational-memory) uses background agents to compress older messages into observations. This reduces the context used by message history while retaining information for later turns.
 
 <Inject>
   **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
@@ -170,7 +170,7 @@ See [Observational Memory](../memory/observational-memory) for details on how ob
 
 ## What the model sees
 
-Each memory feature is added to either the system messages or the conversation messages in the request sent to the model. The layers depend on the features you've enabled. Working memory and semantic recall only appear when configured. The same applies to Observational Memory, while message history is on by default. The diagram shows where each enabled layer is placed in the request. The list below describes what each layer contributes:
+Memory adds context to the system messages or conversation messages sent to the model. Message history is enabled by default. Other memory features contribute context only when configured. The diagram shows where each feature adds its context, and the list below explains what it contributes:
 
 <MemoryContextWindowImage />
 
