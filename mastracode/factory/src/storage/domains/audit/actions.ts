@@ -36,8 +36,9 @@ export function auditNamespaces(): AuditNamespace[] {
 }
 
 export function parseAuditAction(action: string): { namespace: AuditNamespace; leaf: string } | undefined {
-  const [, namespace, leaf] = action.split('.');
-  return namespace !== undefined && leaf !== undefined && isAuditNamespace(namespace) ? { namespace, leaf } : undefined;
+  const [prefix, namespace, leaf, ...rest] = action.split('.');
+  if (prefix !== 'factory' || namespace === undefined || leaf === undefined || rest.length > 0) return undefined;
+  return isAuditNamespace(namespace) ? { namespace, leaf } : undefined;
 }
 
 export function isAuditAction(value: string): value is AuditAction {

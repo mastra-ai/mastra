@@ -1667,6 +1667,31 @@ describe('audit trail', () => {
     );
   });
 
+  it('records a rejection aimed at a work item that no longer exists', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'audit-test',
+      audit: seed.audit,
+    });
+
+    const rejected = await service.transition({
+      ...request(item, { identity: 'gone-1' }),
+      workItemId: '00000000-0000-4000-8000-000000000000',
+    });
+    expect(rejected).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: 'factory.work_item.transition_rejected',
+        targets: [{ type: 'work_item', id: '00000000-0000-4000-8000-000000000000' }],
+      }),
+    ]);
+    expect(events[0]?.metadata).not.toHaveProperty('from');
+  });
+
   it('does not call entering the stage a card already holds a move', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await createItem(seed.workItems);

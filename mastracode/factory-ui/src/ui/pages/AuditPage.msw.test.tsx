@@ -176,6 +176,7 @@ describe('Audit log', () => {
     // The page names namespaces; which actions each one holds is the server's to know.
     await waitFor(() => expect(requestedNamespaces).toContain('run,agent'));
     expect(requestedNamespaces).toContain('run');
+    await waitForMutationsIdle(client);
 
     await user.click(categories.getByRole('button', { name: 'All' }));
     await waitFor(() =>
@@ -183,6 +184,7 @@ describe('Audit log', () => {
     );
     expect(categories.getByRole('button', { name: 'Runs' })).toHaveAttribute('aria-pressed', 'false');
     expect(categories.getByRole('button', { name: 'Agent' })).toHaveAttribute('aria-pressed', 'false');
+    await waitForMutationsIdle(client);
   });
 
   it('keeps category toggles available when the log is empty', async () => {

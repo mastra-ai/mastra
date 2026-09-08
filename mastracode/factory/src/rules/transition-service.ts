@@ -245,20 +245,28 @@ export class FactoryTransitionService {
     const transitionId = request.ingress.transitionId ?? randomUUID();
     const item = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
     if (!item) {
-      return this.#commitRejection(request, transitionId, 'invalid_transition', 'Work item not found.');
+      const rejection = await this.#commitRejection(
+        request,
+        transitionId,
+        'invalid_transition',
+        'Work item not found.',
+      );
+      await this.#recordTransition(request, undefined, rejection);
+      return rejection;
     }
     const result = await this.#evaluateAndCommit(request, transitionId, item);
     await this.#recordTransition(request, item, result);
     return result;
   }
 
+  /** A rejection can outlive its work item: the row still names the id the caller asked for. */
   async #recordTransition(
     request: FactoryTransitionRequest,
-    item: WorkItemRow,
+    item: WorkItemRow | undefined,
     result: FactoryTransitionResult,
   ): Promise<void> {
     if (!this.#audit) return;
-    const from = currentStage(item.stages);
+    const from = item ? currentStage(item.stages) : undefined;
     if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
     const outcome =
       result.status === 'accepted'
@@ -277,13 +285,13 @@ export class FactoryTransitionService {
         ...auditActorOf(request.actor),
         actorProfile: request.actorProfile,
         action,
-        targets: [{ type: 'work_item', id: item.id, name: item.title }],
+        targets: [{ type: 'work_item', id: item?.id ?? request.workItemId, ...(item ? { name: item.title } : {}) }],
         metadata: {
           transitionId: result.transitionId,
           ingressType: request.ingress.type,
           cause: request.cause,
           configVersion: this.#configVersion,
-          from,
+          ...(from ? { from } : {}),
           ...(request.reenter ? { reenter: true } : {}),
           ...detail,
         },

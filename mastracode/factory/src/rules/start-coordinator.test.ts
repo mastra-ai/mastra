@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
+import { FACTORY_OPEN_RUN_SETTING } from '../session/run-end-capture.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
@@ -504,7 +505,7 @@ describe('FactoryStartCoordinator', () => {
         execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),
     });
-    const { controller, sendMessage } = makeController();
+    const { controller, session, sendMessage } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
@@ -519,6 +520,9 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+    expect(session.thread.setSetting).not.toHaveBeenCalledWith(
+      expect.objectContaining({ key: FACTORY_OPEN_RUN_SETTING }),
+    );
   });
 
   it('never sends a kickoff when the binding transaction fails', async () => {

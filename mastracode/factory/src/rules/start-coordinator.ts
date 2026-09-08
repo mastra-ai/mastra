@@ -195,12 +195,6 @@ export class FactoryStartCoordinator {
       kickoffMessage: null,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
-    if (!prepared.replayed) {
-      await session.thread.setSetting({
-        key: FACTORY_OPEN_RUN_SETTING,
-        value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
-      });
-    }
 
     let revision = prepared.item.revision;
     const destinationStage = request.destinationStage;
@@ -227,6 +221,10 @@ export class FactoryStartCoordinator {
     await storage.markPendingStart(prepared.binding.id, 'sent');
     prepared.pendingStart.status = 'sent';
     if (!prepared.replayed) {
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUN_SETTING,
+        value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
+      });
       await this.#recordRunStart(request, {
         item: prepared.item,
         bindingId: prepared.binding.id,

@@ -52,10 +52,14 @@ async function recordRunEnd(session: RunEndCaptureSession, audit: AuditRecorder,
 
 /** A suspended run is parked, not over: it resumes and ends later under its own `agent_end`. */
 export function observeSessionRunEnd(session: RunEndCaptureSession, { audit }: { audit: AuditRecorder }): () => void {
+  // Terminal events arriving together would otherwise each read the open run
+  // before the first one clears it, closing the same run twice.
+  let pending: Promise<void> = Promise.resolve();
   return session.subscribe(event => {
     if (event.type !== 'agent_end' || !event.reason || event.reason === 'suspended') return;
-    void recordRunEnd(session, audit, event.reason).catch(error =>
-      console.warn('[Factory run-end capture] Unable to record run end.', error),
-    );
+    const reason = event.reason;
+    pending = pending
+      .then(() => recordRunEnd(session, audit, reason))
+      .catch(error => console.warn('[Factory run-end capture] Unable to record run end.', error));
   });
 }

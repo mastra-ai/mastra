@@ -63,6 +63,24 @@ describe('observeSessionRunEnd', () => {
     expect(record).toHaveBeenCalledOnce();
   });
 
+  it('closes an open run once when two terminal events land in the same tick', async () => {
+    const record = vi.fn(async () => null);
+    const { session, emit } = makeSession({
+      factoryWorkItemId: 'item-1',
+      [FACTORY_OPEN_RUN_SETTING]: OPEN_RUN,
+    });
+    observeSessionRunEnd(session, { audit: { record } });
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    emit({ type: 'agent_end', reason: 'error' });
+
+    await vi.waitFor(() => expect(record).toHaveBeenCalledOnce());
+    await settled();
+    await settled();
+    expect(record).toHaveBeenCalledOnce();
+    expect(record.mock.calls[0]?.[0]).toMatchObject({ metadata: { reason: 'complete' } });
+  });
+
   it('keeps the run open across a suspension and ignores turns that started no run', async () => {
     const record = vi.fn(async () => null);
     const parked = makeSession({ factoryWorkItemId: 'item-1', [FACTORY_OPEN_RUN_SETTING]: OPEN_RUN });

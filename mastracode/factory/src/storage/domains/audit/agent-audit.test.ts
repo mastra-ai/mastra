@@ -6,6 +6,7 @@ import type { AuditAgentEmitter } from './domain.js';
 const THREAD = 'thread-42';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const SCOPE = '/sandbox/mastra-worktrees/feat-audit';
+const PR_URL = 'https://github.com/mastra-ai/mastra/pull/23247';
 const recorded: any[] = [];
 let emitFailure: Error | undefined;
 
@@ -99,14 +100,45 @@ describe('observeAgentGitAction', () => {
   });
 
   it('records a pull request opened through gh, after the push that carried it', async () => {
-    await observe(toolCall('git push -u origin feat/audit && gh pr create --fill --base main'));
+    await observe(
+      toolCall('git push -u origin feat/audit && gh pr create --fill --base main', { output: `${PR_URL}\n` }),
+    );
 
     expect(recorded.map(r => r.action)).toEqual(['factory.agent.push', 'factory.agent.pr_opened']);
-    expect(recorded[1]).toMatchObject({ targets: [{ type: 'worktree', id: SCOPE }], metadata: {} });
+    expect(recorded[1]).toMatchObject({
+      targets: [
+        { type: 'pull_request', id: PR_URL },
+        { type: 'worktree', id: SCOPE },
+      ],
+      metadata: { url: PR_URL },
+    });
+  });
+
+  it('ignores a pull request preview that opened nothing', async () => {
+    await observe(toolCall('gh pr create --dry-run --fill', { output: 'Would have created a pull request:\ntitle' }));
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('ignores the browser flow, which prints a compare link and no pull request', async () => {
+    await observe(
+      toolCall('gh pr create --web', {
+        output: 'Opening https://github.com/mastra-ai/mastra/compare/main...feat/audit in your browser.',
+      }),
+    );
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('ignores a create that failed against an existing pull request', async () => {
+    await observe(
+      toolCall('gh pr create --fill', {
+        output: `a pull request for branch "feat/audit" already exists: ${PR_URL}\nExit code: 1`,
+      }),
+    );
+    expect(recorded).toHaveLength(0);
   });
 
   it('ignores gh pr subcommands other than create', async () => {
-    await observe(toolCall('gh pr view 42 && gh pr checks'));
+    await observe(toolCall('gh pr view 42 && gh pr checks', { output: PR_URL }));
     expect(recorded).toHaveLength(0);
   });
 

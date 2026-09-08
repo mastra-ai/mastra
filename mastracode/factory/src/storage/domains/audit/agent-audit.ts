@@ -23,6 +23,8 @@ interface ToolObserverContext {
 const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
 const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
+/** `gh pr create` prints the new pull request URL alone on the last line, and nothing else does. */
+const CREATED_PULL_REQUEST_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
 
 function stripHeredocBodies(command: string): string {
   const lines = command.split('\n');
@@ -40,6 +42,17 @@ function stripHeredocBodies(command: string): string {
   }
 
   return executableLines.join('\n');
+}
+
+/**
+ * The pull request `gh pr create` actually opened, or nothing. A command that
+ * printed no URL created no pull request: `--dry-run` prints a preview, `--web`
+ * prints a `/compare/` link, and a failure prints its exit code last.
+ */
+function createdPullRequestUrl(output: unknown): string | undefined {
+  if (typeof output !== 'string') return undefined;
+  const lastLine = output.trimEnd().split('\n').at(-1)?.trim();
+  return lastLine !== undefined && CREATED_PULL_REQUEST_URL_RE.test(lastLine) ? lastLine : undefined;
 }
 
 /** Parse the branch from a plain `git push <remote> <branch>` invocation. */
@@ -89,10 +102,15 @@ export async function observeAgentGitAction({
       });
     }
 
-    if (GH_PR_CREATE_RE.test(command)) {
+    const pullRequestUrl = GH_PR_CREATE_RE.test(command) ? createdPullRequestUrl(toolContext.output) : undefined;
+    if (pullRequestUrl) {
       await audit.emitAgent({
         requestContext: toolContext.context,
-        input: { action: 'factory.agent.pr_opened', targets },
+        input: {
+          action: 'factory.agent.pr_opened',
+          targets: [{ type: 'pull_request', id: pullRequestUrl }, ...targets],
+          metadata: { url: pullRequestUrl },
+        },
       });
     }
   } catch (err) {

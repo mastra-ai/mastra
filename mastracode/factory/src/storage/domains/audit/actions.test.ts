@@ -17,5 +17,7 @@ describe('audit action registry', () => {
     expect(parseAuditAction('factory.feed.touched')).toBeUndefined();
     expect(isAuditAction('factory.run.ended')).toBe(true);
     expect(isAuditAction('factory.run.paused')).toBe(false);
+    expect(isAuditAction('other.run.ended')).toBe(false);
+    expect(isAuditAction('factory.run.ended.extra')).toBe(false);
   });
 });
