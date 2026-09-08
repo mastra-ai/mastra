@@ -1,5 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 
+import { PROVIDERS } from './providers/index.js';
 import type { ProviderToolsOptions } from './toolset.js';
 
 /**
@@ -22,13 +23,15 @@ export interface ProviderRegistration {
 }
 
 /**
- * Providers with shipped toolsets. Generated provider modules register
- * themselves when imported by `src/providers/index.ts`. `connect()` reads this list and
- * exposes one toolset per matching Platform connection on the project.
- * Providers with no matching connection yet are kept and warned about once,
- * so tools appear automatically once a connection is attached.
+ * Providers with shipped toolsets. The list is assembled declaratively in the
+ * generated `src/providers/index.ts` barrel — each generated provider module
+ * exports a `ProviderRegistration` const, and the barrel collects them.
+ * `connect()` reads this list and exposes one toolset per matching Platform
+ * connection on the project. Providers with no matching connection yet are
+ * kept and warned about once, so tools appear automatically once a connection
+ * is attached.
  */
-export const PROVIDERS: ProviderRegistration[] = [];
+export { PROVIDERS };
 
 export function findRegistration(integrationId: string): ProviderRegistration | undefined {
   return PROVIDERS.find(p => p.integrationId === integrationId);

@@ -47,14 +47,23 @@ export function listInstalledProviderIds(): string[] {
     .sort();
 }
 
+export function providerRegistrationName(localId: string): string {
+  return `${localId.replace(/[-._]+(\w)/g, (_, ch: string) => ch.toUpperCase())}Provider`;
+}
+
 export function updateProviderIndex(): void {
-  const imports = listInstalledProviderIds().map(id => `import './${id}/index.js';`);
+  const installed = listInstalledProviderIds();
+  const imports = installed.map(id => `import { ${providerRegistrationName(id)} } from './${id}/index.js';`);
+  const entries = installed.map(id => `  ${providerRegistrationName(id)},`);
   const body = [
     '// AUTO-GENERATED — do not edit by hand.',
     '// Updated by the maintainer-only add-provider and remove-provider commands.',
-    ...imports,
+    "import type { ProviderRegistration } from '../registry.js';",
+    ...(imports.length > 0 ? ['', ...imports] : []),
     '',
-    'export {};',
+    'export const PROVIDERS: readonly ProviderRegistration[] = [',
+    ...entries,
+    '];',
     '',
   ].join('\n');
   writeFileSync(providerIndexPath, body);

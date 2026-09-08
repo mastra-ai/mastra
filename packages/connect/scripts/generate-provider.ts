@@ -335,15 +335,16 @@ ${toolEntries}
 function emitIndexFile(integrationId: string): string {
   const envVar = `MASTRA_${integrationId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
   const factoryName = `create${toPascal(integrationId)}Tools`;
+  const registrationName = `${toCamel(integrationId)}Provider`;
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
-import { PROVIDERS } from '../../registry.js';
+import type { ProviderRegistration } from '../../registry.js';
 import { ${factoryName} } from './tools.js';
 
-PROVIDERS.push({
+export const ${registrationName}: ProviderRegistration = {
   integrationId: '${integrationId}',
   envVar: '${envVar}',
   createTools: ${factoryName},
-});
+};
 
 export { ${factoryName} };
 `;

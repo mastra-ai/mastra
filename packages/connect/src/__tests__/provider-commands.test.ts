@@ -87,8 +87,10 @@ describe('maintainer provider commands', () => {
       readFileSync(resolve(packageRoot, 'src/providers/first-provider/.manifest.json'), 'utf8'),
     ) as { providerId: string; localId: string; toolCount: number };
     expect(manifest).toMatchObject({ providerId: 'first-provider', localId: 'first-provider', toolCount: 1 });
-    expect(readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8')).toContain(
-      "import './first-provider/index.js';",
+    const providerIndex = readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8');
+    expect(providerIndex).toContain("import { firstProviderProvider } from './first-provider/index.js';");
+    expect(providerIndex).toMatch(
+      /export const PROVIDERS: readonly ProviderRegistration\[\] = \[\s*firstProviderProvider,\s*\];/,
     );
     expect(listProviders({ installedOnly: true })).toEqual(['first-provider (1 tools, 0 skipped)']);
 

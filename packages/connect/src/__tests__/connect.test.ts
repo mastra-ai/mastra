@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connect } from '../connect.js';
 import { PROVIDERS, type ProviderRegistration } from '../registry.js';
 
+// Test-only seam: the shipped barrel exports a readonly view; tests mutate the
+// underlying array to install fixture providers.
+const testProviders = PROVIDERS as ProviderRegistration[];
+
 const TOKEN = 'fake-test-token';
 
 const fakeTools = { linear_fake_tool: { id: 'linear_fake_tool' } } as never;
@@ -18,7 +22,7 @@ function installProvider(overrides?: Partial<ProviderRegistration>): {
     createTools,
     ...overrides,
   };
-  PROVIDERS.push(registration);
+  testProviders.push(registration);
   return { registration, createTools };
 }
 
@@ -38,12 +42,12 @@ function makeConnection(overrides?: Record<string, unknown>) {
 let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  PROVIDERS.length = 0;
+  testProviders.length = 0;
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  PROVIDERS.length = 0;
+  testProviders.length = 0;
   vi.unstubAllEnvs();
   warnSpy.mockRestore();
 });
@@ -202,7 +206,7 @@ describe('connect', () => {
     installProvider();
     const notionTools = { notion_fake: { id: 'notion_fake' } } as never;
     const notionCreate = vi.fn().mockReturnValue(notionTools);
-    PROVIDERS.push({
+    testProviders.push({
       integrationId: 'notion',
       envVar: 'MASTRA_NOTION_CONNECTION_ID',
       createTools: notionCreate,

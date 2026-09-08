@@ -5,6 +5,10 @@ import type { ConnectOptions } from '../connect.js';
 import { MastraConnectError } from '../errors.js';
 import { PROVIDERS, type ProviderRegistration } from '../registry.js';
 
+// Test-only seam: the shipped barrel exports a readonly view; tests mutate the
+// underlying array to install fixture providers.
+const testProviders = PROVIDERS as ProviderRegistration[];
+
 const TOKEN = 'fake-test-token';
 
 function installProvider(
@@ -15,7 +19,7 @@ function installProvider(
     .fn()
     .mockReturnValue({ [`${integrationId}_fake_tool`]: { id: `${integrationId}_fake_tool` } } as never);
   const registration = { integrationId, envVar, createTools };
-  PROVIDERS.push(registration);
+  testProviders.push(registration);
   return { ...registration, createToolsSpy: createTools };
 }
 
@@ -51,12 +55,12 @@ function flush(): Promise<void> {
 let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  PROVIDERS.length = 0;
+  testProviders.length = 0;
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  PROVIDERS.length = 0;
+  testProviders.length = 0;
   vi.useRealTimers();
   vi.unstubAllEnvs();
   warnSpy.mockRestore();
