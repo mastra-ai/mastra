@@ -1062,9 +1062,14 @@ export class MemoryPG extends MemoryStorage {
     const limitClause =
       perPageInput === false ? '' : ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
     const dataParams = perPageInput === false ? queryParams : [...queryParams, perPage, offset];
+    // Use a skinny scalar COUNT(*) subquery rather than COUNT(*) OVER (). The window ran over
+    // the full SELECT list, forcing Postgres to materialize/heap-fetch `content` for every
+    // matching row before LIMIT. The uncorrelated subquery is evaluated once (InitPlan) and
+    // can use an index-only scan, while the outer SELECT is served by an index scan + LIMIT.
+    // Both WHERE clauses reference the same positional params, so `dataParams` is unchanged.
     const rows =
       (await this.#db.readClient.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
-        `${selectStatement}, COUNT(*) OVER () AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+        `${selectStatement}, (SELECT COUNT(*) FROM ${tableName} ${whereClause}) AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
         dataParams,
       )) || [];
 
@@ -1116,7 +1121,12 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Order by the raw timestamp column (not COALESCE("${field}Z", "${field}")) so the
+      // (thread_id, createdAt DESC) composite index can serve the LIMIT with an index scan
+      // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
+      // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
+      // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1314,7 +1324,12 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Order by the raw timestamp column (not COALESCE("${field}Z", "${field}")) so the
+      // (thread_id, createdAt DESC) composite index can serve the LIMIT with an index scan
+      // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
+      // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
+      // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
