@@ -490,7 +490,17 @@ Workflows support different looping methods that let you repeat steps until or w
 
 Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
-![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
+```mermaid
+flowchart LR
+  accTitle: Repeat a workflow step with dountil
+  accDescr: The workflow runs step1, then repeats step2 until its condition becomes true before continuing to the end.
+  start(( start )) -->|".then(step1)"<br/>in| step1([step1])
+  step1 -->|".dountil(step2)"<br/>out| step2([step2])
+  step2 -->|".commit()"<br/>out| endNode(( end ))
+  step2 -- dountil --> step2
+
+  class endNode accent
+```
 
 ```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
