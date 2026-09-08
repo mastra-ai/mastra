@@ -25,6 +25,10 @@ const transitionInputSchema = z
       .transform(value =>
         value.length <= MAX_RATIONALE_LENGTH ? value : `${value.slice(0, MAX_RATIONALE_LENGTH - 1)}…`,
       ),
+    // Sessions are shared across role rotations, so a non-triage agent sees the triage
+    // agent's earlier call (with triageType) in its history and copies the shape. Accept
+    // the key here and drop it in execute rather than fail the whole call on it.
+    triageType: z.enum(FACTORY_TRIAGE_TYPES).optional(),
   })
   .strict();
 
@@ -56,7 +60,7 @@ export async function createFactoryTransitionTools(options: {
         : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
       requireApproval: true,
-      execute: async ({ stage, expectedRevision, rationale, ...input }, execution) => {
+      execute: async ({ stage, expectedRevision, rationale, triageType: requestedTriageType }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({
           requestContext: execution.requestContext,
           storage: options.storage,
@@ -79,8 +83,9 @@ export async function createFactoryTransitionTools(options: {
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        // Only a triage binding may classify; anything else forwarding triageType is echo, not intent.
         const triageType =
-          'triageType' in input && isFactoryTriageType(input.triageType) ? input.triageType : undefined;
+          binding.role === 'triage' && isFactoryTriageType(requestedTriageType) ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
