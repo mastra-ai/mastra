@@ -394,10 +394,13 @@ describe('custom board public runtime', () => {
         expect(await storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
         expect(await workItems.getToolResultCursor('release-org', project.id, publisher.id)).toEqual(cursor);
       } finally {
-        await factory.shutdown();
-        await mastra?.stopWorkers();
-        await storage.close();
-        model.mockRestore();
+        try {
+          await factory.shutdown();
+          await mastra?.stopWorkers();
+          await storage.close();
+        } finally {
+          model.mockRestore();
+        }
       }
     },
     30_000,
