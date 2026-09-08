@@ -1,19 +1,15 @@
-import { optionalPositiveInteger } from '../reconciliation-config.js';
+import { optionalBoolean, optionalPositiveInteger } from '../reconciliation-config.js';
 
-function parseBoolean(name: string, value: string | undefined): boolean | undefined {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (normalized === 'true') return true;
-  if (normalized === 'false') return false;
-  console.warn(`[incident.io reconciliation] ${name} must be true or false; received ${JSON.stringify(value)}.`);
-  return undefined;
-}
+const RECONCILIATION_LABEL = 'incident.io reconciliation';
 
 export function incidentioReconciliationEnabled(): boolean {
-  return parseBoolean(
-    'MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED',
-    process.env.MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED,
-  ) ?? true;
+  return (
+    optionalBoolean(
+      'MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED',
+      process.env.MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED,
+      RECONCILIATION_LABEL,
+    ) ?? true
+  );
 }
 
 export function incidentioReconciliationInterval(): number | undefined {
@@ -21,7 +17,7 @@ export function incidentioReconciliationInterval(): number | undefined {
   const value = process.env.MASTRACODE_INCIDENT_IO_RECONCILE_INTERVAL_MS;
   const interval = optionalPositiveInteger(value);
   if (value?.trim() && interval === undefined) {
-    console.warn(`[incident.io reconciliation] ${name} must be a positive integer; received ${JSON.stringify(value)}.`);
+    console.warn(`[${RECONCILIATION_LABEL}] ${name} must be a positive integer; received ${JSON.stringify(value)}.`);
   }
   return interval;
 }
