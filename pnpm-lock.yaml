@@ -1166,6 +1166,9 @@ importers:
 
   client-sdks/ai-sdk:
     devDependencies:
+      '@ai-sdk/openai-v7':
+        specifier: npm:@ai-sdk/openai@4.0.21
+        version: '@ai-sdk/openai@4.0.21(zod@4.4.3)'
       '@ai-sdk/provider':
         specifier: ^2.0.3
         version: 2.0.3
