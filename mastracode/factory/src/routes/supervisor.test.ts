@@ -6,7 +6,6 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -34,7 +33,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       workItems: seed.workItems,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
       liveSessions: { isRunning: () => false },
     }).routes(),
   );
@@ -61,7 +60,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date) {
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `supervisor-failure-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
@@ -131,22 +130,16 @@ describe('GET /supervisor/health', () => {
     expect(typeof body.checkedAt).toBe('string');
   });
 
-  it('surfaces a failed decision as a finding that points at its card', async () => {
+  it('leaves a failed decision to the board and the inbox instead of reporting it', async () => {
     const item = await seedWorkItem(['execute']);
-    const failed = await seedFailure(item, new Date());
+    await seedFailure(item, new Date());
 
     const res = await request('GET', `/web/factory/projects/${PROJECT_ID}/supervisor/health`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    const finding = body.findings.find((f: { kind: string }) => f.kind === 'decision-failed');
-    expect(finding).toMatchObject({
-      workItemId: item.id,
-      suggestedRepair: { action: 'retry-decision', decisionId: failed.id },
-    });
-    expect(finding.evidence).toContain('No active Factory binding');
-    expect(body.counts['decision-failed']).toBe(1);
+    expect(body.findings.map((f: { kind: string }) => f.kind)).not.toContain('decision-failed');
+    expect(body.counts).not.toHaveProperty('decision-failed');
   });
-
   it('is scoped to the caller org', async () => {
     const other = { workosId: 'u2', organizationId: 'org2' };
     const res = await request('GET', `/web/factory/projects/${PROJECT_ID}/supervisor/health`, other);

@@ -441,7 +441,7 @@ describe('goal step waiting semantics', () => {
     expect(done.record.pausedReason).toBeUndefined();
   });
 
-  it('emits a goal-judge signal through the current loop signal path on continue', async () => {
+  it('adds a goal-judge signal without exposing the system reminder in the live stream', async () => {
     const { messages, dataParts, inputData } = await runGoalStep('continue', makeRecord({ runsUsed: 1, maxRuns: 10 }));
 
     expect(messages).toHaveLength(1);
@@ -459,9 +459,7 @@ describe('goal step waiting semantics', () => {
       '[Goal attempt 2/10] The goal is not yet complete. Judge feedback: r:continue\n\nContinue working toward the goal: implement X, then stop and wait for my review',
     );
     expect(inputData.messageId).toBe('response-2');
-    expect(dataParts).toHaveLength(1);
-    expect(dataParts[0].options).toEqual({ messageId: 'response-2' });
-    expect(dataParts[0].data.type).toBe('data-signal');
+    expect(dataParts).toEqual([]);
   });
 
   it('emits a pending chunk before scoring so consumers can show a loading indicator', async () => {

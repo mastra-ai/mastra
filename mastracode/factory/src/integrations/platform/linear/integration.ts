@@ -380,7 +380,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
     const ingest = attachLinearRules(this, ctx);
     const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
-    const workItems = ctx.rules?.workItems;
+    const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../memory';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
@@ -130,7 +131,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         typedInputData.messageId = nextMessageId;
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = messageList.addSignal(pendingSignal);
-          safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          if (!isSystemReminderSignalType(signalForTranscript.type)) {
+            safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          }
         }
         if (typedInputData.stepResult) {
           typedInputData.stepResult.messageId = nextMessageId;
