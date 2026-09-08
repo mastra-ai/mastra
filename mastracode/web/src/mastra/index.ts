@@ -280,23 +280,24 @@ const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), 
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
-const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
-  key => Boolean(process.env[key]?.trim()),
-);
+const hasPlatformSandboxEnv =
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    if (hasPlatformSandboxEnv) {
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
 
-    if (process.env.E2B_API_KEY?.trim()) {
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
         template: createE2BRepoTemplate(ctx),
