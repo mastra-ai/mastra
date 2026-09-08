@@ -3,6 +3,7 @@ import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
+import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
@@ -1144,84 +1145,26 @@ export function createDurableToolCallStep() {
           onResult: async (params: any) => {
             if (!messageList) return;
 
-            const result =
-              params.status === 'failed'
-                ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                : params.result;
-
-            const updated = messageList.updateToolInvocation(
-              {
-                type: 'tool-invocation',
-                toolInvocation: {
-                  // A failed background task is recorded as `output-error` with the
-                  // message in `errorText`; a successful one keeps `state: 'result'`.
-                  ...(params.status === 'failed'
-                    ? { state: 'output-error' as const, errorText: result }
-                    : { state: 'result' as const, result }),
-                  toolCallId: params.toolCallId,
-                  toolName: params.toolName,
-                  args: cleanedArgs,
-                  // Preserve the approval decision for an approved approval-gated tool that
-                  // ran in the background so it round-trips on recall, matching the sync path.
-                  ...(approvalGrant ?? {}),
-                },
+            // Resolve the mapping tool at completion time: the registry entry
+            // may have been rebuilt (or expired) if the task finished after a
+            // process restart.
+            const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+            await applyBackgroundToolResult({
+              params,
+              currentRunId: runId,
+              hasResumeData: resumeData != null,
+              args: cleanedArgs,
+              messageList,
+              approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+              baseProviderMetadata: typedInput.providerMetadata as any,
+              toModelOutput: mappingTool.toModelOutput,
+              logger: logger as any,
+              flush: async () => {
+                if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
+                  await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                }
               },
-              {
-                mode: 'stream',
-                backgroundTasks: {
-                  [params.toolCallId]: {
-                    startedAt: params.startedAt,
-                    completedAt: params.completedAt,
-                    taskId: params.taskId,
-                  },
-                },
-              },
-            );
-
-            if (!updated) {
-              if (params.runId !== runId || (params.runId === runId && resumeData != null)) {
-                messageList.add(
-                  [
-                    {
-                      role: 'tool' as const,
-                      type: 'tool-call',
-                      id: crypto.randomUUID(),
-                      createdAt: new Date(),
-                      content: [
-                        {
-                          type: 'tool-call' as const,
-                          toolCallId: params.toolCallId,
-                          toolName: params.toolName,
-                          args: cleanedArgs,
-                        },
-                      ],
-                    },
-                  ],
-                  'response',
-                );
-              }
-              messageList.add(
-                [
-                  {
-                    role: 'tool' as const,
-                    content: [
-                      {
-                        type: 'tool-result' as const,
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        result,
-                        isError: params.status === 'failed',
-                      },
-                    ],
-                  },
-                ],
-                'response',
-              );
-            }
-
-            if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
-              await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
-            }
+            });
           },
 
           onExecution: async (params: any) => {

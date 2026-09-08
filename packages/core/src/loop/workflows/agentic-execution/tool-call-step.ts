@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
@@ -40,8 +39,8 @@ import {
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
-import { normalizeModelOutput } from '../../shared/normalize-model-output';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
+import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
@@ -1159,185 +1158,84 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // the LLM on the next turn would re-dispatch the tool thinking
               // the research was still running.
               onResult: async params => {
-                const result =
-                  params.status === 'failed'
-                    ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
-                    : params.result;
-                let transformCarrier = withToolPayloadTransformMetadata(
-                  { metadata: {} as Record<string, any> },
-                  await transformToolPayloadForTargets(
-                    {
-                      phase: 'input-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    transformSource,
-                    logger,
-                  ),
-                );
-                transformCarrier = withToolPayloadTransformMetadata(
-                  transformCarrier,
-                  await transformToolPayloadForTargets(
-                    {
-                      phase: params.status === 'failed' ? 'error' : 'output-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      output: params.status === 'failed' ? undefined : params.result,
-                      error: params.status === 'failed' ? params.error : undefined,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    transformSource,
-                    logger,
-                  ),
-                );
-                const transcriptArgsTransform = getTransformedToolPayload(
-                  transformCarrier.metadata,
-                  'transcript',
-                  'input-available',
-                );
-                const transcriptResultTransform = getTransformedToolPayload(
-                  transformCarrier.metadata,
-                  'transcript',
-                  params.status === 'failed' ? 'error' : 'output-available',
-                );
-                const transcriptArgs = hasTransformedToolPayload(transcriptArgsTransform)
-                  ? transcriptArgsTransform.transformed
-                  : args;
-                const transcriptResult = hasTransformedToolPayload(transcriptResultTransform)
-                  ? transcriptResultTransform.transformed
-                  : result;
-                let providerMetadata = withToolPayloadTransformProviderMetadata(
-                  inputData.providerMetadata as ProviderMetadata | undefined,
-                  transformCarrier.metadata,
-                ) as ProviderMetadata | undefined;
-
-                // Recompute the model-facing output from the *real* result.
-                //
-                // The dispatch turn stored `mastra.modelOutput` derived from the
-                // "Background task started..." placeholder, and `llmPrompt()`
-                // prefers that field over `toolInvocation.result` when building
-                // the tool message. Carrying the dispatch metadata through
-                // unchanged would leave the model reading the placeholder
-                // forever, so it re-dispatches the tool or answers from nothing.
-                // Mirrors the synchronous path in llm-mapping-step.
-                // Every path below overwrites the dispatch's `mastra.modelOutput`, including
-                // the ones that produce nothing: a tool with no `toModelOutput`, a mapping
-                // that returns nullish, and a mapping that throws. Leaving the key untouched
-                // in those cases would preserve the placeholder — the exact bug this fixes.
-                // A null `modelOutput` is the established "no mapping, use the raw result"
-                // signal that `MessageList` keys off by value.
-                const toModelOutput = (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
-                  ?.toModelOutput;
-                let modelOutput: unknown = null;
-                if (params.status !== 'failed' && toModelOutput && result != null) {
-                  try {
-                    modelOutput = normalizeModelOutput(await toModelOutput(result)) ?? null;
-                  } catch (mappingError) {
-                    // Non-fatal: the real result is still written to `toolInvocation.result`
-                    // below and the model reads that instead. Surface it loudly because the
-                    // tool asked for a mapping and did not get one.
-                    logger?.warn?.(
-                      `toModelOutput failed for background tool "${params.toolName}" — falling back to the raw result`,
-                      { toolCallId: params.toolCallId, error: mappingError },
-                    );
-                    modelOutput = null;
-                  }
-                }
-                providerMetadata = {
-                  ...providerMetadata,
-                  mastra: { ...(providerMetadata as any)?.mastra, modelOutput },
-                } as ProviderMetadata;
-
-                const updated = messageList.updateToolInvocation(
-                  {
-                    type: 'tool-invocation',
-                    toolInvocation: {
-                      // A failed background task is recorded as `output-error` with the
-                      // message in `errorText`; a successful one keeps `state: 'result'`.
-                      ...(params.status === 'failed'
-                        ? { state: 'output-error' as const, errorText: result as string }
-                        : { state: 'result' as const, result }),
-                      toolCallId: params.toolCallId,
-                      toolName: params.toolName,
-                      args,
-                      // Preserve the approval decision for an approved approval-gated tool that
-                      // ran in the background so it round-trips on recall, matching the sync path
-                      // and the "started" placeholder above.
-                      ...(approvalGrant ?? {}),
-                    },
-                    ...(providerMetadata ? { providerMetadata } : {}),
-                  },
-                  {
-                    mode: 'stream',
-                    backgroundTasks: {
-                      [params.toolCallId]: {
-                        startedAt: params.startedAt,
-                        completedAt: params.completedAt,
-                        taskId: params.taskId,
-                      },
-                    },
-                  },
-                );
-
-                // Fallback: no matching tool-invocation was found in the
-                // current message list (can happen if the initial run's
-                // message list was cleared, e.g. because the task completed
-                // after the process restarted and hooks were reattached
-                // without the original call). Append a standalone tool
-                // message so memory still records the result, even if it
-                // means a duplicate entry for that toolCallId.
-                if (!updated) {
-                  if (params.runId !== runId || (params.runId === runId && workflowResumeData != null)) {
-                    messageList.add(
-                      [
+                await applyBackgroundToolResult({
+                  params,
+                  currentRunId: runId,
+                  hasResumeData: workflowResumeData != null,
+                  args,
+                  messageList,
+                  approvalGrant: approvalGrant as Record<string, unknown> | undefined,
+                  baseProviderMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                  transformForTranscript: async result => {
+                    let transformCarrier = withToolPayloadTransformMetadata(
+                      { metadata: {} as Record<string, any> },
+                      await transformToolPayloadForTargets(
                         {
-                          role: 'tool' as const,
-                          type: 'tool-call',
-                          id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
-                          createdAt: new Date(),
-                          content: [
-                            {
-                              type: 'tool-call' as const,
-                              toolCallId: params.toolCallId,
-                              toolName: params.toolName,
-                              args: transcriptArgs,
-                            },
-                          ],
+                          phase: 'input-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
                         },
-                      ],
-                      'response',
+                        transformSource,
+                        logger,
+                      ),
                     );
-                  }
-                  messageList.add(
-                    [
-                      {
-                        role: 'tool' as const,
-                        content: [
-                          {
-                            type: 'tool-result' as const,
-                            toolCallId: params.toolCallId,
-                            toolName: params.toolName,
-                            result: transcriptResult,
-                            isError: params.status === 'failed',
-                          },
-                        ],
-                      },
-                    ],
-                    'response',
-                  );
-                }
-
-                // Flush to memory if available
-                {
-                  const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                  const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                  if (sqm && tid) {
-                    await sqm.flushMessages(messageList, tid, readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'));
-                  }
-                }
+                    transformCarrier = withToolPayloadTransformMetadata(
+                      transformCarrier,
+                      await transformToolPayloadForTargets(
+                        {
+                          phase: params.status === 'failed' ? 'error' : 'output-available',
+                          toolName: params.toolName,
+                          toolCallId: params.toolCallId,
+                          input: args,
+                          output: params.status === 'failed' ? undefined : params.result,
+                          error: params.status === 'failed' ? params.error : undefined,
+                          providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                        },
+                        transformSource,
+                        logger,
+                      ),
+                    );
+                    const transcriptArgsTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      'input-available',
+                    );
+                    const transcriptResultTransform = getTransformedToolPayload(
+                      transformCarrier.metadata,
+                      'transcript',
+                      params.status === 'failed' ? 'error' : 'output-available',
+                    );
+                    return {
+                      transcriptArgs: hasTransformedToolPayload(transcriptArgsTransform)
+                        ? transcriptArgsTransform.transformed
+                        : args,
+                      transcriptResult: hasTransformedToolPayload(transcriptResultTransform)
+                        ? transcriptResultTransform.transformed
+                        : result,
+                      providerMetadata: withToolPayloadTransformProviderMetadata(
+                        inputData.providerMetadata as ProviderMetadata | undefined,
+                        transformCarrier.metadata,
+                      ) as ProviderMetadata | undefined,
+                    };
+                  },
+                  toModelOutput: (resolvedTool as { toModelOutput?: (output: unknown) => unknown } | undefined)
+                    ?.toModelOutput,
+                  generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
+                  logger,
+                  flush: async () => {
+                    const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    if (sqm && tid) {
+                      await sqm.flushMessages(
+                        messageList,
+                        tid,
+                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
+                      );
+                    }
+                  },
+                });
               },
               // Execution injector — records background task lifecycle metadata on the
               // assistant message without changing the model-visible tool result.
