@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { DatasetsList } from '../datasets-list';
 import type { DatasetsListProps } from '../datasets-list';
 import { datasets, experiments, mixedExperiments } from './fixtures/datasets';
+import { expectComputedTag } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';
 
@@ -57,6 +58,13 @@ describe('DatasetsList', () => {
       expect(within(row).queryByText('reviewed')).toBeNull();
       expect(within(row).getByText('+1')).toBeTruthy();
       expect(within(row).getByTitle('support, english, reviewed')).toBeTruthy();
+    });
+
+    it('renders each visible tag with colors computed from its value', () => {
+      renderList();
+      const row = screen.getByRole('link', { name: /Dataset A/ });
+      expectComputedTag(within(row).getByText('support'), 'support');
+      expectComputedTag(within(row).getByText('english'), 'english');
     });
   });
 

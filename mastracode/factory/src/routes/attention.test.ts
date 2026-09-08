@@ -7,7 +7,6 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryDeferredDecisionRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -35,7 +34,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       workItems: seed.workItems,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
       liveSessions: { isRunning: () => false },
     }).routes(),
   );
@@ -86,7 +85,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date): Promise<FactoryDef
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `attention-failure-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
@@ -144,7 +143,7 @@ describe('supervisor finding attention items', () => {
           title: 'A decision is stuck',
           evidence: 'decision-1 has been retrying past its backoff.',
           ageMs: 600_000,
-          suggestedRepair: { action: 'retry-decision', decisionId: 'decision-1' },
+          suggestedRepair: null,
         },
       ],
       now: new Date('2030-01-01T00:00:00.000Z'),
@@ -436,7 +435,7 @@ async function seedProposal(
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `attention-proposal-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },

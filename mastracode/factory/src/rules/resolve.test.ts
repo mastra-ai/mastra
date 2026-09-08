@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
-import { defaultFactoryRules } from './defaults.js';
-import { resolveFactoryStageRules, resolveFactoryToolRule } from './resolve.js';
+import { resolveFactoryStageRules } from './resolve.js';
 
 describe('Factory rule resolution', () => {
   const onExit = vi.fn(() => undefined);
@@ -11,8 +10,14 @@ describe('Factory rule resolution', () => {
     title: 'Release',
     initialPhase: 'queued',
     phases: {
-      queued: { title: 'Queued', next: 'shipped', onExit: { issue: onExit }, onEnter: { issue: onEnter } },
-      shipped: { title: 'Shipped', onEnter: { issue: onEnter } },
+      queued: {
+        title: 'Queued',
+        kind: 'resting',
+        next: 'shipped',
+        onExit: { issue: onExit },
+        onEnter: { issue: onEnter },
+      },
+      shipped: { title: 'Shipped', kind: 'terminal', onEnter: { issue: onEnter } },
     },
   });
   const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
@@ -77,8 +82,8 @@ describe('Factory rule resolution', () => {
           title: 'Other release',
           initialPhase: 'queued',
           phases: {
-            queued: { title: 'Queued', next: 'shipped' },
-            shipped: { title: 'Shipped' },
+            queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+            shipped: { title: 'Shipped', kind: 'terminal' },
           },
         }),
       ],
@@ -86,12 +91,5 @@ describe('Factory rule resolution', () => {
     });
     expect(resolveFactoryStageRules(other, input)).toEqual([]);
     expect(resolveFactoryStageRules(boards, input)).toHaveLength(2);
-  });
-
-  it('resolves open tool names', () => {
-    const onResult = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({ version: 'resolve-v3', overrides: { tools: { submit_plan: { onResult } } } });
-    expect(resolveFactoryToolRule(rules, 'submit_plan')).toBe(onResult);
-    expect(resolveFactoryToolRule(rules, 'unknown_tool')).toBeUndefined();
   });
 });

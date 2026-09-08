@@ -3,12 +3,9 @@ import { reviewBoard } from '../boards/review.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
 import { defaultLinearRules } from '../integrations/linear/default-rules.js';
-import { defaultFactoryRules, mergeFactoryRuleOverrides } from './defaults.js';
 import type {
-  FactoryToolRuleLeaf,
   FactoryGithubRuleContext,
   FactoryLinearRuleContext,
-  FactoryRulesOverrides,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from './types.js';
@@ -19,7 +16,7 @@ const base = {
   ingress: { type: 'github' as const, id: 'delivery-1' },
   cause: 'test',
   causalChain: [],
-  ruleSetVersion: 'deployment-1',
+  configVersion: 'deployment-1',
 };
 const item = {
   id: 'item-1',
@@ -130,20 +127,14 @@ function linearContext(): FactoryLinearRuleContext {
   };
 }
 
-describe('defaultFactoryRules', () => {
-  it('requires an explicit deployment version', () => {
-    expect(() => defaultFactoryRules({ version: '' })).toThrow(/version is required/i);
-  });
-
+describe('built-in board and integration handlers', () => {
   it('ships ordinary visible default leaves', () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
-    expect(rules.version).toBe('deployment-7');
     expect(workBoard.rules.intake?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
-    expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
+    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
     expect(defaultGithubRules.issueEdited).toBeTypeOf('function');
     expect(defaultGithubRules.issueCommentCreated).toBeTypeOf('function');
@@ -634,7 +625,7 @@ describe('defaultFactoryRules', () => {
   });
 
   it('advances only an approved plan from a bound planning role', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).tools.submit_plan?.onResult;
+    const rule = workBoard.tools.submit_plan?.onResult;
     expect(await rule?.(toolContext({ content: 'Plan approved. Proceed with implementation.' }))).toMatchObject({
       type: 'transition',
       board: 'work',
@@ -951,7 +942,6 @@ describe('defaultFactoryRules', () => {
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
     'keeps every %s in Intake and stamps whether it may be picked up on its own',
     async event => {
-      const rules = defaultFactoryRules({ version: 'deployment-7' });
       const trusted = githubContext(event);
       const untrusted = {
         ...githubContext(event),
@@ -985,7 +975,6 @@ describe('defaultFactoryRules', () => {
   );
 
   it('suggests a review from Intake only for stamped pull requests materialized by webhook', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const rule = reviewBoard.rules.intake?.pullRequest?.onEnter;
 
     expect(
@@ -1016,7 +1005,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('suggests an investigation from Intake only for stamped issues materialized by webhook', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const rule = workBoard.rules.intake?.issue?.onEnter;
 
     expect(
@@ -1037,7 +1025,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const older = {
       ...githubContext('pullRequestOpened', '2026-05-01T00:00:00Z'),
       actor: { type: 'github', login: 'factory-bot', trusted: false, factoryAuthored: true } as const,
@@ -1053,7 +1040,6 @@ describe('defaultFactoryRules', () => {
   it.each(['issueOpened', 'pullRequestOpened'] as const)(
     'keeps trusted %s items created before the Factory in Intake',
     async event => {
-      const rules = defaultFactoryRules({ version: 'deployment-7' });
       const olderContext = githubContext(event, '2026-05-01T00:00:00Z');
 
       expect(await defaultGithubRules[event]?.(olderContext)).toMatchObject({
@@ -1065,7 +1051,6 @@ describe('defaultFactoryRules', () => {
   );
 
   it('uses the same issue and pull-request identities as board Intake', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await defaultGithubRules.issueOpened?.(githubContext('issueOpened'))).toMatchObject({
       source: 'github-issue',
       sourceKey: 'github-issue:42',
@@ -1077,7 +1062,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('records PR branches, status, assignments, and review requests on Review intake', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestOpened');
     context.pullRequest = { ...context.pullRequest!, draft: true };
     expect(await defaultGithubRules.pullRequestOpened?.(context)).toMatchObject({
@@ -1094,7 +1078,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('stamps the GitHub author login on issue and PR intake metadata', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await defaultGithubRules.issueOpened?.(githubContext('issueOpened'))).toMatchObject({
       metadata: { author: 'author' },
     });
@@ -1116,7 +1099,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('moves the merged Review card to Done and carries a session-only message', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
     context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
     context.board = 'review';
@@ -1131,7 +1113,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('reminds the provenance-linked Work agent after merge without transitioning the Work item', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
     context.item = item;
     context.board = 'work';
@@ -1142,7 +1123,6 @@ describe('defaultFactoryRules', () => {
   });
 
   it('cancels the Review card when the PR is closed without merging', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestClosed');
     context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
     context.board = 'review';
@@ -1157,55 +1137,10 @@ describe('defaultFactoryRules', () => {
   });
 
   it('leaves non-review items alone when a PR is closed without merging', async () => {
-    const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestClosed');
     context.item = item;
     context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
     expect(await defaultGithubRules.pullRequestClosed?.(context)).toBeUndefined();
-  });
-
-  it('replaces tool handlers without changing component-owned defaults', () => {
-    const toolResult = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'deployment-8',
-      overrides: { tools: { submit_plan: { onResult: toolResult } } },
-    });
-
-    expect(Object.keys(rules).sort()).toEqual(['tools', 'version']);
-    expect(rules.tools.submit_plan?.onResult).toBe(toolResult);
-    expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
-  });
-
-  it('merges tool overrides while preserving unrelated defaults', () => {
-    const defaultResult = vi.fn(() => undefined);
-    const overrideResult = vi.fn(reject);
-    const unrelatedDefault = vi.fn(() => undefined);
-    const merged = mergeFactoryRuleOverrides(
-      { tools: { submit_plan: { onResult: defaultResult }, other: { onResult: unrelatedDefault } } },
-      { tools: { submit_plan: { onResult: overrideResult } } },
-    );
-
-    expect(merged.tools.submit_plan?.onResult).toBe(overrideResult);
-    expect(merged.tools.other?.onResult).toBe(unrelatedDefault);
-  });
-
-  it('preserves explicitly undefined handlers when they are merged from the base rules', () => {
-    const merged = mergeFactoryRuleOverrides(
-      {
-        tools: { submit_plan: { onResult: undefined } },
-      },
-      {},
-    );
-
-    expect(merged.tools.submit_plan).toHaveProperty('onResult', undefined);
-  });
-
-  it('copies override containers so later mutation cannot replace configured leaves', () => {
-    const leaf: FactoryToolRuleLeaf = { onResult: passThrough };
-    const overrides: FactoryRulesOverrides = { tools: { submit_plan: leaf } };
-    const rules = defaultFactoryRules({ version: 'deployment-9', overrides });
-    leaf.onResult = vi.fn(reject);
-    expect(rules.tools.submit_plan?.onResult).toBe(passThrough);
   });
 });

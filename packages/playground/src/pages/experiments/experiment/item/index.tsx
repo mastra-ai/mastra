@@ -12,6 +12,7 @@ import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutati
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
+import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
@@ -57,6 +58,18 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
         toast('Result flagged for review');
       } catch {
         toast.error('Failed to flag result for review');
+      }
+    },
+    [datasetId, experimentId, updateExperimentResult],
+  );
+  const tagVocabulary = useExperimentTagVocabulary(datasetId, results);
+
+  const updateTags = useCallback(
+    async (resultId: string, tags: string[]) => {
+      try {
+        await updateExperimentResult.mutateAsync({ datasetId, experimentId, resultId, tags });
+      } catch {
+        toast.error('Failed to update tags');
       }
     },
     [datasetId, experimentId, updateExperimentResult],
@@ -149,6 +162,9 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
             }}
             onOpenInReview={() => openInReview(result.id)}
             onFlagForReview={() => void flagForReview(result.id)}
+            onTagsChange={tags => void updateTags(result.id, tags)}
+            tagVocabulary={tagVocabulary}
+            isUpdatingTags={updateExperimentResult.isPending}
             collapsed={resultCollapsed}
             scorePanelSlot={
               featuredScore ? (
