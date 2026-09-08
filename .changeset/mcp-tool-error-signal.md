@@ -16,7 +16,8 @@ if (result.code) { /* ... */ } // structured fields were top-level
 // After
 const result = await tool.execute(...);
 if (result.isError) {
-  const { code, validationResults } = result.structuredContent;
+  // structuredContent is optional; error results may only carry `content`
+  const { code, validationResults } = result.structuredContent ?? {};
   // ...
 }
 ```
