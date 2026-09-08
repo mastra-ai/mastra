@@ -230,6 +230,13 @@ export class ExperimentsPG extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['organizationId', 'projectId'],
       },
+      // Tags JSONB GIN index — backs the `"tags" @> ...::jsonb` containment filter.
+      {
+        name: 'idx_experiment_results_tags_gin',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['tags'],
+        method: 'gin',
+      },
     ];
   }
 

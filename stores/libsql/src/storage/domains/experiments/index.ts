@@ -142,14 +142,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     // LibSQLDB.insert, which encodes jsonb columns again. Those rows hold a JSON
     // string wrapping an array (e.g. '"[\"a\"]"'), which json_each() can't match.
     // Unwrap only string values whose decoded payload is a JSON array; idempotent.
+    // json_valid(x, 6) accepts text or binary JSONB (LibSQLDB writes jsonb columns via jsonb()).
+    // CASE guarantees validity is checked before json_type()/json_extract() run.
     await this.#client.execute({
       sql: `UPDATE "${TABLE_EXPERIMENT_RESULTS}"
-        SET "tags" = json_extract("tags", '$')
-        WHERE "tags" IS NOT NULL
-          AND json_valid("tags")
-          AND json_type("tags") = 'text'
-          AND json_valid(json_extract("tags", '$'))
-          AND json_type(json_extract("tags", '$')) = 'array'`,
+        SET "tags" = jsonb(json_extract("tags", '$'))
+        WHERE CASE
+          WHEN "tags" IS NULL OR NOT json_valid("tags", 6) THEN 0
+          WHEN json_type("tags") <> 'text' THEN 0
+          WHEN NOT json_valid(json_extract("tags", '$'), 6) THEN 0
+          ELSE json_type(json_extract("tags", '$')) = 'array'
+        END`,
       args: [],
     });
   }
@@ -861,7 +864,11 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       }
       // All requested tags must be present (AND semantics)
       for (const tag of args.tags ?? []) {
-        conditions.push('EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)');
+        // CASE guards json_each() so a NULL or malformed tags value excludes the row instead of erroring.
+        // json_valid(x, 6) accepts text or binary JSONB.
+        conditions.push(
+          `CASE WHEN tags IS NOT NULL AND json_valid(tags, 6) THEN EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?) ELSE 0 END`,
+        );
         queryParams.push(tag);
       }
       if (args.filters) {
