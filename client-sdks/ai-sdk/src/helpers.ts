@@ -603,8 +603,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     part.providerMetadata?.openai?.itemId != null
   ) {
     // Replaying a stored OpenAI text item requires its reasoning item, which is hidden here.
-    const openai = { ...part.providerMetadata.openai };
-    delete openai.itemId;
+    const { itemId, ...openai } = { ...part.providerMetadata.openai };
     part = { ...part, providerMetadata: { ...part.providerMetadata, openai } };
   }
 
