@@ -921,6 +921,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
+    // Progressive discovery: point the user (or their agent) at the diagnosis
+    // command so they can pull suggestions without hunting for the flag.
+    // The failed-deploy webhook has already inserted a PENDING diagnosis row,
+    // so `mastra env diagnosis <id>` returns "in progress" immediately rather
+    // than 404-ing while the agent runs.
+    p.log.info(`Run \`mastra env diagnosis ${deployResult.id}\` for suggestions.`);
     process.exit(1);
   } else {
     p.log.warning(`Deploy ended with status: ${finalStatus.status}`);
