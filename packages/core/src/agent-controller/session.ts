@@ -852,6 +852,7 @@ export class SessionThread {
     const threadId = this.#threadId;
     if (!threadId || !store?.hasStorage()) {
       session.resetTokenUsage();
+      session.model.setPackThinkingLevel({ level: undefined });
       return;
     }
 
@@ -898,6 +899,10 @@ export class SessionThread {
       // global currentModelId (set by create()).
       const currentModeId = session.mode.get();
       const modeModelKey = `modeModelId_${currentModeId}`;
+      const packThinkingLevel = meta?.[modeThinkingLevelKey(currentModeId)];
+      session.model.setPackThinkingLevel({
+        level: typeof packThinkingLevel === 'string' ? packThinkingLevel : undefined,
+      });
       if (meta?.[modeModelKey]) {
         session.model.set({ modelId: meta[modeModelKey] as string });
       } else {
@@ -1536,6 +1541,13 @@ export class SessionRun {
  */
 export class SessionModel {
   #id = '';
+  /**
+   * The active mode's ModelPack thinking level, cached from the persisted
+   * `modeThinkingLevel_<mode>` thread setting so building a request context
+   * never has to touch storage. Refreshed on thread hydration, mode switch and
+   * at run start ({@link syncFromPersisted}).
+   */
+  #packThinkingLevel: string | undefined;
   readonly #store: () => ThreadSettingsStore | undefined;
   /** This session's event bus; {@link switch} emits `model_changed` here. */
   readonly #bus: SessionBus;
@@ -1588,6 +1600,25 @@ export class SessionModel {
     this.#id = modelId;
   }
 
+  /** The active mode's cached ModelPack thinking level, or undefined when the pack doesn't set one. */
+  getPackThinkingLevel(): string | undefined {
+    return this.#packThinkingLevel;
+  }
+
+  /** Set the in-memory pack thinking level for the active mode (no persistence). */
+  setPackThinkingLevel({ level }: { level: string | undefined }): void {
+    this.#packThinkingLevel = level;
+  }
+
+  /**
+   * Refresh the cached pack thinking level for `modeId` from the persisted
+   * `modeThinkingLevel_<mode>` thread setting.
+   */
+  async syncPackThinkingLevel({ modeId }: { modeId: string }): Promise<void> {
+    const stored = await this.#store()?.get(modeThinkingLevelKey(modeId));
+    this.#packThinkingLevel = typeof stored === 'string' ? stored : undefined;
+  }
+
   /** Persist `modelId` as the last-used model for `modeId`. */
   async saveForMode({ modeId, modelId }: { modeId: string; modelId: string }): Promise<void> {
     await this.#store()?.set(modeModelKey(modeId), modelId);
@@ -1608,10 +1639,13 @@ export class SessionModel {
    * and the persisted value are always written together).
    */
   async syncFromPersisted({ modeId }: { modeId: string }): Promise<void> {
-    const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
-    if (!stored || stored === this.#id) return;
-    this.#id = stored;
-    this.#bus.emit({ type: 'model_changed', modelId: stored, scope: 'thread', modeId });
+    const [storedModel] = await Promise.all([
+      this.#store()?.get(modeModelKey(modeId)) as Promise<string | undefined>,
+      this.syncPackThinkingLevel({ modeId }),
+    ]);
+    if (!storedModel || storedModel === this.#id) return;
+    this.#id = storedModel;
+    this.#bus.emit({ type: 'model_changed', modelId: storedModel, scope: 'thread', modeId });
   }
 
   /**
@@ -1761,7 +1795,10 @@ export class SessionMode {
     await this.#store()?.set(MODE_ID_KEY, modeId);
     if (this.#switchVersion !== version) return;
 
-    const modelId = await this.#model.resolveForMode({ modeId, defaultModelId: mode.defaultModelId });
+    const [modelId] = await Promise.all([
+      this.#model.resolveForMode({ modeId, defaultModelId: mode.defaultModelId }),
+      this.#model.syncPackThinkingLevel({ modeId }),
+    ]);
     if (this.#switchVersion !== version) return;
     if (modelId) {
       this.#model.set({ modelId });
