@@ -185,6 +185,25 @@ describe('checkMastraPeerDeps', () => {
     const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toHaveLength(0);
   });
+
+  it.each(['workspace:^', 'catalog:', '^1.0.0'])(
+    'should skip unresolved installed version %s',
+    async installedVersion => {
+      const packages: MastraPackageInfo[] = [
+        { name: '@mastra/core', version: installedVersion },
+        { name: '@mastra/memory', version: '1.0.0' },
+      ];
+
+      mockGetPackageInfo.mockImplementation(async (name: string) => ({
+        name,
+        version: packages.find(pkg => pkg.name === name)?.version ?? '0.0.0',
+        rootPath: `/node_modules/${name}`,
+        packageJson: name === '@mastra/memory' ? { peerDependencies: { '@mastra/core': '^1.0.0' } } : {},
+      }));
+
+      await expect(checkMastraPeerDeps(packages)).resolves.toEqual([]);
+    },
+  );
 });
 
 describe('workspace package manager detection', () => {
@@ -284,6 +303,27 @@ describe('workspace package manager detection', () => {
     const aboveRange = { ...mismatch, installedVersion: '2.0.0' };
     expect(getUpdateCommand([aboveRange, aboveRange, mismatch, mismatch])).toBe(
       'pnpm add @mastra/memory@latest @mastra/core@latest',
+    );
+  });
+
+  it.each(['workspace:^', 'catalog:', '^1.0.0'])(
+    'does not generate a command or warning for unresolved installed version %s',
+    installedVersion => {
+      const unresolvedMismatch = { ...mismatch, installedVersion };
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(getUpdateCommand([unresolvedMismatch])).toBeNull();
+      expect(logPeerDepWarnings([unresolvedMismatch])).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('ignores unresolved versions while generating commands for comparable mismatches', () => {
+    fs.writeFileSync(join(workspace, 'pnpm-lock.yaml'), '');
+    vi.spyOn(process, 'cwd').mockReturnValue(app);
+
+    expect(getUpdateCommand([{ ...mismatch, installedVersion: 'workspace:^' }, mismatch])).toBe(
+      'pnpm add @mastra/core@latest',
     );
   });
 
