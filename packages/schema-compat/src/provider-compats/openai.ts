@@ -264,6 +264,24 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             const arrayKeywords = ['items'] as const;
             const typeSpecificKeywords = (type: JSONSchema7['type']) =>
               type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
+            const isRedundantNullableUnion = (type: JSONSchema7['type']) => {
+              if (!prop.anyOf || prop.anyOf.length !== 2) return false;
+
+              const nullBranches = prop.anyOf.filter(branch => typeof branch !== 'boolean' && branch.type === 'null');
+              const valueBranches = prop.anyOf.filter(branch => typeof branch !== 'boolean' && branch.type !== 'null');
+              if (nullBranches.length !== 1 || valueBranches.length !== 1) return false;
+
+              const valueBranch = valueBranches[0] as JSONSchema7;
+              if (valueBranch.type !== type) return false;
+
+              return Object.entries(valueBranch).every(([keyword, value]) => {
+                if (keyword === 'type') return true;
+                return (
+                  keyword in prop &&
+                  JSON.stringify((prop as Record<string, unknown>)[keyword]) === JSON.stringify(value)
+                );
+              });
+            };
 
             if (Array.isArray(prop.type)) {
               const types = [...prop.type];
@@ -309,13 +327,17 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               const keywords = typeSpecificKeywords(originalType);
               if (keywords.length > 0) {
                 const branch = { type: originalType } as JSONSchema7;
-                for (const keyword of [...keywords, 'const', 'enum'] as const) {
+                const preserveAnyOf = prop.anyOf && !isRedundantNullableUnion(originalType) ? prop.anyOf : undefined;
+                for (const keyword of [...keywords, 'const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     branch[keyword] = prop[keyword];
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     delete prop[keyword];
                   }
+                }
+                if (preserveAnyOf) {
+                  branch.anyOf = preserveAnyOf;
                 }
 
                 delete prop.type;

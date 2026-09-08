@@ -1,3 +1,4 @@
+import Ajv from 'ajv';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
@@ -117,6 +118,17 @@ describe('OpenAISchemaCompatLayer', () => {
             },
             required: ['field'],
             additionalProperties: false,
+            anyOf: [
+              {
+                type: 'object',
+                properties: {
+                  field: { type: 'string', description: 'SINGLE_OBJECT_SENTINEL' },
+                },
+                required: ['field'],
+                additionalProperties: false,
+              },
+              { type: 'null' },
+            ],
           },
         },
         required: [],
@@ -183,6 +195,59 @@ describe('OpenAISchemaCompatLayer', () => {
       const nullResult: any = await compatSchema['~standard'].validate({ filter: null, tags: null });
       expect(nullResult).not.toHaveProperty('issues');
       expect(nullResult.value).toEqual({ filter: undefined, tags: undefined });
+    });
+
+    it('preserves meaningful anyOf and oneOf constraints inside the non-null branch', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          anyFilter: {
+            type: 'object',
+            anyOf: [
+              { properties: { kind: { const: 'x' } }, required: ['kind'] },
+              { properties: { kind: { const: 'y' } }, required: ['kind'] },
+            ],
+            properties: { kind: { type: 'string' } },
+            required: ['kind'],
+            additionalProperties: false,
+          },
+          oneFilter: {
+            type: 'object',
+            oneOf: [
+              { properties: { kind: { const: 'x' } }, required: ['kind'] },
+              { properties: { kind: { const: 'y' } }, required: ['kind'] },
+            ],
+            properties: { kind: { type: 'string' } },
+            required: ['kind'],
+            additionalProperties: false,
+          },
+          arrayFilter: {
+            type: 'array',
+            items: { type: 'string' },
+            anyOf: [{ maxItems: 0 }, { minItems: 2 }],
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const anyObjectBranch = result.properties.anyFilter.anyOf.find((branch: any) => branch.type === 'object');
+      expect(anyObjectBranch.anyOf).toHaveLength(2);
+      expect(result.properties.anyFilter).not.toHaveProperty('oneOf');
+
+      const oneObjectBranch = result.properties.oneFilter.anyOf.find((branch: any) => branch.type === 'object');
+      expect(oneObjectBranch.oneOf).toHaveLength(2);
+      expect(result.properties.oneFilter).not.toHaveProperty('oneOf');
+
+      const arrayObjectBranch = result.properties.arrayFilter.anyOf.find((branch: any) => branch.type === 'array');
+      expect(arrayObjectBranch.anyOf).toHaveLength(2);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ anyFilter: null, oneFilter: null, arrayFilter: null })).toBe(true);
+      expect(validate({ anyFilter: { kind: 'x' }, oneFilter: { kind: 'y' }, arrayFilter: ['a', 'b'] })).toBe(true);
+      expect(validate({ anyFilter: null, oneFilter: null, arrayFilter: [] })).toBe(true);
+      expect(validate({ anyFilter: { kind: 'z' }, oneFilter: { kind: 'x' }, arrayFilter: null })).toBe(false);
+      expect(validate({ anyFilter: { kind: 'x' }, oneFilter: { kind: 'z' }, arrayFilter: null })).toBe(false);
+      expect(validate({ anyFilter: null, oneFilter: null, arrayFilter: ['a'] })).toBe(false);
     });
 
     it('keeps items only in the array branch for array/string unions', () => {
@@ -291,14 +356,24 @@ describe('OpenAISchemaCompatLayer', () => {
             additionalProperties: false,
           };
         }
+        const child = nested(depth - 1);
         return {
           type: 'object',
           properties: {
             filter: {
               type: 'object',
-              properties: { child: nested(depth - 1) },
+              properties: { child },
               required: ['child'],
               additionalProperties: false,
+              anyOf: [
+                {
+                  type: 'object',
+                  properties: { child: structuredClone(child) },
+                  required: ['child'],
+                  additionalProperties: false,
+                },
+                { type: 'null' },
+              ],
             },
           },
           required: [],
