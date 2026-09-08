@@ -281,13 +281,98 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
   </StepItem>
 
   <StepItem>
-    Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
+    Record the environment variables your legacy deploys use before the first unified deploy. Legacy Server deploys store variables on the project; legacy Studio deploys read them from the local `.env` file at deploy time. Pull the project-level set to a local file so nothing is lost:
+
+    ```bash
+    mastra server env pull
+    ```
+
+    Keep this file out of version control. You'll compare it against the new environment after the first deploy.
   </StepItem>
 
   <StepItem>
-    Move any project-level environment variables to the environment that needs them, in the dashboard under **Environments → \<env> → Variables**. See [Environment variables](/docs/mastra-platform/environments#environment-variables).
+    Deploy once from a checkout that has your `.env` file (or pass `--env-file`):
+
+    ```bash
+    mastra deploy --env production
+    ```
+
+    The first unified deploy adopts the project onto the environment pipeline and creates the `production` environment. Adoption copies the project-level variables from your legacy Server deploys into `production`, reuses the existing Server infrastructure where possible, and layers any local env file on top. The CLI writes `.mastra-project.json` with the resolved org and project IDs; commit it. See [Environments](/docs/mastra-platform/environments) for the full model.
+  </StepItem>
+
+  <StepItem>
+    Verify the merged variables on the new environment against the file you saved:
+
+    ```bash
+    mastra env vars pull production --output .env.production.check
+    ```
+
+    Add anything missing in the dashboard under **Environments → production → Variables**, then apply the change with `mastra env restart production`. See [Migrate environment variables](#migrate-environment-variables) for how to split shared and per-environment values.
+  </StepItem>
+
+  <StepItem>
+    Confirm auth behaves the same as before: open the Studio URL and sign in as a team member, then call an API route on the Server URL with and without your end-user credentials. See [Keep authentication working](#keep-authentication-working) for what changes and what doesn't.
   </StepItem>
 </Steps>
+
+### Migrate environment variables
+
+Legacy deploys have one flat set of project variables. Environments split that set into the [scopes](/docs/mastra-platform/environments#environment-variables) below. A deploy merges them in this order, and a later source overrides an earlier one on the same key:
+
+1. **Environment-scoped variables**: Stored on one environment. Use these for values that differ between `staging` and `production`, such as webhook URLs or third-party sandbox credentials.
+1. **Project-scoped variables**: Shared by every environment. Use these for values that are the same everywhere, such as model provider keys.
+1. **Local env file**: An explicit `--env-file`, an auto-selected `.env.<env>`, or the ambient `.env` and `.env.local` files. Uploaded on each deploy from the machine that runs it.
+1. **Managed variables**: Injected by hosted databases and other platform resources. Stored variables can't override them. Don't copy legacy database URLs by hand; attach the [database](/docs/mastra-platform/database) to the environment instead.
+
+After adoption, every copied variable is environment-scoped on `production`. Nothing forces you to re-scope them, but do it before you create a second environment so `staging` doesn't inherit production secrets:
+
+- Move shared values to the project scope in the dashboard. Because project-scoped values win over environment-scoped ones, delete the `production` copy of each value you move so a later environment-level edit isn't silently ignored.
+- Leave environment-specific values on `production` and set their `staging` counterparts on the new environment.
+
+Treat the dashboard as the source of truth once the migration is done. A `.env` file in the deploy directory is still uploaded and overwrites stored keys; the CLI lists the affected keys and asks for confirmation (or overwrites silently with `--yes`). In CI, don't check in env files and let the deploy fall back to the stored variables.
+
+Two legacy commands still exist but only see the project scope: `mastra server env pull` and `mastra server env set`. Use [`mastra env vars pull`](/reference/cli/mastra#mastra-env-vars-pull) to see what an environment resolves, and the dashboard to change it. Variables the platform sets itself (`MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_*`, `MASTRA_PLATFORM_ACCESS_TOKEN`) are stripped from uploads and don't need to be migrated.
+
+### Keep authentication working
+
+The platform separates two kinds of auth. Legacy deploys blurred them; the environment pipeline doesn't.
+
+- **Studio auth**: Who on your team can open Studio and see observability. The platform injects this. Team members sign in with their Mastra Platform account, and Studio role-based access control (RBAC) follows the project's team roles.
+- **Server auth**: Who your end users are. You configure this in `server.auth` (and `server.rbac`) in your Mastra instance. The platform never changes it.
+
+On `@mastra/core` `>= 1.44` the deploy wrapper calls `mastra.setStudio()` on the built artifact. Studio gets the platform's auth provider, and your `server.auth` stays exactly as configured. Requests that come from the Studio UI are authenticated by the Studio provider; every other request to `/api/*` is authenticated by `server.auth`. If you already set `studio.auth` in code, both providers are accepted for Studio sign-in: a request is authenticated by the first provider that recognizes its token.
+
+Compared to a legacy deploy, this means:
+
+| Legacy behavior | Environment pipeline |
+| - | - |
+| Studio was public unless you set `server.auth`, in which case the same provider gated the Studio login screen. | Studio always requires a platform team sign-in, whether or not you configure `server.auth`. |
+| A `server.auth` provider authenticated both direct API calls and Studio. | `server.auth` authenticates direct API calls. Studio traffic uses the platform provider. |
+| On `@mastra/core` `< 1.44`, the platform merged its provider into `server.auth`, so a team member's token also worked for direct API calls. | Team tokens only work for Studio. Direct API calls need credentials your `server.auth` accepts. |
+
+Nothing in your `server.auth` configuration needs to change. Keep the provider you have and confirm its env vars (client IDs, JWKS URLs, secrets) made it into the environment scope. If you had no `server.auth`, the API stays public exactly as before; see [Auth](/docs/auth/overview) to add one.
+
+To keep Studio behind your own provider only, set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` on the environment. The platform then skips its provider and leaves `studio.auth` and `server.auth` untouched. Team members lose Studio sign-in with their platform account, and if neither `studio.auth` nor `server.auth` is configured, Studio is public.
+
+Verify after the first deploy:
+
+1. Open the Studio URL. A sign-in screen opens and a project team member can sign in.
+1. Call `GET <server-url>/api/agents` without credentials. Expect `401` if you configure `server.auth`, or `200` if the API was public before.
+1. Repeat the call with an end-user token your `server.auth` accepts. Expect `200`.
+
+### Migrate CI
+
+Replace the legacy command and add the identifiers the unified command needs for headless deploys:
+
+```yaml title=".github/workflows/deploy.yml"
+- run: npx mastra deploy --env production --yes
+  env:
+    MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+    MASTRA_ORG_ID: ${{ vars.MASTRA_ORG_ID }}
+    MASTRA_PROJECT_ID: ${{ vars.MASTRA_PROJECT_ID }}
+```
+
+Both IDs are in the `.mastra-project.json` written by your first local deploy. `--yes` also skips the env-var overwrite confirmation, so don't keep an env file in the CI checkout unless you intend to overwrite stored values on every run.
 
 ### FAQ
 
@@ -295,7 +380,9 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
 
 **My organization isn't opted in yet.** Contact support. Opt-in will be automatic before the next major version.
 
-**Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard.
+**Can I roll back?** Yes. Environments retain deploy history and you can redeploy any prior successful artifact from the dashboard. Keep the legacy deploy and any legacy database in place until the new environment is verified.
+
+**Do I need to migrate a project that only used `mastra studio deploy`?** Yes. The unified command deploys Studio and Server together from one build. Your Studio URL keeps working, and the Server URL becomes available for API traffic.
 
 ## Related
 
