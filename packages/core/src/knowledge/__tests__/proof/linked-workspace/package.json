@@ -1,0 +1,20 @@
+{
+  "name": "knowledge-wave-4-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "wave4": "tsx src/wave4.ts",
+    "teardown": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@mastra/core": "link:__CORE_PATH__",
+    "@mastra/libsql": "link:__LIBSQL_PATH__",
+    "@mastra/memory": "link:__MEMORY_PATH__",
+    "@mastra/pg": "link:__PG_PATH__",
+    "typescript": "link:__TYPESCRIPT_PATH__",
+    "@types/node": "link:__NODE_TYPES_PATH__",
+    "tsx": "link:__TSX_PATH__",
+    "zod": "link:__ZOD_PATH__"
+  }
+}
