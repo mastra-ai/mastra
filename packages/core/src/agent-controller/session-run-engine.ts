@@ -5,6 +5,7 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { MessagePartSpans } from '../agent/message-list/message-part-spans';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -226,8 +227,8 @@ type StreamState = {
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
   isSuspended: boolean;
-  textContentById: Map<string, { index: number; text: string }>;
-  thinkingContentById: Map<string, { index: number; text: string }>;
+  spans: MessagePartSpans;
+  messageIdObserved: boolean;
   toolPartById: Map<string, number>;
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
@@ -321,8 +322,8 @@ export class SessionRunEngine {
     this.#session.emit({ type: 'message_end', message: state.currentMessage });
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
-    state.textContentById.clear();
-    state.thinkingContentById.clear();
+    state.spans.clear();
+    state.messageIdObserved = false;
     state.toolPartById.clear();
     state.completedToolPrelude = false;
   }
@@ -331,8 +332,8 @@ export class SessionRunEngine {
     return {
       currentMessage: this.createEmptyAssistantMessage(),
       isSuspended: false,
-      textContentById: new Map<string, { index: number; text: string }>(),
-      thinkingContentById: new Map<string, { index: number; text: string }>(),
+      spans: new MessagePartSpans(),
+      messageIdObserved: false,
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
       completedToolPrelude: false,
@@ -519,83 +520,26 @@ export class SessionRunEngine {
         }
         state.completedToolPrelude = false;
         state.offeredResponseIds.add(messageId);
-        if (!this.hasCurrentMessageContent(state)) {
+        if (!this.hasCurrentMessageContent(state) && !state.messageIdObserved) {
           state.currentMessage.id = messageId;
         }
         break;
       }
 
-      case 'text-start': {
-        // A late start for an id already seeded by an orphan delta must not
-        // create a duplicate part or reset the accumulated text.
-        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const textIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'text', text: '' });
-        state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        break;
-      }
-
-      case 'text-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let textState = state.textContentById.get(id);
-        if (!textState) {
-          // Deltas can arrive without a seeded part — e.g. after a step-start
-          // rotation cleared the map mid-text. Seed a part instead of silently
-          // dropping the text, otherwise the folded message loses content.
-          const textIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'text', text: '' });
-          textState = { index: textIndex, text: '' };
-          state.textContentById.set(id, textState);
+      case 'text-start':
+      case 'text-delta':
+      case 'text-end':
+      case 'reasoning-start':
+      case 'reasoning-delta':
+      case 'reasoning-end':
+      case 'redacted-reasoning': {
+        const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
+        const opensTheAnswer = chunk.type === 'text-start' || (folded?.created && folded.part.type === 'text');
+        if (opensTheAnswer && !state.messageIdObserved) {
+          state.messageIdObserved = true;
           this.#session.emit({ type: 'message_start', message: state.currentMessage });
         }
-        textState.text += getString(getPayload(chunk).text) ?? '';
-        const textContent = state.currentMessage.content.parts[textState.index];
-        if (textContent && textContent.type === 'text') {
-          textContent.text = textState.text;
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'text-end': {
-        state.textContentById.delete(getString(getPayload(chunk).id) ?? '');
-        break;
-      }
-
-      case 'reasoning-start': {
-        // Mirror text-start: a late start for an already-seeded id is a no-op.
-        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
-        const thinkingIndex = state.currentMessage.content.parts.length;
-        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-        state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-delta': {
-        const id = getString(getPayload(chunk).id) ?? '';
-        let thinkingState = state.thinkingContentById.get(id);
-        if (!thinkingState) {
-          // Same tolerance as text-delta: seed the part rather than silently
-          // dropping reasoning whose start chunk never seeded the id.
-          const thinkingIndex = state.currentMessage.content.parts.length;
-          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
-          thinkingState = { index: thinkingIndex, text: '' };
-          state.thinkingContentById.set(id, thinkingState);
-        }
-        thinkingState.text += getString(getPayload(chunk).text) ?? '';
-        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-        if (thinkingContent && thinkingContent.type === 'reasoning') {
-          thinkingContent.reasoning = thinkingState.text;
-          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-        }
-        this.#session.emit({ type: 'message_update', message: state.currentMessage });
-        break;
-      }
-
-      case 'reasoning-end': {
-        state.thinkingContentById.delete(getString(getPayload(chunk).id) ?? '');
+        if (folded) this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 
