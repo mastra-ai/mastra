@@ -91,13 +91,19 @@ export const backgroundSubagentsScenario = {
     await runtime.waitForOutputText(/background_probe failed in background/i, terminal, 10_000);
     const compactOutput = terminal.serialize().view;
     check(
-      !compactOutput.includes('invocation · {"label":"failed","fail":true}'),
-      `Expected completion-card invocation details to remain collapsed initially.\n${compactOutput}`,
+      !compactOutput.includes('invocation · {"label":"failed","fail":true}') &&
+        !compactOutput.includes('failure · BACKGROUND_PROBE_FAILURE:failed'),
+      `Expected completion-card task details to be omitted.\n${compactOutput}`,
     );
 
     terminal.write('\x05');
-    await runtime.waitForOutputText(/invocation · \{"label":"failed","fail":true\}/i, terminal, 10_000);
-    await runtime.waitForOutputText(/failure · .*BACKGROUND_PROBE_FAILURE:failed/i, terminal, 10_000);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const expandedOutput = terminal.serialize().view;
+    check(
+      !expandedOutput.includes('invocation · {"label":"failed","fail":true}') &&
+        !expandedOutput.includes('failure · BACKGROUND_PROBE_FAILURE:failed'),
+      `Expected completion-card task details to remain omitted after expansion.\n${expandedOutput}`,
+    );
 
     terminal.write('\x07');
     await runtime.waitForScreenText(/Background activity/i, terminal, 10_000);
@@ -144,7 +150,7 @@ export const backgroundSubagentsScenario = {
       if (
         value.name === 'subagent' &&
         isObject(argumentsValue) &&
-        argumentsValue.task === 'Return the exact marker DEEP_DELEGATION_FOREGROUND.' &&
+        argumentsValue.task === 'Return the requested delegation completion marker.' &&
         !('_background' in argumentsValue)
       ) {
         nestedDelegationWithoutOverride = true;
