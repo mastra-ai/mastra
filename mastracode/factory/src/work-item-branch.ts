@@ -64,3 +64,9 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   }
   return `factory/item-${item.id}`;
 }
+
+/** The pull request a `factory/pr-<number>` branch was named after, the inverse of {@link workItemBranch}. */
+export function pullRequestNumberFromBranch(branch: string): number | undefined {
+  const match = /^factory\/pr-([1-9]\d*)$/.exec(branch);
+  return match ? Number(match[1]) : undefined;
+}

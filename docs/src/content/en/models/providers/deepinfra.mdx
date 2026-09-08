@@ -292,18 +292,6 @@ for await (const chunk of stream) {
     "outputCost": 1.1
   },
   {
-    "model": "deepinfra/moonshotai/Kimi-K2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": 0.45,
-    "outputCost": 2.25
-  },
-  {
     "model": "deepinfra/moonshotai/Kimi-K2.6",
     "imageInput": true,
     "audioInput": false,
@@ -797,14 +785,3 @@ const agent = new Agent({
 });
 ```
 
-
-
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/deepinfra) for more details.
-
-```bash npm2yarn
-npm install @ai-sdk/deepinfra
-```
-
-For detailed provider-specific documentation, see the [AI SDK Deep Infra provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/deepinfra).

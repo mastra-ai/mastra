@@ -225,7 +225,7 @@ function TraceThreadRow({
   onHighlightSpans,
 }: TraceThreadRowProps) {
   // Deduped with the fetch inside TraceThreadItemView (same query key).
-  const { data, isLoading } = useTraceSpans(traceId);
+  const { data, isLoading } = useTraceSpans(traceId, { passive: true });
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(data?.spans ?? []), [data]);
 

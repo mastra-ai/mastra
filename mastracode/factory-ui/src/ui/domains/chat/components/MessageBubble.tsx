@@ -5,7 +5,6 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { useState } from 'react';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
@@ -75,14 +74,6 @@ export function MessageBubble({
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
-  // Decided the first time the entry is drawn and never revisited: only calls already
-  // there when the reader arrived may fold into a group. A call landing under them —
-  // a live run being watched, or one restored mid-run — stays the row it played as.
-  const [groupable] = useState<ReadonlySet<string>>(() =>
-    entry.streaming
-      ? new Set()
-      : new Set(written.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : []))),
-  );
   // Always the projected parts, never the raw message: a partially revealed part
   // keeps the same part count as the full one, so no cheap identity check can
   // tell them apart — and this sits inside the entry's memo, so a fresh object
@@ -90,7 +81,7 @@ export function MessageBubble({
   const message = { ...entry.message, content: { ...entry.message.content, parts } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
-  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable, entry.message.createdAt);
+  const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
@@ -163,14 +154,22 @@ export function MessageBubble({
     },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const group = toolGroups.byFirstId.get(toolCallId);
-      if (group)
+      const group = toolGroups.byFirstKey.get(toolCallId);
+      if (group) {
+        const tools = group.map(member =>
+          toolFromInvocationPart(
+            member,
+            entry.runtimeTools?.[member.toolInvocation.toolCallId],
+            entry.message.createdAt,
+          ),
+        );
         return (
           <Arriving>
-            <ToolGroup tools={group} />
+            <ToolGroup tools={tools} />
           </Arriving>
         );
-      if (toolGroups.memberIds.has(toolCallId)) return null;
+      }
+      if (toolGroups.memberKeys.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);

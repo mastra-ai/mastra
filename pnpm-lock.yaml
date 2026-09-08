@@ -2394,6 +2394,9 @@ importers:
       hono:
         specifier: 4.12.34
         version: 4.12.34
+      posthog-node:
+        specifier: ^5.46.1
+        version: 5.48.0(rxjs@7.8.2)
       zod:
         specifier: ^4.3.6
         version: 4.4.3

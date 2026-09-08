@@ -21,7 +21,6 @@ export interface DatasetsToolbarProps {
   onReset?: () => void;
   hasActiveFilters?: boolean;
   onCreateClick?: () => void;
-  createTooltip?: string;
 }
 
 export function DatasetsToolbar({
@@ -35,7 +34,6 @@ export function DatasetsToolbar({
   onReset,
   hasActiveFilters,
   onCreateClick,
-  createTooltip = 'Create a dataset',
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -75,8 +73,9 @@ export function DatasetsToolbar({
         )}
       </ButtonsGroup>
       {onCreateClick && (
-        <Button onClick={onCreateClick} tooltip={createTooltip} variant="primary" className="ml-auto shrink-0">
+        <Button onClick={onCreateClick} variant="primary" className="ml-auto shrink-0">
           <Plus />
+          Create Dataset
         </Button>
       )}
     </div>

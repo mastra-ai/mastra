@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.38.1-alpha.14
+
+### Patch Changes
+
+- Disabled native subagents by default and added enable, disable, and model configuration controls to the /subagents command. ([#23335](https://github.com/mastra-ai/mastra/pull/23335))
+
+- Updated dependencies [[`b7b6ce0`](https://github.com/mastra-ai/mastra/commit/b7b6ce0d9a84e4322e1314bcdf07db81485d6ba2)]:
+  - @mastra/code-sdk@1.7.0-alpha.13
+
+## 0.38.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`e3e847e`](https://github.com/mastra-ai/mastra/commit/e3e847e32238fa52c0295f57fd04f695d400779d)]:
+  - @mastra/pg@1.23.0-alpha.5
+  - @mastra/code-sdk@1.7.0-alpha.12
+
+## 0.38.1-alpha.12
+
+### Patch Changes
+
+- Fixed missing goal startup and resume details in the terminal transcript, including goals started from approved plans. ([#23287](https://github.com/mastra-ai/mastra/pull/23287))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`f596ff6`](https://github.com/mastra-ai/mastra/commit/f596ff65378fcc7e85fb314d895a38fb2e5b7e7e), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/pg@1.23.0-alpha.4
+  - @mastra/code-sdk@1.7.0-alpha.11
+
 ## 0.38.1-alpha.11
 
 ### Patch Changes

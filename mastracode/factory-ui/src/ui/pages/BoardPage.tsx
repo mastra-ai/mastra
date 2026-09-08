@@ -134,6 +134,7 @@ function BoardContent({
   const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
+    factoryProjectId,
     projectRepositoryId: repository.projectRepositoryId,
     items: items.all,
   });
