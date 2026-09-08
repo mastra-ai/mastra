@@ -4,7 +4,7 @@
 
 Updated Session follow-ups to share the Agent-owned thread queue and pending count across collaborators. Steering retains its abort-then-send behavior without clearing queued follow-ups. Session cleanup preserves submitted messages while cancelling unfinished local preparation.
 
-Renamed the experimental `subscribeQueuedMessages()` API to `subscribeThreadEvents()`. It now emits a typed `queue-count-changed` event synchronously for the initial pending-count baseline and whenever that count changes:
+**Breaking change:** replace `subscribeQueuedMessages({ resourceId, threadId }, listener)` with `subscribeThreadEvents({ resourceId, threadId }, listener)`. The listener now receives a typed event instead of a `{ count }` snapshot:
 
 ```typescript
 const unsubscribe = agent.subscribeThreadEvents({ resourceId, threadId }, event => {
