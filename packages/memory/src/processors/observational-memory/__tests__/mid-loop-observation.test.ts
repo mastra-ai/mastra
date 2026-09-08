@@ -721,13 +721,13 @@ describe('Mid-Loop Observation', () => {
           parts: [
             {
               type: 'tool-invocation',
+              providerExecuted: true,
               toolInvocation: {
                 state: 'output-error',
                 toolCallId: 'tc-1',
                 toolName: 'web_search',
                 args: {},
                 errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
-                providerExecuted: true,
               },
             } as any,
           ],
@@ -759,13 +759,13 @@ describe('Mid-Loop Observation', () => {
           parts: [
             {
               type: 'tool-invocation',
+              providerExecuted: true,
               toolInvocation: {
                 state: 'output-error',
                 toolCallId: 'tc-done',
                 toolName: 'web_search',
                 args: {},
                 errorText: 'Provider tool call did not complete: the model stream terminated with an error.',
-                providerExecuted: true,
               },
             } as any,
             {
