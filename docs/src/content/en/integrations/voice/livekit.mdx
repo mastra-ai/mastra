@@ -1,12 +1,12 @@
 ---
 title: 'LiveKit | Voice'
-description: "Build real-time voice agents with Mastra and LiveKit for browser or phone calls, turn detection, interruptions, tools, memory, and telephony."
+description: 'Build real-time voice agents with Mastra and LiveKit for browser or phone calls, turn detection, interruptions, tools, memory, and telephony.'
 packages:
   - '@mastra/livekit'
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
+import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # LiveKit
 
@@ -142,7 +142,7 @@ export default createLiveKitWorker({
 - `turnDetection: 'multilingual'`: Runs LiveKit's semantic end-of-turn model locally on CPU. It reads the live transcript to avoid cutting users off mid-thought. Use `'vad'` or `'stt'` for silence-based endpointing instead.
 - `endpointing`: Bounds how long the agent waits after the user stops speaking.
 - `interruption`: Controls barge-in. When the user speaks over the agent, LiveKit stops playback and cancels the in-flight Mastra stream, so token generation stops too.
-- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and every run persists the user message, which duplicates messages in the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history.
+- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and a run that LiveKit later discards has already persisted a partial user message and a partial, never-spoken reply to the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history, or keep both by running turns read-only; see [preemptive generation with memory](#preemptive-generation-with-memory).
 
 See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns/) for all options.
 
@@ -196,6 +196,83 @@ When the resolved Mastra agent has memory configured, each call becomes one memo
 Each turn sends only the new user input; Mastra Memory supplies history, semantic recall, and working memory. Pin a session to an existing thread by passing `threadId` in the connection request body, which is useful for continuing a text conversation by voice. In Studio, starting a call from an open chat binds the call to that thread, and the transcript fills into the chat after each exchange.
 
 When a user interrupts the agent, the in-flight generation aborts and nothing from that turn is persisted at that moment. LiveKit keeps the part the user actually heard in its transcript, and on the next turn the worker re-sends that heard-only fragment so the thread backfills to match the call. A user who hangs up right after interrupting leaves that final fragment unrecorded. See [interrupted turns](#interrupted-turns) for the details and a reconciliation recipe.
+
+#### Preemptive generation with memory
+
+LiveKit's preemptive generation calls the Mastra agent on interim transcripts and discards runs whose transcript changed. The plugin can't tell a speculative run from a real turn, so with `memory` set every run persists, including discarded ones. To keep preemptive generation on without corrupting the thread, pass `options: { readOnly: true }` in the memory mapping. The agent still reads history, semantic recall, and working memory from the thread but writes nothing, so speculative runs leave no trace. Persistence of committed turns then belongs to you: save them from LiveKit's `ConversationItemAdded` event, which fires only for items the session committed. Messages keep LiveKit's ids, so saves stay idempotent across retries.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { voice } from '@livekit/agents'
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  memory: ({ metadata, roomName }) => ({
+    thread: metadata.threadId ?? roomName,
+    resource: metadata.resourceId ?? roomName,
+    options: { readOnly: true },
+  }),
+  turnHandling: { preemptiveGeneration: { enabled: true } },
+  onSessionStart: async ({ session, ctx, agent }) => {
+    const mapping = agent.memory
+    const memory = await mastra.getAgent('support').getMemory()
+    if (!mapping || !memory) return
+
+    let shuttingDown = false
+    const maxRetries = 5
+    const retryTimers = new Set<ReturnType<typeof setTimeout>>()
+    ctx.addShutdownCallback(async () => {
+      shuttingDown = true
+      for (const timer of retryTimers) clearTimeout(timer)
+      retryTimers.clear()
+    })
+
+    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
+      if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant')) return
+
+      const persist = async (attempt = 0): Promise<void> => {
+        try {
+          await memory.saveMessages({
+            messages: [
+              {
+                id: item.id,
+                threadId: mapping.thread,
+                resourceId: mapping.resource ?? mapping.thread,
+                role: item.role,
+                content: {
+                  format: 2,
+                  parts: [{ type: 'text', text: item.textContent ?? '' }],
+                },
+                type: 'text',
+                createdAt: new Date(),
+              },
+            ],
+          })
+        } catch (error) {
+          if (shuttingDown) return
+          if (attempt >= maxRetries) {
+            console.error(`Failed to persist committed voice item ${item.id}; giving up`, error)
+            return
+          }
+          console.error(`Failed to persist committed voice item ${item.id}; retrying`, error)
+          const delay = Math.min(1_000 * 2 ** attempt, 30_000)
+          const timer = setTimeout(() => {
+            retryTimers.delete(timer)
+            void persist(attempt + 1)
+          }, delay)
+          retryTimers.add(timer)
+        }
+      }
+
+      void persist()
+    })
+  },
+})
+```
+
+The same `options` field works on `MastraVoiceAgent` and `MastraLLM`; on the remote transport it's forwarded in the request body as `memory.options`.
 
 ### Speak while tools run
 
@@ -279,7 +356,8 @@ export default defineAgent({
       stt: 'deepgram/nova-3',
       tts: 'cartesia/sonic-3',
       vad: await silero.VAD.load(),
-      // Required with `memory`: LiveKit enables preemptive generation by default.
+      // Required with `memory` unless memory.options.readOnly is set: LiveKit enables
+      // preemptive generation by default.
       turnHandling: { preemptiveGeneration: { enabled: false } },
     })
 
@@ -311,7 +389,7 @@ Both paths share the same reply pipeline underneath; choose by who should own th
 Tools stay on the Mastra agent and execute on the server. LiveKit-side tools passed to the session are ignored. Tool activity reaches the worker through `toolFeedback` (spoken filler), `onToolCall` (fires as each tool call starts), and `onTurnComplete` (fires after each reply with the text, tool calls, and token usage). Agent-initiated hang-up takes a few lines: pair `onToolCall` with [`runEndCall()`](#runendcall).
 
 :::warning
-Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn that completes before LiveKit discards it persists a user message and a never-spoken reply to the thread. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, or run without `memory` and pass the full transcript each turn.
+Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, run without `memory` and pass the full transcript each turn, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory).
 :::
 
 `MastraLLM` also accepts an in-process Mastra `agent` instance, session ownership without a second deployment, or a custom `generate` function. The remote transport is available standalone as [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator), which also plugs into `createLiveKitWorker`'s `generate` option to run the batteries-included worker against a remote server.
@@ -504,7 +582,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     name: 'turnHandling',
     type: 'Partial<TurnHandlingOptions>',
     description:
-      'Turn handling tuning: endpointing delays, interruption sensitivity, preemptive generation. The worker disables preemptiveGeneration unless set here — each preemptive attempt re-runs the Mastra agent and persists a duplicate user message.',
+      'Turn handling tuning: endpointing delays, interruption sensitivity, preemptive generation. The worker disables preemptiveGeneration unless set here — each preemptive attempt re-runs the Mastra agent and persists partial user and assistant messages unless memory.options.readOnly is set.',
     isOptional: true,
   },
   {
@@ -515,9 +593,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   },
   {
     name: 'memory',
-    type: 'false | ((args) => { thread, resource } | false)',
+    type: 'false | ((args) => { thread, resource, options? } | false)',
     description:
-      'Memory mapping. Defaults to { thread: metadata.threadId ?? room name, resource: metadata.resourceId ?? thread } when the resolved agent has memory configured. Pass false to disable, or a function to customize.',
+      'Memory mapping. Defaults to { thread: metadata.threadId ?? room name, resource: metadata.resourceId ?? thread } when the resolved agent has memory configured. Pass false to disable, or a function to customize. `options` is forwarded to the agent as per-call memory config; `{ readOnly: true }` keeps speculative turns off the thread.',
     isOptional: true,
   },
   {
@@ -755,7 +833,7 @@ Provide exactly one reply source: `agent` or `generate`.
     name: 'memory',
     type: 'MastraVoiceAgentMemory | false',
     description:
-      'Conversation persistence as { thread, resource? }. When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. When false, the full in-session LiveKit context is sent every turn.',
+      'Conversation persistence as { thread, resource?, options? }. When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. `options` is forwarded to the agent as per-call memory config, e.g. { readOnly: true }. When false, the full in-session LiveKit context is sent every turn.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -831,7 +909,8 @@ const session = new voice.AgentSession({
   }),
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
-  // Required with `memory`: LiveKit enables preemptive generation by default.
+  // Required with `memory` unless memory.options.readOnly is set: LiveKit enables
+  // preemptive generation by default.
   turnHandling: { preemptiveGeneration: { enabled: false } },
 })
 ```
@@ -866,9 +945,9 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
   },
   {
     name: 'memory',
-    type: '{ thread: string; resource?: string } | false',
+    type: '{ thread: string; resource?: string; options?: MemoryConfig } | false',
     description:
-      'Conversation persistence, resolved per call (for example from the SIP caller identity). When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. When omitted, the full LiveKit chat context is sent every turn.',
+      'Conversation persistence, resolved per call (for example from the SIP caller identity). When set, only messages new since the agent last spoke are sent each turn and Mastra Memory supplies history. `options` is forwarded in the request body as memory.options, e.g. { readOnly: true }. When omitted, the full LiveKit chat context is sent every turn.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -902,7 +981,7 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
 />
 
 :::warning
-Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn that completes before LiveKit discards it persists a user message and a never-spoken reply to the thread. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session. Stateless mode (no `memory`) works with preemptive generation.
+Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory). Stateless mode (no `memory`) works with preemptive generation.
 :::
 
 #### Tools run on the Mastra agent

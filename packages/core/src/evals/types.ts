@@ -781,6 +781,10 @@ const SKIPPED_SPAN_TYPES = new Set([
   SpanType.SCORER_RUN,
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
+  // Retained for traces recorded before skill spans moved to SKILL_ACTION.
+  // SKILL_ACTION is deliberately NOT skipped: it now also covers the skill
+  // tools (activate/search/read), which are model-initiated trajectory steps
+  // and were never skipped when they were WORKSPACE_ACTION spans.
   SpanType.SKILL_RESOLUTION,
   SpanType.MODEL_STEP,
   SpanType.MODEL_INFERENCE,

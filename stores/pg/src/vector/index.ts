@@ -650,6 +650,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
     }
 
+    // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+    const indexInfo = await this.getIndexMetadata({ indexName });
     // Vector similarity query
     const client = await this.pool.connect();
     try {
@@ -658,9 +660,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
-
-      // Get index type and configuration
-      const indexInfo = await this.getIndexMetadata({ indexName });
 
       const metric = indexInfo.metric ?? 'cosine';
       const ops = this.getVectorOps(indexInfo.vectorType, metric);
@@ -775,6 +774,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const { tableName } = this.getTableName(indexName);
 
+    const indexInfo = await this.getIndexMetadata({ indexName });
+
     // Start a transaction
     const client = await this.pool.connect();
     try {
@@ -806,7 +807,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
@@ -1253,7 +1253,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let existingIndexInfo: PGIndexMetadata | null = null;
       let dimension = 0;
       try {
-        existingIndexInfo = await this.getIndexMetadata({ indexName });
+        existingIndexInfo = await this.describeIndexMetadata({ indexName }, client);
         dimension = existingIndexInfo.dimension;
 
         if (isConfigEmpty && existingIndexInfo.metric === metric) {
@@ -1542,8 +1542,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * {@link describeIndex} it issues no `COUNT(*)`, so its cost does not grow with the
    * number of rows in the table.
    */
-  private async describeIndexMetadata({ indexName }: DescribeIndexParams): Promise<PGIndexMetadata> {
-    const client = await this.pool.connect();
+  private async describeIndexMetadata(
+    { indexName }: DescribeIndexParams,
+    existingClient?: pg.PoolClient,
+  ): Promise<PGIndexMetadata> {
+    const client = existingClient ?? (await this.pool.connect());
     try {
       const { tableName, parsedIndexName } = this.getTableName(indexName);
 
@@ -1641,7 +1644,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         config,
       };
     } catch (e: any) {
-      await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
           id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
@@ -1656,7 +1658,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
-      client.release();
+      if (!existingClient) client.release();
     }
   }
 
@@ -1805,6 +1807,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         });
       }
 
+      const indexInfo = await this.getIndexMetadata({ indexName });
       client = await this.pool.connect();
       // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
       await this.ensureSearchPath(client);
@@ -1812,7 +1815,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 

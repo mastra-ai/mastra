@@ -7,7 +7,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
-import { forwardRef, useMemo } from 'react';
+import { memo, useMemo } from 'react';
+import type { ReactNode } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
 import { DatasetSaveAction } from './dataset-save-action';
@@ -34,6 +35,8 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
   onStopSpeaking?: () => void;
   /** Render historical tool calls without actions or chat/session side effects. */
   readOnly?: boolean;
+  /** Extra controls rendered under the message; only visible while hovering or focusing the row. */
+  footer?: ReactNode;
 }
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
@@ -205,97 +208,114 @@ const AssistantActionBar = ({
   </div>
 );
 
-export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
-  ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, readOnly, className, ...rootProps }, ref) => {
-    const dbMessage = toDisplayMessage(message);
-    const metadata = getMessageMetadata(message);
-    const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
-    const dataParts = useMemo(() => getDataParts(message), [message]);
+// Memoized: a stream chunk hands the thread a new array while every settled message in it is the same object.
+export const MessageRow = memo(function MessageRow({
+  message,
+  hasModelList,
+  isSpeaking,
+  onReadAloud,
+  onStopSpeaking,
+  readOnly,
+  footer,
+  className,
+  ...rootProps
+}: MessageRowProps) {
+  const dbMessage = toDisplayMessage(message);
+  const metadata = getMessageMetadata(message);
+  const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
+  const dataParts = useMemo(() => getDataParts(message), [message]);
 
-    // One clock for the whole message, so a tool row waits behind the sentence written before it.
-    const parts = dbMessage?.content.parts ?? NO_PARTS;
-    const revealed = useRevealedParts(parts, isStreaming(parts));
-    const shownParts = isProse(parts, metadata) ? revealed : parts;
-    const revealing = shownParts !== parts;
+  // One clock for the whole message, so a tool row waits behind the sentence written before it.
+  const parts = dbMessage?.content.parts ?? NO_PARTS;
+  const revealed = useRevealedParts(parts, isStreaming(parts));
+  const shownParts = isProse(parts, metadata) ? revealed : parts;
+  const revealing = shownParts !== parts;
 
-    const sharedRenderers = useMemo<MessageRenderers>(
-      () => ({
-        Reasoning: part => <ReasoningPartRenderer part={part} />,
-        Data: part => (
-          <Arriving>
-            <DataPartRenderer part={part} />
-          </Arriving>
-        ),
-        ToolInvocation: part => (
-          <Arriving>
-            <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
-          </Arriving>
-        ),
-        DynamicTool: part => (
-          <Arriving>
-            <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
-          </Arriving>
-        ),
-      }),
-      [metadata, dataParts, readOnly],
-    );
+  const sharedRenderers = useMemo<MessageRenderers>(
+    () => ({
+      Reasoning: part => <ReasoningPartRenderer part={part} />,
+      Data: part => (
+        <Arriving>
+          <DataPartRenderer part={part} />
+        </Arriving>
+      ),
+      ToolInvocation: part => (
+        <Arriving>
+          <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
+        </Arriving>
+      ),
+      DynamicTool: part => (
+        <Arriving>
+          <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} readOnly={readOnly} />
+        </Arriving>
+      ),
+    }),
+    [metadata, dataParts, readOnly],
+  );
 
-    const userRenderers = useMemo<MessageRenderers>(
-      () => ({
-        ...sharedRenderers,
-        Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
-        File: part => <UserFilePartRenderer part={part} />,
-      }),
-      [sharedRenderers, metadata],
-    );
+  const userRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
+      File: part => <UserFilePartRenderer part={part} />,
+    }),
+    [sharedRenderers, metadata],
+  );
 
-    const assistantRenderers = useMemo<MessageRenderers>(
-      () => ({
-        ...sharedRenderers,
-        Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} revealing={revealing} />,
-      }),
-      [sharedRenderers, metadata, revealing],
-    );
+  const assistantRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} revealing={revealing} />,
+    }),
+    [sharedRenderers, metadata, revealing],
+  );
 
-    if (dbMessage === null) return null;
+  if (dbMessage === null) return null;
 
-    // Same object once caught up, so the factory keeps the part it is filling in mounted.
-    const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
-    const displayRole = dbMessage.role;
+  const footerSlot = footer ? (
+    <div className="opacity-0 transition-opacity group-hover:opacity-100 has-[:focus-visible]:opacity-100">
+      {footer}
+    </div>
+  ) : null;
 
-    if (displayRole === 'user') {
-      const isPending = isPendingMessage(message);
+  // Same object once caught up, so the factory keeps the part it is filling in mounted.
+  const shownMessage = revealing ? { ...dbMessage, content: { ...dbMessage.content, parts: shownParts } } : dbMessage;
+  const displayRole = dbMessage.role;
 
-      return (
-        <div
-          ref={ref}
-          className={cn('w-full flex items-end pb-4 pt-2 flex-col', className)}
-          {...rootProps}
-          data-message-id={message.id}
-          data-message-pending={isPending ? 'true' : undefined}
-        >
-          <DatasetSaveAction messageText={getTextFromParts(message)} />
-          <div
-            className={cn(
-              'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
-              isPending && 'opacity-60 animate-pulse',
-            )}
-          >
-            <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
-          </div>
-        </div>
-      );
-    }
-
-    const showActionBar = hasVisibleAssistantText(message, metadata);
+  if (displayRole === 'user') {
+    const isPending = isPendingMessage(message);
 
     return (
-      <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
-        <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-          <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+      <div
+        className={cn('group w-full flex items-end pb-4 pt-2 flex-col', className)}
+        {...rootProps}
+        data-message-id={message.id}
+        data-message-pending={isPending ? 'true' : undefined}
+      >
+        <DatasetSaveAction messageText={getTextFromParts(message)} />
+        <div
+          className={cn(
+            'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+            isPending && 'opacity-60 animate-pulse',
+          )}
+        >
+          <MessageFactory message={shownMessage} {...userRenderers} status={messageStatusRenderers} />
         </div>
-        {showActionBar && (
-          <div className="flex h-6 items-center gap-2 pt-4">
+        {footerSlot}
+      </div>
+    );
+  }
+
+  const showActionBar = hasVisibleAssistantText(message, metadata);
+
+  return (
+    <div className={cn('group max-w-full', className)} {...rootProps} data-message-id={message.id}>
+      <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
+        <MessageFactory message={shownMessage} {...assistantRenderers} status={messageStatusRenderers} />
+      </div>
+      {(showActionBar || footerSlot) && (
+        <div className="flex h-6 items-center gap-2 pt-4">
+          {showActionBar && (
             <AssistantActionBar
               text={getTextFromParts(message)}
               modelMetadata={modelMetadata}
@@ -303,10 +323,10 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
               onReadAloud={onReadAloud}
               onStopSpeaking={onStopSpeaking}
             />
-          </div>
-        )}
-      </div>
-    );
-  },
-);
-MessageRow.displayName = 'MessageRow';
+          )}
+          {footerSlot}
+        </div>
+      )}
+    </div>
+  );
+});

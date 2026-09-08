@@ -2584,6 +2584,13 @@ export class Mastra<
       const durableWorkflows = durableAgent.getDurableWorkflows?.() ?? [];
       for (const workflow of durableWorkflows) {
         this.addWorkflow(workflow, workflow.id);
+        // Hide the agent's backing loop workflow from listWorkflows() — it is
+        // internal execution plumbing, not a user-runnable workflow. Identity
+        // guard: addWorkflow() no-ops on key collision, so a user workflow
+        // pre-registered under the same id must stay visible.
+        if ((this.#workflows as Record<string, unknown>)[workflow.id] === workflow) {
+          this.#hiddenWorkflowKeys.add(workflow.id);
+        }
       }
 
       // Register configured processor workflows from the agent
@@ -3876,6 +3883,13 @@ export class Mastra<
     }
     for (const runSnapshot of activeRuns.runs) {
       const workflow = this.getWorkflowById(runSnapshot.workflowName);
+      if (workflow?.options?.autoRestartActiveRuns === false) {
+        this.#logger.debug('Skipping workflow run auto-restart; workflow opts out of generic recovery', {
+          workflow: runSnapshot.workflowName,
+          runId: runSnapshot.runId,
+        });
+        continue;
+      }
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();

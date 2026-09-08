@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../events/pubsub';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
@@ -163,6 +164,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       validateInputs: false,
       emitStepEvents: false,
       sharePubsub: true,
+      // Generic boot-time restart must not re-drive agent loops — recovery
+      // is owned by the dedicated opt-in path (`recovery.durableAgents:
+      // 'auto'`) with leasing/fencing (issue #22598).
+      autoRestartActiveRuns: false,
       // Internal durable-agent execution plumbing — hide workflow spans;
       // the agent/tool/model spans within still surface for users.
       tracingPolicy: {
@@ -304,6 +309,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
         emitStepEvents: false,
+        // Generic boot-time restart must not re-drive agent loops — recovery
+        // is owned by the dedicated opt-in path (`recovery.durableAgents:
+        // 'auto'`) with leasing/fencing (issue #22598).
+        autoRestartActiveRuns: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
           internal: InternalSpans.WORKFLOW,
@@ -424,7 +433,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
               for (const pendingSignal of pendingSignals) {
                 const signalForTranscript = drainList.addSignal(pendingSignal);
-                await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+                if (!isSystemReminderSignalType(signalForTranscript.type)) {
+                  await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+                }
               }
 
               state.messageListState = drainList.serialize();

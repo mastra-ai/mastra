@@ -363,8 +363,10 @@ export default function Workspace() {
     );
   }
 
+  const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
+
   return (
-    <PageLayout>
+    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">
@@ -375,7 +377,7 @@ export default function Workspace() {
         </PageLayout.TopArea>
       )}
 
-      <PageLayout.MainArea className="grid content-start gap-6">
+      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-6' : 'grid content-start gap-6'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <div className="relative">
@@ -488,7 +490,12 @@ export default function Workspace() {
         )}
 
         {(hasFilesystem || hasSkills) && (
-          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={activeTab}>
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            defaultTab={activeTab}
+            className={showSkillsEmptyState ? 'flex flex-1 flex-col' : undefined}
+          >
             <TabList>
               {hasFilesystem && (
                 <Tab value="files">
@@ -544,7 +551,7 @@ export default function Workspace() {
             )}
 
             {hasSkills && (
-              <TabContent value="skills" className="pb-8">
+              <TabContent value="skills" className={showSkillsEmptyState ? 'flex-1 pb-8' : 'pb-8'}>
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}

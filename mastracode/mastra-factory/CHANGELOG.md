@@ -1,5 +1,68 @@
 # create-factory
 
+## 0.1.16-alpha.9
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.28.0-alpha.9
+
+## 0.1.16-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`4294da0`](https://github.com/mastra-ai/mastra/commit/4294da076014056bbaf959c9d8e4f75e385c9dbf), [`15b42e6`](https://github.com/mastra-ai/mastra/commit/15b42e65d03a19eddba6d9558b9e1d45f5934933), [`b947ae4`](https://github.com/mastra-ai/mastra/commit/b947ae4490df857b5ba82b1ea04740e7d51917d4), [`654faae`](https://github.com/mastra-ai/mastra/commit/654faaeeb5592b838d5df09cb3be378d5a42aaa5), [`1f4f4b2`](https://github.com/mastra-ai/mastra/commit/1f4f4b29632f40591a305c83ddf20390e16c8029)]:
+  - mastra@1.28.0-alpha.8
+
+## 0.1.16-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`6a62efd`](https://github.com/mastra-ai/mastra/commit/6a62efd85679d433a3fb65092aa24ccb3fafac03)]:
+  - mastra@1.28.0-alpha.7
+
+## 0.1.16-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.28.0-alpha.6
+
+## 0.1.16-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`d3cfd96`](https://github.com/mastra-ai/mastra/commit/d3cfd9606918c16112bfcf2394909387be59619e)]:
+  - mastra@1.28.0-alpha.5
+
+## 0.1.16-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.28.0-alpha.4
+
+## 0.1.16-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`d8dade8`](https://github.com/mastra-ai/mastra/commit/d8dade8d6b48ccdf17efdf79e21f9b9b71f67fba), [`10dad61`](https://github.com/mastra-ai/mastra/commit/10dad61e5b9915b38255e119cba489ebd6d1ecae), [`74df887`](https://github.com/mastra-ai/mastra/commit/74df887cc8174db7888aa29f0309eafa36463279)]:
+  - mastra@1.28.0-alpha.3
+
+## 0.1.16-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.28.0-alpha.2
+
+## 0.1.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f82efa5`](https://github.com/mastra-ai/mastra/commit/f82efa55c270588a00b50637d23d0cfaa4e668b9), [`d80d6be`](https://github.com/mastra-ai/mastra/commit/d80d6beebf26a82a48c047294914fcacfdf6c5ee), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038)]:
+  - mastra@1.28.0-alpha.1
+
 ## 0.1.16-alpha.0
 
 ### Patch Changes

@@ -12,18 +12,17 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import { boardForWorkItem, resolveBoardToolRule } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { getFactorySessionCoordinates } from './binding-context.js';
-import { resolveFactoryToolRule } from './resolve.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { factoryRuleStage, workItemSource } from './types.js';
 import type {
   FactoryCommitDecision,
-  FactoryRuleBoard,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRuleStage,
-  FactoryRules,
   FactoryToolResultRuleContext,
 } from './types.js';
 import { normalizeFactoryRuleJsonValue, validateFactoryRuleDecisions } from './validation.js';
@@ -82,13 +81,15 @@ type ActivePhaseSnapshotBase = {
   revision: number;
   stage: FactoryRuleStage;
   role: string;
-  ruleSetVersion: string;
+  configVersion: string;
   status: 'active';
 };
 
-type ActivePhaseSnapshotValue =
-  | (ActivePhaseSnapshotBase & { board: 'work' })
-  | (ActivePhaseSnapshotBase & { board: 'review' } & RuntimeSnapshot);
+type ActivePhaseSnapshotValue = ActivePhaseSnapshotBase & {
+  board: string;
+  modelId?: string;
+  thinkingLevel?: ThinkingLevel;
+};
 
 type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
 
@@ -107,10 +108,6 @@ function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs[
 function workItemSourceKey(item: WorkItemRow): string | null {
   const source = item.externalSource;
   return source ? `${source.integrationId}:${source.type}:${source.externalId}` : null;
-}
-
-function boardForItem(item: WorkItemRow): FactoryRuleBoard {
-  return item.externalSource?.type === 'pull-request' ? 'review' : 'work';
 }
 
 function boundedError(value: unknown): FactoryRuleJsonValue {
@@ -235,8 +232,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
 
   constructor(
     private readonly options: {
-      rules: FactoryRules;
+      configVersion: string;
       storage: WorkItemsStorage;
+      boards: BoardRegistry;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -296,7 +294,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linked = allItems
       .filter(candidate => candidate.parentWorkItemId === item.id || item.parentWorkItemId === candidate.id)
       .slice(0, MAX_LINKED_ITEMS);
-    const board = boardForItem(item);
+    const board = boardForWorkItem(item);
     const baseValue: ActivePhaseSnapshotBase = {
       status: 'active',
       bindingId: binding.id,
@@ -304,7 +302,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       revision: item.revision,
       stage,
       role: binding.role,
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
     };
     const value: ActivePhaseSnapshotValue =
       board === 'review'
@@ -317,12 +315,15 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
+    const phaseLabel = this.options.boards.get(board)?.phases[stage]?.title ?? PHASE_LABELS[stage] ?? stage;
+    const runtime =
+      value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
-      `Factory ${board} phase: ${PHASE_LABELS[stage]} (${escapeText(stage)})\n` +
+      `Factory ${board} phase: ${escapeText(phaseLabel)} (${escapeText(stage)})\n` +
       `Work item: ${escapeText(item.title)} (${item.id})\n` +
-      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nRules: ${escapeText(this.options.rules.version)}\n` +
-      (value.board === 'review'
-        ? `Runtime: model=${escapeText(value.modelId)}, reasoning-setting=${escapeText(value.thinkingLevel)}\n`
+      `Role: ${escapeText(binding.role)}\nRevision: ${item.revision}\nConfig: ${escapeText(this.options.configVersion)}\n` +
+      (runtime
+        ? `Runtime: model=${escapeText(runtime.modelId)}, reasoning-setting=${escapeText(runtime.thinkingLevel)}\n`
         : '') +
       (stage === 'intake'
         ? 'This card rests in Intake: its work is paused. Answer questions without moving it; when the user asks to resume, request the transition into the working stage first, then continue the work in this session.\n'
@@ -343,7 +344,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         stage,
         role: binding.role,
         revision: item.revision,
-        ...(value.board === 'review' ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : {}),
+        ...(runtime ?? {}),
       },
       metadata: { value: { phase: value } },
     };
@@ -426,7 +427,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     item: WorkItemRow,
     toolResult: CompletedToolResult,
   ): Promise<void> {
-    const rule = resolveFactoryToolRule(this.options.rules, toolResult.toolName);
+    const board = boardForWorkItem(item);
+    const rule = resolveBoardToolRule(this.options.boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
       binding.id,
@@ -440,14 +442,13 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       ingressId,
     );
     if (prior) return;
-    const board = boardForItem(item);
     const context: FactoryToolResultRuleContext = {
       tenant: { orgId: binding.orgId, projectId: binding.factoryProjectId },
       actor: { type: 'agent', bindingId: binding.id, role: binding.role },
       ingress: { type: 'toolResult', id: ingressId },
       cause: `Completed ${toolResult.toolName}`,
       causalChain: [],
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       item: {
         id: item.id,
         source: workItemSource(item.externalSource),
@@ -456,6 +457,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         title: item.title,
         url: item.externalSource?.url ?? null,
         stages: item.stages,
+        acceptedAt: item.acceptedAt,
         metadata: item.metadata,
       },
       board,
@@ -494,7 +496,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       factoryProjectId: binding.factoryProjectId,
       workItemId: item.id,
       ingress: { identity: ingressId, triggerType: 'tool.result' },
-      ruleSetVersion: this.options.rules.version,
+      configVersion: this.options.configVersion,
       expectedRevision: item.revision,
       actor: { ...context.actor },
       outcome,

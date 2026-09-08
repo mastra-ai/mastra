@@ -6,16 +6,21 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   Archive,
   ArchiveRestore,
+  Brain,
+  Check,
   MailOpen,
   MessageSquare,
   MessagesSquare,
   RotateCw,
+  Sparkles,
   TriangleAlert,
+  X,
 } from 'lucide-react';
 import { createElement, type ReactElement, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
+import { attentionPrompt, supervisorAskPath } from '../../supervisor/services/supervisor';
 import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
 import { TIMESTAMP } from './panel';
@@ -26,6 +31,8 @@ const KIND = {
   mention: { glyph: MessageSquare, label: 'mention', tone: 'text-accent1', badge: 'green' },
   activity: { glyph: MessagesSquare, label: 'comment', tone: 'text-icon3', badge: 'neutral' },
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
+  'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
+  'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }
@@ -81,9 +88,12 @@ export function AttentionItemRow({
   factoryId,
   item,
   retrying,
+  settling,
   updatingReceipt,
   onOpen,
   onRetry,
+  onApprove,
+  onDismiss,
   onRead,
   onArchive,
   onRestore,
@@ -91,13 +101,17 @@ export function AttentionItemRow({
   factoryId: string;
   item: FactoryAttentionItem;
   retrying: boolean;
+  settling: boolean;
   updatingReceipt: boolean;
   onOpen?: () => void;
   onRetry?: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
   onRead: () => void;
   onArchive: () => void;
   onRestore: () => void;
 }) {
+  const navigate = useNavigate();
   const author = attentionAuthorName(item);
 
   return (
@@ -125,6 +139,18 @@ export function AttentionItemRow({
             {relativeTime(item.occurredAt)}
           </time>
           <span className={REVEAL_ACTIONS}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              tooltip="Ask supervisor"
+              aria-label={`Ask supervisor about ${item.title}`}
+              onClick={() => {
+                onOpen?.();
+                void navigate(supervisorAskPath(factoryId, attentionPrompt(item)));
+              }}
+            >
+              <Brain aria-hidden />
+            </Button>
             {onRetry ? (
               <RowAction
                 tooltip="Retry"
@@ -133,6 +159,16 @@ export function AttentionItemRow({
                 onClick={onRetry}
               >
                 {retrying ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <RotateCw aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onApprove ? (
+              <RowAction tooltip="Run it" label={`Run ${item.title}`} disabled={settling} onClick={onApprove}>
+                {settling ? <Spinner size="sm" aria-hidden className="size-3.5" /> : <Check aria-hidden />}
+              </RowAction>
+            ) : null}
+            {onDismiss ? (
+              <RowAction tooltip="Dismiss" label={`Dismiss ${item.title}`} disabled={settling} onClick={onDismiss}>
+                <X aria-hidden />
               </RowAction>
             ) : null}
             {!item.read ? (

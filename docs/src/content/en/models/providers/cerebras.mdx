@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "cerebras/gemma-4-31b"
+  model: "cerebras/gpt-oss-120b"
 });
 
 // Generate a response
@@ -40,18 +40,6 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "cerebras/gemma-4-31b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 40960,
-    "inputCost": 0.99,
-    "outputCost": 1.49
-  },
-  {
     "model": "cerebras/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -62,6 +50,18 @@ for await (const chunk of stream) {
     "maxOutput": 40960,
     "inputCost": 0.35,
     "outputCost": 0.75
+  },
+  {
+    "model": "cerebras/qwen-3.8-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 32768,
+    "inputCost": 0.99,
+    "outputCost": 1.49
   }
 ]}
 />
@@ -77,7 +77,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    id: "cerebras/gemma-4-31b",
+    id: "cerebras/gpt-oss-120b",
     apiKey: process.env.CEREBRAS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -95,8 +95,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cerebras/gpt-oss-120b"
-      : "cerebras/gemma-4-31b";
+      ? "cerebras/qwen-3.8-27b"
+      : "cerebras/gpt-oss-120b";
   }
 });
 ```

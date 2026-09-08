@@ -551,6 +551,8 @@ export interface ThinkingConfigInfo {
   modeDefaults: Record<string, ThinkingLevelSetting>;
   /** Mode ids known to the controller (for rendering per-mode rows). */
   modes: string[];
+  /** False when the deployment refuses writes, so the UI can render read-only rows. */
+  editable: boolean;
 }
 
 /** `PUT /web/config/thinking` success payload. */
@@ -1218,6 +1220,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               globalDefault: settings.preferences.thinkingLevel,
               modeDefaults: settings.models.modeThinkingDefaults,
               modes,
+              editable: !auth.enabled(),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1230,7 +1233,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           if (auth.enabled()) {
-            return c.json({ error: 'Deployment thinking defaults can only be changed in local mode' }, 403);
+            return c.json(
+              {
+                error:
+                  'Deployment thinking defaults are shared by the whole deployment, so they cannot be changed while authentication is enabled',
+              },
+              403,
+            );
           }
           let body: { globalDefault?: unknown; modeDefaults?: unknown };
           try {

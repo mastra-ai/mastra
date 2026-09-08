@@ -1,24 +1,4 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import type { DatasetTargetType } from '../target-type-options';
-import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from '../target-type-options';
-
-export type DatasetTargetFilter = 'all' | 'none' | DatasetTargetType;
-
-// 'none' surfaces legacy/untyped datasets (created before targetType was persisted) so they can be
-// found and classified instead of silently disappearing under a type filter.
-export const DATASET_TARGET_OPTIONS = [
-  { value: 'all', label: 'All targets' },
-  ...DATASET_TARGET_TYPE_OPTIONS,
-  { value: 'none', label: 'No target' },
-] as const satisfies readonly { value: DatasetTargetFilter; label: string }[];
-
-/** Target-filter predicate for the Datasets list. `targetTypes` comes from
- *  `getDatasetTargetTypes` (explicit type, or derived from experiments). */
-export function matchesDatasetTargetFilter(targetTypes: readonly DatasetTargetType[], targetFilter: string): boolean {
-  if (targetFilter === 'all') return true;
-  if (targetFilter === 'none') return targetTypes.length === 0;
-  return isDatasetTargetType(targetFilter) && targetTypes.includes(targetFilter);
-}
 
 export const DATASET_EXPERIMENT_OPTIONS = [
   { value: 'all', label: 'All datasets' },
@@ -26,20 +6,8 @@ export const DATASET_EXPERIMENT_OPTIONS = [
   { value: 'without', label: 'Without experiments' },
 ] as const;
 
-/** `targetType` is persisted by create/edit flows and is the source of truth.
- *  When absent, `getDatasetTargetTypes` falls back to the distinct target type(s)
- *  from the dataset's experiments so legacy/imported datasets can still be
- *  classified. Returns one type when known, several when experiments span types. */
-export function getDatasetTargetTypes(
-  targetType: string | null | undefined,
-  experiments: Array<{ targetType?: string | null }>,
-): DatasetTargetType[] {
-  if (isDatasetTargetType(targetType)) return [targetType];
-  // Sorted so the derived list renders in a stable order regardless of experiment order.
-  return Array.from(new Set(experiments.map(e => e.targetType).filter(isDatasetTargetType))).sort();
-}
-
-export function getDatasetTagOptions(datasets: DatasetRecord[]) {
+/** Distinct tags across all datasets, sorted alphabetically. */
+export function getAllDatasetTags(datasets: DatasetRecord[]): string[] {
   const tagSet = new Set<string>();
 
   for (const dataset of datasets) {
@@ -50,10 +18,9 @@ export function getDatasetTagOptions(datasets: DatasetRecord[]) {
     }
   }
 
-  return [
-    { value: 'all', label: 'All tags' },
-    ...Array.from(tagSet)
-      .sort()
-      .map(tag => ({ value: tag, label: tag })),
-  ];
+  return Array.from(tagSet).sort();
+}
+
+export function getDatasetTagOptions(datasets: DatasetRecord[]) {
+  return [{ value: 'all', label: 'All tags' }, ...getAllDatasetTags(datasets).map(tag => ({ value: tag, label: tag }))];
 }

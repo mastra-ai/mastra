@@ -15,6 +15,7 @@ import type { CollectedChunk } from '../../../../loop/workflows/agentic-executio
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
+import { isSystemReminderSignalType } from '../../../../memory/system-reminders';
 import type {
   SpanType,
   AIModelGenerationSpan,
@@ -575,7 +576,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             if (pubsub) {
               const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
               for (const initialSignal of initialSignalEchoes) {
-                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
+                if (!isSystemReminderSignalType(initialSignal.type)) {
+                  await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
+                }
               }
 
               const isFirstModelRequest = stepIndex === 0;
@@ -586,7 +589,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
                 for (const preRunSignal of preRunSignals) {
                   const signalForTranscript = messageList.addSignal(preRunSignal);
-                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+                  if (!isSystemReminderSignalType(signalForTranscript.type)) {
+                    await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+                  }
                 }
               }
             }
@@ -932,6 +937,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               responseFormat: structuredOutput ? 'json_schema' : undefined,
             });
             modelSpanTracker?.startInference?.();
+            let inferenceStartedAt: number | undefined;
 
             // Collect chunks for post-stream message building (via
             // buildMessagesFromChunks) and for the processLLMResponse hook
@@ -1015,6 +1021,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             } else {
               const releaseModelCallActivity = markRunActive(runId);
               try {
+                inferenceStartedAt = Date.now();
                 modelResult = execute({
                   runId,
                   model: currentModel,
@@ -1115,6 +1122,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   await emitStepStartEvent(pubsub, runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
+                    startedAt: inferenceStartedAt,
                     warnings,
                   });
                 }

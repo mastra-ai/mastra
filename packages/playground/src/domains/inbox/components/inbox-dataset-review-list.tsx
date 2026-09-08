@@ -3,7 +3,7 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { Inbox } from 'lucide-react';
+import { CircleSlashIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { InboxDatasetReviewItem } from '@/domains/review/hooks/use-inbox-review-items';
@@ -42,7 +42,7 @@ export function InboxDatasetReviewList({ items, isLoading, error }: InboxDataset
   if (items.length === 0) {
     return (
       <EmptyState
-        iconSlot={<Inbox className="text-neutral3 h-8 w-8" />}
+        iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
         titleSlot="Nothing to review"
         descriptionSlot="Experiment results that need review will show up here."
       />

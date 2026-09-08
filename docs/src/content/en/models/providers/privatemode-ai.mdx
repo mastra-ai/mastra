@@ -7,7 +7,7 @@ description: "Browse Privatemode AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/privatemode-ai.svg" alt="Privatemode AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Privatemode AI
 
-Access 7 Privatemode AI models through Mastra's model router. Authentication is handled automatically using the `PRIVATEMODE_API_KEY` environment variable.
+Access 9 Privatemode AI models through Mastra's model router. Authentication is handled automatically using the `PRIVATEMODE_API_KEY` environment variable.
 
 Learn more in the [Privatemode AI documentation](https://docs.privatemode.ai).
 
@@ -56,6 +56,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.8897,
     "outputCost": 1.4675
+  },
+  {
+    "model": "privatemode-ai/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 1.791,
+    "outputCost": 8.9436
+  },
+  {
+    "model": "privatemode-ai/glm-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 131072,
+    "inputCost": 1.791,
+    "outputCost": 8.9436
   },
   {
     "model": "privatemode-ai/gpt-oss-120b",

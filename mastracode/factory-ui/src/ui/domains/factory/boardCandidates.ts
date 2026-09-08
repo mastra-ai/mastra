@@ -1,7 +1,6 @@
+import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
-import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL, hasLabel } from './boardItems';
-import { LINEAR_FETCH_HINT, approvalRunAction, guidedPrompt, issueRunActions, reviewRunAction } from './boardRunSpecs';
-import type { RunAction } from './boardRunSpecs';
+import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { LinearIssue } from './services/linear';
@@ -42,39 +41,23 @@ export interface BoardCandidate {
   meta: string;
   /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
-  /** Runs the candidate can start; the first is the one-click default. */
-  runActions: RunAction[];
-  branch: string;
-  threadTitle: string;
-  customPrompt: (instructions: string) => string;
   metadata: Record<string, unknown>;
 }
 
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
   const labels = issue.labels;
-  const autoTriaged = hasLabel(labels, AUTO_TRIAGED_LABEL);
-  const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
-  const ref = `GitHub issue #${issue.number} (${issue.url})`;
-  const investigateBase = `Investigate ${ref}.`;
-  const approvalBase = `Prepare approval for ${ref}.`;
   return {
     sourceKey: `github-issue:${issue.number}`,
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · ${relativeTime(issue.createdAt)}`,
-    column: autoTriaged ? 'triage' : 'intake',
-    runActions: needsApproval ? [approvalRunAction(ref, issue.number)] : issueRunActions(ref, { triage: true }),
-    branch: `factory/issue-${issue.number}`,
-    threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
-    customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
+    column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
     metadata: { number: issue.number, author: issue.author, assignee: issue.assignee, labels },
   };
 }
 
 export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
-  const ref = `GitHub pull request #${pr.number} (${pr.url})`;
-  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`. Expected head branch: ${pr.headBranch}.`;
   return {
     sourceKey: `github-pr:${pr.number}`,
     source: 'github-pr',
@@ -82,10 +65,6 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     url: pr.url,
     meta: `#${pr.number}${pr.author ? ` · ${pr.author}` : ''} · ${pr.headBranch} → ${pr.baseBranch}`,
     column: 'intake',
-    runActions: [reviewRunAction(ref, checkout)],
-    branch: `factory/pr-${pr.number}`,
-    threadTitle: `PR #${pr.number}: ${pr.title}`,
-    customPrompt: instructions => guidedPrompt(`Review ${ref}. ${checkout}`, instructions),
     metadata: {
       number: pr.number,
       author: pr.author,
@@ -98,7 +77,6 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
 }
 
 export function linearCandidate(issue: LinearIssue): BoardCandidate {
-  const ref = `Linear issue ${issue.identifier} (${issue.url})`;
   return {
     sourceKey: `linear:${issue.identifier}`,
     source: 'linear-issue',
@@ -106,10 +84,6 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     url: issue.url,
     meta: `${issue.identifier} · ${issue.state}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
     column: 'intake',
-    runActions: issueRunActions(ref, { context: LINEAR_FETCH_HINT }),
-    branch: `factory/linear-${issue.identifier.toLowerCase()}`,
-    threadTitle: `${issue.identifier}: ${issue.title}`,
-    customPrompt: instructions => guidedPrompt(`Investigate ${ref}. ${LINEAR_FETCH_HINT}`, instructions),
     metadata: {
       identifier: issue.identifier,
       state: issue.state,

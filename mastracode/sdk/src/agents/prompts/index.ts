@@ -28,6 +28,9 @@ import { buildToolGuidance } from './tool-guidance.js';
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
+  /** The subconscious knowledge tools are registered on the agent. */
+  hasSubconscious?: boolean;
+  hostInstructions?: string;
   currentDate: string;
   workingDir: string;
 }
@@ -105,6 +108,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
+    hasSubconscious: ctx.hasSubconscious === true,
+    hasSubagents: ctx.hasSubagents,
     deniedTools,
     plansDir: getLocalPlansRelativeDir({ factoryProjectId }),
   });
@@ -120,6 +125,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     mode: ctx.modeId,
     modelId: ctx.modelId,
     activePlan: ctx.state?.activePlan,
+    hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
     toolGuidance,
   };
 
@@ -182,8 +188,11 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     };
   });
 
+  const hostInstructions = ctx.hostInstructions?.trim() ?? '';
+
   return [
     { id: 'base-prompt', label: 'Base system prompt', content: base },
+    { id: 'host-instructions', label: 'Host instructions', content: hostInstructions },
     ...instructionSections,
     { id: 'model-prompt', label: 'Model-specific prompt', detail: ctx.modelId, content: modelSpecific.trim() },
     { id: 'mode-prompt', label: 'Mode prompt', detail: ctx.modeId, content: modeSpecific.trim() },

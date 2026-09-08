@@ -101,23 +101,26 @@ async function mockPartialThread(page: Page) {
 async function openPartialThread(page: Page) {
   await mockPartialThread(page);
   await page.goto(`/traces?traceId=${TRACE_ID}`);
-  await page.getByRole('tab', { name: 'Messages' }).click();
+  await expect(page.getByRole('heading', { name: 'Messages' })).toBeVisible();
 }
 
 /**
- * FEATURE: Messages trace view
- * USER STORY: A trace reviewer can inspect an agent turn with its chat presentation and leave a trace comment.
- * BEHAVIOR UNDER TEST: Stored spans become a read-only chat turn, while feedback stays in its dedicated tab.
+ * FEATURE: Messages trace column
+ * USER STORY: A trace reviewer can inspect an agent turn as chat beside its trace and leave a trace comment.
+ * BEHAVIOR UNDER TEST: Stored spans become a read-only chat column to the left of the timeline (no tab click
+ * required), the side panel widens to fit it, while feedback stays in its dedicated tab.
  */
-test.describe('Messages trace view', () => {
+test.describe('Messages trace column', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
   test.describe('when an agent trace with a thread is selected', () => {
-    test('renders the user input, assistant response, and tool execution', async ({ page }) => {
+    test('renders the user input, assistant response, and tool execution beside the trace', async ({ page }) => {
       await openPartialThread(page);
 
+      await expect(page.getByRole('tab', { name: 'Messages' })).toHaveCount(0);
+      await expect(page.getByRole('dialog', { name: 'Trace details' })).toHaveClass(/w-4\/5/);
       await expect(page.getByText(USER_INPUT)).toBeVisible();
       await expect(page.getByText(ASSISTANT_OUTPUT)).toBeVisible();
       await expect(page.getByRole('button', { name: 'weatherInfo' })).toBeVisible();

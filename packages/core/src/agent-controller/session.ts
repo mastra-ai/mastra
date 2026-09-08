@@ -30,6 +30,7 @@ import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
+import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -3410,7 +3411,12 @@ export class Session<TState = unknown> {
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
     const submitted = createSignal(
       'content' in input
-        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        ? {
+            type: 'user',
+            tagName: 'user',
+            contents: input.content,
+            providerOptions: withMessageAuthor(input.providerOptions, readMessageAuthor(requestContextInput)),
+          }
         : input,
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
@@ -3638,11 +3644,17 @@ export class Session<TState = unknown> {
           tracingContext: options?.tracingContext,
           tracingOptions: options?.tracingOptions,
         });
-        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
-          resourceId: this.identity.getResourceId(),
-          threadId,
-          ifIdle: { streamOptions: streamOptions as any },
-        });
+        const result = agent.queueMessage(
+          {
+            contents: this.createMessageInput({ content: next.content }),
+            providerOptions: withMessageAuthor(undefined, readMessageAuthor(next.requestContext)),
+          },
+          {
+            resourceId: this.identity.getResourceId(),
+            threadId,
+            ifIdle: { streamOptions: streamOptions as any },
+          },
+        );
         // Let a rejected `accepted` propagate: `next` is already dequeued, so a
         // setup/misconfig failure must reach the outer catch to requeue it
         // rather than being swallowed into a false success (the follow-up would

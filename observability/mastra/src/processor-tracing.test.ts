@@ -202,6 +202,24 @@ class ProcessorTestExporter implements ObservabilityExporter {
 // Mock Model Factory
 // ============================================================================
 
+/**
+ * Entity types the processor runner assigns, one per pipeline phase. A
+ * processor may declare a domain span type (MessageHistory declares
+ * MEMORY_OPERATION), so a processor is identified by its entity type rather
+ * than by PROCESSOR_RUN.
+ */
+const PROCESSOR_ENTITY_TYPES: EntityType[] = [
+  EntityType.INPUT_PROCESSOR,
+  EntityType.INPUT_STEP_PROCESSOR,
+  EntityType.OUTPUT_PROCESSOR,
+  EntityType.OUTPUT_STEP_PROCESSOR,
+  EntityType.TOOL_RESULT_PROCESSOR,
+];
+
+function processorPhaseSpans(exporter: ProcessorTestExporter) {
+  return exporter.getAllSpans().filter(s => s.entityType && PROCESSOR_ENTITY_TYPES.includes(s.entityType));
+}
+
 function createMockModel() {
   return new MockLanguageModelV2({
     doGenerate: async () => ({
@@ -1673,10 +1691,14 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (fetches history)
+     *   - memory: recall MEMORY_OPERATION (fetches history)
      *   - MODEL_GENERATION
      *     - MODEL_STEP
-     *   - output processor: message-history PROCESSOR_RUN (saves messages)
+     *   - memory: save MEMORY_OPERATION (saves messages)
+     *
+     * MessageHistory declares MEMORY_OPERATION, so its spans carry the memory
+     * operation rather than an anonymous processor label. They keep their
+     * processor entity type, which is what identifies them here.
      */
     it('should trace MessageHistory processor when memory is enabled', async () => {
       const model = createMockModel();
@@ -1722,9 +1744,9 @@ describe('Processor Tracing Tests', () => {
       // EXPECTED: MessageHistory processor should create input and output spans
       // Input: fetches message history
       // Output: saves new messages
-      const messageHistorySpans = processorSpans.filter(
-        s => s.name?.includes('message-history') || s.entityId?.includes('message-history'),
-      );
+      const messageHistorySpans = testExporter
+        .getSpansByType(SpanType.MEMORY_OPERATION)
+        .filter(s => s.entityId?.includes('message-history'));
 
       // MessageHistory runs on both input (fetch) and output (save)
       expect(messageHistorySpans.length).toBe(2);
@@ -1747,10 +1769,10 @@ describe('Processor Tracing Tests', () => {
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
      *   - input processor: working-memory PROCESSOR_RUN (retrieves state)
-     *   - input processor: message-history PROCESSOR_RUN
+     *   - memory: recall MEMORY_OPERATION
      *   - MODEL_GENERATION
      *     - MODEL_STEP
-     *   - output processor: message-history PROCESSOR_RUN
+     *   - memory: save MEMORY_OPERATION
      */
     it('should trace WorkingMemory processor when enabled', async () => {
       const model = createMockModel();
@@ -1816,12 +1838,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure:
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory runs first)
+     *   - memory: recall MEMORY_OPERATION (memory runs first)
      *   - input processor: custom-input PROCESSOR_RUN
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: custom-output PROCESSOR_RUN
-     *   - output processor: message-history PROCESSOR_RUN (memory runs last)
+     *   - memory: save MEMORY_OPERATION (memory runs last)
      */
     it('should trace memory processors alongside custom processors', async () => {
       const model = createMockModel();
@@ -1868,8 +1890,9 @@ describe('Processor Tracing Tests', () => {
 
       // EXPECTED: Both memory processors and custom processors should have spans
       // Memory processors run first on input, last on output
-      // MessageHistory (input) + custom-input + custom-output + MessageHistory (output) = 4
-      expect(processorSpans.length).toBe(4);
+      // MessageHistory (input) + custom-input + custom-output + MessageHistory (output) = 4.
+      // MessageHistory declares MEMORY_OPERATION, so count by processor entity type.
+      expect(processorPhaseSpans(testExporter).length).toBe(4);
 
       // Should have custom processor spans with correct names
       const customInputSpan = processorSpans.find(s => s.name === 'input processor: custom-input');
@@ -1890,12 +1913,12 @@ describe('Processor Tracing Tests', () => {
     /**
      * Expected span structure (execution order matters):
      * - test-agent AGENT_RUN (root)
-     *   - input processor: message-history PROCESSOR_RUN (memory first - fetches history)
+     *   - memory: recall MEMORY_OPERATION (memory first - fetches history)
      *   - input processor: guardrail PROCESSOR_RUN (custom after memory)
      *   - MODEL_GENERATION
      *     - MODEL_STEP
      *   - output processor: filter PROCESSOR_RUN (custom before memory)
-     *   - output processor: message-history PROCESSOR_RUN (memory last - persists)
+     *   - memory: save MEMORY_OPERATION (memory last - persists)
      */
     it('should respect processor execution order for memory processors', async () => {
       const model = createMockModel();
@@ -1940,8 +1963,9 @@ describe('Processor Tracing Tests', () => {
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
 
-      const inputSpans = processorSpans.filter(s => s.entityType === EntityType.INPUT_PROCESSOR);
-      const outputSpans = processorSpans.filter(s => s.entityType === EntityType.OUTPUT_PROCESSOR);
+      const phaseSpans = processorPhaseSpans(testExporter);
+      const inputSpans = phaseSpans.filter(s => s.entityType === EntityType.INPUT_PROCESSOR);
+      const outputSpans = phaseSpans.filter(s => s.entityType === EntityType.OUTPUT_PROCESSOR);
 
       // EXPECTED: Memory processors run first on inputs, last on outputs
       // This ensures guardrails validate content before persistence

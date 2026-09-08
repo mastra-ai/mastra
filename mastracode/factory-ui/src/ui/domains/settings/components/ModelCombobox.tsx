@@ -42,6 +42,7 @@ export function ModelCombobox({
       placeholder={placeholder ?? 'Select model…'}
       searchPlaceholder="Search models…"
       emptyText="No matching model."
+      allowCustomValue
       disabled={disabled}
       className={className}
     />

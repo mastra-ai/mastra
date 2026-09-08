@@ -3,7 +3,15 @@ import type { IMastraAuthProvider } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildAuthRoutes, getWorkOSProvider, isWorkOSAuth, mountFactoryAuth, factoryAuthTenant } from './auth.js';
+import {
+  buildAuthRoutes,
+  createFactoryRouteAuth,
+  getWorkOSProvider,
+  isWorkOSAuth,
+  mountFactoryAuth,
+  factoryAuthTenant,
+} from './auth.js';
+import { handleServerError } from './server-error.js';
 
 /**
  * Provider-seam behavior: the auth module operates on an explicitly-passed
@@ -94,6 +102,73 @@ describe('active provider resolution', () => {
 
   it('getWorkOSProvider throws when the active provider is not WorkOS', () => {
     expect(() => getWorkOSProvider(fakeProvider())).toThrow(/not WorkOS/);
+  });
+});
+
+describe('Factory route auth organization selection', () => {
+  function buildRouteApp(provider: IMastraAuthProvider) {
+    const app = new Hono();
+    const auth = createFactoryRouteAuth(provider);
+    app.onError(handleServerError);
+    app.get('/web/projects', async c => {
+      const user = await auth.ensureUser(c);
+      if (!user) return c.json({ error: 'unauthorized' }, 401);
+      return c.json(auth.tenant(c));
+    });
+    return app;
+  }
+
+  it('selects a requested bearer organization inside the custom route auth seam', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({
+        id: 'user_123',
+        organizationId: 'org_1',
+        memberOrgIds: ['org_1', 'org_2'],
+      })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: {
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_2',
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+  });
+
+  it('rejects an inaccessible bearer organization inside the custom route auth seam', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({
+        id: 'user_123',
+        organizationId: 'org_1',
+        memberOrgIds: ['org_1'],
+      })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: {
+        Authorization: 'Bearer cli-token',
+        'X-Mastra-Organization-Id': 'org_other',
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+  });
+
+  it('ignores the organization header for cookie-authenticated custom routes', async () => {
+    const provider = fakeProvider({
+      authenticateToken: vi.fn(async () => ({ id: 'user_123', organizationId: 'org_cookie' })),
+    });
+
+    const res = await buildRouteApp(provider).request('/web/projects', {
+      headers: { 'X-Mastra-Organization-Id': 'org_other' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_cookie', userId: 'user_123' });
   });
 });
 
