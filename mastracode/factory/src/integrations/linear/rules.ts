@@ -1,5 +1,7 @@
+import { boardForWorkItem } from '../../boards/index.js';
+import type { BoardRegistry } from '../../boards/index.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
@@ -42,6 +44,7 @@ export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   configVersion: string;
+  boards: BoardRegistry;
   linearRules: LinearEventRules;
 }
 
@@ -107,7 +110,7 @@ export class LinearRules {
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
-            board: 'work' as const,
+            board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
           }
         : {}),
@@ -124,7 +127,14 @@ export class LinearRules {
       if (decision?.type === 'reject') {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
-        decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+        decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+          assertFactoryDecisionTarget(
+            entry,
+            this.options.boards,
+            relatedItem ? boardForWorkItem(relatedItem) : undefined,
+          );
+          return { ...entry };
+        });
       }
     } catch (error) {
       const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -165,6 +175,7 @@ export function attachLinearRules(
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
     linearRules: linear.rules,
   });
   return input => rules.ingest(input);

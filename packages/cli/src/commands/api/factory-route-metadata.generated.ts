@@ -2002,22 +2002,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "properties": {
         "board": {
           "type": "string",
-          "enum": [
-            "work",
-            "review"
-          ]
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "stage": {
           "type": "string",
-          "enum": [
-            "intake",
-            "triage",
-            "planning",
-            "execute",
-            "review",
-            "done",
-            "canceled"
-          ]
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "expectedRevision": {
           "type": "integer",

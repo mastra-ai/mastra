@@ -86,6 +86,31 @@ describe('Factory route contracts', () => {
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
   });
 
+  it('accepts custom transition identifiers and rejects malformed identifiers', () => {
+    const request = {
+      board: 'Release-board_1',
+      stage: 'Preparing-release_2',
+      expectedRevision: 1,
+      requestId: decisionId,
+      cause: 'release-approved',
+    };
+    expect(transitionBodySchema.parse(request)).toEqual({
+      board: request.board,
+      stage: request.stage,
+      expectedRevision: 1,
+      ingress: { type: 'human', identity: decisionId },
+      cause: request.cause,
+    });
+    for (const field of ['board', 'stage']) {
+      expect(transitionBodySchema.safeParse({ ...request, [field]: 'a'.repeat(128) }).success).toBe(true);
+      for (const value of ['', 'a'.repeat(129), ' release', 'release ', '-release', 'release/prepare', 123, null]) {
+        expect(transitionBodySchema.safeParse({ ...request, [field]: value }).success, `${field}: ${value}`).toBe(
+          false,
+        );
+      }
+    }
+  });
+
   it('normalizes deterministic decision and attention query inputs', () => {
     const decisionCursor = Buffer.from(JSON.stringify(['2030-01-01T00:00:00.000Z', decisionId])).toString('base64url');
     expect(
