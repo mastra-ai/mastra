@@ -1,15 +1,20 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import type { IsTaskCompleteRunResult, MastraDBMessage } from '../../../agent';
+import { safeEnqueue } from '../../../stream/base/input';
 import type { ChunkType } from '../../../stream/types';
-import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
-import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
-import type { StreamCompletionContext } from '../../network/validation';
 import { readScoped } from '../../run-scope-access';
 import { RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
+import { evaluateTaskCompletion } from '../../shared/steps/is-task-complete-core';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 
+/**
+ * Grades a settled iteration against the configured isTaskComplete scorers.
+ * Behavior lives in the shared `evaluateTaskCompletion` core; this glue owns
+ * the per-run iteration counter, RunScope access, and projection back onto
+ * `LLMIterationData` (flipping `isContinued` + the `isTaskCompleteCheckFailed`
+ * flag consumed by the next llm-execution).
+ */
 export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: OuterLLMRun<Tools, OUTPUT>,
 ) {
@@ -39,151 +44,41 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
       // Increment iteration count
       currentIteration++;
 
-      // Skip scorers if a background task result was just injected —
-      // the LLM hasn't processed it yet, so scoring now would be premature
-      if (inputData.backgroundTaskPending) {
-        return inputData;
-      }
-
-      // Only run isTaskComplete check if scorers are configured
-      const hasIsTaskCompleteScorers = isTaskComplete?.scorers && isTaskComplete.scorers.length > 0;
-
-      //Also check if the step result is not continued to avoid running scorers before the LLM is done
-      if (!hasIsTaskCompleteScorers || inputData.stepResult?.isContinued) {
-        return inputData;
-      }
-
-      // Skip scoring when the only thing this iteration did was update working
-      // memory. Working-memory updates are housekeeping — not a task response —
-      // so grading them would produce misleading scores. The next iteration
-      // (where the LLM actually answers the user) will be scored instead.
-      const iterationToolCalls = (inputData.output.toolCalls || []) as Array<{ toolName: string }>;
-      const isWorkingMemoryTool = (name: string) =>
-        name === 'updateWorkingMemory' || name === 'setWorkingMemory' || name === 'update-working-memory';
-      if (iterationToolCalls.length > 0 && iterationToolCalls.every(tc => isWorkingMemoryTool(tc.toolName))) {
-        return inputData;
-      }
-      // Get the original user message for context
-      const userMessages = messageList.get.input.db();
-      const firstUserMessage = userMessages[0];
-      let originalTask = 'Unknown task';
-      if (firstUserMessage) {
-        if (typeof firstUserMessage.content === 'string') {
-          originalTask = firstUserMessage.content;
-        } else if (firstUserMessage.content?.parts?.[0]?.type === 'text') {
-          originalTask = (firstUserMessage.content.parts[0] as { type: 'text'; text: string }).text;
-        }
-      }
-
-      // Build isTaskComplete context
-      const toolCalls = (inputData.output.toolCalls || []) as Array<{ toolName: string; args?: unknown }>;
-      const toolResults = (inputData.output.toolResults || []) as Array<{
-        toolName: string;
-        result?: unknown;
-      }>;
-
-      const isTaskCompleteContext: StreamCompletionContext = {
+      const outcome = await evaluateTaskCompletion({
+        policy: isTaskComplete,
         iteration: currentIteration,
         maxIterations: maxSteps,
-        originalTask,
+        llmSignaledDone: !inputData.stepResult?.isContinued,
+        stepReason: inputData.stepResult?.reason,
+        backgroundTaskPending: inputData.backgroundTaskPending,
+        toolCalls: (inputData.output.toolCalls || []) as Array<{ toolName: string; args?: unknown }>,
+        toolResults: (inputData.output.toolResults || []) as Array<{ toolName: string; result?: unknown }>,
         currentText: inputData.output.text || '',
-        toolCalls: toolCalls.map(tc => ({
-          name: tc.toolName,
-          args: (tc.args || {}) as Record<string, unknown>,
-        })),
-        messages: messageList.get.all.db(),
-        toolResults: toolResults.map(tr => ({
-          name: tr.toolName,
-          result: tr.result as Record<string, unknown>,
-        })),
-        agentId: agentId || '',
-        agentName: agentName || '',
-        runId: runId,
+        messageList: () => messageList,
+        runId,
+        agentId,
+        agentName,
         threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
         resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
         customContext: requestContext ? Object.fromEntries(requestContext.entries()) : undefined,
-      };
-
-      // Run isTaskComplete scorers - they're guaranteed to exist at this point
-      const isTaskCompleteResult: IsTaskCompleteRunResult = await runStreamCompletionScorers(
-        isTaskComplete.scorers!,
-        isTaskCompleteContext,
-        {
-          strategy: isTaskComplete.strategy,
-          parallel: isTaskComplete.parallel,
-          timeout: isTaskComplete.timeout,
+        generateId: () => mastra?.generateId(),
+        emitChunk: chunk => {
+          safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
         },
-      );
+        logger: mastra?.getLogger?.(),
+      });
 
-      // Call onComplete callback if configured
-      if (isTaskComplete.onComplete) {
-        await isTaskComplete.onComplete(isTaskCompleteResult);
+      if (!outcome.evaluated) {
+        return inputData;
       }
 
-      // Update isContinued based on isTaskComplete result
-      if (isTaskCompleteResult.complete) {
-        // Task is complete - stop continuing
-        if (inputData.stepResult) {
-          inputData.stepResult.isContinued = false;
-        }
-      } else {
-        // Task not complete - continue
-        if (inputData.stepResult) {
-          inputData.stepResult.isContinued = true;
-        }
+      // Update isContinued based on the verdict: complete → stop, not
+      // complete → run one more LLM iteration to course-correct.
+      if (inputData.stepResult) {
+        inputData.stepResult.isContinued = !outcome.complete;
       }
 
-      // Add feedback as assistant message for the LLM to see in next iteration.
-      // Skipped when the check passes: the loop ends, so the report would only
-      // leak into the resolved final text and thread memory.
-      const maxIterationReached = maxSteps ? currentIteration >= maxSteps : false;
-      if (!isTaskCompleteResult.complete) {
-        const feedback = formatStreamCompletionFeedback(isTaskCompleteResult, maxIterationReached);
-        messageList.add(
-          {
-            id: mastra?.generateId(),
-            createdAt: new Date(),
-            type: 'text',
-            role: 'assistant',
-            content: {
-              parts: [
-                {
-                  type: 'text',
-                  text: feedback,
-                },
-              ],
-              metadata: {
-                mode: 'stream',
-                completionResult: {
-                  passed: isTaskCompleteResult.complete,
-                  suppressFeedback: !!isTaskComplete.suppressFeedback,
-                },
-              },
-              format: 2,
-            },
-          } as MastraDBMessage,
-          'response',
-        );
-      }
-
-      // Emit is-task-complete event
-      controller.enqueue({
-        type: 'is-task-complete',
-        runId: runId,
-        from: ChunkFrom.AGENT,
-        payload: {
-          iteration: currentIteration,
-          passed: isTaskCompleteResult.complete,
-          results: isTaskCompleteResult.scorers,
-          duration: isTaskCompleteResult.totalDuration,
-          timedOut: isTaskCompleteResult.timedOut,
-          reason: isTaskCompleteResult.completionReason,
-          maxIterationReached: !!maxIterationReached,
-          suppressFeedback: !!isTaskComplete.suppressFeedback,
-        },
-      } as ChunkType<OUTPUT>);
-
-      return { ...inputData, isTaskCompleteCheckFailed: !isTaskCompleteResult.complete };
+      return { ...inputData, isTaskCompleteCheckFailed: !outcome.complete };
     },
   });
 }
