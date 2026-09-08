@@ -1,4 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Memory, Subconscious } from '../../..';
 import { applyExtractorHooks } from '../extracted-values';
 import { buildExtractorOutputSections, Extractor } from '../extractor';
+import { formatMessagesForObserver } from '../observer-agent';
 import { SubconsciousRemindExtractor } from '../subconscious';
 import {
   getRemindMessageMetadata,
@@ -13,6 +15,7 @@ import {
   getRemindThreadId,
   REMIND_PARENT_THREAD_METADATA_KEY,
 } from '../subconscious/remind-protocol';
+import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
 
 function createModel(response: string, prompts?: string[], repeatToolCall = false) {
   let streamCall = 0;
@@ -413,6 +416,68 @@ describe('Subconscious remind', () => {
 
     expect(prompts[0]).toContain('user: what is the weather like on the moon?');
     expect(prompts[0]).toContain('already visible');
+  });
+
+  it.each(['text', 'tool-result'])('characterizes the reminder hook %s tail loss', kind => {
+    const text = 'Deployment inventory reviewed. '.repeat(30) + 'TAIL_ONLY_APPROVAL';
+    const message: MastraDBMessage = {
+      id: 'tail-message',
+      role: kind === 'text' ? 'user' : 'assistant',
+      createdAt: new Date(),
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      content: {
+        format: 2,
+        parts:
+          kind === 'text'
+            ? [{ type: 'text', text }]
+            : [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'inventory',
+                    toolName: 'read_inventory',
+                    args: {},
+                    result: text,
+                  },
+                },
+              ],
+      },
+    };
+    expect(formatMessagesForObserver([message])).toContain('TAIL_ONLY_APPROVAL');
+    expect(formatMessagesForObserver([message], { maxPartLength: 500 })).not.toContain('TAIL_ONLY_APPROVAL');
+  });
+
+  it('retains the default observer tool-result token budget without a character cap', () => {
+    const result = 'deployment inventory '.repeat(30_000) + 'BEYOND_TOKEN_BUDGET';
+    const message: MastraDBMessage = {
+      id: 'large-result',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId: 'alpha',
+      resourceId: 'user-42',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'inventory',
+              toolName: 'read_inventory',
+              args: {},
+              result,
+            },
+          },
+        ],
+      },
+    };
+    const bounded = formatToolResultForObserver(result, { maxTokens: DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS });
+    expect(DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS).toBe(10_000);
+    expect(bounded.length).toBeGreaterThan(500);
+    expect(formatMessagesForObserver([message])).toContain(bounded);
+    expect(formatMessagesForObserver([message])).not.toContain('BEYOND_TOKEN_BUDGET');
   });
 
   it('stays silent when no main agent and no observational memory model are available', async () => {
