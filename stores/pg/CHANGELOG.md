@@ -1,5 +1,19 @@
 # @mastra/pg
 
+## 1.23.0-alpha.4
+
+### Patch Changes
+
+- # Fix namespace migration for long vector table names ([#23280](https://github.com/mastra-ai/mastra/pull/23280))
+  - Fix `PgVector.createIndex()` failing for table names of 40 or more characters by bounding generated index names with a 128-bit hash suffix. Short names remain unchanged.
+  - Preserve legacy vector-ID uniqueness if replacement-index creation fails by creating the namespace unique index before dropping the legacy constraint.
+  - Repair tables left half-migrated by earlier versions on the next `createIndex()` call, provided they contain no duplicate `(namespace, vector_id)` pairs.
+
+  Fixes #23273
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+
 ## 1.23.0-alpha.3
 
 ### Patch Changes

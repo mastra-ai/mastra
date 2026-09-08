@@ -21,7 +21,7 @@ export interface TraceThreadItemViewProps {
 const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans(traceId);
+  const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
 
   if (isLoading) {
     return (

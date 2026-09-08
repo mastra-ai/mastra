@@ -1,6 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
+import { attentionKindSummaries } from './attention';
+
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
  * (`vitest.setup.ts`) starts it with `onUnhandledRequest: 'error'` so any
@@ -28,17 +30,7 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/attention', () =>
-    HttpResponse.json({
-      items: [],
-      openCount: 0,
-      badgeCount: 0,
-      unreadCount: 0,
-      activityUnreadCount: 0,
-      hasMore: false,
-      latestOccurrenceKey: null,
-      latestOccurrenceAt: null,
-      latestOccurrenceUnread: false,
-    }),
+    HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false }),
   ),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
