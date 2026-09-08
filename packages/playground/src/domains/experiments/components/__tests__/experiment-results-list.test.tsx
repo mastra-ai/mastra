@@ -59,6 +59,40 @@ describe('ExperimentResultsList', () => {
     });
   });
 
+  describe('tags column', () => {
+    const tagColumns = [...columns, { name: 'tags', label: 'Tags', size: '10rem' }];
+
+    it('renders each tag of the result in the tags cell', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[{ ...makeResult('r-1'), tags: ['alpha', 'beta'] }]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expect(screen.getByText('alpha')).toBeDefined();
+      expect(screen.getByText('beta')).toBeDefined();
+    });
+
+    it('renders an empty tags cell when the result has no tags', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[makeResult('r-1')]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expect(screen.getByText('Tags')).toBeDefined();
+      expect(screen.getByTestId('result-tags-r-1').textContent).toBe('');
+    });
+  });
+
   describe('scorer columns', () => {
     it('links the column header to the scorer page in the same tab', () => {
       renderWithProviders(
