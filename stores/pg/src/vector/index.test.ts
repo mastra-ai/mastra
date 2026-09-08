@@ -170,6 +170,110 @@ describe('PgVector', () => {
       expect(defaultResults.map(result => result.id)).toEqual(['legacy-id']);
       expect(acmeResults.map(result => result.id)).toEqual(['legacy-id']);
     });
+
+    describe('lazy migration without createIndex', () => {
+      const lazyIndex = 'test_namespace_lazy_migration';
+      let lazyVectorDB: PgVector;
+
+      beforeEach(async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`DROP TABLE IF EXISTS ${lazyIndex}`);
+          await client.query(`
+            CREATE TABLE ${lazyIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+          await client.query(
+            `INSERT INTO ${lazyIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+            ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+          );
+        } finally {
+          client.release();
+        }
+        // Fresh instance so no per-process caches from createIndex() are present.
+        lazyVectorDB = new PgVector({ connectionString, id: 'pg-vector-lazy-test' });
+      });
+
+      afterEach(async () => {
+        await lazyVectorDB.deleteIndex({ indexName: lazyIndex });
+        await lazyVectorDB.disconnect();
+      });
+
+      const getNamespaceColumns = async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = 'namespace'`,
+            [lazyIndex],
+          );
+          return result.rows;
+        } finally {
+          client.release();
+        }
+      };
+
+      it('migrates on query, upsert, and delete without createIndex', async () => {
+        expect(await getNamespaceColumns()).toHaveLength(0);
+
+        const results = await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 });
+        expect(results.map(result => result.id)).toEqual(['legacy-id']);
+        expect(await getNamespaceColumns()).toHaveLength(1);
+
+        await lazyVectorDB.upsert({
+          indexName: lazyIndex,
+          vectors: [[0, 1, 0]],
+          ids: ['legacy-id'],
+          namespace: 'acme',
+        });
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).map(r => r.id),
+        ).toEqual(['legacy-id']);
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [0, 1, 0], namespace: 'acme' })).map(
+            r => r.id,
+          ),
+        ).toEqual(['legacy-id']);
+
+        await lazyVectorDB.deleteVector({ indexName: lazyIndex, id: 'legacy-id' });
+        expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(0);
+        expect(
+          await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [0, 1, 0], namespace: 'acme' }),
+        ).toHaveLength(1);
+      });
+
+      it('migrates on updateVector and deleteVectors without createIndex', async () => {
+        await lazyVectorDB.updateVector({
+          indexName: lazyIndex,
+          id: 'legacy-id',
+          update: { metadata: { source: 'updated' } },
+        });
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'updated' } })).map(r => r.id),
+        ).toEqual(['legacy-id']);
+
+        await lazyVectorDB.deleteVectors({ indexName: lazyIndex, ids: ['legacy-id'] });
+        expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'updated' } })).toHaveLength(0);
+      });
+
+      it('throws a descriptive error instead of running DDL when init is disabled', async () => {
+        await lazyVectorDB.disconnect();
+        lazyVectorDB = new PgVector({ connectionString, id: 'pg-vector-lazy-disabled', disableInit: true });
+
+        await expect(
+          lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 }),
+        ).rejects.toMatchObject({ id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED' });
+        expect(await getNamespaceColumns()).toHaveLength(0);
+
+        // Migration via createIndex() on an init-enabled instance unblocks the disabled instance.
+        await vectorDB.createIndex({ indexName: lazyIndex, dimension: 3 });
+        const results = await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 });
+        expect(results.map(result => result.id)).toEqual(['legacy-id']);
+      });
+    });
   });
 
   describe('Metadata-Only Query', () => {

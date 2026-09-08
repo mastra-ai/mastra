@@ -147,6 +147,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private indexMetadataCache: Map<string, Promise<PGIndexMetadata>> = new Map();
   private createdIndexes = new Map<string, number>();
   private namespaceReadyIndexes = new Set<string>();
+  /** In-flight lazy namespace migrations, keyed by index name (see {@link ensureNamespaceReady}). */
+  private namespaceReadyCache: Map<string, Promise<void>> = new Map();
   private indexVectorTypes = new Map<string, VectorType>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
@@ -516,6 +518,65 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     );
   }
 
+  /**
+   * Every data path filters on `namespace`, but tables created before that column existed are
+   * only migrated by `createIndex()`, which callers are not required to invoke before reading.
+   * Run the migration lazily instead, once per index per process.
+   */
+  private ensureNamespaceReady(indexName: string): Promise<void> {
+    if (this.namespaceReadyIndexes.has(indexName)) {
+      return Promise.resolve();
+    }
+
+    return this.memoize(this.namespaceReadyCache, indexName, () =>
+      // Share the createIndex mutex so lazy migration never races its DDL on the same table.
+      this.getMutexByName(`create-${indexName}`).runExclusive(async () => {
+        if (this.namespaceReadyIndexes.has(indexName)) {
+          return;
+        }
+
+        const client = await this.pool.connect();
+        try {
+          const { tableName } = this.getTableName(indexName);
+          const columns = await client.query<{ attname: string }>(
+            `SELECT attname
+             FROM pg_attribute
+             WHERE attrelid = to_regclass($1)
+               AND attname IN ('vector_id', 'namespace')
+               AND attnum > 0
+               AND NOT attisdropped`,
+            [tableName],
+          );
+          const names = new Set(columns.rows.map(row => row.attname));
+          if (!names.has('vector_id')) {
+            // Not a vector table (or missing) - let the caller's own query surface the error.
+            return;
+          }
+
+          if (!names.has('namespace')) {
+            if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+              throw new MastraError({
+                id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
+                domain: ErrorDomain.MASTRA_VECTOR,
+                category: ErrorCategory.USER,
+                text:
+                  `Vector index "${indexName}" predates namespace support and schema changes are disabled. ` +
+                  `Call createIndex({ indexName: "${indexName}", dimension }) with init enabled, ` +
+                  `or apply the namespace migration SQL from the @mastra/pg changelog.`,
+                details: { indexName },
+              });
+            }
+            await this.ensureNamespaceSchema(indexName, client);
+          }
+
+          this.namespaceReadyIndexes.add(indexName);
+        } finally {
+          client.release();
+        }
+      }),
+    );
+  }
+
   transformFilter(filter?: PGVectorFilter) {
     const translator = new PGFilterTranslator();
     return translator.translate(filter);
@@ -602,6 +663,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     }
+
+    await this.ensureNamespaceReady(indexName);
 
     // Metadata-only query: filter without vector similarity
     if (queryVector === undefined) {
@@ -775,6 +838,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const { tableName } = this.getTableName(indexName);
 
     const indexInfo = await this.getIndexMetadata({ indexName });
+    await this.ensureNamespaceReady(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
@@ -1161,6 +1225,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
           this.namespaceReadyIndexes.delete(indexName);
+          this.namespaceReadyCache.delete(indexName);
           this.indexVectorTypes.delete(indexName);
           throw error;
         } finally {
@@ -1702,6 +1767,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
       this.namespaceReadyIndexes.delete(indexName);
+      this.namespaceReadyCache.delete(indexName);
       this.indexVectorTypes.delete(indexName);
       this.invalidateIndexCaches(indexName);
     } catch (error: any) {
@@ -1808,6 +1874,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       const indexInfo = await this.getIndexMetadata({ indexName });
+      await this.ensureNamespaceReady(indexName);
       client = await this.pool.connect();
       // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
       await this.ensureSearchPath(client);
@@ -1935,6 +2002,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   async deleteVector({ indexName, id, namespace = DEFAULT_NAMESPACE }: PgDeleteVectorParams): Promise<void> {
     let client;
     try {
+      await this.ensureNamespaceReady(indexName);
       client = await this.pool.connect();
       const { tableName } = this.getTableName(indexName);
       const query = `
@@ -1973,6 +2041,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     let client;
     const effectiveNamespace = namespace ?? DEFAULT_NAMESPACE;
     try {
+      await this.ensureNamespaceReady(indexName);
       client = await this.pool.connect();
       const { tableName } = this.getTableName(indexName);
 
