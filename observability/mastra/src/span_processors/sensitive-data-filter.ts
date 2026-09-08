@@ -159,9 +159,11 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     if (obj === null || typeof obj !== 'object') {
       // Handle string values - check if they contain JSON that needs redacting
       if (typeof obj === 'string') {
-        // Quick check - JSON objects/arrays start with { or [
+        // Check the first possible JSON token as well as the opening delimiter.
+        // This avoids parse exceptions for serialization markers like [MaxDepth]
+        // while still allowing every valid object/array through to JSON.parse.
         const trimmed = obj.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        if (/^(?:\{\s*["}]|\[\s*(?:["{[\]0-9-]|true|false|null))/.test(trimmed)) {
           return this.redactJsonString(obj, indexedState);
         }
       }
