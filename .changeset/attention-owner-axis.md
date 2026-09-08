@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-The attention inbox now reports counts and the newest item per kind, and the UI decides what interrupts a person. Runs waiting for approval leave the sidebar badge, its preview, and the notification sound; the inbox page files them under "Waiting for approval", above "Activity".
+The attention inbox now reports counts and the newest item per kind, and the UI decides what interrupts a person. Runs waiting for approval leave the sidebar badge and the notification sound; the sidebar popover lists them under an "Approvals" tab beside "Needs you" and "Activity", each tab carrying its unread count, and the inbox page files them under "Waiting for approval", above "Activity".
 
 Breaking for callers of `GET /web/factory/projects/:id/attention`:
 

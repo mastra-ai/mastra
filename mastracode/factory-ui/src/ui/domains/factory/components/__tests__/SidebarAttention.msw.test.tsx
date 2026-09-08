@@ -295,7 +295,7 @@ describe('Sidebar attention', () => {
 
     await waitFor(() => expect(api.retried).toEqual([DECISION_ID]));
     await waitForMutationsIdle(client);
-    expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
   });
 
   it('keeps read failures open and hides archived failures', async () => {
@@ -354,7 +354,7 @@ describe('Sidebar attention', () => {
     const { client } = renderAttention();
     const emptyTrigger = await screen.findByRole('button', { name: 'Needs attention' });
     await user.click(emptyTrigger);
-    await screen.findByText('Nothing needs attention.');
+    await screen.findByText('Nothing needs you.');
     await user.click(emptyTrigger);
     expect(oscillatorStart).not.toHaveBeenCalled();
 
@@ -438,7 +438,7 @@ describe('Sidebar attention', () => {
     expect(screen.getByRole('link', { name: 'Open thread for Fix the loader' })).toBeVisible();
   });
 
-  it('a parked run stays out of the badge, the preview, and the sound', async () => {
+  it('a parked run stays out of the badge and the sound, one tab away in the preview', async () => {
     const api = stubAttention([]);
     const user = userEvent.setup();
     const { client } = renderAttention();
@@ -449,12 +449,18 @@ describe('Sidebar attention', () => {
     await waitForMutationsIdle(client);
 
     await user.click(screen.getByRole('button', { name: 'Needs attention' }));
-    expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
     expect(screen.queryByText('Waiting for approval to run review')).not.toBeInTheDocument();
     expect(oscillatorStart).not.toHaveBeenCalled();
     expect(api.listed.at(-1)).toBe(
       '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
     );
+
+    await user.click(screen.getByRole('tab', { name: 'Approvals 1' }));
+    expect(await screen.findByText('Waiting for approval to run review')).toBeVisible();
+    expect(api.listed.at(-1)).toBe('?view=open&kind=automation-proposed&limit=25');
+    expect(screen.getByRole('button', { name: 'Needs attention' })).toBeVisible();
+    expect(oscillatorStart).not.toHaveBeenCalled();
   });
   it('the sidebar and the Overview preview share one attention query', async () => {
     const api = stubAttention([attentionItem()]);
@@ -506,9 +512,19 @@ describe('Sidebar attention', () => {
     const user = userEvent.setup();
     renderAttention();
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+    const trigger = await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
+    await user.click(trigger);
 
     expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Activity 5' }));
+    expect(await screen.findByText('Chatter on item-2')).toBeVisible();
+    expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });
