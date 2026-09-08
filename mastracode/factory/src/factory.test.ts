@@ -549,6 +549,47 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
+  it('registers session updates only for authenticated scoped supervisor turns', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    vi.spyOn(projects, 'get').mockResolvedValue({
+      id: 'project',
+      orgId: 'org-1',
+      createdBy: 'user-1',
+      name: 'Project',
+      description: null,
+      defaultModelId: null,
+      slackWorkItemsEnabled: false,
+      autoRunEnabled: false,
+      autoApprovePlans: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const extraTools = config.extraTools as (args: {
+      requestContext: RequestContext;
+    }) => Promise<Record<string, unknown>>;
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('controller', {
+      resourceId: 'factory-supervisor:project',
+      threadId: 'thread',
+      scope: '/worktree',
+      getState: () => ({}),
+    });
+    expect(await extraTools({ requestContext })).toHaveProperty('factory_update_session');
+    requestContext.set('user', { organizationId: 'org-1' });
+    expect(await extraTools({ requestContext })).not.toHaveProperty('factory_update_session');
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set('controller', {
+      resourceId: 'worker',
+      threadId: 'thread',
+      scope: '/worktree',
+      getState: () => ({}),
+    });
+    expect(await extraTools({ requestContext })).not.toHaveProperty('factory_update_session');
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });

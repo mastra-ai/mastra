@@ -257,6 +257,34 @@ describe('createFactorySupervisorWriteTools', () => {
     });
   });
 
+  it('signals without approval using active bindings only and audits every active role', async () => {
+    const context = await setup();
+    const item = await createItem(context.workItems, 7, 'execute');
+    const { binding } = await bindRun(context.workItems, item, 7);
+    const list = vi
+      .spyOn(context.workItems, 'listRunBindings')
+      .mockResolvedValue([
+        { ...binding, id: 'revoked', status: 'revoked', role: 'old' },
+        binding,
+        { ...binding, id: 'second', role: 'review', threadId: 'second-thread' },
+      ]);
+    expect(context.tools.factory_signal_session.requireApproval).toBe(false);
+    await expect(
+      execute(context.tools.factory_signal_session, { sessionId: 'session-7', message: 'Continue.' }),
+    ).resolves.toEqual({ sessionId: 'session-7', delivered: true, workItemId: item.id, role: 'work' });
+    expect((await latestAudit(context.audit))?.metadata).toMatchObject({
+      bindings: [
+        { workItemId: item.id, role: 'work' },
+        { workItemId: item.id, role: 'review' },
+      ],
+    });
+    list.mockResolvedValue([{ ...binding, status: 'revoked' }]);
+    await expect(
+      execute(context.tools.factory_signal_session, { sessionId: 'session-7', message: 'Continue.' }),
+    ).rejects.toThrow('does not belong');
+    expect(context.signalSession).toHaveBeenCalledTimes(1);
+  });
+
   it('signals only a session bound to this factory', async () => {
     const context = await setup();
     const item = await createItem(context.workItems, 6, 'execute');

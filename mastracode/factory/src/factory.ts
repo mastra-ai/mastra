@@ -107,6 +107,7 @@ import type { WorkItemRow } from './storage/domains/work-items/base.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
+import { createFactorySupervisorSessionTools } from './supervisor/session-tools.js';
 import { hydrateSupervisorSession, parseSupervisorResourceId, resolveSupervisorScope } from './supervisor/session.js';
 import { createFactorySupervisorWriteTools } from './supervisor/write-tools.js';
 import { timedPhase } from './timing.js';
@@ -828,6 +829,18 @@ export class MastraFactory {
                       }),
                     );
                     if (userId) {
+                      mergeTools(
+                        'factory-supervisor-sessions',
+                        createFactorySupervisorSessionTools({
+                          scope: supervisorScope,
+                          userId,
+                          workItems: workItemsStorage,
+                          audit: auditStorage,
+                          controller: prepared.base.controller,
+                          memorySettings: memorySettingsStorage,
+                          projects: factoryProjectsStorage,
+                        }),
+                      );
                       mergeTools(
                         'factory-supervisor-write',
                         createFactorySupervisorWriteTools({
