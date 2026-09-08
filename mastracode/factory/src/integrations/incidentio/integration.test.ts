@@ -199,7 +199,7 @@ describe('IncidentioIntegration', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const integration = new IncidentioIntegration({ apiKey: 'incident-key', fetchImpl });
-    const connection = { type: 'oauth' as const, accessToken: 'incident-key' };
+    const connection = { type: 'oauth' as const, accessToken: 'incidentio-direct-api-key' };
 
     await expect(
       integration.intake.listIssues({
@@ -242,7 +242,7 @@ describe('IncidentioIntegration', () => {
 
     await expect(
       integration.intake.updateIssue({
-        connection: { type: 'oauth', accessToken: 'incident-key' },
+        connection: { type: 'oauth', accessToken: 'incidentio-direct-api-key' },
         issueId: 'incidentio:follow-up:follow-up-1',
         state: { kind: 'byType', stateType: 'completed' },
       }),

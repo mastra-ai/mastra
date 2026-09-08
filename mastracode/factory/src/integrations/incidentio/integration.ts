@@ -13,6 +13,8 @@ export interface IncidentioIntegrationConfig {
   baseUrl?: string;
 }
 
+const DIRECT_CONNECTION_TOKEN = 'incidentio-direct-api-key';
+
 export class IncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
   readonly intake;
@@ -30,7 +32,10 @@ export class IncidentioIntegration implements FactoryIntegration {
       accessToken: apiKey,
       ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
     });
-    this.intake = createIncidentioIntake({ api, connection: { type: 'oauth', accessToken: apiKey } });
+    this.intake = createIncidentioIntake({
+      api,
+      connection: { type: 'oauth', accessToken: DIRECT_CONNECTION_TOKEN },
+    });
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
