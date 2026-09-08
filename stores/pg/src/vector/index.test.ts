@@ -170,6 +170,111 @@ describe('PgVector', () => {
       expect(defaultResults.map(result => result.id)).toEqual(['legacy-id']);
       expect(acmeResults.map(result => result.id)).toEqual(['legacy-id']);
     });
+
+    describe('long table names (issue #23273)', () => {
+      // 63 chars: the Postgres identifier limit. `${name}_namespace_vector_id_idx` would be 87 chars.
+      const longLegacyIndex = 'test_ns_legacy_0123456789abcdef0123456789abcdef0123456789abcdef';
+      const longFreshIndex = 'test_ns_fresh_00123456789abcdef0123456789abcdef0123456789abcdef';
+      const longHalfIndex = 'test_ns_half_000123456789abcdef0123456789abcdef0123456789abcdef';
+
+      const uniqueIndexDefs = async (table: string) => {
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query<{ indexdef: string }>(
+            `SELECT indexdef FROM pg_indexes
+             WHERE tablename = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexdef NOT LIKE '%_pkey%'`,
+            [table],
+          );
+          return result.rows.map(row => row.indexdef);
+        } finally {
+          client.release();
+        }
+      };
+
+      afterAll(async () => {
+        for (const indexName of [longLegacyIndex, longFreshIndex, longHalfIndex]) {
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it('migrates a legacy table whose name is at the identifier limit', async () => {
+        expect(longLegacyIndex).toHaveLength(63);
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longLegacyIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+        } finally {
+          client.release();
+        }
+
+        await vectorDB.createIndex({ indexName: longLegacyIndex, dimension: 3 });
+
+        const defs = await uniqueIndexDefs(longLegacyIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+        expect(
+          await vectorDB.query({ indexName: longLegacyIndex, queryVector: [0, 1, 0], namespace: 'acme' }),
+        ).toHaveLength(1);
+      });
+
+      it('creates a fresh index whose name is at the identifier limit', async () => {
+        expect(longFreshIndex).toHaveLength(63);
+        await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        // createIndex must be idempotent (IF NOT EXISTS must match the hashed name)
+        await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
+
+        const defs = await uniqueIndexDefs(longFreshIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[0, 1, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longFreshIndex, queryVector: [0, 1, 0] })).toHaveLength(1);
+      });
+
+      it('repairs a table left half-migrated by the previous implementation', async () => {
+        expect(longHalfIndex).toHaveLength(63);
+        // Reproduce the broken state: namespace column added, legacy UNIQUE dropped, no new index.
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longHalfIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb,
+              namespace VARCHAR(255) NOT NULL DEFAULT ''
+            )
+          `);
+        } finally {
+          client.release();
+        }
+        expect(await uniqueIndexDefs(longHalfIndex)).toHaveLength(0);
+
+        await vectorDB.createIndex({ indexName: longHalfIndex, dimension: 3 });
+
+        const defs = await uniqueIndexDefs(longHalfIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+        await vectorDB.upsert({ indexName: longHalfIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+      });
+
+      it('keeps the unhashed index name for short table names', async () => {
+        const defs = await uniqueIndexDefs(legacyIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain(`${legacyIndex}_namespace_vector_id_idx`);
+      });
+    });
   });
 
   describe('Metadata-Only Query', () => {
