@@ -537,36 +537,66 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         const client = await this.pool.connect();
         try {
-          const { tableName } = this.getTableName(indexName);
-          const columns = await client.query<{ attname: string }>(
-            `SELECT attname
-             FROM pg_attribute
-             WHERE attrelid = to_regclass($1)
-               AND attname IN ('vector_id', 'namespace')
-               AND attnum > 0
-               AND NOT attisdropped`,
-            [tableName],
-          );
-          const names = new Set(columns.rows.map(row => row.attname));
-          if (!names.has('vector_id')) {
-            // Not a vector table (or missing) - let the caller's own query surface the error.
-            return;
-          }
+          const { tableName, parsedIndexName } = this.getTableName(indexName);
+          const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
 
-          if (!names.has('namespace')) {
-            if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
-              throw new MastraError({
-                id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
-                domain: ErrorDomain.MASTRA_VECTOR,
-                category: ErrorCategory.USER,
-                text:
-                  `Vector index "${indexName}" predates namespace support and schema changes are disabled. ` +
-                  `Call createIndex({ indexName: "${indexName}", dimension }) with init enabled, ` +
-                  `or apply the namespace migration SQL from the @mastra/pg changelog.`,
-                details: { indexName },
-              });
+          // Reconcile inside a single transaction under a database-scoped advisory lock so the
+          // migration is atomic across PgVector instances/processes. Without this, a second process
+          // could observe the `namespace` column after another process' `ADD COLUMN` commits but
+          // before its `CREATE UNIQUE INDEX` commits, mark the index ready, and run an upsert whose
+          // `ON CONFLICT (namespace, vector_id)` target does not yet exist.
+          await client.query('BEGIN');
+          try {
+            await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`mastra:pg:namespace:${tableName}`]);
+
+            const columns = await client.query<{ attname: string }>(
+              `SELECT attname
+               FROM pg_attribute
+               WHERE attrelid = to_regclass($1)
+                 AND attname IN ('vector_id', 'namespace')
+                 AND attnum > 0
+                 AND NOT attisdropped`,
+              [tableName],
+            );
+            const names = new Set(columns.rows.map(row => row.attname));
+            if (!names.has('vector_id')) {
+              // Not a vector table (or missing) - let the caller's own query surface the error.
+              await client.query('ROLLBACK');
+              return;
             }
-            await this.ensureNamespaceSchema(indexName, client);
+
+            const compositeIndex = await client.query(
+              `SELECT 1
+               FROM pg_index i
+               JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = to_regclass($1)
+                 AND c.relname = $2`,
+              [tableName, namespaceIndexName],
+            );
+
+            // Only mark ready once both the column and its composite unique index exist. This also
+            // heals partial migrations left by older versions that committed each DDL separately.
+            const ready = names.has('namespace') && (compositeIndex.rowCount ?? 0) > 0;
+            if (!ready) {
+              if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+                throw new MastraError({
+                  id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
+                  domain: ErrorDomain.MASTRA_VECTOR,
+                  category: ErrorCategory.USER,
+                  text:
+                    `Vector index "${indexName}" predates namespace support and schema changes are disabled. ` +
+                    `Call createIndex({ indexName: "${indexName}", dimension }) with init enabled, ` +
+                    `or apply the namespace migration SQL from the @mastra/pg changelog.`,
+                  details: { indexName },
+                });
+              }
+              await this.ensureNamespaceSchema(indexName, client);
+            }
+
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
           }
 
           this.namespaceReadyIndexes.add(indexName);
