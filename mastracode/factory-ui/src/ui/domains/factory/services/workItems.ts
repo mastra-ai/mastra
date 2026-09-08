@@ -191,6 +191,8 @@ export interface UpdateWorkItemInput {
 export interface BoardSnapshot {
   workItems: WorkItem[];
   runningSessionIds: string[];
+  /** Sessions parked on a tool until someone answers, read live with the cards. */
+  parkedSessionIds: string[];
 }
 
 /** List the org's work items for a Factory project. */
@@ -199,11 +201,16 @@ export async function listWorkItems(
   factoryProjectId: string,
   signal?: AbortSignal,
 ): Promise<BoardSnapshot> {
-  const data = await requestJson<{ workItems: WireWorkItem[]; runningSessionIds?: string[] }>(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`,
-    { signal },
-  );
-  return { workItems: data.workItems.map(fromWireWorkItem), runningSessionIds: data.runningSessionIds ?? [] };
+  const data = await requestJson<{
+    workItems: WireWorkItem[];
+    runningSessionIds?: string[];
+    parkedSessionIds?: string[];
+  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    runningSessionIds: data.runningSessionIds ?? [],
+    parkedSessionIds: data.parkedSessionIds ?? [],
+  };
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

@@ -14,13 +14,24 @@ import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel
 import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
 import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { FactoryAttentionItem, FactoryAttentionView } from '../domains/factory/services/attention';
+import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
+import type {
+  FactoryAttentionGroup,
+  FactoryAttentionItem,
+  FactoryAttentionView,
+} from '../domains/factory/services/attention';
 import { SkeletonRows } from '../ui/SkeletonRows';
 
 const VIEWS: Array<{ value: FactoryAttentionView; label: string; icon: typeof Inbox }> = [
   { value: 'open', label: 'Open', icon: Inbox },
   { value: 'unread', label: 'Unread', icon: Mail },
   { value: 'archived', label: 'Archived', icon: Archive },
+];
+
+/** What needs a person leads the page; what waits on their say-so and what they merely follow sit under it. */
+const SECTIONS_BELOW: Array<{ group: FactoryAttentionGroup; heading: string; headingId: string }> = [
+  { group: 'queue', heading: 'Waiting for approval', headingId: 'attention-queue-heading' },
+  { group: 'activity', heading: 'Activity', headingId: 'attention-activity-heading' },
 ];
 
 function attentionView(value: string | null): FactoryAttentionView {
@@ -81,10 +92,11 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
   const items = pages.flatMap(page => page.items);
-  const primary = items.filter(item => item.kind !== 'activity');
-  const activity = items.filter(item => item.kind === 'activity');
-  const activityUnread = view === 'archived' ? 0 : (summary?.activityUnreadCount ?? 0);
-  const unreadCount = (summary?.unreadCount ?? 0) + (summary?.activityUnreadCount ?? 0);
+  const itemsIn = (group: FactoryAttentionGroup) => items.filter(item => attentionGroupOf(item.kind) === group);
+  const unreadIn = (group: FactoryAttentionGroup) =>
+    summary && view !== 'archived' ? attentionCountsIn(summary.kinds, group).unread : 0;
+  const unreadCount = unreadIn('attention') + unreadIn('queue') + unreadIn('activity');
+  const interrupting = itemsIn('attention');
 
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
@@ -155,23 +167,30 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
         </div>
       ) : (
         <>
-          {primary.length > 0 ? <AttentionRail factoryId={factoryId} items={primary} rowProps={rowProps} /> : null}
-
-          {activity.length > 0 ? (
-            <section aria-labelledby="attention-activity-heading" className="flex flex-col gap-4">
-              <span className="flex items-center gap-2">
-                <h2 id="attention-activity-heading" className="text-ui-sm text-icon3 m-0 font-medium">
-                  Activity
-                </h2>
-                {activityUnread > 0 ? (
-                  <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
-                    {activityUnread}
-                  </span>
-                ) : null}
-              </span>
-              <AttentionRail factoryId={factoryId} items={activity} rowProps={rowProps} />
-            </section>
+          {interrupting.length > 0 ? (
+            <AttentionRail factoryId={factoryId} items={interrupting} rowProps={rowProps} />
           ) : null}
+
+          {SECTIONS_BELOW.map(section => {
+            const sectionItems = itemsIn(section.group);
+            if (sectionItems.length === 0) return null;
+            const unread = unreadIn(section.group);
+            return (
+              <section key={section.group} aria-labelledby={section.headingId} className="flex flex-col gap-4">
+                <span className="flex items-center gap-2">
+                  <h2 id={section.headingId} className="text-ui-sm text-icon3 m-0 font-medium">
+                    {section.heading}
+                  </h2>
+                  {unread > 0 ? (
+                    <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
+                      {unread}
+                    </span>
+                  ) : null}
+                </span>
+                <AttentionRail factoryId={factoryId} items={sectionItems} rowProps={rowProps} />
+              </section>
+            );
+          })}
         </>
       )}
 

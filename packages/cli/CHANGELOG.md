@@ -1,5 +1,11 @@
 # mastra
 
+## 1.28.0-alpha.11
+
+### Patch Changes
+
+- Fixed Studio thread history downloading every historical trace on focus. Only selected trace details refresh automatically, while history rows share the updated data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
 ## 1.28.0-alpha.10
 
 ### Minor Changes

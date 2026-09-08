@@ -223,6 +223,7 @@ const attentionKindSchema = z.enum([
   'mention',
   'activity',
   'supervisor-finding',
+  'agent-waiting',
 ]);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
 type AttentionStreamPosition = { occurredAt: Date; id: string };
@@ -272,7 +273,7 @@ const attentionCursorSchema = z
 
 export const attentionQuerySchema = z.object({
   view: z.enum(['open', 'unread', 'archived']).optional().default('open'),
-  tier: z.enum(['all', 'badge', 'activity']).optional().default('all'),
+  kind: z.array(attentionKindSchema).optional(),
   before: attentionCursorSchema,
   limit: boundedLimitSchema(25, 50),
   search: z
@@ -360,7 +361,11 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({ workItems: z.array(entitySchema), runningSessionIds: z.array(z.string()) }),
+    responseSchema: z.object({
+      workItems: z.array(entitySchema),
+      runningSessionIds: z.array(z.string()),
+      parkedSessionIds: z.array(z.string()),
+    }),
   },
   workItemCreate: {
     method: 'POST',
@@ -438,13 +443,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: attentionQuerySchema,
     responseSchema: z.object({
       items: z.array(entitySchema),
-      openCount: z.number(),
-      badgeCount: z.number(),
-      unreadCount: z.number(),
-      activityUnreadCount: z.number(),
-      latestOccurrenceKey: z.string().nullable(),
-      latestOccurrenceAt: z.string().nullable(),
-      latestOccurrenceUnread: z.boolean(),
+      kinds: z.record(
+        attentionKindSchema,
+        z.object({
+          open: z.number(),
+          unread: z.number(),
+          latest: z.object({ key: z.string(), at: z.string(), unread: z.boolean() }).nullable(),
+        }),
+      ),
       hasMore: z.boolean(),
       nextCursor: z.string().optional(),
     }),

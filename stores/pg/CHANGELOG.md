@@ -1,5 +1,11 @@
 # @mastra/pg
 
+## 1.23.0-alpha.5
+
+### Patch Changes
+
+- `PgFactoryStorage` now widens an `integer` column to `bigint` when the collection schema says so, the way it already adds missing columns and drops stale `NOT NULL`. A Factory deployed before `factory_attention_receipts.occurrence` became `bigint` no longer needs a hand-run `ALTER TABLE` before parked-run receipts can be written. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
 ## 1.23.0-alpha.4
 
 ### Patch Changes
