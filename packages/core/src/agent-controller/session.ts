@@ -3653,8 +3653,16 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
   }): Promise<void> {
     const messageInput = this.createMessageInput({ content, files });
-
+    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+    const messageWithAuthor = providerOptions ? { contents: messageInput, providerOptions } : messageInput;
     const wasActive = this.stream.isActive();
+    const submittedRunId = this.run.getRunId();
+    const submittedActiveRunId = this.stream.activeRunId();
+    const submittedIsRunning = this.run.isRunning();
+    const submittedAbortRequested = this.run.isAbortRequested();
+    const submittedWhileWorking =
+      submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+
     let resolveAgentEnd: (() => void) | undefined;
     const agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
@@ -3666,22 +3674,103 @@ export class Session<TState = unknown> {
             resolveAgentEnd?.();
           }
         });
-    const signal = this.sendSignal({
-      content: messageInput,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-      untilIdle,
-    });
-    if (wasActive) {
-      await signal.accepted;
-    } else {
-      const acceptedFailure = signal.accepted.then(
-        () => new Promise<void>(() => {}),
-        error => Promise.reject(error),
-      );
-      try {
+
+    try {
+      if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
+        this.approval.respond({
+          decision: 'decline',
+          declineContext: {
+            reason: 'interrupted_by_user_message',
+            message: 'The pending tool approval was declined because the user sent a new message.',
+          },
+        });
+      }
+      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+        await this.waitForStreamIdle();
+      }
+
+      const target = await this.prepareMessageTarget({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+        includeStreamOptions: !(
+          !submittedAbortRequested &&
+          submittedRunId &&
+          submittedActiveRunId &&
+          submittedIsRunning
+        ),
+      });
+      const result = this.machinery
+        .getAgent()
+        .sendMessage(
+          submittedWhileWorking
+            ? { contents: messageInput, attributes: { delivery: 'while-active' }, providerOptions }
+            : messageWithAuthor,
+          target,
+        );
+
+      if (wasActive) {
+        await result.accepted;
+      } else {
+        const acceptedFailure = result.accepted.then(
+          () => new Promise<void>(() => {}),
+          error => Promise.reject(error),
+        );
         await Promise.race([agentEnd, acceptedFailure]);
+      }
+    } finally {
+      unsubscribeAgentEnd?.();
+    }
+  }
+
+  /**
+   * Queue a message for the next run, or send it immediately when this session
+   * is idle. Queue ordering and retry behavior are owned by the Agent runtime.
+   */
+  async queueMessage({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {    const wasActive = this.stream.isActive();
+    let resolveAgentEnd: (() => void) | undefined;
+    const agentEnd = new Promise<void>(resolve => {
+      resolveAgentEnd = resolve;
+    });
+    const unsubscribeAgentEnd = wasActive
+      ? undefined
+      : this.subscribe(event => {
+          if (event.type === 'agent_end') {
+            resolveAgentEnd?.();
+          }
+        });
+
+    try {
+      const target = await this.prepareMessageTarget({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
+      const messageInput = this.createMessageInput({ content, files });
+      const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+      const result = this.machinery
+        .getAgent()
+        .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
+
+      if (wasActive) {
+        await result.accepted;
+      } else {
+        const acceptedFailure = result.accepted.then(
+          () => new Promise<void>(() => {}),
+          error => Promise.reject(error),
+        );        await Promise.race([agentEnd, acceptedFailure]);
       } finally {
         unsubscribeAgentEnd?.();
       }
@@ -3748,11 +3837,17 @@ export class Session<TState = unknown> {
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
       // Once submitted, the Agent owns this work independently of the Session.
       this.#preparingFollowUps.delete(operation);
-      await agent.queueMessage(this.createMessageInput({ content }), {
-        resourceId,
-        threadId,
-        ifIdle: { streamOptions: streamOptions as any },
-      }).accepted;
+      await agent.queueMessage(
+        {
+          contents: this.createMessageInput({ content }),
+          providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
+        },
+        {
+          resourceId,
+          threadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        },
+      ).accepted;
     } finally {
       this.#preparingFollowUps.delete(operation);
     }
