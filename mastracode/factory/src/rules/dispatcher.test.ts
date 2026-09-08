@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
@@ -3712,7 +3712,7 @@ describe('FactoryDecisionDispatcher', () => {
           onEnter: () => ({
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-pr-1',
-            board: 'work',
+            board: 'review',
             source: 'github-pr',
             sourceKey: 'github-pr:2',
             title: 'Linked PR',
@@ -4497,4 +4497,336 @@ describe('FactoryDecisionDispatcher', () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe('custom-board deferred targets', () => {
+  const linkedDecision: FactoryCommitDecision = {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: 'custom-linked',
+    board: 'release',
+    stage: 'queued',
+    source: 'github-issue',
+    sourceKey: 'github-issue:release',
+    title: 'Release candidate',
+    url: null,
+    metadata: { authorTrusted: true, releaseTag: 'v1' },
+  };
+
+  async function persist(storage: WorkItemsStorage, decision: FactoryCommitDecision, workItemId?: string) {
+    const item = workItemId ? await storage.get({ orgId: 'org-1', id: workItemId }) : null;
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItemId ?? null,
+      ingress: { identity: `ingress:${decision.idempotencyKey}`, triggerType: 'test' },
+      configVersion: 'custom-v1',
+      expectedRevision: item?.revision ?? null,
+      actor: { type: 'human', id: 'user-1' },
+      outcome: { status: 'accepted' },
+      decisions: [{ ...decision }],
+      causalChain: [],
+      now: new Date(),
+    });
+  }
+
+  function dispatcherFor(
+    storage: WorkItemsStorage,
+    boards: ReturnType<typeof createBoardRegistry>,
+    configVersion = 'custom-v1',
+  ) {
+    return new FactoryDecisionDispatcher({
+      controller: createSession().controller as never,
+      storage,
+      boards,
+      transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'custom-worker',
+    });
+  }
+
+  it('materializes its declared initial phase and dispatches its lifecycle-produced custom transition once', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const queued = vi.fn(
+      (): FactoryCommitDecision => ({
+        type: 'transition',
+        idempotencyKey: 'begin-release',
+        board: 'release',
+        stage: 'shipping',
+      }),
+    );
+    const shipping = vi.fn();
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipping', onEnter: { issue: queued } },
+        shipping: {
+          title: 'Shipping',
+          kind: 'working',
+          role: 'publisher',
+          next: 'shipped',
+          onEnter: { issue: shipping },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    await persist(storage, linkedDecision);
+    const dispatcher = dispatcherFor(storage, boards);
+    await dispatcher.runOnce();
+    expect(queued).toHaveBeenCalledTimes(1);
+    expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({ status: 'succeeded' });
+    await dispatcher.runOnce();
+    await dispatcher.runOnce();
+    const items = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ board: 'release', stages: ['shipping'], revision: 2 });
+    expect(queued).toHaveBeenCalledTimes(1);
+    expect(shipping).toHaveBeenCalledTimes(1);
+    expect(await decisionByKey(storage, 'begin-release')).toMatchObject({ status: 'succeeded' });
+  });
+
+  it.each(['missing-board', 'foreign-phase'] as const)('rejects %s before materialization', async mode => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const boards = createBoardRegistry({ boards: mode === 'missing-board' ? [] : [createTestBoard()] });
+    await persist(storage, { ...linkedDecision, stage: mode === 'foreign-phase' ? 'planning' : 'queued' });
+    const upsert = vi.spyOn(storage, 'upsert');
+    await dispatcherFor(storage, boards).runOnce();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([]);
+    expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
+      status: 'retry',
+      lastError:
+        mode === 'missing-board'
+          ? 'Factory decision target board is not installed.'
+          : 'Factory decision target phase is not defined on its board.',
+    });
+  });
+
+  it.each(['work', null] as const)(
+    'does not adopt a %s item or change its metadata/parent on a source collision',
+    async assignedBoard => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const parent = await createItem(storage);
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          ...(assignedBoard ? { board: assignedBoard } : {}),
+          title: 'Existing',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:release' },
+        },
+      });
+      await persist(storage, linkedDecision, parent.id);
+      await dispatcherFor(storage, createBoardRegistry({ boards: [createTestBoard()] })).runOnce();
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toEqual(item);
+      expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
+        lastError: expect.stringContaining('belongs to board'),
+      });
+    },
+  );
+
+  it('rejects an uncommitted transition after its board is uninstalled', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'release',
+        title: 'Release',
+        stages: ['queued'],
+        sessions: {},
+        metadata: {},
+        externalSource: null,
+      },
+    });
+    await persist(
+      storage,
+      { type: 'transition', idempotencyKey: 'missing-transition', board: 'release', stage: 'shipping' },
+      item.id,
+    );
+    await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false })).runOnce();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toEqual(item);
+    expect(await decisionByKey(storage, 'missing-transition')).toMatchObject({
+      status: 'retry',
+      lastError: 'Factory decision target board is not installed.',
+    });
+  });
+
+  it('does not mistake a committed linked initial entry for a completed destination after uninstall', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const entered = vi.fn(
+      (): FactoryCommitDecision => ({
+        type: 'notify',
+        idempotencyKey: 'initial-effect',
+        title: 'Initial entry committed',
+      }),
+    );
+    const destination = vi.fn();
+    const boards = createBoardRegistry({
+      includeDefaultBoards: false,
+      boards: [
+        defineBoard({
+          id: 'release',
+          title: 'Release',
+          initialPhase: 'queued',
+          phases: {
+            queued: { title: 'Queued', kind: 'resting', next: 'shipping', onEnter: { issue: entered } },
+            shipping: { title: 'Shipping', kind: 'working', role: 'publisher', onEnter: { issue: destination } },
+          },
+        }),
+      ],
+    });
+    await persist(storage, { ...linkedDecision, stage: 'shipping' });
+    const service = new FactoryTransitionService({ storage, boards, configVersion: 'custom-v1' });
+    const transition = service.transition.bind(service);
+    vi.spyOn(service, 'transition').mockImplementation(request => {
+      if (request.stage === 'shipping') throw new Error('Interrupted before destination');
+      return transition(request);
+    });
+    await new FactoryDecisionDispatcher({
+      storage,
+      boards,
+      transitionService: service,
+      controller: createSession().controller as never,
+      isAutoRunEnabled: async () => true,
+    }).runOnce();
+    expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
+      status: 'retry',
+      lastError: 'Interrupted before destination',
+    });
+    const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(before).toEqual([expect.objectContaining({ board: 'release', stages: ['queued'], revision: 1 })]);
+    expect(entered).toHaveBeenCalledOnce();
+    expect(destination).not.toHaveBeenCalled();
+    const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
+    await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false }), 'replacement-v2').runOnce(
+      new Date(Date.now() + 60_000),
+    );
+    expect(await decisionByKey(storage, 'custom-linked')).toMatchObject({
+      status: 'retry',
+      lastError: 'Factory decision target board is not installed.',
+    });
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual(before);
+    expect(await seed.storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
+    expect(entered).toHaveBeenCalledOnce();
+    expect(destination).not.toHaveBeenCalled();
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+        row => row.decision.idempotencyKey === 'initial-effect',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it.each(['transition', 'upsertLinkedWorkItem'] as const)(
+    'rejects deferred %s when its removed phase exists only on another installed board',
+    async type => {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const enter = vi.fn();
+      const original = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+      expect(original.get('release')?.phases.shipping).toBeDefined();
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          board: 'release',
+          title: 'Release',
+          stages: ['queued'],
+          sessions: {},
+          metadata: {},
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'parent-release' },
+        },
+      });
+      const decision: FactoryCommitDecision =
+        type === 'transition'
+          ? { type, idempotencyKey: 'removed-phase', board: 'release', stage: 'shipping' }
+          : { ...linkedDecision, idempotencyKey: 'removed-phase', stage: 'shipping' };
+      await persist(storage, decision, item.id);
+      const replacement = createBoardRegistry({
+        includeDefaultBoards: false,
+        boards: [
+          defineBoard({
+            id: 'release',
+            title: 'Release',
+            initialPhase: 'queued',
+            phases: {
+              queued: { title: 'Queued', kind: 'resting', onEnter: { issue: enter } },
+            },
+          }),
+          defineBoard({
+            id: 'other',
+            title: 'Other',
+            initialPhase: 'shipping',
+            phases: {
+              shipping: { title: 'Shipping', kind: 'resting', onEnter: { issue: enter } },
+            },
+          }),
+        ],
+      });
+      const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+      const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
+      const upsert = vi.spyOn(storage, 'upsert');
+      await dispatcherFor(storage, replacement, 'replacement-v2').runOnce();
+      expect(await decisionByKey(storage, 'removed-phase')).toMatchObject({
+        status: 'retry',
+        lastError: 'Factory decision target phase is not defined on its board.',
+      });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(enter).not.toHaveBeenCalled();
+      expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual(before);
+      expect(await seed.storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
+    },
+  );
+
+  it.each(['transition', 'upsertLinkedWorkItem'] as const)(
+    'replays committed %s after its board is uninstalled',
+    async type => {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+      if (type === 'transition') {
+        const { item } = await storage.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          input: {
+            board: 'release',
+            title: 'Release',
+            stages: ['queued'],
+            sessions: {},
+            metadata: {},
+            externalSource: null,
+          },
+        });
+        await persist(storage, { type, idempotencyKey: 'custom-replay', board: 'release', stage: 'shipping' }, item.id);
+      } else {
+        await persist(storage, { ...linkedDecision, idempotencyKey: 'custom-replay' });
+      }
+      const complete = vi
+        .spyOn(storage, 'completeDeferredDecision')
+        .mockRejectedValueOnce(new Error('lost completion'));
+      await dispatcherFor(storage, boards).runOnce();
+      expect(await decisionByKey(storage, 'custom-replay')).toMatchObject({ status: 'retry' });
+      const before = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+      const evaluations = await seed.storage.ops.findMany('factory_rule_evaluations', {});
+      expect(evaluations.length).toBeGreaterThan(1);
+      expect(evaluations.every(row => row.rule_set_version === 'custom-v1')).toBe(true);
+      complete.mockRestore();
+      await dispatcherFor(storage, createBoardRegistry({ includeDefaultBoards: false }), 'replacement-v2').runOnce(
+        new Date(Date.now() + 60_000),
+      );
+      expect(await decisionByKey(storage, 'custom-replay')).toMatchObject({ status: 'succeeded' });
+      expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual(before);
+      expect(await seed.storage.ops.findMany('factory_rule_evaluations', {})).toEqual(evaluations);
+    },
+  );
 });

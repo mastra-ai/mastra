@@ -29,6 +29,32 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Product telemetry
+
+Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
+
+| Property                              | Meaning                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------- |
+| `activity`                            | `page_view` for a visible screen, or `interaction` for pointer/keyboard activity |
+| `page`                                | A bounded category such as `work`, `review`, or `settings`; never a URL          |
+| `platform_user_id`, `platform_org_id` | Opaque IDs from the authenticated platform account                               |
+| `platform_project_id`                 | `MASTRA_PROJECT_ID`, when configured                                             |
+| `platform_hosted`                     | Whether a nonempty `MASTRA_DEPLOYMENT_ID` is present                             |
+| `deployment_id`, `platform_region`    | `MASTRA_DEPLOYMENT_ID` and `MASTRA_PLATFORM_REGION`, when configured             |
+| `schema_version`                      | `1`                                                                              |
+
+The person ID is `factory:platform:<user ID>`, consistent across local and hosted servers. This does not merge existing CLI or platform analytics profiles. A local server can have a platform project ID and use platform services while `platform_hosted` remains `false`. Non-platform hosting includes both local and other self-hosted servers; this event does not distinguish them.
+
+Count unique people per day for visitors, and filter to `activity = interaction` for engaged users. Group by `platform_project_id` for project adoption. Interaction events are limited to once per minute per mounted browser app, and the server caps captures at 60 per minute per account/organization per process. Hidden tabs do not capture activity, and there is no background heartbeat. These are best-effort usage signals, not a record of successful product actions.
+
+To disable collection, set this on the Factory Server:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=true
+```
+
+`1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
+
 ### Board lifecycle rules
 
 Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
@@ -193,7 +219,103 @@ phases: {
 }
 ```
 
-**Remaining limitations:** Rule-decision and tool-input validation still accept only the built-in board IDs and phase names, so custom-board lifecycle handlers cannot emit `transition` or `upsertLinkedWorkItem` decisions into custom phases, and the `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
+**Remaining limitations:** The `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
+
+### Execute a custom board
+
+Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
+
+This configuration runs a release rehearsal through `queued → preparing → shipping → shipped`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
+
+```typescript
+import { MastraFactory } from '@mastra/factory';
+import type { MastraFactoryConfig } from '@mastra/factory';
+import { defineBoard } from '@mastra/factory/boards';
+import type { BoardPhaseDefinition } from '@mastra/factory/boards';
+
+type ReleasePhase = 'queued' | 'preparing' | 'shipping' | 'shipped';
+
+const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefinition<ReleasePhase>>>({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  transitionPolicy: context => {
+    if (context.fromStage === 'queued' && context.toStage === 'preparing' && !context.isHumanTransition) {
+      return {
+        type: 'reject',
+        code: 'approval_required',
+        reason: 'A person must start the release rehearsal.',
+      };
+    }
+  },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+    preparing: {
+      title: 'Preparing',
+      kind: 'working',
+      role: 'release-preparer',
+      next: 'shipping',
+      onEnter: {
+        issue: context => ({
+          type: 'invokeSkill',
+          idempotencyKey: `${context.ingress.id}:prepare`,
+          role: 'release-preparer',
+          prompt:
+            'Inspect the release changes. When ready, call factory_transition_work_item with stage shipping and the current expectedRevision from the Factory phase signal.',
+        }),
+      },
+    },
+    shipping: {
+      title: 'Shipping',
+      kind: 'working',
+      role: 'release-publisher',
+      next: 'shipped',
+      onEnter: {
+        issue: context => ({
+          type: 'invokeSkill',
+          idempotencyKey: `${context.ingress.id}:check`,
+          role: 'release-publisher',
+          prompt:
+            'Run npm run release:check && printf "RELEASE_CHECK_PASSED\\n" with execute_command. This is a rehearsal; do not publish anything.',
+        }),
+      },
+    },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+  tools: {
+    execute_command: {
+      onResult: context => {
+        if (
+          context.item.stages[0] !== 'shipping' ||
+          context.result.status !== 'success' ||
+          typeof context.result.value !== 'string' ||
+          !context.result.value.trimEnd().endsWith('RELEASE_CHECK_PASSED')
+        ) {
+          return;
+        }
+        return {
+          type: 'transition',
+          idempotencyKey: `${context.ingress.id}:checked`,
+          board: 'release',
+          stage: 'shipped',
+        };
+      },
+    },
+  },
+});
+
+export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'includeDefaultBoards'>) {
+  return new MastraFactory({ ...config, boards: [releaseBoard], includeDefaultBoards: true });
+}
+```
+
+Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work or Review. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. The board's kickoff prompts supply the role-specific instructions.
+
+Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `queued`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `shipping`; the publisher's completed check produces a deferred transition to `shipped`. Terminal entry revokes the binding and releases the sandbox. Check the persisted card's board, phase, and deferred decision status rather than relying on the built-in UI pipeline.
+
+Lifecycle, tool-result, and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
+
+Custom phase signals and persisted tool-result ingestion use the item's installed board. Bound tools re-resolve the live binding, retain revision and topology checks, and reject session reassignment. A custom role named `triage` does not inherit Work's classification requirements. Existing authorization, external-author safeguards, and board-owned policies still apply.
 
 ### GitHub event rules
 

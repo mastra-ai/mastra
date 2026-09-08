@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
@@ -126,8 +128,8 @@ export const updateWorkItemBodySchema = z
 
 export const transitionBodySchema = z
   .object({
-    board: z.enum(['work', 'review']),
-    stage: z.enum(['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled']),
+    board: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
+    stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
     expectedRevision: z.number().int().min(1),
     requestId: trimmedUuidSchema,
     cause: nonEmptyTrimmed(256),
