@@ -280,10 +280,8 @@ const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), 
 
 export const factoryConfigVersion = 'mastracode-web-v1';
 
-const platformSandboxToken =
-  process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
 const hasPlatformSandboxEnv =
-  Boolean(platformSandboxToken) &&
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
@@ -293,7 +291,6 @@ export const factory = new MastraFactory({
   sandbox: ctx => {
     if (hasPlatformSandboxEnv) {
       return new PlatformSandbox({
-        accessToken: platformSandboxToken,
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
       });

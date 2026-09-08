@@ -212,8 +212,28 @@ describe('PlatformClient', () => {
     expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
   });
 
-  it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+  it.each([
+    [undefined, undefined, 'sk_secret', 'sk_secret'],
+    [undefined, 'jwt_platform', 'sk_secret', 'jwt_platform'],
+    ['explicit', 'jwt_platform', 'sk_secret', 'explicit'],
+    [undefined, '', 'sk_secret', 'sk_secret'],
+    [undefined, '  ', ' sk_secret ', 'sk_secret'],
+    [undefined, ' jwt_platform ', 'sk_secret', 'jwt_platform'],
+  ])('resolves credentials with explicit=%j, token=%j, key=%j', async (explicit, token, key, expected) => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
+    const client = new PlatformClient({ accessToken: explicit, fetch: fetchMock });
+
+    expect(client.accessToken).toBe(expected);
+    await client.request('/sandbox');
+    expect((fetchMock.mock.calls[0]![1].headers as Headers).get('authorization')).toBe(`Bearer ${expected}`);
+  });
+
+  it('requires a credential when both environment variables are blank', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', ' ');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', ' ');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
 
     expect(() => resolvePlatformOptions({})).toThrow('accessToken is required');

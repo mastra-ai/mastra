@@ -14,7 +14,7 @@ All options can be passed to the constructor or read from environment variables:
 
 | Option            | Env var                        | Required                        |
 | ----------------- | ------------------------------ | ------------------------------- |
-| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` | Yes                             |
+| `accessToken`     | `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` | Yes                             |
 | `projectId`       | `MASTRA_PROJECT_ID`            | Yes                             |
 | `environmentId`   | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)                   |
 | `actingUserId`    | —                              | No (sandbox)                    |
@@ -49,7 +49,7 @@ const agent = new Agent({
 
 ## Documentation
 
-Both providers authenticate through the workspace proxy with `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`. `PlatformSandbox` also requires `MASTRA_ENVIRONMENT_ID`; `PlatformFilesystem` requires `MASTRA_PLATFORM_BUCKET_NAME`. Constructor values override environment variables, and `MASTRA_WORKSPACE_PROXY_URL` can point requests at a non-production proxy.
+Both providers authenticate through the workspace proxy with `MASTRA_PROJECT_ID` and a credential. Set `MASTRA_PLATFORM_SECRET_KEY` to your organization API key for local development. The deployed `MASTRA_PLATFORM_ACCESS_TOKEN` takes precedence when present; an explicit `accessToken` constructor option takes precedence over both. Blank environment credentials are ignored. `PlatformSandbox` also requires `MASTRA_ENVIRONMENT_ID`; `PlatformFilesystem` requires `MASTRA_PLATFORM_BUCKET_NAME`. Constructor values override environment variables, and `MASTRA_WORKSPACE_PROXY_URL` can point requests at a non-production proxy.
 
 `PlatformFilesystem` implements the Mastra filesystem interface against a Platform bucket. It supports reading, writing, listing, moving, and deleting files, preserves reserved characters in object names, and can be mounted with `readOnly: true` to reject mutations.
 
