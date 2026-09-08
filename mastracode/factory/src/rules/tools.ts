@@ -8,7 +8,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
+import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES } from './types.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
 
@@ -84,8 +84,7 @@ export async function createFactoryTransitionTools(options: {
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
         // Only a triage binding may classify; anything else forwarding triageType is echo, not intent.
-        const triageType =
-          binding.role === 'triage' && isFactoryTriageType(requestedTriageType) ? requestedTriageType : undefined;
+        const triageType = binding.role === 'triage' ? requestedTriageType : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
