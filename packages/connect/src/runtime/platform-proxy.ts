@@ -1,23 +1,23 @@
 /**
- * Runtime shim that provides the subset of Nango's action SDK used by the
- * templates we vendor. Generated tool exec bodies receive a `nango` object
- * shaped like this and never touch @nangohq/node — every request goes through
- * the Mastra platform's `/v2/proxy` endpoint.
+ * Runtime request context handed to generated tool exec bodies. It implements
+ * the subset of the upstream template SDK that shipped templates actually
+ * call, but every request goes through the Mastra platform's `/v2/proxy`
+ * endpoint — no third-party SDK is involved at runtime.
  *
- * The shim intentionally implements only what the templates we ship actually
- * call. If we vendor a template that uses a helper not modelled here, the
- * generator will fail at generation time (unknown property access on `nango`)
+ * The context intentionally implements only what the templates we ship
+ * actually use. If we vendor a template that needs a helper not modelled
+ * here, the generator fails at generation time (unknown property access)
  * rather than exploding at runtime.
  */
 import { proxyRequest, type ProxyRequestOptions, type ResolvedClient } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 /**
- * The shape of an individual request as Nango templates author them. This is
- * a strict subset of Nango's `ProxyConfiguration` — fields the templates
- * actually use.
+ * The shape of an individual request as templates author them — a strict
+ * subset of the upstream proxy configuration containing only the fields the
+ * templates actually use.
  */
-export interface NangoRequestConfig {
+export interface PlatformProxyRequest {
   endpoint: string;
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
@@ -30,11 +30,11 @@ export interface NangoRequestConfig {
   retries?: number;
 }
 
-/** Nango action templates treat provider response bodies as untyped JSON until they validate them. */
+/** Templates treat provider response bodies as untyped JSON until they validate them. */
 type ProviderResponseData = ReturnType<typeof JSON.parse>;
 
-/** Mirrors Nango's response shape closely enough for the templates we vendor. */
-export interface NangoResponse<T = ProviderResponseData> {
+/** Mirrors the upstream response shape closely enough for the templates we vendor. */
+export interface PlatformProxyResponse<T = ProviderResponseData> {
   data: T;
   status: number;
   headers: Record<string, string>;
@@ -42,41 +42,41 @@ export interface NangoResponse<T = ProviderResponseData> {
 
 /**
  * Thrown from generated exec bodies to signal a domain error. Templates
- * construct these with `throw new nango.ActionError({ type, message, ... })`.
+ * construct these with `throw new platformProxy.ActionError({ type, message, ... })`.
  */
-export class NangoActionError extends Error {
+export class ToolActionError extends Error {
   readonly payload: Record<string, unknown>;
   constructor(payload: { type?: string; message?: string; details?: unknown; [key: string]: unknown }) {
-    super(payload.message ?? payload.type ?? 'Nango action error');
-    this.name = 'NangoActionError';
+    super(payload.message ?? payload.type ?? 'Tool action error');
+    this.name = 'ToolActionError';
     this.payload = payload;
   }
 }
 
 /**
- * The `nango` binding passed as the first argument of every generated exec
- * body. Only fields we've seen used are exposed.
+ * The `platformProxy` binding passed as the first argument of every generated
+ * exec body. Only fields we've seen used are exposed.
  */
-export interface NangoContext {
-  get<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  post<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  put<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  patch<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  delete<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  ActionError: typeof NangoActionError;
+export interface PlatformProxy {
+  get<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  post<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
 }
 
-interface CreateNangoContextOptions {
+interface CreatePlatformProxyOptions {
   client: ResolvedClient;
   connectionId: string;
 }
 
 async function callProxy<T>(
   method: ProxyRequestOptions['method'],
-  { client, connectionId }: CreateNangoContextOptions,
-  config: NangoRequestConfig,
-): Promise<NangoResponse<T>> {
+  { client, connectionId }: CreatePlatformProxyOptions,
+  config: PlatformProxyRequest,
+): Promise<PlatformProxyResponse<T>> {
   const attempts = Math.max(1, Math.min(config.retries ?? 1, 5));
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -112,11 +112,11 @@ function isTransient(error: unknown): boolean {
   return !(error instanceof MastraConnectError);
 }
 
-/** Builds a `nango`-shaped context bound to one connection for a single tool call. */
-export function createNangoContext(options: CreateNangoContextOptions): NangoContext {
+/** Builds a platform proxy context bound to one connection for a single tool call. */
+export function createPlatformProxy(options: CreatePlatformProxyOptions): PlatformProxy {
   const bind =
     (method: ProxyRequestOptions['method']) =>
-    <T>(config: NangoRequestConfig): Promise<NangoResponse<T>> =>
+    <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
       callProxy<T>(method, options, config);
   return {
     get: bind('GET'),
@@ -124,9 +124,9 @@ export function createNangoContext(options: CreateNangoContextOptions): NangoCon
     put: bind('PUT'),
     patch: bind('PATCH'),
     delete: bind('DELETE'),
-    ActionError: NangoActionError,
+    ActionError: ToolActionError,
     log: (...args: unknown[]) => {
-      // Templates use nango.log for observability; forward to console.
+      // Templates use log for observability; forward to console.
       console.log('[@mastra/connect]', ...args);
     },
   };

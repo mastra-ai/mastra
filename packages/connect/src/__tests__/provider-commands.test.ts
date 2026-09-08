@@ -91,6 +91,14 @@ describe('maintainer provider commands', () => {
       "import './first-provider/index.js';",
     );
     expect(listProviders({ installedOnly: true })).toEqual(['first-provider (1 tools, 0 skipped)']);
+
+    // Generated output must not reference the upstream SDK by name; the only
+    // permitted mention is the source attribution in the header comment.
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/first-provider/tools/echo.ts'), 'utf8');
+    expect(generatedTool).toContain('exec: async (platformProxy, input)');
+    const [header, ...body] = generatedTool.split('\n');
+    expect(header).toContain('AUTO-GENERATED');
+    expect(body.join('\n')).not.toMatch(/nango/i);
   });
 
   it('lists available providers and searches by installed alias', async () => {

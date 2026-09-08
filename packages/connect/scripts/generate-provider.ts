@@ -43,8 +43,10 @@ import {
 } from './provider-utils.js';
 import { TEMPLATE_SHA } from './templates-config.js';
 
-const SHIM_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'ActionError', 'log']);
-const ALLOWED_NANGO_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
+/** Module specifier the upstream templates import their SDK from. */
+const TEMPLATE_SDK_MODULE = 'nango';
+const PROXY_CONTEXT_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'ActionError', 'log']);
+const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
   file: string;
@@ -60,8 +62,8 @@ interface ExtractedAction {
   toolFactoryName: string;
   moduleStatements: string[];
   execBody: string;
-  usesProxyConfiguration: boolean;
-  usesNangoActionLocal: boolean;
+  usesProxyRequestType: boolean;
+  usesProxyContextType: boolean;
 }
 
 interface SkippedAction {
@@ -115,17 +117,17 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
 function unsupportedImportReason(source: SourceFile): string | undefined {
   for (const declaration of source.getImportDeclarations()) {
     const moduleName = declaration.getModuleSpecifierValue();
-    if (moduleName !== 'zod' && moduleName !== 'nango') {
+    if (moduleName !== 'zod' && moduleName !== TEMPLATE_SDK_MODULE) {
       return `imports unsupported module: ${moduleName}`;
     }
-    if (moduleName !== 'nango') continue;
+    if (moduleName !== TEMPLATE_SDK_MODULE) continue;
 
     const unsupported = declaration
       .getNamedImports()
       .map(namedImport => namedImport.getName())
-      .filter(name => !ALLOWED_NANGO_IMPORTS.has(name));
+      .filter(name => !ALLOWED_TEMPLATE_SDK_IMPORTS.has(name));
     if (unsupported.length > 0) {
-      return `imports unsupported nango types: ${unsupported.join(', ')}`;
+      return `imports unsupported template SDK types: ${unsupported.join(', ')}`;
     }
   }
   return undefined;
@@ -139,7 +141,9 @@ function shouldKeepStatement(statement: Statement, createActionCall: CallExpress
   if (Node.isImportDeclaration(statement)) return false;
   if (isGeneratedActionStatement(statement, createActionCall)) return false;
   if (Node.isExportAssignment(statement)) return false;
-  if (Node.isTypeAliasDeclaration(statement) && statement.getName() === 'NangoActionLocal') return false;
+  // Templates alias their SDK context type locally; the generated module
+  // imports `PlatformProxy` directly instead (the alias gets renamed first).
+  if (Node.isTypeAliasDeclaration(statement) && statement.getName() === 'PlatformProxy') return false;
   return true;
 }
 
@@ -206,13 +210,13 @@ function extractAction(
   const originalExecBody = Node.isBlock(execBodyNode)
     ? execBodyNode.getText()
     : `{ return ${execBodyNode.getText()}; }`;
-  const usedNangoMethods = new Set<string>();
+  const usedContextMethods = new Set<string>();
   for (const match of originalExecBody.matchAll(/\bnango\.([A-Za-z_$][\w$]*)/g)) {
-    usedNangoMethods.add(match[1]!);
+    usedContextMethods.add(match[1]!);
   }
-  const unsupportedMethods = [...usedNangoMethods].filter(method => !SHIM_METHODS.has(method));
+  const unsupportedMethods = [...usedContextMethods].filter(method => !PROXY_CONTEXT_METHODS.has(method));
   if (unsupportedMethods.length > 0) {
-    return { kind: 'skip', reason: `exec uses unshimmed nango methods: ${unsupportedMethods.join(', ')}` };
+    return { kind: 'skip', reason: `exec uses unsupported template SDK helpers: ${unsupportedMethods.join(', ')}` };
   }
 
   const actionName = toCamel(candidate.actionSlug);
@@ -223,12 +227,34 @@ function extractAction(
   inputDeclaration.getVariableStatementOrThrow().setIsExported(true);
   outputDeclaration.getVariableStatementOrThrow().setIsExported(true);
 
+  // Rename template SDK bindings to their platform equivalents so the
+  // generated module never references the upstream SDK by name.
+  const templateSdkImport = source.getImportDeclaration(TEMPLATE_SDK_MODULE);
+  const usesProxyRequestType = Boolean(templateSdkImport && usesNamedImport(templateSdkImport, 'ProxyConfiguration'));
+  if (templateSdkImport) {
+    for (const namedImport of templateSdkImport.getNamedImports()) {
+      const nameNode = namedImport.getNameNode();
+      if (namedImport.getName() === 'ProxyConfiguration' && Node.isIdentifier(nameNode)) {
+        nameNode.rename('PlatformProxyRequest');
+      }
+    }
+  }
+  let usesProxyContextType = false;
+  for (const alias of source.getTypeAliases()) {
+    if (alias.getName() === 'NangoActionLocal') {
+      alias.rename('PlatformProxy');
+      usesProxyContextType = true;
+    }
+  }
+  for (const parameter of source.getDescendantsOfKind(SyntaxKind.Parameter)) {
+    if (parameter.getName() === 'nango') parameter.rename('platformProxy');
+  }
+
   const renamedExecBodyNode = execInitializer.getBody();
   const execBody = sanitizeVendoredSource(
     Node.isBlock(renamedExecBodyNode) ? renamedExecBodyNode.getText() : `{ return ${renamedExecBodyNode.getText()}; }`,
   );
 
-  const nangoImport = source.getImportDeclaration('nango');
   const moduleStatements = source
     .getStatements()
     .filter(statement => shouldKeepStatement(statement, createActionCall))
@@ -244,26 +270,27 @@ function extractAction(
       toolFactoryName: `${actionName}Tool`,
       moduleStatements,
       execBody,
-      usesProxyConfiguration: Boolean(nangoImport && usesNamedImport(nangoImport, 'ProxyConfiguration')),
-      usesNangoActionLocal: moduleStatements.some(statement => /\bNangoActionLocal\b/.test(statement)),
+      usesProxyRequestType,
+      usesProxyContextType,
     },
   };
 }
 
 function emitActionFile(action: ExtractedAction): string {
-  const proxyConfigurationImport = action.usesProxyConfiguration
-    ? "import type { NangoRequestConfig as ProxyConfiguration } from '../../../runtime/nango-shim.js';\n"
-    : '';
-  const nangoContextImport = action.usesNangoActionLocal
-    ? "import type { NangoContext } from '../../../runtime/nango-shim.js';\n"
-    : '';
-  const nangoActionAlias = action.usesNangoActionLocal ? '\ntype NangoActionLocal = NangoContext;\n' : '';
+  const proxyTypeImports = [
+    action.usesProxyContextType ? 'PlatformProxy' : undefined,
+    action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined,
+  ].filter((name): name is string => Boolean(name));
+  const proxyTypeImport =
+    proxyTypeImports.length > 0
+      ? `import type { ${proxyTypeImports.join(', ')} } from '../../../runtime/platform-proxy.js';\n`
+      : '';
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
 import { z } from 'zod';
 
 import { defineActionTool, type ActionToolContext } from '../../../runtime/action-tool.js';
-${proxyConfigurationImport}${nangoContextImport}${nangoActionAlias}
+${proxyTypeImport}
 ${action.moduleStatements.join('\n\n')}
 
 export function ${action.toolFactoryName}(ctx: ActionToolContext) {
@@ -272,7 +299,7 @@ export function ${action.toolFactoryName}(ctx: ActionToolContext) {
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
     outputSchema: ${action.outputSchemaName},
-    exec: async (nango, input) => ${action.execBody},
+    exec: async (platformProxy, input) => ${action.execBody},
   });
 }
 `;
