@@ -17,6 +17,7 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
       },
     },
     maxTokensPerBatch: 10_000,
+    observeAttachments: ['image/*', 'application/pdf'],
     // Async buffering defaults (enabled by default)
     bufferTokens: 0.2 as number | undefined, // Buffer every 20% of messageTokens
     bufferActivation: 0.8 as number | undefined, // Activate to retain 20% of threshold

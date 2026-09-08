@@ -43,9 +43,10 @@ const releaseBoard = defineBoard({
   title: 'Release',
   initialPhase: 'queued',
   phases: {
-    queued: { title: 'Queued', next: 'shipped' },
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
     shipped: {
       title: 'Shipped',
+      kind: 'terminal',
       onEnter: {
         manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
       },
@@ -64,14 +65,55 @@ Handlers return one typed decision or `undefined`. Supported sources are `issue`
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. The web deployment now uses the guarded Work default rather than its former unconditional intake handler, so noncandidate or manual arrivals no longer start merely from entering Intake.
 
-Global rules now contain only the shared audit `version` and tool-result handlers:
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
+
+### Board tool-result rules
+
+A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:
 
 ```typescript
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
+import { defineBoard } from '@mastra/factory/boards';
+import type { BoardToolResultRuleHandler } from '@mastra/factory/boards';
 
-const rules = defaultFactoryRules({ version: 'deployment-v2' });
-// Pass rules to MastraFactory. Optional tool overrides remain under overrides.tools.
+const shipIt: BoardToolResultRuleHandler = context => {
+  if (context.result.status !== 'success' || context.item.stages[0] !== 'queued') return;
+  return { type: 'notify', idempotencyKey: `${context.ingress.id}:shipped`, title: 'Release shipped' };
+};
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+  tools: { ship_it: { onResult: shipIt } },
+});
 ```
+
+The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
+
+Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+
+### Config version
+
+`configVersion` is an operator-maintained deployment label stamped onto transition audit rows, deferred decisions, reconciler audit, and the session kickoff header (`Config: …`). Nothing branches on it; it exists so an audit row can be traced back to the deployment that produced it. It defaults to `factory-config-v1` and must be a non-empty bounded string. The storage column keeps its shipped name, `rule_set_version`.
+
+```typescript
+new MastraFactory({ storage, configVersion: 'deployment-v2' });
+```
+
+**Migration:** The `rules` option, `FactoryRules`, `defaultFactoryRules`, and the `@mastra/factory/rules/defaults` subpath are gone. Passing `rules` throws at construction with a pointer to the replacements.
+
+```typescript
+// before
+new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrides: { tools: { my_tool: { onResult } } } }) });
+// after
+new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
+```
+
+Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
 
 ### Board transition policy
 
@@ -95,8 +137,8 @@ const releaseBoard = defineBoard({
   initialPhase: 'approval',
   transitionPolicy: releasePolicy,
   phases: {
-    approval: { title: 'Approval', next: 'shipped' },
-    shipped: { title: 'Shipped' },
+    approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'working', role: 'release' },
   },
 });
 // Install through new MastraFactory({ storage, boards: [releaseBoard] }).
@@ -110,7 +152,48 @@ Policies must be side-effect-free. They run on initial entry, reentry, and same-
 
 A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
 
-**Remaining limitations:** Phase execution semantics are not generalized by this API. Working/resting interpretation, role routing, terminal cleanup, consent, and kickoff behavior still include built-in naming assumptions. For example, naming a phase `shipped` does not make it a runtime terminal phase. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Built-in board replacement and customization remain unsupported.
+
+### Board phase semantics
+
+Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
+
+- `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
+- `working` — an agent seat carries the card. `role` is required (same identifier rules as decision roles) and names the seat a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a role; `phaseForRole` returns the first in declaration order.
+- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `role` is not allowed.
+
+```typescript
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+    shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
+});
+```
+
+Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, the closed-PR and issue sweeps, and supervisor findings all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+
+Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, the supervisor neither revokes nor starts a seat for it, and a rule-started run from rest with no lane for its role is rejected.
+
+**Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
+
+```typescript
+// before
+phases: { queued: { title: 'Queued', next: 'shipped' }, shipped: { title: 'Shipped' } }
+// after
+phases: {
+  queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+  shipped: { title: 'Shipped', kind: 'terminal' },
+}
+```
+
+**Remaining limitations:** Rule-decision and tool-input validation still accept only the built-in board IDs and phase names, so custom-board lifecycle handlers cannot emit `transition` or `upsertLinkedWorkItem` decisions into custom phases, and the `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
 ### GitHub event rules
 
@@ -143,7 +226,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle handlers; only tool-result configuration remains global. The global rule version remains shared audit metadata, including for GitHub evaluations; it is not a hash of custom handler code and does not change delivery replay semantics. Update the deployment-owned version when changing handler behavior.
+Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -180,7 +263,7 @@ const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
 
 Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
 
-The global rule version remains shared audit metadata for Linear evaluations. Update the deployment-owned version when handler behavior changes; it does not change ingress identity or replay semantics.
+`MastraFactory({ configVersion })` is the deployment-owned label stamped on Linear evaluations and audit records. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
 ### GitHub review commands
 

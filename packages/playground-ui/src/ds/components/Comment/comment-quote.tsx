@@ -16,7 +16,7 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
   return (
     <blockquote
       data-slot="comment-quote"
-      className={cn('text-neutral3 m-0 flex min-w-0 gap-2 border-l-2 border-border2 pl-2 text-ui-xs', className)}
+      className={cn('m-0 flex min-w-0 gap-2 border-l-2 border-border2 pl-2 text-ui-xs text-neutral3', className)}
     >
       <span className="min-w-0 flex-1">
         {authorName ? <span className="text-neutral4 font-medium">{authorName} </span> : null}

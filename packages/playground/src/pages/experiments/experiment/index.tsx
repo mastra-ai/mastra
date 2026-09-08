@@ -117,7 +117,7 @@ function ExperimentPage() {
       isLoadingResults={resultsLoading}
       hasNextPage={hasNextPage}
     >
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full">
           <ExperimentTopArea experiment={experiment!} />
 
