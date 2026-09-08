@@ -1510,8 +1510,14 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
       const updatedThread = {
         ...thread,
-        title: title || thread.title,
-        metadata: metadata || thread.metadata,
+        // Absent means "leave it alone"; present means "use this", including an
+        // empty string or an empty object. A falsy check here cannot express
+        // "clear this field": `{ title: '' }` would return 200 with the old
+        // title still in place, and the caller has no way to tell that apart
+        // from a successful write. Both fields are optional in the body schema,
+        // so `undefined` is already the documented way to skip one.
+        title: title !== undefined ? title : thread.title,
+        metadata: metadata !== undefined ? metadata : thread.metadata,
         // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
         resourceId: effectiveResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
