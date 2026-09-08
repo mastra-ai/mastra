@@ -38,12 +38,6 @@ const { results: byTrace } = await dataset.listExperimentResults({
   traceId: 'trace-abc',
 })
 
-// Restrict to results tagged with both 'regression' and 'p0'
-const { results: tagged } = await dataset.listExperimentResults({
-  experimentId: 'exp-id',
-  tags: ['regression', 'p0'],
-})
-
 for (const result of results) {
   console.log(`Item ${result.itemId}: ${result.error ? 'FAILED' : 'OK'}`)
 }
@@ -69,13 +63,6 @@ for (const result of results) {
     type: "'needs-review' | 'reviewed' | 'complete'",
     isOptional: true,
     description: 'Restrict results to this per-result review status.',
-  },
-  {
-    name: 'tags',
-    type: 'string[]',
-    isOptional: true,
-    description:
-      'Restrict results to those that have every listed tag. Results with extra tags still match; an empty array applies no filter.',
   },
   {
     name: 'filters',
