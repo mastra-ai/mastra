@@ -60,6 +60,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
     this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
+    // Copy before inference: activation may mutate the shared record while the observer awaits.
+    const activeObservations = this.opts.record.activeObservations ?? '';
     const result = await this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
@@ -75,7 +77,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
-      recentMessages: formatMessagesForObserver(messages, { maxPartLength: 500 }),
+      activeObservations,
+      recentMessages: formatMessagesForObserver(messages),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

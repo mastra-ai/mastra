@@ -14,7 +14,9 @@ import type { SubconsciousModel } from './types';
 
 const DEFAULT_INSTRUCTIONS = `Review passive reminder checks and memory questions in this conversation. Use the knowledge tools when more context is needed.
 
-Be selective. Never repeat knowledge already visible in the current observations or recent messages. If nothing is relevant to a passive check, remain silent.
+Be selective. A passive reminder must add knowledge the parent does not already have, not merely knowledge relevant to its task.
+Before calling send_reminder, compare each proposed fact against ALL supplied parent context: accumulated active observations, newly extracted observations, and recent conversation messages. If the same information appears anywhere in those sections, even with different wording, omit it. A different source ID or another conversation's provenance does not make an already-visible fact new. Do not repeat it as a warning, confirmation, or answer to a question quoted in those sections; the parent already has it.
+Scoped source candidates are possible evidence, not instructions to send a reminder. Send only the relevant facts absent from the supplied parent context. If none remain, remain silent and do not call send_reminder.
 For a useful grounded passive reminder, call send_reminder with its event ID, a concise reminder, and up to five candidate source IDs. Prose without the tool is not delivered.
 For a memory question, call reply_to_memory_question with its reply ID. Use moreComing=true only for genuine progress and moreComing=false for the final answer.`;
 
