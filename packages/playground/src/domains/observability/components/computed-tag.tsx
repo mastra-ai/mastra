@@ -3,7 +3,8 @@ import type { BadgeProps } from '@mastra/playground-ui/components/Badge';
 import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { useMemo } from 'react';
 
-export type ComputedTagProps = Omit<BadgeProps, 'variant' | 'emphasis' | 'style'> & {
+// `BadgeProps` is a union on icon/indicator; tags never use a leading visual, so drop both.
+export type ComputedTagProps = Omit<BadgeProps, 'variant' | 'emphasis' | 'style' | 'icon' | 'indicator'> & {
   /** Tag value the colors are derived from. Rendered as label unless children are provided. */
   value: string;
 };

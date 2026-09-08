@@ -26,19 +26,17 @@ export function useAddTagToResults({ datasetId, experimentId }: UseAddTagToResul
       setIsPending(true);
       let added = 0;
       try {
-        for (const result of targets) {
-          try {
-            await updateExperimentResult.mutateAsync({
+        const outcomes = await Promise.allSettled(
+          targets.map(result =>
+            updateExperimentResult.mutateAsync({
               datasetId,
               experimentId,
               resultId: result.id,
               tags: [...(result.tags ?? []), tag],
-            });
-            added++;
-          } catch {
-            // continue on individual failures
-          }
-        }
+            }),
+          ),
+        );
+        added = outcomes.filter(o => o.status === 'fulfilled').length;
       } finally {
         setIsPending(false);
       }

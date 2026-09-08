@@ -87,6 +87,39 @@ describe('useAddTagToResults', () => {
     });
   });
 
+  describe('given several results to tag', () => {
+    it('sends every update concurrently instead of one after the other', async () => {
+      patches.length = 0;
+      let inFlight = 0;
+      let maxInFlight = 0;
+      server.use(
+        http.patch(
+          `${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          async ({ params, request }) => {
+            inFlight++;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            const body = (await request.json()) as { tags: string[] };
+            // Hold the response so overlapping requests can be observed.
+            await new Promise(resolve => setTimeout(resolve, 20));
+            inFlight--;
+            return HttpResponse.json({ ...makeResult(String(params.resultId), body.tags) });
+          },
+        ),
+      );
+      const { result } = renderTagHook();
+
+      await act(async () => {
+        await result.current.addTag('beta', [
+          makeResult('res-1', null),
+          makeResult('res-2', null),
+          makeResult('res-3', null),
+        ]);
+      });
+
+      expect(maxInFlight).toBe(3);
+    });
+  });
+
   describe('given one of the updates fails', () => {
     it('still applies the tag to the other results and resets isPending', async () => {
       setupPatchHandler('res-1');
