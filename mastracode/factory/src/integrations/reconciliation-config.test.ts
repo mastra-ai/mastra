@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { optionalBoolean } from './reconciliation-config.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('optionalBoolean', () => {
   it('parses boolean values case-insensitively', () => {
