@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { encode } from './codec';
 import type { Event } from './types';
 import { UnixSocketPubSub } from './unix-socket-pubsub';
 
@@ -762,7 +763,7 @@ describe('UnixSocketPubSub', () => {
     const event = {
       ...makeEvent({ type: 'during-unsubscribe' }),
       id: 'event-1',
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
       deliveryAttempt: 1,
     };
     const server = net.createServer((socket: net.Socket) => {
@@ -783,7 +784,9 @@ describe('UnixSocketPubSub', () => {
             acknowledgeUnsubscribe = () => {
               socket.write(`${JSON.stringify({ type: 'unsubscribed', topic: frame.topic, group: frame.group })}\n`);
             };
-            socket.write(`${JSON.stringify({ type: 'event', topic: frame.topic, group: frame.group, event })}\n`);
+            socket.write(
+              `${JSON.stringify(encode({ type: 'event', topic: frame.topic, group: frame.group, event }))}\n`,
+            );
             unsubscribeReceivedResolve?.();
           }
         }
@@ -816,7 +819,7 @@ describe('UnixSocketPubSub', () => {
       expect(unsubscribeCompleted).toBe(true);
 
       for (const socket of sockets) {
-        socket.write(`${JSON.stringify({ type: 'event', topic: 'topic-a', group: 'workers', event })}\n`);
+        socket.write(`${JSON.stringify(encode({ type: 'event', topic: 'topic-a', group: 'workers', event }))}\n`);
       }
       await waitFor(() => expect(replacement).toHaveBeenCalledTimes(1));
       expect(cb).toHaveBeenCalledTimes(1);
