@@ -70,7 +70,11 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
   const configuredSandboxProvider = options.sandboxProvider ?? environmentSandboxProvider;
 
   return {
-    accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
+    accessToken: requireOption(
+      options.accessToken ??
+        (process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim()),
+      'accessToken',
+    ),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     actingUserId: options.actingUserId?.trim() || undefined,
     proxyUrl: resolveProxyUrl().replace(/\/$/, ''),
