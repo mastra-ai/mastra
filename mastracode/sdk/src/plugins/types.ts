@@ -1,12 +1,12 @@
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { SignalProvider } from '@mastra/core/signals';
-
 import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValue,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
+import type { PluginSettingsCommands } from './settings-commands.js';
 
 /** Processors a plugin contributed, normalized into the lane they belong to. */
 export type LoadedPluginProcessors = {
@@ -71,6 +71,8 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   signalProviders?: SignalProvider<string>[];
   skillPaths?: string[];
   commandPaths?: string[];
+  settingsCommands?: PluginSettingsCommands;
+  settingsCommandErrors?: string[];
   configSchema?: MastraCodePluginConfigSchema;
   configValues?: Record<string, MastraCodePluginConfigValue>;
   conflicts?: string[];

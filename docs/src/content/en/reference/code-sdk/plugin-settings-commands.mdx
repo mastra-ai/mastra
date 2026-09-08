@@ -1,0 +1,112 @@
+---
+title: 'Reference: Plugin settings commands | Code SDK'
+description: 'Declare validated plugin settings forms with captured thread context, cancellation, and profile-local storage paths.'
+packages:
+  - '@mastra/code-sdk'
+---
+
+# Plugin settings commands
+
+The optional `settingsCommands` property on `defineMastraCodePlugin()` declares settings forms for an interactive host. Unlike Markdown slash commands, these definitions aren't prompts sent to a model. The SDK defines and validates the form; the host supplies the interface and command registration.
+
+SDK, Factory, and headless sessions don't become interactive subscribers just because a Session exists. A host must supply the interactive-binding capability. This API doesn't start timers, create threads, or persist settings automatically.
+
+## Usage example
+
+This example keeps one boolean per resource/thread **in memory only**. Use plugin-owned storage for values that must survive a restart.
+
+```typescript title="plugin.ts"
+import { defineMastraCodePlugin, z } from '@mastra/code-sdk/plugin'
+
+const schema = z.object({ enabled: z.boolean() })
+const records = new Map<string, boolean>()
+
+export default defineMastraCodePlugin({
+  id: 'example.settings',
+  settingsCommands: {
+    preferences: {
+      label: 'Plugin preferences',
+      description: 'Configure this thread',
+      fields: { enabled: { type: 'boolean', label: 'Enabled' } },
+      schema,
+      resolve: context => ({
+        values: {
+          enabled: records.get(JSON.stringify([context.resourceId, context.threadId])) ?? false,
+        },
+        status: [{ label: 'Thread', value: context.threadId }],
+      }),
+      save: async (values, context) => {
+        const { enabled } = schema.parse(values)
+        context.signal.throwIfAborted()
+        records.set(JSON.stringify([context.resourceId, context.threadId]), enabled)
+      },
+    },
+  },
+})
+```
+
+`settingsCommands` accepts a map or a synchronous/asynchronous function returning that map. The function receives the normal plugin context, including `dataDir` and optional lazy runtime accessors. Don't capture the active Session during plugin load. Use the invocation context passed to `resolve` and `save` instead.
+
+## Command definition
+
+Map keys are slash command names without `/`. Names must match `^[a-z][a-z0-9-]*$`.
+
+<PropertiesTable
+  content={[
+  { name: 'label', type: 'string', description: 'Nonempty form label.' },
+  { name: 'description', type: 'string', description: 'Short command description.', isOptional: true },
+  {
+    name: 'fields',
+    type: 'Record<string, PluginSettingsField>',
+    description: 'Named boolean, string, or select controls.',
+  },
+  {
+    name: 'schema',
+    type: 'z.ZodType<PluginSettingsValues>',
+    description: 'Schema that validates the complete settings object. Supports asynchronous refinements.',
+  },
+  {
+    name: 'resolve',
+    type: '(context: PluginSettingsContext) => PluginSettingsSnapshot | Promise<PluginSettingsSnapshot>',
+    description: 'Reads current values and optional read-only status rows.',
+  },
+  {
+    name: 'save',
+    type: '(values: PluginSettingsValues, context: PluginSettingsContext) => Promise<void>',
+    description: 'Persists a complete validated object. Throw to report a persistence failure.',
+  },
+]}
+/>
+
+Every field has a nonempty `label` and optional `description`. Its `type` is `boolean`, `string`, or `select`. A select also requires a nonempty `options` array of `{ label: string, value: string }`, with unique values. Arbitrary components and executable settings aren't supported.
+
+`PluginSettingsValues` is `Record<string, string | boolean>`. Field keys and resolved/submitted value keys must match exactly. Select values must occur in the options. Validation runs before and after the plugin schema, so defaults or transforms can't fill missing submitted fields or introduce additional output keys. Put cross-field validation in the schema, not in `save`.
+
+`resolve` returns `{ values, status? }`. Each status row is `{ label: string, value: string }`. Resolver, validation, and persistence failures are returned to the host as `{ success: false, error: string }`, rather than reported as successful saves.
+
+## Captured context and cancellation
+
+`PluginSettingsContext` contains read-only `session`, `sessionId`, `resourceId`, `threadId`, and `signal` properties. A form retains the binding from when it opened, not whichever thread happens to be active when a callback finishes.
+
+The host aborts the binding signal before a thread/session transition or teardown. Reloading plugins invalidates settings forms from the previous generation, even when a provider's version hasn't changed. The SDK checks cancellation around asynchronous resolution and validation and before calling `save`. A callback that awaits external work must also check `context.signal` before its own persistent write. Cancellation cannot undo a write already committed.
+
+Invalid definitions produce settings diagnostics without disabling unrelated tools or providers. At combined registration, the host passes all built-in and Markdown command names to `PluginManager.getPluginSettingsCommands()`. Native names that collide with those names or with another native contribution are excluded, with diagnostics identifying the plugin and name. The host must display those diagnostics and dispatch only the returned contributions.
+
+## Interactive binding capability
+
+The optional runtime methods are:
+
+- `getInteractiveBinding()`: returns the current interactive binding, or `undefined`.
+- `onInteractiveBindingChange(listener)`: synchronously delivers the current binding, including `undefined`, then subsequent transitions. Returns an unsubscribe function.
+
+The SDK's `createInteractiveBindingHost()` helper in `@mastra/code-sdk/plugins/interactive-binding` supplies those methods and a host-only `publish()` method. Publishing replaces and aborts the old binding. Listener exceptions are passed to the supplied error reporter. Publications iterate a snapshot, respect removed listeners, and coalesce reentrant publications before continuing with the newest generation. A provider can subscribe before the first Session exists; it must unsubscribe when stopped. No scheduling or background work is implied by subscription.
+
+## Profile-local data directory
+
+Plugin context includes read-only `dataDir`, distinct from the installation directory `pluginDir`. It is derived from the loader's `homeDir`, `configDir`, and encoded logical plugin ID:
+
+```text
+<home>/<configDir>/plugin-data/<encoded-plugin-id>/
+```
+
+The same ID shares this directory across project/global installations and versions. Different profiles don't share it. Path traversal IDs are rejected. Computing the path doesn't create directories. The plugin owns directory creation, permissions, record validation, persistence, and cleanup. Don't assume data follows a cloned thread or a different machine.

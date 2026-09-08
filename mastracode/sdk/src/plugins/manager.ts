@@ -13,6 +13,7 @@ import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
+import { collectSettingsCommands } from './settings-commands.js';
 import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
@@ -50,6 +51,7 @@ export class PluginManager {
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
   private runtime: MastraCodePluginRuntime | undefined;
+  private settingsGeneration = new AbortController();
 
   constructor(private readonly options: PluginManagerOptions) {
     this.runtime = options.runtime;
@@ -81,7 +83,10 @@ export class PluginManager {
     if (this.reloadInFlight) return this.reloadInFlight;
 
     this.reloadInFlight = (async () => {
-      this.loadedPlugins = await loadPlugins({ ...this.options, runtime: this.runtime });
+      const plugins = await loadPlugins({ ...this.options, runtime: this.runtime });
+      this.settingsGeneration.abort();
+      this.settingsGeneration = new AbortController();
+      this.loadedPlugins = plugins;
       await this.stampLoadedPlugins(this.loadedPlugins);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
@@ -121,6 +126,25 @@ export class PluginManager {
 
   getPluginCommandPaths(): string[] {
     return this.loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.commandPaths ?? []) : []));
+  }
+
+  /** Supply built-in and Markdown names from the host's combined command registry. */
+  getPluginSettingsCommands(reservedNames: Iterable<string>) {
+    const result = collectSettingsCommands(
+      this.loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active'
+          ? Object.entries(plugin.settingsCommands ?? {}).map(([name, command]) => ({
+              pluginId: plugin.id,
+              name,
+              command,
+              signal: this.settingsGeneration.signal,
+            }))
+          : [],
+      ),
+      reservedNames,
+    );
+    result.diagnostics.unshift(...this.loadedPlugins.flatMap(plugin => plugin.settingsCommandErrors ?? []));
+    return result;
   }
 
   getPluginInstructions(): string[] {

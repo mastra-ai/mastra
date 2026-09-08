@@ -17,9 +17,10 @@ import type {
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
-import { getPluginRoot } from './paths.js';
+import { getPluginDataDir, getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
+import { validateSettingsCommands } from './settings-commands.js';
 import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
 
 export type LoadPluginRecordOptions = PluginPathOptions & {
@@ -75,16 +76,32 @@ export async function loadPluginRecord(
       cwd: options.projectRoot,
       scope: record.scope,
       pluginDir,
+      dataDir: getPluginDataDir(plugin.id, options),
       config: configValues,
       // Accessors, not instances: plugins load before the controller and the
       // session exist, so a plugin resolves these when it needs them, not now.
       getController: options.runtime?.getController,
       getActiveSession: options.runtime?.getActiveSession,
+      getInteractiveBinding: options.runtime?.getInteractiveBinding,
+      onInteractiveBindingChange: options.runtime?.onInteractiveBindingChange,
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const processors = await resolvePluginProcessors(plugin, context);
     const signalProviders = await resolvePluginSignalProviders(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
+    let settingsCommands: LoadedPlugin['settingsCommands'];
+    const settingsCommandErrors: string[] = [];
+    try {
+      const definitions =
+        typeof plugin.settingsCommands === 'function'
+          ? await plugin.settingsCommands(context)
+          : plugin.settingsCommands;
+      if (definitions !== undefined) settingsCommands = validateSettingsCommands(definitions);
+    } catch (error) {
+      settingsCommandErrors.push(
+        `Plugin "${plugin.id}" settings commands: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     return {
       ...record,
@@ -102,6 +119,8 @@ export async function loadPluginRecord(
       commandPaths: resolveExistingAssetDirs(pluginRoot, 'commands'),
       configSchema,
       configValues,
+      settingsCommands,
+      settingsCommandErrors,
     };
   } catch (error) {
     return {

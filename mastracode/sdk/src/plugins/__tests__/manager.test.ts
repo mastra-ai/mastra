@@ -48,6 +48,37 @@ async function waitUntil(assertion: () => boolean, timeoutMs = 3000): Promise<vo
 }
 
 describe('PluginManager', () => {
+  it('collects settings, rejects host collisions and invalidates every reload and disable', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-settings-manager-'));
+    const pluginDir = makeResolvableDir('settings-manager');
+    fs.writeFileSync(
+      path.join(pluginDir, 'index.ts'),
+      `import { z } from 'zod';
+      export default { id: 'settings.manager', settingsCommands: { fixture: {
+        label: 'Fixture', fields: { enabled: { type: 'boolean', label: 'Enabled' } },
+        schema: z.object({ enabled: z.boolean() }), resolve: () => ({ values: { enabled: false } }), save: async () => {}
+      } } };`,
+    );
+    const manager = new PluginManager({
+      projectRoot: path.join(tempDir, 'project'),
+      homeDir: path.join(tempDir, 'home'),
+    });
+    await manager.installLocal(pluginDir, 'project');
+    const first = manager.getPluginSettingsCommands([]);
+    expect(first.diagnostics).toEqual([]);
+    expect(first.commands).toHaveLength(1);
+    expect(manager.getPluginSettingsCommands(['fixture']).commands).toEqual([]);
+    expect(manager.getPluginSettingsCommands(['fixture']).diagnostics[0]).toContain('conflicts');
+    await manager.reload();
+    expect(first.commands[0]?.signal.aborted).toBe(true);
+    const second = manager.getPluginSettingsCommands([]).commands[0]!;
+    expect(second.signal.aborted).toBe(false);
+    await manager.setEnabled('settings.manager', 'project', false);
+    expect(second.signal.aborted).toBe(true);
+    expect(manager.getPluginSettingsCommands([]).commands).toEqual([]);
+    await manager.uninstall('settings.manager', 'project');
+  });
+
   it('installs, lists, disables, enables, and uninstalls local plugins', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

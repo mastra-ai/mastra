@@ -4,6 +4,8 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastr
 import { SignalProvider } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { MastraCodePluginSession } from '../../plugin.js';
+import { createInteractiveBindingHost } from '../interactive-binding.js';
 import { PluginSignalLane } from '../signal-lane.js';
 import type { PluginContribution } from '../types.js';
 
@@ -74,6 +76,34 @@ function processorIds(processors: ReadonlyArray<InputProcessorOrWorkflow | Outpu
 }
 
 describe('PluginSignalLane', () => {
+  it('starts before the first interactive session and removes binding listeners on stop', () => {
+    const host = createInteractiveBindingHost(vi.fn());
+    const seen: (string | undefined)[] = [];
+    class BindingProvider extends TestProvider {
+      private unsubscribe?: () => void;
+      override start() {
+        super.start();
+        this.unsubscribe = host.onInteractiveBindingChange(binding => seen.push(binding?.threadId));
+      }
+      override stop() {
+        this.unsubscribe?.();
+        super.stop();
+      }
+    }
+    const provider = new BindingProvider('binding-provider');
+    const lane = laneWithMastra();
+    lane.sync(contributions('binding-plugin', 'v1', [provider]));
+    expect(seen).toEqual([undefined]);
+    const session = {} as MastraCodePluginSession;
+    host.publish({ session, sessionId: 'session', resourceId: 'resource', threadId: 'thread' });
+    expect(seen).toEqual([undefined, 'thread']);
+    host.publish(undefined);
+    lane.stopAll();
+    host.publish({ session, sessionId: 'session', resourceId: 'resource', threadId: 'other' });
+    expect(seen).toEqual([undefined, 'thread', undefined]);
+    expect(provider.stopped).toBe(1);
+  });
+
   it('starts a plugin provider through the full lifecycle once Mastra exists', async () => {
     const provider = new TestProvider('demo-signals');
     const lane = new PluginSignalLane();
