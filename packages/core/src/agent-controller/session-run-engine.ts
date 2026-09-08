@@ -1259,7 +1259,6 @@ export class SessionRunEngine {
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
           requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
-          if (runId) this.#session.markQueuedFollowUpStarted(runId);
           this.#session.emit({ type: 'agent_start' });
         }
 

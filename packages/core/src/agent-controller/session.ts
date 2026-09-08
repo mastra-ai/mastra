@@ -547,6 +547,7 @@ export class SessionThread {
 
   /** Tear down the current agent subscription and reset the run tracker. */
   cleanupSubscription(): void {
+    this.#owner.cleanupFollowUpBinding();
     this.#owner.stream.cleanup();
     this.#owner.run.reset();
   }
@@ -559,11 +560,15 @@ export class SessionThread {
     const session = this.#owner;
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
-    if (session.stream.matches({ key })) return;
+    if (session.stream.matches({ key })) {
+      session.ensureFollowUpBinding(agent, resourceId, threadId);
+      return;
+    }
 
     this.cleanupSubscription();
     const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
     session.stream.attach({ subscription, agent, key });
+    session.ensureFollowUpBinding(agent, resourceId, threadId);
     void session.processSubscribedThreadStream(subscription);
   }
 
@@ -2881,8 +2886,12 @@ export class Session<TState = unknown> {
   readonly stream = new SessionStream();
   /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
   readonly suspensions = new SessionSuspensions();
-  /** Messages queued to send after the active run finishes. */
-  readonly followUps = new SessionFollowUps();
+  /** Captured Agent queue scope for this session binding. */
+  #followUpBinding?: { agent: Agent; resourceId: string; threadId: string; unsubscribe?: () => void };
+  /** Follow-up preparation that can finish after the session's active run changes. */
+  readonly #preparingFollowUps = new Set<{ generation: number; controller: AbortController }>();
+  /** Invalidates asynchronous follow-up preparation when the session unbinds. */
+  #followUpGeneration = 0;
   /** The interactive tool-approval gate the current run parks on. */
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
@@ -3682,82 +3691,81 @@ export class Session<TState = unknown> {
     return;
   }
 
-  /**
-   * Steer the agent mid-stream: aborts the current run and sends a new message.
-   */
+  /** Abort the current run and send steering input without clearing queued follow-ups. */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
-    this.followUps.clear();
-    this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
 
-  /**
-   * Queue a follow-up message to be processed after the current run completes,
-   * or send it immediately when the session is idle.
-   */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.run.isRunning()) {
-      this.followUps.enqueue({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-    } else {
-      await this.sendMessage({ content, requestContext });
+  ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
+    const existing = this.#followUpBinding;
+    if (existing?.agent === agent && existing.resourceId === resourceId && existing.threadId === threadId)
+      return existing;
+    this.cleanupFollowUpBinding();
+    const binding: {
+      agent: Agent;
+      resourceId: string;
+      threadId: string;
+      unsubscribe?: () => void;
+    } = {
+      agent,
+      resourceId,
+      threadId,
+    };
+    this.#followUpBinding = binding;
+    try {
+      const unsubscribe = agent.subscribeQueuedMessages({ resourceId, threadId }, ({ count }) => {
+        if (this.#followUpBinding === binding) this.emit({ type: 'follow_up_queued', count });
+      });
+      binding.unsubscribe = unsubscribe;
+      if (this.#followUpBinding !== binding) {
+        unsubscribe();
+        return undefined;
+      }
+      return binding;
+    } catch (error) {
+      if (this.#followUpBinding === binding) this.#followUpBinding = undefined;
+      throw error;
     }
   }
 
-  /**
-   * Send the next queued follow-up message after a run finishes. Called by the
-   * run engine when a run ends. Re-queues on failure so the message isn't lost.
-   */
-  async drainFollowUpQueue(options?: {
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-  }): Promise<boolean> {
-    if (this.followUps.isEmpty()) return false;
-
-    const next = this.followUps.dequeue()!;
+  /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
     const threadId = this.thread.getId();
+    if (!threadId) return;
+    const resourceId = this.identity.getResourceId();
+    const agent = this.machinery.getAgent();
+    const binding = this.ensureFollowUpBinding(agent, resourceId, threadId);
+    if (!binding) return;
+    const operation = { generation: this.#followUpGeneration, controller: new AbortController() };
+    this.#preparingFollowUps.add(operation);
     try {
-      if (this.stream.isOpen() && threadId) {
-        const agent = this.machinery.getAgent();
-        const streamOptions = await this.machinery.buildStreamOptions({
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-        const result = agent.queueMessage(
-          {
-            contents: this.createMessageInput({ content: next.content }),
-            providerOptions: withMessageAuthor(undefined, readMessageAuthor(next.requestContext)),
-          },
-          {
-            resourceId: this.identity.getResourceId(),
-            threadId,
-            ifIdle: { streamOptions: streamOptions as any },
-          },
-        );
-        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
-        // setup/misconfig failure must reach the outer catch to requeue it
-        // rather than being swallowed into a false success (the follow-up would
-        // otherwise be lost).
-        const accepted = await result.accepted;
-        const runId = 'runId' in accepted ? accepted.runId : undefined;
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId });
-      } else {
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-      }
-      return true;
-    } catch (error) {
-      this.followUps.requeue(next);
-      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
-      throw error;
+      const streamOptions = await this.machinery.buildStreamOptions({
+        requestContext,
+        abortSignal: operation.controller.signal,
+      });
+      if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
+      // Once submitted, the Agent owns this work independently of the Session.
+      this.#preparingFollowUps.delete(operation);
+      await agent.queueMessage(this.createMessageInput({ content }), {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: streamOptions as any },
+      }).accepted;
+    } finally {
+      this.#preparingFollowUps.delete(operation);
     }
+  }
+
+  cleanupFollowUpBinding(): void {
+    this.#followUpGeneration += 1;
+    for (const operation of this.#preparingFollowUps) operation.controller.abort();
+    this.#preparingFollowUps.clear();
+    const binding = this.#followUpBinding;
+    this.#followUpBinding = undefined;
+    binding?.unsubscribe?.();
+    this.emit({ type: 'follow_up_queued', count: 0 });
   }
 
   /**

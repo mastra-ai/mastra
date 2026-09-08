@@ -25,6 +25,10 @@ function createAgentMock() {
     listScorers: vi.fn(async () => []),
     getChannels: vi.fn(() => null),
     subscribeToThread: vi.fn(async () => createSubscription()),
+    subscribeQueuedMessages: vi.fn((_scope, listener) => {
+      listener({ count: 0 });
+      return vi.fn();
+    }),
     sendNotificationSignal: vi.fn(async (_input, target) => ({
       record: { id: 'notification-1', threadId: target.threadId, source: 'mastracode' },
       decision: { action: 'deliver' },
