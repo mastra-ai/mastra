@@ -251,7 +251,7 @@ program
 
 // ---- Unified deploy command (new entry point) ----
 
-program
+const unifiedDeployCommand = program
   .command('deploy [dir]')
   .description('Deploy your Mastra application to an environment')
   .option('--env <name>', 'Target environment (default: production)', 'production')
@@ -265,6 +265,18 @@ program
   .option('--region <region>', 'Region for new environments (e.g., us, eu)')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(unifiedDeployAction));
+
+// `mastra deploy diagnosis <id>` handles bare deploy ids by reusing the
+// server-diagnosis endpoint, which server-side dual-looks-up across server
+// and environment deploy tables. No project/env context required.
+if (coreFeatures.has('deploy-diagnosis')) {
+  unifiedDeployCommand
+    .command('suggestions [deploy-id]')
+    .alias('diagnosis')
+    .description('Show deploy suggestions for a failed deploy')
+    .option('--org <id>', 'Organization ID')
+    .action(wrapAction(serverSuggestionsAction));
+}
 
 // ---- Studio commands ----
 
