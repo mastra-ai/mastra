@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { queryKeys } from '../../../../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
@@ -15,6 +15,12 @@ const controllerId = 'code';
 const resourceId = 'resource-test';
 const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
+const inFlightMessage = {
+  id: 'live-1',
+  role: 'assistant',
+  createdAt: '2026-09-08T10:00:00.000Z',
+  content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
+};
 
 describe('useAgentControllerConnection', () => {
   it('given a session, when the connection is established, then status is ready with session state exposed', async () => {
@@ -289,12 +295,7 @@ describe('useAgentControllerConnection', () => {
           modelId: 'openai/gpt-4o-mini',
           threadId: 'state-thread',
           running: true,
-          currentMessage: {
-            id: 'live-1',
-            role: 'assistant',
-            createdAt: '2026-09-08T10:00:00.000Z',
-            content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
-          },
+          currentMessage: inFlightMessage,
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
@@ -311,8 +312,11 @@ describe('useAgentControllerConnection', () => {
       }),
     );
 
-    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }));
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }),
+    );
     await waitFor(() => expect(result.current.status).toBe('ready'));
+    await waitForMutationsIdle(client);
     expect(result.current.state?.currentMessage?.id).toBe('live-1');
 
     emit({ type: 'agent_end', reason: 'complete' });
@@ -321,6 +325,69 @@ describe('useAgentControllerConnection', () => {
 
     emit({ type: 'agent_start' });
     await waitFor(() => expect(result.current.state?.running).toBe(true));
+    expect(result.current.state?.currentMessage).toBeUndefined();
+  });
+
+  it('given a state refetch started before the run ends, then the stale response does not restore its in-flight message', async () => {
+    const encoder = new TextEncoder();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    let stateReads = 0;
+    let releaseRefetch: (() => void) | undefined;
+    const refetchGate = new Promise<void>(resolve => {
+      releaseRefetch = resolve;
+    });
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'thread-1' }),
+      ),
+      http.get(sessionUrl, async () => {
+        stateReads += 1;
+        if (stateReads > 1) await refetchGate;
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'thread-1',
+          running: true,
+          currentMessage: inFlightMessage,
+        });
+      }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, sessionThreadId: 'thread-1', onEvent: vi.fn() }),
+    );
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    await waitForMutationsIdle(client);
+
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
+    await waitFor(() => expect(stateReads).toBe(2));
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+
+    releaseRefetch?.();
+    await waitForMutationsIdle(client);
+
+    expect(result.current.state?.running).toBe(false);
     expect(result.current.state?.currentMessage).toBeUndefined();
   });
 

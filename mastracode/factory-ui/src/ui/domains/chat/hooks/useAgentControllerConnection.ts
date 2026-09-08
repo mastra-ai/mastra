@@ -7,7 +7,12 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import {
+  overlayLiveEvents,
+  recordLiveEvent,
+  useAgentControllerSessionSync,
+} from '../../../../hooks/useAgentControllerSessionSync';
+import type { LiveEvents } from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -42,8 +47,7 @@ export function useAgentControllerConnection({
   const queryClient = useQueryClient();
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseStateRef = useRef<SseConnectionState>('never');
-  const taskEventGeneration = useRef(0);
-  const liveTasks = useRef<{ threadId?: string; tasks: NonNullable<AgentControllerSessionState['tasks']> }>(undefined);
+  const liveEvents = useRef<LiveEvents>({ generation: 0 });
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
@@ -70,8 +74,7 @@ export function useAgentControllerConnection({
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
-    taskEventGeneration,
-    liveTasks,
+    liveEvents,
   });
   const handleConnectedChange = (connected: boolean) => {
     // Ref mirrors the state so back-to-back events see the true previous value
@@ -110,11 +113,12 @@ export function useAgentControllerConnection({
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     const runBoundary = event.type === 'agent_start' || event.type === 'agent_end';
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
-    if (tasks) {
-      taskEventGeneration.current += 1;
-      liveTasks.current = { threadId: sessionThreadId, tasks };
-    }
     if (typeof running === 'boolean' || tasks) {
+      const since = recordLiveEvent(liveEvents.current, {
+        running,
+        runBoundary,
+        tasks: tasks && { threadId: sessionThreadId, tasks },
+      });
       const stateQueryKey = queryKeys.agentControllerConnectionState(
         agentControllerId,
         resourceId,
@@ -124,15 +128,7 @@ export function useAgentControllerConnection({
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,
-        current =>
-          current
-            ? {
-                ...current,
-                ...(typeof running === 'boolean' ? { running } : {}),
-                ...(runBoundary ? { currentMessage: undefined } : {}),
-                ...(tasks ? { tasks } : {}),
-              }
-            : current,
+        current => current && overlayLiveEvents(current, liveEvents.current, since, sessionThreadId),
         { updatedAt },
       );
     }
