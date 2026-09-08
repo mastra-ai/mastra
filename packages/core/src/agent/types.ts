@@ -270,7 +270,7 @@ export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OU
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export interface SubscribeQueuedAgentMessagesOptions {
+export interface SubscribeAgentThreadEventsOptions {
   resourceId: string;
   threadId: string;
   /** Omit to observe all locally pending messages on the shared thread. */
@@ -280,15 +280,14 @@ export interface SubscribeQueuedAgentMessagesOptions {
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export interface QueuedAgentMessagesSnapshot {
+export type AgentThreadEvent =
   /** Locally pending messages: FIFO entries plus a non-cancelled lease handoff. */
-  count: number;
-}
+  { type: 'queue-count-changed'; count: number };
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueuedAgentMessagesListener = (snapshot: QueuedAgentMessagesSnapshot) => void;
+export type AgentThreadEventListener = (event: AgentThreadEvent) => void;
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.

@@ -333,7 +333,7 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 `queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it is neither serialized with the message nor an authorization mechanism.
 
-Use `subscribeQueuedMessages({ resourceId, threadId }, listener)` to observe all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives a synchronous initial `{ count }` snapshot, then only receives later snapshots when its count changes. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict observation to that owner's messages submitted by the calling Agent.
+Use `subscribeThreadEvents({ resourceId, threadId }, listener)` to observe local thread events. Currently, Mastra emits only `queue-count-changed`, which reports all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives this event synchronously to establish the current baseline, then receives it again only when its count changes. The baseline does not mean that a queue mutation just occurred. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict queue-count notifications to that owner's messages submitted by the calling Agent.
 
 ```typescript
 const scope = {
@@ -341,8 +341,10 @@ const scope = {
   threadId: 'thread-abc',
 }
 
-const unsubscribe = agent.subscribeQueuedMessages(scope, ({ count }) => {
-  console.log(`${count} messages are pending`)
+const unsubscribe = agent.subscribeThreadEvents(scope, event => {
+  if (event.type === 'queue-count-changed') {
+    console.log(`${event.count} messages are pending`)
+  }
 })
 
 agent.queueMessage('Review the failing test.', {
@@ -352,6 +354,8 @@ agent.queueMessage('Review the failing test.', {
 
 unsubscribe()
 ```
+
+`subscribeThreadEvents()` is distinct from `subscribeToThread()`, which streams agent output. It does not currently emit composite thread state, individual message lifecycle events, run events, or approval events; those may be added as separate event types in the future.
 
 AgentController Sessions observe the shared thread count when they subscribe, even before submitting a follow-up. `session.steer()` aborts the current run before sending the new input, without clearing queued follow-ups. Session cleanup stops observation and cancels unfinished local preparation, but leaves submitted messages in the Agent queue.
 
