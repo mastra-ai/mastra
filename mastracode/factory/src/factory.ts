@@ -58,19 +58,18 @@ import { createCustomProvidersPrimer, registerCustomProvidersSource } from './ro
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
+import { TelemetryRoutes } from './routes/telemetry.js';
 import {
   createTenantCredentialPrimer,
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
-import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
-import type { FactoryRules } from './rules/types.js';
-import { assertFactoryRules } from './rules/validation.js';
+import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
@@ -79,6 +78,7 @@ import { handleServerError } from './server-error.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -203,12 +203,12 @@ export interface MastraFactoryConfig {
    */
   integrations?: FactoryIntegration[];
   /**
-   * Authoritative Factory board, tool-result, and Linear-event rules. Construct
-   * with `defaultFactoryRules({ version, overrides })` so deployment policy has
-   * an explicit version and exact handler leaves replace rather than compose.
-   * Omitted → conservative built-in rules for the current deployment.
+   * Operator-maintained provenance label stamped on transition audit rows,
+   * deferred decisions, and session kickoff headers so a row can be traced
+   * back to the deployment that produced it. Nothing branches on it.
+   * Default: `factory-config-v1`.
    */
-  rules?: FactoryRules;
+  configVersion?: string;
   /** Board definitions installed for this Factory instance. */
   boards?: readonly InstalledBoard[];
   /** Whether the built-in Work and Review boards are installed. Default: true. */
@@ -306,9 +306,20 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
   return undefined;
 }
 
+/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
+function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
+  const liveSessions = new LiveSessions(controller);
+  liveSessions.onParkedChanged(session => {
+    const { factoryOrgId, factoryProjectId } = session.state.get();
+    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
+  });
+  return liveSessions;
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   readonly #boards: BoardRegistry;
+  readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
@@ -326,6 +337,13 @@ export class MastraFactory {
       boards: config.boards,
       includeDefaultBoards: config.includeDefaultBoards,
     });
+    if ('rules' in config) {
+      throw new Error(
+        "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
+          'rules on the owning board via defineBoard({ tools }).',
+      );
+    }
+    this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
   }
 
@@ -390,8 +408,7 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
-    const rules = this.#config.rules ?? builtInFactoryRules();
-    assertFactoryRules(rules);
+    const configVersion = this.#configVersion;
 
     // FactoryStorage owns every app-table domain and initializes them through
     // the same lifecycle as the backend connection.
@@ -593,7 +610,7 @@ export class MastraFactory {
       : retireTerminalSessions;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
-          rules,
+          configVersion,
           boards: this.#boards,
           storage: workItemsStorage,
           ...(onTerminalStage ? { onTerminalStage } : {}),
@@ -646,9 +663,9 @@ export class MastraFactory {
     });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
-          rules,
+          configVersion,
           storage: workItemsStorage,
-          boardRegistry: this.#boards,
+          boards: this.#boards,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -892,10 +909,12 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`.
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
+            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -913,7 +932,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            rules,
+            configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
@@ -1101,7 +1120,7 @@ export class MastraFactory {
           factoryStorage: storage,
           integrationStorage,
           sourceControlStorage,
-          rules,
+          configVersion,
           boardRegistry: this.#boards,
           factoryReady,
           domains,
@@ -1147,7 +1166,7 @@ export class MastraFactory {
                 factoryStorage: storage,
                 integrationStorage,
                 sourceControlStorage,
-                rules,
+                configVersion,
                 boardRegistry: this.#boards,
                 factoryReady,
                 domains,

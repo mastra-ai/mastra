@@ -1,9 +1,8 @@
-import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from './types.js';
+import type { BoardRegistry } from '../boards/registry.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
-  FactoryRules,
   FactoryRuleRejectionCode,
   WorkItemSource,
 } from './types.js';
@@ -17,6 +16,7 @@ const MAX_TITLE_LENGTH = 512;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
+export const MAX_TOOL_NAME_LENGTH = 128;
 const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
@@ -24,7 +24,9 @@ const MAX_METADATA_JSON_LENGTH = 16_384;
 const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
+export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
@@ -68,6 +70,33 @@ function boundedString(value: unknown, label: string, max: number, pattern?: Reg
     throw new FactoryRuleValidationError(`${label} is invalid.`);
   }
   return normalized;
+}
+
+export function isBoardIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_BOARD_IDENTIFIER_LENGTH && BOARD_IDENTIFIER_RE.test(value);
+}
+
+function boardIdentifier(value: unknown, label: string): string {
+  if (!isBoardIdentifier(value)) {
+    throw new FactoryRuleValidationError(`${label} is invalid.`);
+  }
+  return value;
+}
+
+export function assertFactoryDecisionTarget(
+  decision: FactoryRuleDecision,
+  boards: BoardRegistry,
+  itemBoard?: string | null,
+): void {
+  if (decision.type !== 'transition' && decision.type !== 'upsertLinkedWorkItem') return;
+  const board = boards.get(decision.board);
+  if (!board) throw new FactoryRuleValidationError('Factory decision target board is not installed.');
+  if (!Object.hasOwn(board.phases, decision.stage)) {
+    throw new FactoryRuleValidationError('Factory decision target phase is not defined on its board.');
+  }
+  if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
+    throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
+  }
 }
 
 function optionalBoundedString(value: unknown, label: string, max: number): string | undefined {
@@ -132,21 +161,11 @@ function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> 
   return sanitized;
 }
 
-export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'tools'], 'Factory rules');
-  boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
+export const DEFAULT_FACTORY_CONFIG_VERSION = 'factory-config-v1';
 
-  if (!isPlainObject(rules.tools)) throw new FactoryRuleValidationError('Factory rules.tools must be an object.');
-  for (const [toolName, leaf] of Object.entries(rules.tools)) {
-    boundedString(toolName, 'Factory tool name', 128, IDENTIFIER_RE);
-    if (!isPlainObject(leaf))
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName} must be an object.`);
-    assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
-    if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
+/** Operator-maintained provenance label stamped on transition audit and deferred-decision rows. */
+export function assertFactoryConfigVersion(value: unknown): string {
+  return boundedString(value, 'Factory configVersion', MAX_VERSION_LENGTH);
 }
 
 function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: string } {
@@ -199,8 +218,8 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       return {
         type,
         ...commonCommitFields(value),
-        board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory transition board'),
-        stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory transition stage'),
+        board: boardIdentifier(value.board, 'Factory transition board'),
+        stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
       };
@@ -219,12 +238,12 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       return {
         type,
         ...commonCommitFields(value),
-        board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory linked work item board'),
+        board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
-        stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory linked work item stage'),
+        stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(metadata ? { metadata } : {}),
       };
     }

@@ -5,8 +5,6 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { SearchableSpan } from '../types';
 import { selectSearchableSpans } from '../utils';
 
-const IMMUTABLE_CACHE_TIME = 1000 * 60 * 60 * 24 * 30; // 30 days, massive cache, span data is immutable
-
 /**
  * Key, fetcher and stale policy of the `trace-spans` query. Every observer of this key must
  * share these (rather than only the key) so one observer with a stricter `staleTime` does not
@@ -23,11 +21,8 @@ export const traceSpansQueryOptions = (client: MastraClient, traceId: string | n
       return res;
     },
     enabled: !!traceId,
-    staleTime: query => {
-      const data = query.state.data;
-      const isFinished = data?.spans.every(span => Boolean(span.endedAt));
-      return isFinished ? IMMUTABLE_CACHE_TIME : 0;
-    },
+    // Resumed runs and delayed exports can append spans even when every known span has ended.
+    staleTime: 0,
   });
 
 /**
@@ -41,11 +36,16 @@ export const traceSpansQueryOptions = (client: MastraClient, traceId: string | n
  */
 export function useTraceSpans(
   traceId: string | null | undefined,
+  { passive = false }: { passive?: boolean } = {},
 ): UseQueryResult<{ traceId: string; spans: SearchableSpan[] } | null> {
   const client = useMastraClient();
 
   return useQuery({
     ...traceSpansQueryOptions(client, traceId),
+    // History rows share updates but leave automatic refreshes to the selected detail.
+    refetchOnMount: !passive,
+    refetchOnWindowFocus: !passive,
+    refetchOnReconnect: !passive,
     // Builds each span's search haystack once per fetch, cached with the query.
     select: selectSearchableSpans,
   });
@@ -67,6 +67,9 @@ export function useTraceSpansQueries<T>(
   return useQueries({
     queries: traceIds.map(traceId => ({
       ...traceSpansQueryOptions(client, traceId),
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
       select: (data: TraceSpansData) => select(traceId, data),
     })),
     combine: results =>

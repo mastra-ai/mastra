@@ -11,6 +11,7 @@ import { CheckCircle, FileInputIcon, FileOutputIcon, GaugeIcon, ThumbsDown, Thum
 import { useState, useEffect, useRef } from 'react';
 import type { ReviewItem } from './review-item-card';
 import { TagPicker } from './tag-picker';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 function formatUnknown(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -151,7 +152,7 @@ export function ReviewItemPanel({
               {isCompleted ? (
                 <div className="flex flex-wrap gap-1">
                   {item.tags.length > 0 ? (
-                    item.tags.map(tag => <Badge key={tag}>{tag}</Badge>)
+                    item.tags.map(tag => <ComputedTag key={tag} value={tag} size="sm" />)
                   ) : (
                     <Txt variant="ui-sm" className="text-neutral2">
                       No tags

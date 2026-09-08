@@ -10,15 +10,26 @@ When schema changes are disabled via `disableInit` or `MASTRA_DISABLE_STORAGE_IN
 
 ```sql
 BEGIN;
-SELECT pg_advisory_xact_lock(1936876916, '<index>'::regclass::oid::int);
+SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | '<index>'::regclass::oid::bigint);
 ALTER TABLE <index> ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT 'default';
 CREATE UNIQUE INDEX IF NOT EXISTS <index>_namespace_vector_id_idx ON <index> (namespace, vector_id);
 ALTER TABLE <index> DROP CONSTRAINT IF EXISTS <index>_vector_id_key;
 COMMIT;
 ```
 
-First access to a legacy table requires table-owner DDL permissions and takes a transaction-scoped advisory lock plus PostgreSQL DDL locks. Already-migrated tables remain usable with SELECT-only access. Failed or incomplete migrations are retried on the next operation; equivalent composite unique indexes are recognized regardless of name or key order.
+**What automatic migration requires**
 
-The SQL example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed, choose a unique index name of at most 63 characters for long table names, and verify any pre-existing same-named index is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint. Automatic migration uses a bounded hashed name for long tables and rolls back if a conflicting index prevents reconciliation.
+- First access to a legacy table requires table-owner DDL permissions.
+- First access takes a transaction-scoped advisory lock and PostgreSQL DDL locks.
+- Already-migrated tables remain usable with SELECT-only access.
+- Failed or incomplete migrations are retried on the next operation.
+- Equivalent composite unique indexes are recognized regardless of name or key order.
+- For long table names, automatic migration uses a bounded hashed index name and rolls back if a conflicting index prevents reconciliation.
+
+**Before you run the SQL above**
+
+- The example assumes the original generated constraint name. Use the actual legacy constraint name if it was renamed.
+- For a long table name, choose a unique index name of at most 63 characters.
+- If an index with the same name already exists, verify it is a valid, non-partial unique index on exactly `namespace` and `vector_id` before dropping the legacy constraint.
 
 Fixes #23272

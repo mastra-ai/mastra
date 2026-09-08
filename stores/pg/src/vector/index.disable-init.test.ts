@@ -48,6 +48,7 @@ vi.mock('@mastra/core/vector/filter', () => ({
 }));
 
 import type { PgVectorConfig } from '../shared/config';
+import { namespaceSchemaReadyResult } from './namespace-test-utils';
 import { PgVector } from '.';
 
 type QueryCall = { text: string; values?: any[] };
@@ -88,7 +89,7 @@ describe('PgVector disableInit', () => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
       if (sql.includes('AS composite_index')) {
-        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+        return namespaceSchemaReadyResult();
       }
       return { rows: [] };
     });

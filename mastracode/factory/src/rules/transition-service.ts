@@ -13,7 +13,6 @@ import type {
   FactoryRuleRejectionCode,
   FactoryRuleStage,
   FactoryTriageType,
-  FactoryRules,
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
@@ -25,6 +24,7 @@ import {
 } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
+  assertFactoryDecisionTarget,
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
 } from './validation.js';
@@ -58,7 +58,7 @@ export interface FactoryTransitionRequest {
 }
 
 export interface FactoryTransitionServiceOptions {
-  rules: FactoryRules;
+  configVersion: string;
   storage: WorkItemsStorage;
   boards?: BoardRegistry;
   timeoutMs?: number;
@@ -192,7 +192,7 @@ async function withRuleTimeout<T>(operation: Promise<T>, timeoutMs: number): Pro
 }
 
 export class FactoryTransitionService {
-  readonly #rules: FactoryRules;
+  readonly #configVersion: string;
   readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
@@ -201,7 +201,7 @@ export class FactoryTransitionService {
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
 
   constructor(options: FactoryTransitionServiceOptions) {
-    this.#rules = options.rules;
+    this.#configVersion = options.configVersion;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
@@ -210,8 +210,8 @@ export class FactoryTransitionService {
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
-  get ruleSetVersion(): string {
-    return this.#rules.version;
+  get configVersion(): string {
+    return this.#configVersion;
   }
 
   async transition(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
@@ -306,7 +306,7 @@ export class FactoryTransitionService {
       ingress: { type: request.ingress.type, id: request.ingress.identity },
       cause: request.cause,
       causalChain: request.causalChain ?? [],
-      ruleSetVersion: this.#rules.version,
+      configVersion: this.#configVersion,
       item: {
         id: item.id,
         source: itemSource,
@@ -392,6 +392,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            assertFactoryDecisionTarget(decision, this.#boards, itemBoard);
             if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }
@@ -467,7 +468,7 @@ export class FactoryTransitionService {
       destinationStage: request.stage,
       actorId: actorId(request.actor),
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
-      ruleSetVersion: this.#rules.version,
+      configVersion: this.#configVersion,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
       ...(options.triageType ? { triageType: options.triageType } : {}),

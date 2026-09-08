@@ -15,7 +15,6 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRules } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -24,7 +23,7 @@ import {
   resolveFactoryProjectForSession,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
-import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -79,6 +78,8 @@ export interface IntegrationRegistration {
 export interface FactoryApiRoutesDeps {
   controllerId: string;
   controller: AgentController<MastraCodeState>;
+  /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
+  liveSessions: LiveSessions;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
   /** Optional user directory for resolving persisted owners to display profiles. */
@@ -113,7 +114,7 @@ export interface FactoryApiRoutesDeps {
   factoryReady: boolean;
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
-  rules: FactoryRules;
+  configVersion: string;
   /** Boards installed for this Factory instance. */
   boardRegistry: BoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
@@ -320,7 +321,7 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    rules: FactoryRules;
+    configVersion: string;
     boardRegistry: BoardRegistry;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
@@ -359,7 +360,9 @@ export function buildIntegrationContext(
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
-      ? { rules: { config: deps.rules, workItems: deps.domains.workItems, boards: deps.boardRegistry } }
+      ? {
+          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+        }
       : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -480,7 +483,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const transitionService = deps.factoryReady
     ? (deps.factoryTransitionService ??
       new FactoryTransitionService({
-        rules: deps.rules,
+        configVersion: deps.configVersion,
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
       }))
@@ -581,7 +584,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
-          liveSessions: new LiveSessions(deps.controller),
+          liveSessions: deps.liveSessions,
         }).routes()
       : []),
   ];

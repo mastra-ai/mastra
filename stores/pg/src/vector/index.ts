@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -500,7 +501,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const state = await this.getNamespaceSchemaState(tableName, client);
     if (!state.composite_index) {
-      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
+      const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
       await client.query(
         `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
       );
@@ -521,13 +522,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
-  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
+  private getNamespaceIndexName(parsedIndexName: string): string {
     const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
     if (fullName.length <= 63) {
       return fullName;
     }
-    const hasher = await this.hasher;
-    const suffix = `_ns_${hasher.h32(parsedIndexName).toString(16)}_idx`;
+    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const suffix = `_ns_${hash}_idx`;
     return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
 
@@ -565,7 +566,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     await client.query('BEGIN');
     try {
       // Resolve aliases (explicit schema and search_path) to the same cross-process lock.
-      await client.query('SELECT pg_advisory_xact_lock(1936876916, to_regclass($1)::oid::int)', [tableName]);
+      await client.query('SELECT pg_advisory_xact_lock((1936876916::bigint << 32) | to_regclass($1)::oid::bigint)', [
+        tableName,
+      ]);
       const state = await this.getNamespaceSchemaState(tableName, client);
       if (!state.vector_id) {
         await client.query('ROLLBACK');

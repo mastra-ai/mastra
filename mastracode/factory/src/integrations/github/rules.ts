@@ -1,13 +1,12 @@
-import { workItemPhaseSemantics } from '../../boards/index.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
-  FactoryRules,
 } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -262,7 +261,7 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
-  rules: Pick<FactoryRules, 'version'>;
+  configVersion: string;
   boards: BoardRegistry;
 }
 
@@ -424,7 +423,7 @@ export class GithubRules {
         ingress: { type: 'github', id: ingressIdentity },
         cause: `github.${event}`,
         causalChain: [],
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         ...(item
           ? {
               item: {
@@ -438,7 +437,7 @@ export class GithubRules {
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
-              board: item.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
+              board: boardForWorkItem(item),
               itemRevision: item.revision,
             }
           : {}),
@@ -532,7 +531,10 @@ export class GithubRules {
         if (decision?.type === 'reject') {
           outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
         } else if (decision) {
-          decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+          decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+            assertFactoryDecisionTarget(entry, this.options.boards, item ? boardForWorkItem(item) : undefined);
+            return { ...entry };
+          });
         }
       } catch (error) {
         const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -552,7 +554,7 @@ export class GithubRules {
         factoryProjectId: project.factoryProjectId,
         workItemId: item?.id ?? null,
         ingress: { identity: ingressIdentity, triggerType: `github.${event}` },
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         expectedRevision: item?.revision ?? null,
         actor: { ...actor },
         outcome,
@@ -1133,15 +1135,15 @@ export function githubRulesOptions(
   github: GithubRulesIntegration,
   context: IntegrationContext,
 ): GithubRulesOptions | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   return {
     github,
     sourceControl: context.storage.sourceControl,
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
-    boards: context.rules.boards,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
   };
 }
 

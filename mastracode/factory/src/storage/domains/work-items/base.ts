@@ -104,7 +104,7 @@ export interface CommitFactoryRuleEvaluationInput {
   factoryProjectId: string;
   workItemId: string | null;
   ingress: { identity: string; triggerType: string };
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
@@ -131,7 +131,7 @@ export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
   workItemId: string | null;
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
@@ -157,8 +157,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'source_repository_missing',
   'unsupported_provider_item',
   'notification_delivery_failed',
-  'plan_awaiting_approval',
-  'run_awaiting_input',
+  'run_overdue',
   'repository_git_missing',
   'repository_egress_blocked',
   'repository_clone_failed',
@@ -170,10 +169,19 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'unknown',
 ] as const;
 
-export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
+/** Written until a pause stopped counting as a failure; stored rows still read through them. */
+const RETIRED_FACTORY_DISPATCH_FAILURE_CODES = ['plan_awaiting_approval', 'run_awaiting_input'] as const;
 
-function isFactoryDispatchFailureCode(value: unknown): value is FactoryDispatchFailureCode {
-  return FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value);
+const STORED_FACTORY_DISPATCH_FAILURE_CODES = [
+  ...FACTORY_DISPATCH_FAILURE_CODES,
+  ...RETIRED_FACTORY_DISPATCH_FAILURE_CODES,
+] as const;
+
+export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
+export type StoredFactoryDispatchFailureCode = (typeof STORED_FACTORY_DISPATCH_FAILURE_CODES)[number];
+
+function isStoredFactoryDispatchFailureCode(value: unknown): value is StoredFactoryDispatchFailureCode {
+  return STORED_FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value);
 }
 
 export interface FactoryDeferredDecisionPageInput {
@@ -217,7 +225,7 @@ export interface FactoryDeferredDecisionRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
-  failureCode: FactoryDispatchFailureCode | null;
+  failureCode: StoredFactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   /** Who released this run — the run is attributed to them, not the repo connector. */
@@ -232,7 +240,8 @@ export type FactoryAttentionKind =
   | 'automation-proposed'
   | 'mention'
   | 'activity'
-  | 'supervisor-finding';
+  | 'supervisor-finding'
+  | 'agent-waiting';
 export type FactoryAttentionReceiptState = 'read' | 'archived';
 
 export interface FactorySupervisorFindingRecord {
@@ -314,6 +323,11 @@ export function factorySupervisorFindingAttentionIdentity(
   return { kind: 'supervisor-finding', sourceId: findingKey, occurrence };
 }
 
+/** Dated by the park itself, so an answer and a new park never share a receipt. */
+export function factoryAgentWaitingAttentionIdentity(sessionId: string, suspendedAt: number): FactoryAttentionIdentity {
+  return { kind: 'agent-waiting', sourceId: sessionId, occurrence: suspendedAt };
+}
+
 export function factoryAttentionKey(factoryProjectId: string, identity: FactoryAttentionIdentity): string {
   return `factory:${factoryProjectId}:attention:${identity.kind}:${identity.sourceId}:${identity.occurrence}`;
 }
@@ -377,7 +391,7 @@ export interface FactoryPendingStartRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
-  failureCode: FactoryDispatchFailureCode | null;
+  failureCode: StoredFactoryDispatchFailureCode | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -414,7 +428,7 @@ export interface CommitFactoryTransitionInput {
   destinationStage: string;
   actorId: string;
   ingress: { identity: string; triggerType: string; transitionId: string };
-  ruleSetVersion: string;
+  configVersion: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
@@ -927,7 +941,8 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       user_id: { type: 'text' },
       kind: { type: 'text' },
       source_id: { type: 'text' },
-      occurrence: { type: 'integer' },
+      // A park's occurrence is its epoch-ms stamp, past what INTEGER holds.
+      occurrence: { type: 'bigint' },
       state: { type: 'text' },
       read_at: { type: 'timestamp' },
       archived_at: { type: 'timestamp', nullable: true },
@@ -1064,7 +1079,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
-    failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
+    failureCode: isStoredFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
@@ -1078,7 +1093,8 @@ function attentionReceiptKind(value: unknown): FactoryAttentionKind {
     value === 'automation-proposed' ||
     value === 'mention' ||
     value === 'activity' ||
-    value === 'supervisor-finding'
+    value === 'supervisor-finding' ||
+    value === 'agent-waiting'
   ) {
     return value;
   }
@@ -1291,7 +1307,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       { org_id: input.orgId, factory_project_id: input.factoryProjectId, resolved_at: null },
       {
         orderBy: [
-          ['updated_at', 'desc'],
+          ['opened_at', 'desc'],
           ['id', 'desc'],
         ],
         limit: input.limit + 1,
@@ -1507,6 +1523,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return cleared;
   }
 
+  async getByProjectSource({
+    orgId,
+    factoryProjectId,
+    source,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    source: ExternalWorkItemSource;
+  }): Promise<WorkItemRow | null> {
+    const row = await this.#db.findOne<WorkItemDbRow>('work_items', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: externalSourceKey(source),
+    });
+    return row ? toWorkItem(row) : null;
+  }
+
   async get({ orgId, id }: { orgId: string; id: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, id });
     return row ? toWorkItem(row) : null;
@@ -1651,7 +1684,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
             ingress_id: ingress.id,
             work_item_id: item.id,
-            rule_set_version: input.ruleSetVersion,
+            rule_set_version: input.configVersion,
             expected_revision: input.expectedRevision,
             outcome,
             code,
@@ -1792,7 +1825,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
           ingress_id: ingress.id,
           work_item_id: item?.id ?? null,
-          rule_set_version: input.ruleSetVersion,
+          rule_set_version: input.configVersion,
           expected_revision: input.expectedRevision,
           outcome,
           code,
@@ -2096,6 +2129,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       );
       return Boolean(decision) && parked;
     }
+    // A parked session has no row here; the route checks it against the live registry.
+    if (identity.kind === 'agent-waiting') return true;
     if (identity.kind === 'activity') {
       // Occurrence-exact: a bump since the read makes that receipt stale, and
       // the route answers 409. Scoped to this user or every badge would skew.

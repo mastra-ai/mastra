@@ -8,8 +8,7 @@ import type { TimelineEntry } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
-const ROOM_CLASS = 'turn-room-open';
-const ROOM_SELECTOR = `.${ROOM_CLASS}`;
+const ROOM_SELECTOR = '[data-holds-room]';
 
 function textEntry(id: string, role: 'user' | 'assistant', text: string): TimelineEntry {
   const message: MastraDBMessage = {
@@ -95,7 +94,7 @@ describe('TranscriptEntries turn groups', () => {
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).toHaveClass(ROOM_CLASS);
+    expect(liveGroup).toHaveAttribute('data-holds-room', 'true');
     expect(liveGroup).toBeInstanceOf(HTMLElement);
     if (liveGroup) expect(within(liveGroup).getByText('second question')).toBeInTheDocument();
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
@@ -113,11 +112,11 @@ describe('TranscriptEntries turn groups', () => {
         tail={<div data-testid="tail" />}
       />,
     );
-    expect(screen.getByTestId('tail').parentElement).toHaveClass(ROOM_CLASS);
+    expect(screen.getByTestId('tail').parentElement).toHaveAttribute('data-holds-room', 'true');
     // Closes as the new turn opens instead of vanishing under the reader.
-    const handedOver = screen.getByText('second question').closest('.turn-room');
+    const handedOver = screen.getByText('second question').closest('[data-opens-turn]');
     expect(handedOver).not.toBeNull();
-    expect(handedOver).not.toHaveClass(ROOM_CLASS);
+    expect(handedOver).not.toHaveAttribute('data-holds-room');
     // One room, whatever the turn count: two would stack into a double gap.
     expect(document.querySelectorAll(ROOM_SELECTOR)).toHaveLength(1);
   });
@@ -143,9 +142,9 @@ describe('TranscriptEntries turn groups', () => {
     );
 
     const liveGroup = screen.getByTestId('tail').parentElement;
-    expect(liveGroup).not.toHaveClass(ROOM_CLASS);
+    expect(liveGroup).not.toHaveAttribute('data-holds-room');
     // Kept: it carries the transition the room closes on.
-    expect(liveGroup).toHaveClass('turn-room');
+    expect(liveGroup).toHaveAttribute('data-opens-turn', 'true');
   });
 
   it('keeps the room on the message you sent when the run echoes it back undrawn', () => {
@@ -179,7 +178,7 @@ describe('TranscriptEntries turn groups', () => {
 
     // It opens at the top already: room under it would only put empty scroll below.
     expect(screen.getByText('first question').closest(ROOM_SELECTOR)).toBeNull();
-    expect(screen.getByText('first question').closest('.turn-room')).not.toBeNull();
+    expect(screen.getByText('first question').closest('[data-opens-turn]')).not.toBeNull();
   });
 
   it('keeps the same room node when a pending steer is confirmed', () => {
@@ -235,7 +234,7 @@ describe('TranscriptEntries turn groups', () => {
     );
 
     expect(screen.getByText('change direction')).toBeInTheDocument();
-    expect(screen.getByTestId('tail').parentElement).not.toHaveClass(ROOM_CLASS);
+    expect(screen.getByTestId('tail').parentElement).not.toHaveAttribute('data-holds-room');
   });
 
   it('takes the gap that introduces a turn into that turn, where the room absorbs it', () => {

@@ -246,6 +246,7 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       authenticated: true,
+      telemetryEnabled: false,
       user: { userId: 'user_fake', email: 'fake@example.com', organizationId: 'org_fake' },
       provider: 'fake',
     });

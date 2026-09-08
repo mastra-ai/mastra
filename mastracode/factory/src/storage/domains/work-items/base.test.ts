@@ -121,7 +121,7 @@ describe('WorkItemsStorage', () => {
         destinationStage: 'intake',
         actorId: 'triage-agent',
         ingress: { identity, triggerType: 'agent', transitionId: identity },
-        ruleSetVersion: 'rules-v1',
+        configVersion: 'rules-v1',
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
@@ -169,7 +169,7 @@ describe('WorkItemsStorage', () => {
         ...scope,
         workItemId: null,
         ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
-        ruleSetVersion: 'v1',
+        configVersion: 'v1',
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -446,7 +446,7 @@ describe('WorkItemsStorage', () => {
       ...scope,
       workItemId: created.item.id,
       ingress: { identity: 'legacy-1', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -492,7 +492,7 @@ describe('WorkItemsStorage', () => {
         ...scope,
         workItemId: created.item.id,
         ingress: { identity: `park-${index}`, triggerType: 'test' },
-        ruleSetVersion: 'rules-v1',
+        configVersion: 'rules-v1',
         expectedRevision: current?.revision ?? created.item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -542,7 +542,7 @@ describe('WorkItemsStorage', () => {
       ...scope,
       workItemId: created.item.id,
       ingress: { identity: 'receipt-race', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -736,6 +736,38 @@ describe('getBySource', () => {
     });
 
     expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
+  });
+
+  it('resolves canonical sources within the requested organization and project', async () => {
+    const storage = await makeStorage();
+    for (const orgId of ['org1', 'org2']) {
+      for (const factoryProjectId of orgId === 'org1' ? ['p1', 'p2'] : ['p3', 'p4']) {
+        const created = await storage.upsert({
+          orgId,
+          userId: 'u',
+          factoryProjectId,
+          input: { ...input, externalSource: slackThread },
+        });
+        expect(await storage.getByProjectSource({ orgId, factoryProjectId, source: slackThread })).toEqual(
+          created.item,
+        );
+      }
+    }
+    const found = await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'p1', source: slackThread });
+    expect(found).toMatchObject({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(
+      await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'missing', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({ orgId: 'missing', factoryProjectId: 'p1', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        source: { ...slackThread, integrationId: 'other' },
+      }),
+    ).toBeNull();
   });
 
   it('refuses to guess when two projects hold the same source', async () => {
