@@ -1727,6 +1727,12 @@ describe('Display state OMProgressState', () => {
 
 describe('a subscriber attaching mid-run', () => {
   let session: Session;
+  const prompt = {
+    id: 'prompt-1',
+    role: 'signal',
+    createdAt: new Date('2026-09-08T09:59:59.000Z'),
+    content: { format: 2, parts: [{ type: 'data-user-message', data: { content: 'Review the pull request' } }] },
+  } as any;
   const message = {
     id: 'live-1',
     role: 'assistant',
@@ -1739,28 +1745,50 @@ describe('a subscriber attaching mid-run', () => {
     session = ctx.session;
   });
 
-  it('first receives the message the run has streamed so far', () => {
-    emit(session, { type: 'agent_start' });
-    emit(session, { type: 'message_update', message });
-
+  function attach(): AgentControllerEvent[] {
     const received: AgentControllerEvent[] = [];
     session.subscribe(event => {
       received.push(event);
     });
+    return received;
+  }
 
-    expect(received).toEqual([{ type: 'message_update', message }]);
+  it('first receives the messages the run ended, then the one it is streaming', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_start', message: prompt });
+    emit(session, { type: 'message_end', message: prompt });
+    emit(session, { type: 'message_start', message });
+    emit(session, { type: 'message_update', message });
+
+    expect(attach()).toEqual([
+      { type: 'message_end', message: prompt },
+      { type: 'message_update', message },
+    ]);
+  });
+
+  it('does not replay an ended message as still streaming', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_update', message });
+    emit(session, { type: 'message_end', message });
+
+    expect(attach()).toEqual([{ type: 'message_end', message }]);
   });
 
   it('receives nothing of a run that already ended', () => {
     emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_end', message: prompt });
     emit(session, { type: 'message_update', message });
     emit(session, { type: 'agent_end', reason: 'complete' });
 
-    const received: AgentControllerEvent[] = [];
-    session.subscribe(event => {
-      received.push(event);
-    });
+    expect(attach()).toEqual([]);
+  });
 
-    expect(received).toEqual([]);
+  it('receives nothing of the previous run once a new one starts', () => {
+    emit(session, { type: 'agent_start' });
+    emit(session, { type: 'message_end', message: prompt });
+    emit(session, { type: 'agent_end', reason: 'complete' });
+    emit(session, { type: 'agent_start' });
+
+    expect(attach()).toEqual([]);
   });
 });

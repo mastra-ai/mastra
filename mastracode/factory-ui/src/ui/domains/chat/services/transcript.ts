@@ -184,9 +184,10 @@ export const initialTranscript: TranscriptState = {
   _decodeStartedAt: 0,
 };
 
+const LOCAL_MESSAGE_ID_PREFIX = 'local-';
 let noticeSeq = 0;
 export function createLocalMessageId(): string {
-  return `local-${Date.now()}-${noticeSeq++}`;
+  return `${LOCAL_MESSAGE_ID_PREFIX}${Date.now()}-${noticeSeq++}`;
 }
 
 /** A file attached to an outgoing message (base64-encoded, mirrors the client-js `sendMessage` files option). */
@@ -1012,7 +1013,7 @@ function upsertMessage(
   const nextMessage =
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
-      : preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+      : signalToDraw(message, prevEntry?.message, entries, viewerId);
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // An entry the reader is already watching keeps the identity it was drawn with:
   // adopting the server's id here remounts the row and everything it holds — open
@@ -1054,6 +1055,25 @@ function withoutToolPartsDrawnElsewhere(
   if (parts.length === message.content.parts.length) return message;
 
   return { ...message, content: { ...message.content, parts } };
+}
+
+/**
+ * An own signal stays unrenderable behind its optimistic echo (see `withRenderableSignalText`);
+ * a tab that attached mid-run has no echo, so the signal draws its own text.
+ */
+function signalToDraw(
+  message: MastraDBMessage,
+  previous: MastraDBMessage | undefined,
+  entries: TimelineEntry[],
+  viewerId?: string,
+): MastraDBMessage {
+  const preserved = preserveOptimisticUserContent(message, previous, viewerId);
+  if (previous || entries.some(isOptimisticEcho)) return preserved;
+  return withRenderableSignalText(preserved);
+}
+
+function isOptimisticEcho(entry: TimelineEntry): boolean {
+  return entry.kind === 'message' && entry.message.role === 'user' && entry.id.startsWith(LOCAL_MESSAGE_ID_PREFIX);
 }
 
 function preserveOptimisticUserContent(

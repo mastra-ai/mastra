@@ -237,10 +237,28 @@ describe('ThreadPage loading shell', () => {
     expect(emptyPrompt.wasDrawn()).toBe(false);
   });
 
-  it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
+  it('joins a run mid-step with its prompt and what it has streamed so far, never the empty prompt', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({
       sessionState: { running: true },
       streamed: [
+        {
+          type: 'message_end',
+          message: {
+            id: 'prompt-1',
+            role: 'signal',
+            createdAt: new Date('2026-09-08T09:59:59.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-user-message',
+                  data: { type: 'user', id: 'prompt-1', contents: 'Review pull request #42' },
+                },
+              ],
+              metadata: { signal: { type: 'user', id: 'prompt-1', contents: 'Review pull request #42' } },
+            },
+          },
+        },
         {
           type: 'message_update',
           message: {
@@ -271,6 +289,7 @@ describe('ThreadPage loading shell', () => {
     await waitForMutationsIdle(client);
     emptyPrompt.disconnect();
 
+    expect(document.body).toHaveTextContent('Review pull request #42');
     expect(document.body).toHaveTextContent('Checking out the pull request.');
     expect(emptyPrompt.wasDrawn()).toBe(false);
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();

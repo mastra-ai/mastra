@@ -1413,6 +1413,14 @@ describe('live user-signal events render the same as their persisted copy', () =
     expect(drawable[0]?.id).toMatch(/^local-/);
   });
 
+  it('draws a composer signal a tab attached mid-run has no optimistic message for', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveComposerSignal() } });
+
+    expect(state.entries).toHaveLength(1);
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'hello from the composer' }]);
+  });
+
   it('confirms the optimistic composer message with the streamed signal', () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, {
