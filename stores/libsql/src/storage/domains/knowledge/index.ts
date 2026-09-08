@@ -407,33 +407,55 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #init(): Promise<void> {
+    await loadKnowledgeCore();
+    if (this.#client.protocol !== 'file') {
+      await this.#transaction(tx => this.#initializeSchema(tx));
+      return;
+    }
+    // The local client's transaction() opens another connection, which is a separate
+    // database for :memory:. Keep schema DDL on the supplied connection instead.
+    await withKnowledgeWriteLock(this.getStorageIsolationKey(), () =>
+      this.#db.executeWriteOperationWithRetry(
+        () =>
+          withClientWriteLock(this.#client, async () => {
+            await this.#client.execute('BEGIN IMMEDIATE');
+            try {
+              await this.#initializeSchema(this.#client);
+              await this.#client.execute('COMMIT');
+            } catch (error) {
+              await this.#client.execute('ROLLBACK');
+              throw error;
+            }
+          }),
+        'initialize knowledge schema',
+      ),
+    );
+  }
+
+  async #initializeSchema(tx: Pick<Transaction, 'execute'>): Promise<void> {
     const { KnowledgeSchemaError } = await loadKnowledgeCore();
-    const existingTables = await this.#client.execute(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra_knowledge_%'",
+    const createTable = (input: Parameters<LibSQLDB['createTable']>[0]) =>
+      this.#db.createTable({ ...input, executor: tx });
+    const existingTables = await tx.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'mastra_knowledge_*'",
     );
     const existingNames = new Set(existingTables.rows.map(row => String(row.name)));
-    if (existingNames.size > 0 && !existingNames.has(TABLE_KNOWLEDGE_SCHEMA) && (await this.#replacePublishedV1())) {
-      existingNames.clear();
-    }
-    if (existingNames.size > 0) {
-      if (!existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
+    if (existingNames.size > 0 && !existingNames.has(TABLE_KNOWLEDGE_SCHEMA)) {
+      if (!(await this.#replacePublishedV1(tx))) {
         throw new KnowledgeSchemaError(
           `Knowledge schema reset required: the existing Knowledge schema has no completion marker. ${KNOWLEDGE_RESET_GUIDANCE}`,
         );
       }
-      const marker = await this.#client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
-        throw new KnowledgeSchemaError(
-          `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
-        );
-      }
+      existingNames.clear();
+    }
+    if (existingNames.size > 0) {
       const missing = KNOWLEDGE_TABLE_NAMES.filter(table => !existingNames.has(table));
       if (missing.length > 0)
         throw new KnowledgeSchemaError(
           `Knowledge schema reset required: the existing Knowledge schema is missing ${missing.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
         );
       for (const table of KNOWLEDGE_TABLE_NAMES) {
-        const columns = await this.#client.execute(`PRAGMA table_info("${table}")`);
+        const columns = await tx.execute(`PRAGMA table_info("${table}")`);
         const actual = new Set(columns.rows.map(row => String(row.name)));
         const missingColumns = Object.keys(TABLE_SCHEMAS[table]).filter(column => !actual.has(column));
         if (missingColumns.length > 0) {
@@ -442,111 +464,116 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           );
         }
       }
+      const marker = await tx.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+        throw new KnowledgeSchemaError(
+          `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
+        );
+      }
     }
 
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
-    await this.#db.createTable({
+    await createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
+    await createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
+    await createTable({
       tableName: TABLE_KNOWLEDGE_MENTIONS,
       schema: KNOWLEDGE_MENTIONS_SCHEMA,
       compositePrimaryKey: ['recordId', 'targetNodeId'],
     });
-    await this.#db.createTable({
+    await createTable({
       tableName: TABLE_KNOWLEDGE_NODE_SCOPES,
       schema: KNOWLEDGE_NODE_SCOPES_SCHEMA,
       compositePrimaryKey: ['nodeId', 'scopeNodeId'],
     });
-    await this.#db.createTable({
+    await createTable({
       tableName: TABLE_KNOWLEDGE_RECORD_SCOPES,
       schema: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
       compositePrimaryKey: ['recordId', 'scopeNodeId'],
     });
-    await this.#db.createTable({
+    await createTable({
       tableName: TABLE_KNOWLEDGE_SCOPE_GRANTS,
       schema: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
       compositePrimaryKey: ['scopeNodeId', 'scopeRefId'],
     });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ACCESS_STATE, schema: KNOWLEDGE_ACCESS_STATE_SCHEMA });
-    await this.#db.createTable({
+    await createTable({ tableName: TABLE_KNOWLEDGE_ACCESS_STATE, schema: KNOWLEDGE_ACCESS_STATE_SCHEMA });
+    await createTable({
       tableName: TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
       schema: KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
     });
-    await this.#db.createTable({
+    await createTable({
       tableName: TABLE_KNOWLEDGE_NODE_ADDRESSES,
       schema: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
       compositePrimaryKey: ['source', 'address'],
     });
-    await this.#db.createTable({
+    await createTable({
       tableName: TABLE_KNOWLEDGE_IMPORT_STATE,
       schema: KNOWLEDGE_IMPORT_STATE_SCHEMA,
       compositePrimaryKey: ['importerId', 'binding', 'key'],
     });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_SCHEMA, schema: KNOWLEDGE_SCHEMA_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
-    await this.#db.createTable({
+    await createTable({ tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA });
+    await createTable({ tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA });
+    await createTable({ tableName: TABLE_KNOWLEDGE_SCHEMA, schema: KNOWLEDGE_SCHEMA_SCHEMA });
+    await createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
+    await createTable({
       tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
     });
-    await this.#client.batch(
-      [
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (lower(name))`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (nodeId, id DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId, targetNodeId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status, availableAt, createdAt)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON "${TABLE_KNOWLEDGE_NODE_SCOPES}" (scopeNodeId, nodeId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_record_scopes_scope ON "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (scopeNodeId, recordId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_scope_grants_ref ON "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeRefId, scopeNodeId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_addresses_node ON "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (nodeId)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (importerId, binding, queuedAt DESC)`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_import_run ON "${TABLE_KNOWLEDGE_ACTIVITY}" (importRunId, id DESC)`,
-          args: [],
-        },
-      ],
-      'write',
-    );
-    await this.#client.execute({
+    for (const statement of [
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON "${TABLE_KNOWLEDGE_NODES}" (lower(name))`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON "${TABLE_KNOWLEDGE_RECORDS}" (nodeId, id DESC)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_mentions_record ON "${TABLE_KNOWLEDGE_MENTIONS}" (recordId, targetNodeId)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON "${TABLE_KNOWLEDGE_ACTIVITY}" (id DESC)`,
+        args: [],
+      },
+      {
+        sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (idempotencyKey)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" (status, availableAt, createdAt)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON "${TABLE_KNOWLEDGE_NODE_SCOPES}" (scopeNodeId, nodeId)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_record_scopes_scope ON "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (scopeNodeId, recordId)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_scope_grants_ref ON "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" (scopeRefId, scopeNodeId)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_addresses_node ON "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" (nodeId)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (importerId, binding, queuedAt DESC)`,
+        args: [],
+      },
+      {
+        sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_import_run ON "${TABLE_KNOWLEDGE_ACTIVITY}" (importRunId, id DESC)`,
+        args: [],
+      },
+    ]) {
+      await tx.execute(statement);
+    }
+    await tx.execute({
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch) VALUES ('global', 0)`,
       args: [],
     });
-    await this.#client.execute({
+    await tx.execute({
       sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_SCHEMA}" (id, version) VALUES ('canonical', ?)`,
       args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
     });
@@ -556,39 +583,38 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
    * Knowledge v1 and the interim canonical-model release were experimental and their data is not
    * migrated. When exactly the published v1 or interim tables and indexes are the only Knowledge
    * objects, drop them, discarding any rows they hold, so canonical storage can initialize. Partial or
-   * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched.
+   * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched. Runs on the
+   * caller's init transaction, so a failed canonical creation restores the replaced tables.
    */
-  async #replacePublishedV1(): Promise<boolean> {
-    return this.#transaction(async tx => {
-      const objects = await tx.execute(
-        "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+  async #replacePublishedV1(tx: Pick<Transaction, 'execute'>): Promise<boolean> {
+    const objects = await tx.execute(
+      "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+    );
+    const tables: string[] = [];
+    const indexes: string[] = [];
+    for (const row of objects.rows) {
+      const type = String(row.type);
+      const name = String(row.name);
+      if (type === 'table' && REPLACEABLE_KNOWLEDGE_TABLE_NAMES.has(name)) tables.push(name);
+      else if (type === 'index') indexes.push(name);
+      else return false;
+    }
+    const columnsByTable = new Map<string, string[]>();
+    for (const table of tables) {
+      const columns = await tx.execute(`PRAGMA table_info("${table}")`);
+      columnsByTable.set(
+        table,
+        columns.rows.map(row => String(row.name)),
       );
-      const tables: string[] = [];
-      const indexes: string[] = [];
-      for (const row of objects.rows) {
-        const type = String(row.type);
-        const name = String(row.name);
-        if (type === 'table' && REPLACEABLE_KNOWLEDGE_TABLE_NAMES.has(name)) tables.push(name);
-        else if (type === 'index') indexes.push(name);
-        else return false;
-      }
-      const columnsByTable = new Map<string, string[]>();
-      for (const table of tables) {
-        const columns = await tx.execute(`PRAGMA table_info("${table}")`);
-        columnsByTable.set(
-          table,
-          columns.rows.map(row => String(row.name)),
-        );
-      }
-      const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
-      if (!knownIndexes) return false;
-      if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
-      // Children before the tables they reference.
-      const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
-      tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));
-      for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
-      return true;
-    });
+    }
+    const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
+    if (!knownIndexes) return false;
+    if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
+    // Children before the tables they reference.
+    const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
+    tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));
+    for (const table of tables) await tx.execute(`DROP TABLE "${table}"`);
+    return true;
   }
 
   override async dangerouslyReset(): Promise<void> {

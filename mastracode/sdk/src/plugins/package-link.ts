@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,6 +57,49 @@ export function findMastraCodePackageRoot(startDir: string): string {
       throw new Error(`Could not find mastracode package root from ${startDir}`);
     }
     currentDir = parentDir;
+  }
+}
+
+function resolvedPackageRoot(entryPath: string, packageName: string): string | undefined {
+  let resolved: string;
+  try {
+    resolved = createRequire(entryPath).resolve(`${packageName}/package.json`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') return undefined;
+    throw error;
+  }
+  let dir = path.dirname(fs.realpathSync(resolved));
+  while (true) {
+    if (readPackageName(dir) === packageName) return fs.realpathSync(dir);
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`Could not find package root for ${packageName} at ${resolved}`);
+    dir = parent;
+  }
+}
+
+/** Reject nested runtime copies before importing any plugin code or opening its storage. */
+export function assertHostPluginRuntime(entryPath: string): void {
+  for (const name of ['mastracode', '@mastra/code-sdk']) {
+    const pluginRoot = resolvedPackageRoot(entryPath, name);
+    if (!pluginRoot) continue;
+    let hostRoot: string | undefined;
+    if (name === 'mastracode') {
+      try {
+        hostRoot = fs.realpathSync(mastraCodePackageRoot());
+      } catch {
+        // SDK-only consumers need not install the CLI runtime.
+        hostRoot = undefined;
+      }
+    } else {
+      hostRoot = resolvedPackageRoot(fileURLToPath(import.meta.url), name);
+    }
+    if (pluginRoot !== hostRoot) {
+      throw new Error(
+        `Plugin runtime mismatch: ${name} resolves to ${pluginRoot}, but the host uses ${hostRoot ?? 'no CLI runtime'}. ` +
+          'Plugin code was not loaded. Remove the plugin-local runtime copy and use the host runtime ' +
+          '(declare a peer dependency and reinstall/relink the plugin), then restart Mastra Code. Do not reset storage.',
+      );
+    }
   }
 }
 
