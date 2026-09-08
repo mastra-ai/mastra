@@ -17,8 +17,11 @@
  * the server.
  */
 
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Knowledge } from '@mastra/core/knowledge';
+import type { MaterializeKnowledgeScopeInput } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -246,6 +249,310 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const demoKnowledgeEnabled = process.env.NODE_ENV !== 'production';
+const demoRepository = process.env.MASTRACODE_DEMO_GITHUB_REPOSITORY?.trim() || 'mastra-ai/mastra';
+const demoRepositoryMatch = /^([^/]+)\/([^/]+)$/.exec(demoRepository);
+if (demoKnowledgeEnabled && !demoRepositoryMatch) {
+  throw new Error('MASTRACODE_DEMO_GITHUB_REPOSITORY must use the form owner/repository.');
+}
+const demoKnowledge = demoKnowledgeEnabled
+  ? new Knowledge({
+      id: 'mastra',
+      description: 'Local Factory demo knowledge imported from the latest GitHub pull requests.',
+      storage: storage.getMastraStorage(),
+    })
+  : undefined;
+const demoImportRuns = new Map<string, Promise<void>>();
+
+type DemoGitHubUser = {
+  login: string;
+  html_url?: string;
+  avatar_url?: string;
+};
+
+type DemoGitHubItem = {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  state: string;
+  draft?: boolean;
+  user: DemoGitHubUser;
+  assignees?: DemoGitHubUser[];
+  requested_reviewers?: DemoGitHubUser[];
+  created_at: string;
+  updated_at: string;
+  merged_at?: string | null;
+  base?: { ref: string };
+  head?: { ref: string };
+  pull_request?: object;
+};
+
+function demoGithubReferences(item: DemoGitHubItem): number[] {
+  const references = new Set<number>();
+  for (const match of `${item.title}\n${item.body ?? ''}`.matchAll(/(?:^|[^\w])#(\d+)\b/g)) {
+    const number = Number(match[1]);
+    if (number !== item.number) references.add(number);
+  }
+  return [...references];
+}
+
+function demoGithubMentionedUsers(item: DemoGitHubItem): string[] {
+  const logins = new Set<string>();
+  for (const match of (item.body ?? '').matchAll(/(?:^|[^\w])@([a-z\d](?:[a-z\d-]{0,38}))/gi)) {
+    if (match[1]) logins.add(match[1].toLowerCase());
+  }
+  return [...logins];
+}
+
+function demoGithubUserAddress(login: string): string {
+  return `github:user:${encodeURIComponent(login.toLowerCase())}`;
+}
+
+// GitHub App logins end in `[bot]`, which would break `[[@login]]` wikilinks.
+function demoGithubUserName(login: string): string {
+  return `@${login.replace(/\[bot\]$/i, ' (bot)')}`;
+}
+
+async function configureDemoKnowledgeProject(input: {
+  knowledge: Knowledge;
+  projectId: string;
+  orgScopeAddress: string;
+  resourceScopeAddress: string;
+  repositoryScope: MaterializeKnowledgeScopeInput;
+}): Promise<void> {
+  const [, owner, repository] = demoRepositoryMatch!;
+  const repositoryScopeAddress = input.repositoryScope.address;
+  const importerId = 'github-graph-demo-v3';
+  const source = `github:${owner}/${repository}:graph-v3`;
+  const pullRequestsAddress = `github:${owner}/${repository}:pull-requests`;
+  const issuesAddress = `github:${owner}/${repository}:issues`;
+  const contributorsAddress = `github:${owner}/${repository}:contributors`;
+
+  if (!input.knowledge.getImporter(importerId)) {
+    input.knowledge.registerImporter({
+      id: importerId,
+      access: {
+        [input.orgScopeAddress]: 'owner',
+        [input.resourceScopeAddress]: 'owner',
+        [repositoryScopeAddress]: 'owner',
+      },
+      triggers: {
+        cron: {
+          schedule: '0 9 * * *',
+          bindings: [{ source, scope: repositoryScopeAddress }],
+        },
+      },
+      handler: async context => {
+        const headers: Record<string, string> = {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'mastra-factory-knowledge-demo',
+        };
+        if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+        const githubFetch = async (path: string) => {
+          const response = await fetch(`https://api.github.com/repos/${owner}/${repository}${path}`, {
+            headers,
+            signal: context.signal,
+          });
+          if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw new Error(
+              `GitHub returned ${response.status} for ${owner}/${repository}${path}: ${detail.slice(0, 200)}`,
+            );
+          }
+          return response.json();
+        };
+
+        const [pullPayload, issuePayload] = await Promise.all([
+          githubFetch('/pulls?state=all&sort=created&direction=desc&per_page=10'),
+          githubFetch('/issues?state=all&sort=created&direction=desc&per_page=30'),
+        ]);
+        const pulls = pullPayload as DemoGitHubItem[];
+        const issues = (issuePayload as DemoGitHubItem[]).filter(item => !item.pull_request).slice(0, 10);
+        const itemsByNumber = new Map([...pulls, ...issues].map(item => [item.number, item]));
+        const referencedNumbers = [...new Set([...itemsByNumber.values()].flatMap(demoGithubReferences))]
+          .filter(number => !itemsByNumber.has(number))
+          .slice(0, 20);
+        // Sequential on purpose: GitHub's secondary rate limit rejects bursts
+        // of concurrent requests with 403 regardless of remaining quota.
+        for (const number of referencedNumbers) {
+          const item = (await githubFetch(`/issues/${number}`)) as DemoGitHubItem;
+          itemsByNumber.set(item.number, item);
+        }
+
+        const items = [...itemsByNumber.values()];
+        const itemKind = (item: DemoGitHubItem) => (item.pull_request || item.base ? 'pr' : 'issue');
+        const itemAddress = (item: DemoGitHubItem) => `github:${owner}/${repository}:${itemKind(item)}:${item.number}`;
+        const itemName = (item: DemoGitHubItem) => `${itemKind(item) === 'pr' ? 'PR' : 'Issue'} #${item.number}`;
+        const users = new Map<string, DemoGitHubUser>();
+        for (const item of items) {
+          const actors = [item.user, ...(item.assignees ?? []), ...(item.requested_reviewers ?? [])];
+          for (const actor of actors) users.set(actor.login.toLowerCase(), actor);
+          for (const login of demoGithubMentionedUsers(item)) {
+            if (!users.has(login)) users.set(login, { login });
+          }
+        }
+
+        const importer = await context.importer();
+        await importer.upsertNode(pullRequestsAddress, {
+          name: 'Pull requests',
+          kind: 'collection',
+          metadata: { type: 'github-category', repository: `${owner}/${repository}` },
+        });
+        await importer.upsertNode(issuesAddress, {
+          name: 'Issues',
+          kind: 'collection',
+          metadata: { type: 'github-category', repository: `${owner}/${repository}` },
+        });
+        await importer.upsertNode(contributorsAddress, {
+          name: 'Contributors',
+          kind: 'collection',
+          metadata: { type: 'github-category', repository: `${owner}/${repository}` },
+        });
+        for (const user of users.values()) {
+          await importer.upsertNode(demoGithubUserAddress(user.login), {
+            name: demoGithubUserName(user.login),
+            kind: 'person',
+            metadata: { type: 'github-user', login: user.login, url: user.html_url, avatarUrl: user.avatar_url },
+          });
+        }
+        for (const item of items) {
+          const kind = itemKind(item);
+          await importer.upsertNode(itemAddress(item), {
+            name: itemName(item),
+            kind: kind === 'pr' ? 'pull-request' : 'issue',
+            metadata: {
+              type: kind === 'pr' ? 'pull-request' : 'issue',
+              title: item.title,
+              repository: `${owner}/${repository}`,
+              number: item.number,
+              url: item.html_url,
+              state: item.merged_at ? 'merged' : item.state,
+              draft: item.draft,
+              author: item.user.login,
+              base: item.base?.ref,
+              head: item.head?.ref,
+              createdAt: item.created_at,
+              updatedAt: item.updated_at,
+            },
+          });
+        }
+
+        // One record per relationship: each record is a labeled edge with its
+        // own provenance, so the canvas renders "PR #N — reviewed by @x"
+        // rather than a hub node with a blob of links.
+        const entries: Array<{ address: string; text: string; metadata: Record<string, unknown> }> = [];
+        const relate = (address: string, relationship: string, text: string, metadata: Record<string, unknown> = {}) =>
+          entries.push({ address, text, metadata: { relationship, ...metadata } });
+        const userLink = (login: string) => `[[${demoGithubUserName(users.get(login.toLowerCase())?.login ?? login)}]]`;
+        const itemLabel = (item: DemoGitHubItem) => (itemKind(item) === 'pr' ? 'pull request' : 'issue');
+
+        for (const item of items) {
+          const kind = itemKind(item);
+          const address = itemAddress(item);
+          const provenance = { url: item.html_url, updatedAt: item.updated_at };
+          const body = (item.body?.trim() || `No ${itemLabel(item)} description.`)
+            .replaceAll('[[', '［［')
+            .replaceAll(']]', '］］');
+
+          relate(address, 'description', [`# ${itemName(item)}: ${item.title}`, body].join('\n\n'), {
+            ...provenance,
+            state: item.merged_at ? 'merged' : item.state,
+            draft: item.draft,
+            ...(item.head && item.base ? { head: item.head.ref, base: item.base.ref } : {}),
+          });
+          relate(
+            kind === 'pr' ? pullRequestsAddress : issuesAddress,
+            'contains',
+            `${itemName(item)} (${item.title}) is a ${itemLabel(item)} in this collection: [[${itemName(item)}]]`,
+            provenance,
+          );
+          relate(address, 'authored-by', `${itemName(item)} was opened by ${userLink(item.user.login)}`, provenance);
+          for (const assignee of item.assignees ?? []) {
+            relate(address, 'assigned-to', `${itemName(item)} is assigned to ${userLink(assignee.login)}`, provenance);
+          }
+          for (const reviewer of item.requested_reviewers ?? []) {
+            relate(
+              address,
+              'reviewed-by',
+              `${itemName(item)} requests review from ${userLink(reviewer.login)}`,
+              provenance,
+            );
+          }
+          const explicitActors = new Set(
+            [item.user, ...(item.assignees ?? []), ...(item.requested_reviewers ?? [])].map(user =>
+              user.login.toLowerCase(),
+            ),
+          );
+          for (const login of demoGithubMentionedUsers(item)) {
+            if (explicitActors.has(login)) continue;
+            relate(address, 'mentions', `${itemName(item)} mentions ${userLink(login)}`, provenance);
+          }
+          for (const number of demoGithubReferences(item)) {
+            const related = itemsByNumber.get(number);
+            if (!related) continue;
+            relate(address, 'references', `${itemName(item)} references [[${itemName(related)}]]`, provenance);
+          }
+        }
+        for (const user of users.values()) {
+          relate(
+            contributorsAddress,
+            'contains',
+            `${userLink(user.login)} contributes to ${owner}/${repository}`,
+            user.html_url ? { url: user.html_url } : {},
+          );
+        }
+
+        const desiredByAddress = new Map<string, Map<string, (typeof entries)[number]>>();
+        for (const entry of entries) {
+          const recordId = createHash('sha256')
+            .update(`${entry.address}:${entry.text}`)
+            .digest('hex')
+            .replace(/^(.{8})(.{4}).(.{3}).(.{3})(.{12}).*$/, '$1-$2-4$3-8$4-$5');
+          let byId = desiredByAddress.get(entry.address);
+          if (!byId) desiredByAddress.set(entry.address, (byId = new Map()));
+          byId.set(recordId, entry);
+        }
+        const nodeAddresses = new Set([
+          ...desiredByAddress.keys(),
+          ...items.map(itemAddress),
+          ...[...users.keys()].map(demoGithubUserAddress),
+        ]);
+        for (const address of nodeAddresses) {
+          const node = await importer.getNode(address);
+          if (!node) throw new Error(`GitHub node disappeared before record reconciliation: ${address}`);
+          const desired = desiredByAddress.get(address) ?? new Map();
+          const existing = await node.listRecords();
+          for (const record of existing) {
+            if (!desired.has(record.id)) await node.removeRecord(record.id);
+          }
+          const existingIds = new Set(existing.map(record => record.id));
+          for (const [recordId, entry] of desired) {
+            if (existingIds.has(recordId)) continue;
+            await node.appendRecord({ id: recordId, text: entry.text, metadata: entry.metadata });
+          }
+        }
+        await context.state.set('latestCreatedAt', pulls[0]?.created_at ?? new Date().toISOString());
+      },
+    });
+  }
+
+  if (!demoImportRuns.has(input.projectId)) {
+    // The destination scope must exist before the importer binds to it.
+    // Materialization is idempotent and coalesces with Factory's own pass
+    // over the access profile, so this never races the profile hook.
+    const run = input.knowledge
+      .materializeScope(input.repositoryScope)
+      .then(async () => {
+        await input.knowledge.getImporter(importerId)!.run({ source, scope: repositoryScopeAddress }, undefined);
+      })
+      .catch((error: unknown) => {
+        console.error(`[demo-knowledge] GitHub import for ${input.projectId} failed`, error);
+      });
+    demoImportRuns.set(input.projectId, run);
+  }
+}
+
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
@@ -323,6 +630,33 @@ export const factory = new MastraFactory({
   // local dev) → default storage resolution applies (local libSQL file).
   storage,
   vector,
+  ...(demoKnowledge
+    ? {
+        knowledge: demoKnowledge,
+        knowledgeAccessProfile: async ({ knowledge, projectId, builtInScopes }) => {
+          const repositoryScope = {
+            address: `resource:${projectId}:github:${demoRepository}`,
+            name: demoRepository,
+            parentAddresses: [builtInScopes.resource.address],
+            contextualScopeAddress: builtInScopes.resource.address,
+            parameters: { repository: demoRepository },
+          };
+          await configureDemoKnowledgeProject({
+            knowledge,
+            projectId,
+            orgScopeAddress: builtInScopes.org.address,
+            resourceScopeAddress: builtInScopes.resource.address,
+            repositoryScope,
+          });
+          return {
+            id: `local-demo:${projectId}`,
+            rootScopeAddress: builtInScopes.org.address,
+            baselineScopes: [builtInScopes.org, builtInScopes.resource, repositoryScope],
+            vouchedScopeAddresses: [builtInScopes.org.address, builtInScopes.resource.address, repositoryScope.address],
+          };
+        },
+      }
+    : {}),
   pubsub,
   platform: {
     // The deployment's own self-hosted App slug, when one is configured. It is

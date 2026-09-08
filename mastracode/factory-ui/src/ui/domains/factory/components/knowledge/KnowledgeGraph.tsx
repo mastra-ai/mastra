@@ -157,12 +157,13 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
       <BaseEdge
         id={id}
         path={path}
-        style={
+        style={{
+          vectorEffect: 'non-scaling-stroke',
           // A9: a pinned record marks the RELATIONSHIP — the amber accent
           // rides the edge, with a pin chip at the arc's midpoint. Edges
           // touching a knowledge record marker are white, echoing the Mastra logo.
           // A selected record (open in the flyout) lights its edge up.
-          data?.focused
+          ...(data?.focused
             ? {
                 stroke: pinned ? 'rgba(251,191,36,1)' : 'rgba(255,255,255,0.95)',
                 strokeWidth: 2.5,
@@ -174,8 +175,8 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
                 ? { stroke: 'rgba(167,139,250,0.7)', strokeWidth: 1.5, strokeDasharray: '6 5' }
                 : source.startsWith('record:') || target.startsWith('record:')
                   ? { stroke: 'rgba(255,255,255,0.45)', strokeWidth: 1.2 }
-                  : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }
-        }
+                  : { stroke: 'rgba(139,92,246,0.4)', strokeWidth: 1.4 }),
+        }}
       />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
         <EdgeLabelRenderer>

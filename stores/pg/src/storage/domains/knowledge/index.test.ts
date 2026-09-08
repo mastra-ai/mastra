@@ -3,6 +3,7 @@ import { knowledgeImporterBindingKey, KnowledgeSchemaError, TABLE_KNOWLEDGE_SCHE
 import { Pool } from 'pg';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
+import { PostgresStore } from '../..';
 import { PoolAdapter } from '../../client';
 import { connectionString } from '../../test-utils';
 import { getPgKnowledgeIsolationKey, KnowledgePG, postgresSql } from '.';
@@ -102,6 +103,44 @@ describe('KnowledgePG schema completion marker', () => {
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
     expect(marker.rows[0]?.version).toBe(1);
+  });
+
+  it.each([false, true])('preserves incidental legacy schema on startup (populated: %s)', async populated => {
+    const schemaName = `knowledge_rollout_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await pool.query(`CREATE TABLE "${schemaName}".mastra_knowledge_nodes (id TEXT PRIMARY KEY, type TEXT)`);
+    await pool.query(`CREATE INDEX legacy_type ON "${schemaName}".mastra_knowledge_nodes (type)`);
+    await pool.query(`CREATE TABLE "${schemaName}".unrelated_sentinel (value TEXT)`);
+    await pool.query(`INSERT INTO "${schemaName}".unrelated_sentinel VALUES ('preserved')`);
+    if (populated) await pool.query(`INSERT INTO "${schemaName}".mastra_knowledge_nodes VALUES ('legacy', 'node')`);
+    const before = await pool.query(
+      'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname=$1 ORDER BY indexname',
+      [schemaName],
+    );
+    const storage = new PostgresStore({ id: 'rollout', pool, schemaName });
+    try {
+      await storage.init();
+      await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      const tables = await pool.query(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema=$1 AND table_name LIKE 'mastra_knowledge_%' ORDER BY table_name`,
+        [schemaName],
+      );
+      expect(tables.rows.map(row => row.table_name)).toEqual(['mastra_knowledge_nodes']);
+      const after = await pool.query(
+        `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname=$1 AND tablename='mastra_knowledge_nodes' ORDER BY indexname`,
+        [schemaName],
+      );
+      expect(after.rows).toEqual(before.rows);
+      expect((await pool.query(`SELECT * FROM "${schemaName}".mastra_knowledge_nodes`)).rows).toEqual(
+        populated ? [{ id: 'legacy', type: 'node' }] : [],
+      );
+      expect((await pool.query(`SELECT value FROM "${schemaName}".unrelated_sentinel`)).rows).toEqual([
+        { value: 'preserved' },
+      ]);
+    } finally {
+      await storage.close();
+    }
   });
 
   it('rejects a markerless partial schema without mutating it', async () => {
