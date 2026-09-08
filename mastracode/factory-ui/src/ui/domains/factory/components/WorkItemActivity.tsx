@@ -1,3 +1,5 @@
+import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -5,7 +7,7 @@ import { History } from 'lucide-react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
-import { CREATED_ACTION } from '../workItemActivity';
+import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -13,8 +15,8 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 });
 
-const ACTION_LABELS: Record<string, string> = {
-  'factory.work_item.assigned': 'Assigned the item',
+const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string>> = {
+  [ASSIGNED_ACTION]: 'Assigned the item',
   'factory.work_item.updated': 'Updated the item',
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.deleted': 'Removed the item',
@@ -24,9 +26,14 @@ const ACTION_LABELS: Record<string, string> = {
   'factory.run.dismissed': 'Dismissed a suggested run',
 };
 
+function knownActionLabel(action: string): string | undefined {
+  if (isAuditAction(action) || action === ASSIGNED_ACTION) return ACTION_LABELS[action];
+  return undefined;
+}
+
 function actionLabel(action: string): string {
   return (
-    ACTION_LABELS[action] ??
+    knownActionLabel(action) ??
     action
       .replace(/^factory\./, '')
       .replaceAll('.', ' ')

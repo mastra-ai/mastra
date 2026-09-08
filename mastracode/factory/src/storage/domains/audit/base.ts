@@ -17,6 +17,8 @@
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
+import type { AuditActorType } from './actors.js';
+
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
   /** Target kind, e.g. 'work_item', 'worktree', 'issue', 'pull_request'. */
@@ -27,8 +29,7 @@ export interface AuditTarget {
   name?: string;
 }
 
-/** Who performed the audited action. */
-export type AuditActorType = 'human' | 'agent' | 'system';
+export type { AuditActorType } from './actors.js';
 
 /** Display name and avatar of a human actor, stamped at record time because MastraAuthStudio cannot resolve users by id. */
 export interface AuditActorProfileInput {

@@ -1,3 +1,5 @@
+import { isAuditAction, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -54,7 +56,7 @@ function actorName(by: string | undefined, roster: Map<string, FactoryMentionMem
   return roster.get(by)?.name ?? 'Someone';
 }
 
-const DEED_GLYPHS: Record<string, LucideIcon> = {
+const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
   run: Play,
   git: GitCommitHorizontal,
   agent: Bot,
@@ -62,34 +64,37 @@ const DEED_GLYPHS: Record<string, LucideIcon> = {
   work_item: SquarePen,
 };
 
-/** The verb that makes the rail read as prose; anything new falls back to its own label. */
-const DEED_PHRASES: Record<string, string> = {
-  'run.started': 'started a run on',
-  'run.ended': 'ended a run on',
-  'run.approved': 'approved the run on',
-  'run.dismissed': 'dismissed the run on',
-  'git.commit': 'committed to',
-  'git.push': 'pushed to',
-  'git.pr_opened': 'opened a pull request for',
-  'agent.commit': 'committed to',
-  'agent.push': 'pushed to',
-  'agent.pr_opened': 'opened a pull request for',
-  'work_item.comment_created': 'commented:',
-  'work_item.comment_edited': 'edited a comment:',
-  'work_item.comment_deleted': 'deleted a comment:',
-  'work_item.comment_mentioned': 'mentioned someone:',
-  'work_item.created': 'created',
-  'work_item.updated': 'updated',
-  'work_item.deleted': 'deleted',
-  'work_item.transition_rejected': 'was blocked moving',
-  'intake.config_updated': 'changed intake settings on',
-  'intake.binding_updated': 'changed an intake binding on',
+/** The verb that makes the rail read as prose; a row off the registry falls back to its own label. */
+const DEED_PHRASES: Record<AuditAction, string> = {
+  'factory.run.started': 'started a run on',
+  'factory.run.ended': 'ended a run on',
+  'factory.run.approved': 'approved the run on',
+  'factory.run.dismissed': 'dismissed the run on',
+  'factory.run.retry': 'retried the run on',
+  'factory.git.commit': 'committed to',
+  'factory.git.push': 'pushed to',
+  'factory.git.pr_opened': 'opened a pull request for',
+  'factory.agent.commit': 'committed to',
+  'factory.agent.push': 'pushed to',
+  'factory.agent.pr_opened': 'opened a pull request for',
+  'factory.agent.signaled': 'signaled',
+  'factory.work_item.created': 'created',
+  'factory.work_item.updated': 'updated',
+  'factory.work_item.deleted': 'deleted',
+  'factory.work_item.stage_moved': 'moved',
+  'factory.work_item.transition_rejected': 'was blocked moving',
+  'factory.work_item.comment_created': 'commented:',
+  'factory.work_item.comment_edited': 'edited a comment:',
+  'factory.work_item.comment_deleted': 'deleted a comment:',
+  'factory.work_item.comment_mentioned': 'mentioned someone:',
+  'factory.work_item.labels_reconciled': 'reconciled the labels on',
+  'factory.intake.config_updated': 'changed intake settings on',
+  'factory.intake.binding_updated': 'changed an intake binding on',
 };
 
 /** Some events name nothing — an intake setting has no title — so the verb drops its preposition. */
 function deedPhrase(action: string, named: boolean): string {
-  const [, namespace, leaf] = action.split('.');
-  const phrase = DEED_PHRASES[`${namespace}.${leaf}`] ?? auditActionLabel(action).toLowerCase();
+  const phrase = isAuditAction(action) ? DEED_PHRASES[action] : auditActionLabel(action).toLowerCase();
   return named ? phrase : phrase.replace(/ (?:on|to|for|of)$/, '');
 }
 
@@ -100,9 +105,9 @@ function entryTone(entry: ActivityEntry): BadgeVariant {
 }
 
 function entryGlyph(entry: ActivityEntry): LucideIcon {
-  return entry.kind === 'move'
-    ? (STAGE_GLYPHS[entry.stages.at(-1) ?? ''] ?? ListFilter)
-    : (DEED_GLYPHS[entry.action.split('.')[1] ?? ''] ?? SquarePen);
+  if (entry.kind === 'move') return STAGE_GLYPHS[entry.stages.at(-1) ?? ''] ?? ListFilter;
+  const namespace = parseAuditAction(entry.action)?.namespace;
+  return namespace ? DEED_GLYPHS[namespace] : SquarePen;
 }
 
 function Node({ entry }: { entry: ActivityEntry }) {

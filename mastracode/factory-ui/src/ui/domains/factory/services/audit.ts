@@ -1,30 +1,11 @@
-export interface AuditTarget {
-  type: string;
-  id: string;
-  name?: string;
-}
+import { isAuditActorType } from '@mastra/factory/storage/domains/audit/actors';
+import type { AuditTarget } from '@mastra/factory/storage/domains/audit/base';
+import type { WireAuditActor, WireAuditEvent, WireAuditPage } from '@mastra/factory/storage/domains/audit/wire';
 
-export interface AuditActorProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
-export interface AuditEvent {
-  id: string;
-  actorId: string;
-  actorType: 'human' | 'agent' | 'system';
-  action: string;
-  targets: AuditTarget[];
-  metadata: Record<string, unknown>;
-  occurredAt: string;
-}
-
-export interface AuditEventPage {
-  events: AuditEvent[];
-  actors: Record<string, AuditActorProfile>;
-  nextCursor?: string;
-}
+export type { AuditTarget };
+export type AuditActorProfile = WireAuditActor;
+export type AuditEvent = WireAuditEvent;
+export type AuditEventPage = WireAuditPage;
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
@@ -60,7 +41,7 @@ function isAuditEvent(value: unknown): value is AuditEvent {
     'actorId' in value &&
     typeof value.actorId === 'string' &&
     'actorType' in value &&
-    (value.actorType === 'human' || value.actorType === 'agent' || value.actorType === 'system') &&
+    isAuditActorType(value.actorType) &&
     'action' in value &&
     typeof value.action === 'string' &&
     'targets' in value &&

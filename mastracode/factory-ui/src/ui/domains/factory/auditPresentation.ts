@@ -1,47 +1,32 @@
+import { auditNamespaces, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import type { AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 
 import type { AuditEvent } from './services/audit';
 import { stageLabel } from './stages';
 
-export const AUDIT_CATEGORIES = [
-  {
-    namespace: 'work_item',
-    tone: 'purple' satisfies BadgeVariant,
-    label: 'Work items',
-    dotClass: 'bg-accent3',
-    strokeClass: 'stroke-accent3',
-  },
-  {
-    namespace: 'run',
-    tone: 'green' satisfies BadgeVariant,
-    label: 'Runs',
-    dotClass: 'bg-positive1',
-    strokeClass: 'stroke-positive1',
-  },
-  {
-    namespace: 'git',
-    tone: 'orange' satisfies BadgeVariant,
-    label: 'Git',
-    dotClass: 'bg-(--chart-4)',
-    strokeClass: 'stroke-(--chart-4)',
-  },
-  {
-    namespace: 'agent',
-    tone: 'blue' satisfies BadgeVariant,
-    label: 'Agent',
-    dotClass: 'bg-accent6',
-    strokeClass: 'stroke-accent6',
-  },
-  {
-    namespace: 'intake',
-    tone: 'cyan' satisfies BadgeVariant,
-    label: 'Intake',
-    dotClass: 'bg-neutral2',
-    strokeClass: 'stroke-neutral2',
-  },
-] as const;
+export type { AuditNamespace };
 
-export type AuditNamespace = (typeof AUDIT_CATEGORIES)[number]['namespace'];
+interface AuditCategoryStyle {
+  tone: BadgeVariant;
+  label: string;
+  dotClass: string;
+  strokeClass: string;
+}
+
+const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
+  work_item: { tone: 'purple', label: 'Work items', dotClass: 'bg-accent3', strokeClass: 'stroke-accent3' },
+  run: { tone: 'green', label: 'Runs', dotClass: 'bg-positive1', strokeClass: 'stroke-positive1' },
+  git: { tone: 'orange', label: 'Git', dotClass: 'bg-(--chart-4)', strokeClass: 'stroke-(--chart-4)' },
+  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-accent6', strokeClass: 'stroke-accent6' },
+  intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-neutral2', strokeClass: 'stroke-neutral2' },
+};
+
+/** The server's namespaces, in its order, dressed for the page. */
+export const AUDIT_CATEGORIES = auditNamespaces().map(namespace => ({
+  namespace,
+  ...AUDIT_CATEGORY_STYLES[namespace],
+}));
 
 export interface AuditTimeRange {
   from: number;
@@ -106,7 +91,7 @@ export function auditNamespacesForCategories(selected: ReadonlySet<AuditNamespac
 }
 
 export function auditCategory(action: string) {
-  const namespace = action.split('.')[1];
+  const namespace = parseAuditAction(action)?.namespace;
   return AUDIT_CATEGORIES.find(category => category.namespace === namespace);
 }
 
@@ -115,9 +100,9 @@ function words(value: string): string {
 }
 
 export function auditActionLabel(action: string): string {
-  const [, namespace, leaf] = action.split('.');
-  const prefix = namespace && namespace !== 'work_item' ? `${words(namespace)} ` : '';
-  const description = leaf ? `${prefix}${words(leaf)}` : words(action);
+  const parsed = parseAuditAction(action);
+  const prefix = parsed && parsed.namespace !== 'work_item' ? `${words(parsed.namespace)} ` : '';
+  const description = parsed ? `${prefix}${words(parsed.leaf)}` : words(action);
   return description.charAt(0).toUpperCase() + description.slice(1);
 }
 

@@ -1,5 +1,7 @@
 /** `stageHistory` ships in full on every card, so the whole stream is a client-side read — no window, no second endpoint. */
 
+import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
+
 import type { BoardKind } from './boardStages';
 import { itemBoard } from './boardStages';
 import type { MovedItem } from './overview';
@@ -85,7 +87,7 @@ export interface ActivityDeed {
 export type ActivityEntry = ActivityMove | ActivityDeed;
 
 /** `factoryActivity` owns moves from `stageHistory`; the audit copy would show each one twice. */
-const STAGE_MOVE_ACTION = 'factory.work_item.stage_moved';
+const STAGE_MOVE_ACTION = 'factory.work_item.stage_moved' satisfies AuditAction;
 
 /** A card the board still holds, as the audit trail's bare target ids need it. */
 export interface ActivityCard {

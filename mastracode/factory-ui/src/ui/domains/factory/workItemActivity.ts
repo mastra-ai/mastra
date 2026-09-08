@@ -1,13 +1,8 @@
+import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
-
-const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
 
 export interface WorkItemActivity {
   events: AuditEvent[];
@@ -19,11 +14,6 @@ export interface WorkItemActivity {
    * authors on synthetic "created" events resolve to a name + avatar.
    */
   extraActors: Record<string, AuditActorProfile>;
-}
-
-export function isHumanActor(actorId: string | undefined): actorId is string {
-  if (!actorId) return false;
-  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
 }
 
 function actorProfile(actorId: string, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
@@ -73,8 +63,8 @@ function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined 
   return { id: `linear:${assignee}`, name: assignee };
 }
 
-export const CREATED_ACTION = 'factory.work_item.created';
-const ASSIGNED_ACTION = 'factory.work_item.assigned';
+export const CREATED_ACTION = 'factory.work_item.created' satisfies AuditAction;
+export const ASSIGNED_ACTION = 'factory.work_item.assigned';
 
 /**
  * Synthesize a "created" event from the item itself so review boards populated
@@ -84,7 +74,7 @@ const ASSIGNED_ACTION = 'factory.work_item.assigned';
  */
 function syntheticCreatedEvent(item: WorkItem, hasRealCreateEvent: boolean): AuditEvent | undefined {
   if (hasRealCreateEvent) return undefined;
-  const isHuman = isHumanActor(item.createdBy);
+  const isHuman = isHumanActorId(item.createdBy);
   const creator = externalCreatorProfile(item);
   return {
     id: `synthetic-created:${item.id}`,
@@ -130,8 +120,8 @@ function targetsWorkItem(event: AuditEvent, workItemId: string): boolean {
 function latestStageWorker(item: WorkItem): { actorId: string; occurredAt: string } | undefined {
   const candidates = item.stageHistory.flatMap(entry => {
     const actors: Array<{ actorId: string; occurredAt: string }> = [];
-    if (isHumanActor(entry.by)) actors.push({ actorId: entry.by, occurredAt: entry.enteredAt });
-    if (entry.exitedAt && isHumanActor(entry.exitedBy)) {
+    if (isHumanActorId(entry.by)) actors.push({ actorId: entry.by, occurredAt: entry.enteredAt });
+    if (entry.exitedAt && isHumanActorId(entry.exitedBy)) {
       actors.push({ actorId: entry.exitedBy, occurredAt: entry.exitedAt });
     }
     return actors;
@@ -147,7 +137,7 @@ export function workItemHumanActorIds(item: WorkItem): string[] {
     item.createdBy,
     ...item.stageHistory.flatMap(entry => [entry.by, entry.exitedBy]),
     ...Object.values(item.sessions).map(session => session.startedBy),
-  ].filter(isHumanActor);
+  ].filter(isHumanActorId);
   return [...new Set(actorIds)];
 }
 
@@ -170,17 +160,17 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   if (creator) extraActors[creator.id] = creator;
   if (assignee) extraActors[assignee.id] = assignee;
 
-  const latestHumanEvent = auditEvents.find(event => event.actorType === 'human' && isHumanActor(event.actorId));
+  const latestHumanEvent = auditEvents.find(event => event.actorType === 'human' && isHumanActorId(event.actorId));
   const latestStage = latestStageWorker(item);
   const sessionActorId = Object.values(item.sessions)
     .map(session => session.startedBy)
-    .find(isHumanActor);
-  const createdBy = isHumanActor(item.createdBy) ? item.createdBy : undefined;
+    .find(isHumanActorId);
+  const createdBy = isHumanActorId(item.createdBy) ? item.createdBy : undefined;
 
   // Try each internal source in order; only pick one that has a resolvable
   // profile.
   const candidateActorIds = [latestHumanEvent?.actorId, latestStage?.actorId, sessionActorId, createdBy].filter(
-    isHumanActor,
+    isHumanActorId,
   );
   for (const actorId of candidateActorIds) {
     const profile = actorProfile(actorId, actors);

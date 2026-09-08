@@ -31,6 +31,20 @@ export function isAuditNamespace(value: string): value is AuditNamespace {
   return Object.hasOwn(AUDIT_ACTIONS, value);
 }
 
+export function auditNamespaces(): AuditNamespace[] {
+  return Object.keys(AUDIT_ACTIONS).filter(isAuditNamespace);
+}
+
+export function parseAuditAction(action: string): { namespace: AuditNamespace; leaf: string } | undefined {
+  const [, namespace, leaf] = action.split('.');
+  return namespace !== undefined && leaf !== undefined && isAuditNamespace(namespace) ? { namespace, leaf } : undefined;
+}
+
+export function isAuditAction(value: string): value is AuditAction {
+  const parsed = parseAuditAction(value);
+  return parsed !== undefined && AUDIT_ACTIONS[parsed.namespace].some(leaf => leaf === parsed.leaf);
+}
+
 export function auditActionsInNamespaces(namespaces: readonly AuditNamespace[]): string[] {
   return namespaces.flatMap(namespace => AUDIT_ACTIONS[namespace].map(leaf => `factory.${namespace}.${leaf}`));
 }

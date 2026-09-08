@@ -9,6 +9,7 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
 import { auditActionsInNamespaces, isAuditNamespace } from './actions.js';
 import type { AuditAction } from './actions.js';
+import { isHumanActorId } from './actors.js';
 import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile, auditAgentName } from './base.js';
 import type {
   AuditActorProfileInput,
@@ -20,6 +21,8 @@ import type {
   ListAuditEventsInput,
   RecordAuditEventInput,
 } from './base.js';
+import { toWireAuditEvent } from './wire.js';
+import type { WireAuditActor, WireAuditPage } from './wire.js';
 
 export interface EmitAuditInput {
   action: AuditAction;
@@ -57,12 +60,6 @@ interface FactorySessionState {
   projectRepositoryId?: string;
 }
 
-export interface AuditActorProfile {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
-
 function readStoredActorProfile(metadata: Record<string, unknown> | undefined): AuditActorProfileInput | undefined {
   if (!metadata) return undefined;
   const raw = metadata[ACTOR_PROFILE_METADATA_KEY];
@@ -91,13 +88,6 @@ export interface AuditDomainOptions {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ACTOR_PROFILES = 100;
-const AUTOMATION_ACTORS = new Set([
-  'factory',
-  'system',
-  'automation',
-  'factory-rule-dispatcher',
-  'factory-tool-result-rule',
-]);
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -110,11 +100,6 @@ function actionsInRequestedNamespaces(raw: string | undefined): string[] | undef
     .map(namespace => namespace.trim())
     .filter(isAuditNamespace);
   return namespaces.length > 0 ? auditActionsInNamespaces(namespaces) : undefined;
-}
-
-function isHumanActorId(actorId: string | undefined): actorId is string {
-  if (!actorId) return false;
-  return !AUTOMATION_ACTORS.has(actorId) && !actorId.startsWith('agent:') && !actorId.startsWith('github:');
 }
 
 function parseActorIdsParam(raw: string | undefined): string[] {
@@ -270,7 +255,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   async #resolveActorProfiles(
     events: AuditEventRow[],
     requestedActorIds: string[] = [],
-  ): Promise<Record<string, AuditActorProfile>> {
+  ): Promise<Record<string, WireAuditActor>> {
     const humanActorIds = [
       ...new Set(
         [
@@ -285,7 +270,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     // regardless of the auth provider's ability to resolve a user by id
     // (MastraAuthStudio's getUser() always returns null, WorkOS looks up by
     // id but every provider stamps here uniformly).
-    const profiles: Record<string, AuditActorProfile> = {};
+    const profiles: Record<string, WireAuditActor> = {};
     for (const event of events) {
       if (event.actorType !== 'human') continue;
       if (!isHumanActorId(event.actorId)) continue;
@@ -348,7 +333,12 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             limit: parseLimitParam(c.req.query('limit')),
           });
           const actors = await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
-          return c.json({ ...page, actors });
+          const body: WireAuditPage = {
+            events: page.events.map(toWireAuditEvent),
+            actors,
+            ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+          };
+          return c.json(body);
         },
       }),
     ];

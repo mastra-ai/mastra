@@ -1658,10 +1658,13 @@ describe('audit trail', () => {
     expect(reentered).toMatchObject({ status: 'accepted', stage: 'execute' });
 
     const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
-    expect(events.map(event => event.metadata)).toEqual([
-      expect.objectContaining({ from: 'execute', to: 'execute', reenter: true }),
-      expect.objectContaining({ from: 'intake', to: 'execute' }),
-    ]);
+    expect(events).toHaveLength(2);
+    expect(events.map(event => event.metadata)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'execute', to: 'execute', reenter: true }),
+        expect.objectContaining({ from: 'intake', to: 'execute' }),
+      ]),
+    );
   });
 
   it('does not call entering the stage a card already holds a move', async () => {
