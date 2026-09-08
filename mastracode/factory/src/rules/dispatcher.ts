@@ -949,10 +949,12 @@ export class FactoryDecisionDispatcher {
   ): Promise<void> {
     // A lost completion acknowledgement must not reinterpret a committed
     // materialization against a replacement installation.
-    const existing = (
-      await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
-    ).find(item => item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey);
-    if (existing) {
+    const existing = await this.#storage.getByProjectSource({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      source: externalSourceForDecision(decision),
+    });
+    if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,

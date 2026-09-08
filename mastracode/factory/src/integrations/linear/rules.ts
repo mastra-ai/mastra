@@ -110,7 +110,7 @@ export class LinearRules {
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },
-            board: 'work' as const,
+            board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
           }
         : {}),

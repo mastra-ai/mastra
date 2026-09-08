@@ -304,9 +304,14 @@ describe('GithubRules', () => {
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
   });
 
-  it('rejects a transition that changes the persisted item board', async () => {
+  it.each([true, false])('validates a transition using the persisted board (echo context: %s)', async echoContext => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
-      issueClosed: () => ({ type: 'transition', board: 'work', stage: 'done', idempotencyKey: 'wrong-board' }),
+      issueClosed: context => ({
+        type: 'transition',
+        board: echoContext ? (context.board ?? '') : 'work',
+        stage: echoContext ? 'shipped' : 'done',
+        idempotencyKey: 'board-context',
+      }),
     });
     const { item } = await workItems.upsert({
       orgId: 'org-1',
@@ -336,6 +341,13 @@ describe('GithubRules', () => {
       configVersion: 'custom-github-v2',
     });
     await service.ingest(issueClosed('wrong-board', 'completed'));
+    if (echoContext) {
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+        { decision: { type: 'transition', board: 'release', stage: 'shipped' } },
+      ]);
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toEqual(item);
+      return;
+    }
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: expect.objectContaining({ status: 'rejected', code: 'rule_error' }),

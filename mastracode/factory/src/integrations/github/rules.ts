@@ -437,7 +437,7 @@ export class GithubRules {
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
-              board: item.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
+              board: boardForWorkItem(item),
               itemRevision: item.revision,
             }
           : {}),
