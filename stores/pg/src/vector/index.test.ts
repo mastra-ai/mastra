@@ -234,6 +234,37 @@ describe('PgVector', () => {
         ).toHaveLength(1);
       });
 
+      it('migrates both legacy tables when their old 32-bit namespace hashes collide', async () => {
+        // Both names hash to 6d75b957 with xxhash h32 and share the retained prefix.
+        const tables = [
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx0000000000009nsg',
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx000000000000bfc0',
+        ];
+        try {
+          for (const indexName of tables) {
+            await vectorDB.pool.query(`CREATE TABLE ${indexName} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )`);
+            await vectorDB.createIndex({ indexName, dimension: 3 });
+            const defs = await uniqueIndexDefs(indexName);
+            expect(defs).toHaveLength(1);
+            expect(defs[0]).toContain('(namespace, vector_id)');
+            expect(defs[0]!.split(' ')[3]!.length).toBeLessThanOrEqual(63);
+            await vectorDB.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+            await vectorDB.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+            expect(await vectorDB.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+            expect(await vectorDB.query({ indexName, queryVector: [0, 1, 0], namespace: 'acme' })).toHaveLength(1);
+          }
+        } finally {
+          for (const indexName of tables) {
+            await vectorDB.deleteIndex({ indexName });
+          }
+        }
+      });
+
       it('creates a fresh index whose name is at the identifier limit', async () => {
         expect(longFreshIndex).toHaveLength(63);
         await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
