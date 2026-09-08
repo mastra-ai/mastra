@@ -1,7 +1,12 @@
 import { ScorerRunError } from '../../evals/base';
 import type { MastraScorer } from '../../evals/base';
 import { extractTrajectory, extractTrajectoryFromTrace } from '../../evals/types';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '../../evals/types';
+import type {
+  ScorerRunInputForAgent,
+  ScorerRunOutputForAgent,
+  Trajectory,
+  TrajectoryExpectation,
+} from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
@@ -151,9 +156,28 @@ export interface WorkflowScorerData {
  * source for trajectory extraction, so nulling it to stop writes would silently
  * downgrade trajectory scorers to the raw-message fallback.
  */
+/**
+ * Deterministic score id for experiment score rows. Retried executions of the
+ * same (experiment, item, attempt, scorer) produce the same id, so the scores
+ * store upserts (latest wins) instead of accumulating duplicate rows.
+ */
+export function experimentScoreId(experimentId: string, itemId: string, attempt: number, scorerId: string): string {
+  return `${experimentScoreKey(experimentId, itemId, attempt)}:${scorerId}`;
+}
+
+/** Prefix shared by all scores of one (experiment, item, attempt) execution. */
+export function experimentScoreKey(experimentId: string, itemId: string, attempt: number): string {
+  return `expscore:${experimentId}:${itemId}:${attempt}`;
+}
+
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   output: unknown,
   storage: MastraCompositeStore | null,
   runId: string,
@@ -165,6 +189,7 @@ export async function runScorersForItem(
   traceId?: string,
   workflowData?: WorkflowScorerData,
   persistScores: boolean = true,
+  stableScoreKey?: string,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
@@ -208,6 +233,7 @@ export async function runScorersForItem(
         try {
           // Legacy score-store emission. This path is being deprecated.
           await validateAndSaveScore(storage, {
+            ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
             scorerId: scorer.id,
             score: result.score,
             reason: result.reason ?? undefined,
@@ -305,7 +331,12 @@ function extractScorerRunFields(scoreResult: unknown): {
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
@@ -336,6 +367,7 @@ async function runScorerSafe(
       input: scorerInput ?? item.input,
       output: effectiveOutput,
       groundTruth: item.groundTruth,
+      expectedTrajectory: item.expectedTrajectory,
       scoreSource: 'experiment',
       targetScope: effectiveScope,
       targetEntityType: toScorerTargetEntityType(targetType),
@@ -438,7 +470,12 @@ export function resolveStepScorers(
  */
 export async function runStepScorersForItem(
   stepScorers: Record<string, MastraScorer<any, any, any, any>[]>,
-  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
+  item: {
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: TrajectoryExpectation;
+    metadata?: Record<string, unknown>;
+  },
   workflowData: WorkflowScorerData | undefined,
   storage: MastraCompositeStore | null,
   runId: string,
@@ -494,6 +531,7 @@ export async function runStepScorersForItem(
             input: stepInput,
             output: stepOutput,
             groundTruth: item.groundTruth,
+            expectedTrajectory: item.expectedTrajectory,
             scoreSource: 'experiment',
             targetScope: 'span',
             targetEntityType: EntityType.WORKFLOW_STEP,

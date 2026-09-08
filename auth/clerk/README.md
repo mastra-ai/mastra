@@ -1,75 +1,41 @@
 # @mastra/auth-clerk
 
-A Mastra authentication provider for Clerk, enabling seamless integration of Clerk authentication with Mastra applications.
+`@mastra/auth-clerk` verifies Clerk session tokens and exposes the authenticated user to Mastra's server authorization layer. Use it when your application already uses Clerk and Mastra should protect its API routes with the same users and sessions.
 
 ## Installation
 
 ```bash
 npm install @mastra/auth-clerk
-# or
-yarn add @mastra/auth-clerk
-# or
-pnpm add @mastra/auth-clerk
 ```
 
 ## Usage
 
+Set `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and `CLERK_JWKS_URI` before starting Mastra.
+
 ```typescript
-import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { Mastra } from '@mastra/core/mastra';
 
-// Initialize the Clerk auth provider
-const clerkAuth = new MastraAuthClerk({
-  jwksUri: 'your-jwks-uri',
-  secretKey: 'your-secret-key',
-  publishableKey: 'your-publishable-key',
-});
-
-// Or use environment variables
-const clerkAuth = new MastraAuthClerk();
-
-// Enable auth in Mastra
-const mastra = new Mastra({
-  ...
+export const mastra = new Mastra({
   server: {
-    auth: clerkAuth,
+    auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwksUri: process.env.CLERK_JWKS_URI,
+    }),
   },
 });
 ```
 
-## Configuration
+## Documentation
 
-The package can be configured either through constructor options or environment variables:
+- [Clerk integration guide](https://mastra.ai/integrations/auth/clerk)
+- [Clerk provider reference](https://mastra.ai/reference/auth/clerk)
 
-### Environment Variables
+## Changelog
 
-- `CLERK_JWKS_URI`: The JWKS URI for your Clerk instance
-- `CLERK_SECRET_KEY`: Your Clerk secret key
-- `CLERK_PUBLISHABLE_KEY`: Your Clerk publishable key
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/auth/clerk/CHANGELOG.md) for version history and release notes.
 
-### Constructor Options
+## Support
 
-```typescript
-interface MastraAuthClerkOptions {
-  jwksUri?: string;
-  secretKey?: string;
-  publishableKey?: string;
-}
-```
-
-## Features
-
-- JWT token verification using Clerk's JWKS
-- User authentication and authorization
-- Organization membership verification
-- Seamless integration with Mastra's authentication system
-
-## API
-
-### `authenticateToken(token: string): Promise<ClerkUser | null>`
-
-Verifies a JWT token and returns the associated user if valid.
-
-### `authorizeUser(user: ClerkUser): Promise<boolean>`
-
-Checks if a user is authorized by verifying their organization membership.
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

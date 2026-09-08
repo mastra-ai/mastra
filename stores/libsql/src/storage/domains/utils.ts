@@ -1,5 +1,6 @@
-import type { InValue } from '@libsql/client';
 import type { DatasetTenancyFilters, ExperimentTenancyFilters } from '@mastra/core/storage';
+
+import type { SqliteInValue as InValue } from '../db/client';
 
 /**
  * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`

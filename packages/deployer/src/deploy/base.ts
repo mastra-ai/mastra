@@ -14,16 +14,7 @@ export abstract class Deployer extends Bundler implements IDeployer {
   }
 
   getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
-
-    try {
-      const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
-
-      return Promise.resolve([envFile]);
-    } catch {}
-
-    return Promise.resolve([]);
+    return Promise.resolve(new FileService().getExistingFiles(['.env', '.env.local', '.env.production']));
   }
 
   abstract deploy(outputDirectory: string): Promise<void>;

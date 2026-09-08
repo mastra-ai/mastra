@@ -85,6 +85,7 @@ export class FakeSandbox implements WorkspaceSandbox {
   async start(): Promise<void> {
     this.started++;
   }
+  async snapshot(): Promise<void> {}
   async stop(): Promise<void> {
     this.stopped++;
   }

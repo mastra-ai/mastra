@@ -1,4 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import type { ChunkType } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped } from '../../run-scope-access';
@@ -28,11 +29,12 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
         return typedInput;
       }
 
-      messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
-      const nextMessageId = rotateResponseMessageId();
+      const nextMessageId = rotateResponseMessageId(typedInput.stepResult?.messageId ?? typedInput.messageId);
       for (const pendingSignal of pendingSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
-        controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
+        if (!isSystemReminderSignalType(signalForTranscript.type)) {
+          controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
+        }
       }
 
       return {

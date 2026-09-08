@@ -1,6 +1,6 @@
 ---
 title: "Reference: BraintrustExporter | Observability"
-description: Braintrust exporter for Tracing
+description: "Configure BraintrustExporter to send Mastra trace data to Braintrust for AI observability, evaluations, logging, and project-level analysis."
 packages:
   - "@mastra/braintrust"
 ---
@@ -13,7 +13,7 @@ Sends Tracing data to Braintrust for eval and observability.
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new BraintrustExporter(config: BraintrustExporterConfig)
 ```
 
@@ -87,7 +87,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -95,7 +95,7 @@ Exports a tracing event to Braintrust.
 
 ### export
 
-```typescript prettier:false
+```typescript oxfmt:false
 async export(spans: ReadOnlySpan[]): Promise<void>
 ```
 
@@ -103,7 +103,7 @@ Batch exports spans to Braintrust.
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -111,7 +111,7 @@ Force flushes any buffered spans to Braintrust without shutting down the exporte
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

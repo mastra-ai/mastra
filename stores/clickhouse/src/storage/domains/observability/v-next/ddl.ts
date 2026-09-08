@@ -35,6 +35,7 @@ export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
+export const TABLE_DELETION_REQUESTS = 'mastra_deletion_requests';
 export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
 export const TABLE_LOG_EVENTS_DELTA = 'mastra_log_events_delta';
 export const TABLE_SCORE_EVENTS_DELTA = 'mastra_score_events_delta';
@@ -808,6 +809,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   feedbackUserId     Nullable(String),
   sourceId           Nullable(String),
 
+  -- Review workflow
+  reviewStatus       LowCardinality(String) DEFAULT 'needs-review',
+
   -- Feedback identity
   feedbackSource     LowCardinality(String),
   feedbackType       LowCardinality(String),
@@ -830,6 +834,24 @@ ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const DELETION_REQUESTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_DELETION_REQUESTS} (
+  requestId       String,
+  organizationId  String DEFAULT '',
+  resourceId      String DEFAULT '',
+  signal          LowCardinality(String),
+  predicateType   LowCardinality(String),
+  predicateValues Array(String),
+  requestedAt     DateTime64(3),
+  requestedBy     String DEFAULT '',
+  lastAppliedAt   DateTime64(3) DEFAULT 0,
+  purgeVerifiedAt DateTime64(3) DEFAULT 0,
+  updatedAt       DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(updatedAt)
+ORDER BY (organizationId, resourceId, requestId)
 `;
 
 export function buildFeedbackEventsDeltaDDL(): string {
@@ -953,7 +975,11 @@ ORDER BY (kind, key1, key2, value)
 `;
 
 // ---------------------------------------------------------------------------
-// Refreshable MV: discovery_values — recomputes every 1 minute
+// Refreshable MV: discovery_values — appends a fresh snapshot every 1 minute.
+// APPEND mode uses plain INSERTs instead of an atomic table swap, which is
+// required when the target table is Replicated inside a non-Replicated
+// database. Duplicates are collapsed by the ReplacingMergeTree target and
+// DISTINCT read paths.
 // Source: span_events, metric_events, log_events (not scores/feedback)
 // ---------------------------------------------------------------------------
 
@@ -977,7 +1003,7 @@ function unionDistinctFromSignals(
 
 export const DISCOVERY_VALUES_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_VALUES}
-REFRESH EVERY 1 MINUTE
+REFRESH EVERY 1 MINUTE APPEND
 TO ${TABLE_DISCOVERY_VALUES}
 AS
 SELECT DISTINCT kind, key1, value FROM (
@@ -1002,13 +1028,14 @@ SELECT DISTINCT kind, key1, value FROM (
 `;
 
 // ---------------------------------------------------------------------------
-// Refreshable MV: discovery_pairs — recomputes every 5 minutes
+// Refreshable MV: discovery_pairs — appends a fresh snapshot every 5 minutes.
+// APPEND mode for the same reasons as discovery_values above.
 // Source: span_events, metric_events, log_events (not scores/feedback)
 // ---------------------------------------------------------------------------
 
 export const DISCOVERY_PAIRS_MV_DDL = `
 CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_DISCOVERY_PAIRS}
-REFRESH EVERY 5 MINUTE
+REFRESH EVERY 5 MINUTE APPEND
 TO ${TABLE_DISCOVERY_PAIRS}
 AS
 SELECT DISTINCT kind, key1, key2, value FROM (
@@ -1038,6 +1065,7 @@ export const BASE_TABLE_DDL = [
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
   FEEDBACK_EVENTS_DDL,
+  DELETION_REQUESTS_DDL,
   DISCOVERY_VALUES_DDL,
   DISCOVERY_PAIRS_DDL,
 ];
@@ -1128,6 +1156,7 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
@@ -1176,6 +1205,7 @@ export const ALL_TABLE_NAMES = [
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_FEEDBACK_EVENTS,
+  TABLE_DELETION_REQUESTS,
   TABLE_METRIC_EVENTS_DELTA,
   TABLE_LOG_EVENTS_DELTA,
   TABLE_SCORE_EVENTS_DELTA,
@@ -1193,7 +1223,7 @@ export const ALL_TABLE_NAMES = [
  *
  * Per design doc (shared.md §Retention):
  *   - TTL configurable per signal in day increments
- *   - tracing retention identical across span_events and trace_roots
+ *   - tracing retention identical across span_events, trace_roots, and trace_branches
  *   - discovery helpers do not need TTL (fully derived)
  */
 export interface RetentionConfig {

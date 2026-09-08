@@ -63,6 +63,8 @@ export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]?: number;
   [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
+  'gen_ai.usage.cache_creation.5m_input_tokens'?: number;
+  'gen_ai.usage.cache_creation.1h_input_tokens'?: number;
   'gen_ai.usage.reasoning_tokens'?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
@@ -97,6 +99,12 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
   // Cache creation input tokens (subset of input_tokens)
   if (usage.inputDetails?.cacheWrite !== undefined) {
     metrics[ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.inputDetails.cacheWrite;
+  }
+  if (usage.inputDetails?.cacheWrite5m !== undefined) {
+    metrics['gen_ai.usage.cache_creation.5m_input_tokens'] = usage.inputDetails.cacheWrite5m;
+  }
+  if (usage.inputDetails?.cacheWrite1h !== undefined) {
+    metrics['gen_ai.usage.cache_creation.1h_input_tokens'] = usage.inputDetails.cacheWrite1h;
   }
 
   // Audio tokens from inputDetails/outputDetails
@@ -336,18 +344,21 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
     // Attribute-dependent fields (description, type, MCP server)
     if (span.attributes) {
+      const toolAttrs = span.attributes as ToolCallAttributes;
+      if (toolAttrs.toolDescription) {
+        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+      }
+      if (toolAttrs.toolType) {
+        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+      }
       if (span.type === SpanType.MCP_TOOL_CALL) {
         const mcpAttrs = span.attributes as MCPToolCallAttributes;
         if (mcpAttrs.mcpServer) {
           attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+          attributes[`mastra.${spanType}.server_name`] = mcpAttrs.mcpServer;
         }
-      } else {
-        const toolAttrs = span.attributes as ToolCallAttributes;
-        if (toolAttrs.toolDescription) {
-          attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
-        }
-        if (toolAttrs.toolType) {
-          attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+        if (mcpAttrs.serverVersion) {
+          attributes[`mastra.${spanType}.server_version`] = mcpAttrs.serverVersion;
         }
       }
     }

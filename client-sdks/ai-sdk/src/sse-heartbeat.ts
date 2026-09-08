@@ -17,8 +17,14 @@ export function assertValidHeartbeatMs(heartbeatMs?: number): void {
 }
 
 /**
- * Adds periodic SSE comment heartbeats to an AI SDK response body.
- * AI SDK serialization uses LF-delimited frames, which this private wrapper preserves and relies on.
+ * Wraps an SSE `Response` so it emits periodic `: heartbeat` comments while the source is idle,
+ * keeping connections alive through proxies that close idle streams.
+ *
+ * Heartbeats are only inserted between complete SSE frames. AI SDK serialization uses LF-delimited
+ * frames, which this wrapper preserves and relies on.
+ *
+ * Returns the input response unchanged when `heartbeatMs` is omitted, is `<= 0`, or the response has
+ * no body. Throws a `RangeError` when `heartbeatMs` is enabled but cannot be scheduled with a timer.
  */
 export function withSseHeartbeat(response: Response, heartbeatMs?: number): Response {
   assertValidHeartbeatMs(heartbeatMs);

@@ -1,5 +1,5 @@
 import { MastraError } from '../../../error/index.js';
-import type { MastraModelGatewayInterface } from './base.js';
+import type { GatewayAuthResult, MastraModelGatewayInterface } from './base.js';
 
 export function getGatewayId(gateway: MastraModelGatewayInterface): string {
   return gateway.getId?.() ?? gateway.id;
@@ -7,6 +7,10 @@ export function getGatewayId(gateway: MastraModelGatewayInterface): string {
 
 export function shouldEnableGateway(gateway: MastraModelGatewayInterface): boolean {
   return gateway.shouldEnable?.() ?? true;
+}
+
+export function hasAuthCredentials(auth?: GatewayAuthResult): auth is GatewayAuthResult {
+  return Boolean(auth?.apiKey || auth?.bearerToken || (auth?.headers && Object.keys(auth.headers).length > 0));
 }
 
 export function serializeGatewayForSpan(

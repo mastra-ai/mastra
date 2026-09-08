@@ -7,7 +7,10 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
+
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Slow model that takes a long time to respond (simulates real LLM latency)
@@ -65,11 +68,11 @@ function createSlowModel(delayMs: number) {
           controller.enqueue({ type: 'text-start', id: 'text-1' });
 
           for (let i = 0; i < 10; i++) {
+            await new Promise(resolve => setTimeout(resolve, delayMs / 10));
             if (abortSignal?.aborted) {
               controller.error(new DOMException('The operation was aborted.', 'AbortError'));
               return;
             }
-            await new Promise(resolve => setTimeout(resolve, delayMs / 10));
             controller.enqueue({ type: 'text-delta', id: 'text-1', delta: `chunk-${i} ` });
           }
 
@@ -132,6 +135,67 @@ describe('AbortSignal basics', () => {
 
     const result = await agent.generate('Hello');
     expect(result.text).toBe('Completed normally.');
+  }, 10000);
+
+  it('persists an aborted turn through the Observational Memory output processor', async () => {
+    const controller = new AbortController();
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          model: createSlowModel(1) as any,
+          observation: { messageTokens: 100_000, bufferTokens: false },
+          reflection: { observationTokens: 100_000 },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'abort-test-observational-memory',
+      name: 'Abort Test Observational Memory',
+      model: createSlowModel(1000) as any,
+      instructions: 'You are a test agent.',
+      memory,
+    });
+    const threadId = 'abort-test-observational-memory-thread';
+
+    const result = await agent.stream('Remember this aborted request', {
+      abortSignal: controller.signal,
+      memory: { thread: threadId, resource: 'abort-test-resource' },
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta') {
+          controller.abort();
+        }
+      },
+    });
+    try {
+      await result.consumeStream();
+    } catch {
+      // The provider surfaces cancellation as an AbortError.
+    }
+
+    const memoryStore = await store.getStore('memory');
+    const { messages } = await memoryStore!.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      role: 'user',
+      content: { parts: [{ type: 'text', text: 'Remember this aborted request' }] },
+    });
+    expect(messages[1]).toMatchObject({ role: 'assistant' });
+    expect(
+      messages[1]?.content.parts
+        ?.filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('')
+        .trim(),
+    ).toBe('chunk-0');
+    expect(new Set(messages.map(message => message.id)).size).toBe(2);
   }, 10000);
 });
 

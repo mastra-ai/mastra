@@ -3,7 +3,6 @@ export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel'
 export { FactorySwitcher } from './components/FactorySwitcher';
 export { UserSessionsSection } from './components/UserSessionsSection';
 export { WorkspacesSection } from './components/WorkspacesSection';
-export * from '../../../hooks/useEnsureMaterializedSandbox';
 export * from '../../../hooks/useGithubGitOps';
 export * from '../../../hooks/useGithubRepos';
 export * from '../../../hooks/useGithubStatus';

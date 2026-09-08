@@ -89,11 +89,18 @@ export async function executeHook(hook: HookDefinition, stdinPayload: HookStdin)
       });
     });
 
+    // A hook that never reads stdin (or exits before we finish writing) closes
+    // the pipe under us. That surfaces asynchronously as an EPIPE 'error' event
+    // on the socket, which Node escalates to an unhandled error — taking the
+    // whole host process down — unless something is listening. The hook's real
+    // outcome still arrives via 'close', so absorb it.
+    child.stdin?.on('error', () => {});
+
     try {
       child.stdin?.write(JSON.stringify(stdinPayload));
       child.stdin?.end();
     } catch {
-      // stdin write failure — process continues
+      // Synchronous stdin write failure — process continues
     }
   });
 }

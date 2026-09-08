@@ -15,7 +15,11 @@ import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
-import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
+import {
+  backgroundOverrideJsonSchema,
+  backgroundOverrideZodSchema,
+  isToolBackgroundEligible,
+} from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -27,11 +31,11 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import type { StandardSchemaWithJSON } from '../../schema';
 import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
-import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { markBuilderValidatedInput } from '../builder-validation-context';
+import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
   CoreTool,
@@ -42,7 +46,6 @@ import type {
   VercelTool,
   VercelToolV5,
 } from '../types';
-import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -261,10 +264,20 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
 
     // Only inject the `_background` override schema for tools that are actually
-    // eligible for background execution — otherwise every user tool's input
-    // schema would be mutated with a v4 Zod field, which breaks v3-authored
-    // tools (keyValidator._parse crashes in schema-compat validation).
-    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    // eligible for background execution: the manager must be enabled AND this
+    // specific tool must be opted in at the agent or tool layer (the same
+    // resolution `resolveBackgroundConfig` uses at dispatch time). Otherwise
+    // every user tool's schema would advertise `_background` even though the
+    // runtime would never honor it (issue #22724), and mutating every schema
+    // with a v4 Zod field breaks v3-authored tools (keyValidator._parse
+    // crashes in schema-compat validation).
+    const isBackgroundEligible =
+      !!input.backgroundTaskEnabled &&
+      isToolBackgroundEligible({
+        toolName: this.options.name,
+        toolConfig: this.options.backgroundConfig,
+        agentConfig: this.options.agentBackgroundConfig,
+      });
     const isResumableTool =
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
@@ -307,7 +320,7 @@ export class CoreToolBuilder extends MastraBase {
                 .optional(),
             });
           }
-          this.originalTool.inputSchema = nextSchema;
+          this.originalTool.inputSchema = toStandardSchema(nextSchema);
         } else {
           // Normalize to Standard Schema, extract JSON Schema, splice overrides.
           const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
@@ -644,7 +657,7 @@ export class CoreToolBuilder extends MastraBase {
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
-            observe: execOptions.observe ?? noopObserve,
+            observe: execOptions.observe ?? createToolObserve(toolSpan),
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -688,9 +701,12 @@ export class CoreToolBuilder extends MastraBase {
             // Nest agent-specific properties under 'agent' key
             // Do NOT include workflow context even if workflow properties exist
             // (agents use workflows internally but tools should see agent context)
+            // Preserve MCP context when the agent run originated from an MCP tools/call
+            // so nested tools can use elicitation/log/progress.
             const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
@@ -708,6 +724,7 @@ export class CoreToolBuilder extends MastraBase {
             const { suspend, resumeData, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               workflow: options.workflow || {
                 runId: options.runId,
                 workflowId: options.workflowId,
@@ -809,6 +826,7 @@ export class CoreToolBuilder extends MastraBase {
           ? {
               mcpServer: mcpMeta.serverName,
               serverVersion: mcpMeta.serverVersion,
+              toolType: logType || 'tool',
               toolDescription: options.description,
               toolCallId: execOptions?.toolCallId,
             }
@@ -856,7 +874,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       try {
-        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject });
 
         // When a tool is being resumed (resumeData present in execOptions), skip input
         // validation. The original args were already validated during the initial
@@ -901,16 +919,17 @@ export class CoreToolBuilder extends MastraBase {
             id: 'TOOL_EXECUTION_FAILED',
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
+            // Raw args are intentionally omitted: they can carry credentials or PII and
+            // are already recorded on the tool span, where observability redaction applies.
             details: {
               errorMessage: String(err),
-              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },
           err,
         );
         toolSpan?.error({ error: mastraError, attributes: { success: false } });
-        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject });
         throw mastraError;
       }
     };

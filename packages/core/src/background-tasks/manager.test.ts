@@ -772,13 +772,19 @@ describe('BackgroundTaskManager', () => {
       expect(suspendedChunk.payload.suspendPayload).toEqual({ ask: 'pause' });
     });
 
-    it('resumes a suspended task with resumeData and completes', async () => {
-      const executeFn = vi.fn(async (_args, opts: any) => {
+    it('resumes a suspended task with resumeData and the suspended tool run id', async () => {
+      const executeFn = vi.fn(async (args, opts: any) => {
         if (!opts.resumeData) {
-          await opts.suspend({ awaiting: 'approval' });
+          await opts.suspend(
+            { awaiting: 'approval', suspendedToolRunId: 'delegated-run-id' },
+            { runId: 'delegated-run-id' },
+          );
           return undefined;
         }
-        return { approvedBy: (opts.resumeData as { user: string }).user };
+        return {
+          approvedBy: (opts.resumeData as { user: string }).user,
+          suspendedToolRunId: args.suspendedToolRunId,
+        };
       });
 
       const { task } = await manager.enqueue(
@@ -787,13 +793,14 @@ describe('BackgroundTaskManager', () => {
       );
       await tick(200);
       expect((await manager.getTask(task.id))?.status).toBe('suspended');
+      expect(executeFn.mock.calls[0]?.[0]).not.toHaveProperty('suspendedToolRunId');
 
       await manager.resume(task.id, { user: 'alice' });
       await tick(200);
 
       const completed = await manager.getTask(task.id);
       expect(completed?.status).toBe('completed');
-      expect(completed?.result).toEqual({ approvedBy: 'alice' });
+      expect(completed?.result).toEqual({ approvedBy: 'alice', suspendedToolRunId: 'delegated-run-id' });
       expect(completed?.suspendPayload).toBeUndefined();
       expect(executeFn).toHaveBeenCalledTimes(2);
     });

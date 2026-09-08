@@ -260,7 +260,7 @@ export function createRoute<
   RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
   TMethod,
   TPath
-> {
+> & { readonly _mastraSchemaRoute: true } {
   const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
     config;
 
@@ -284,6 +284,7 @@ export function createRoute<
 
   return {
     ...baseRoute,
+    _mastraSchemaRoute: true,
     openapi,
     deprecated,
     requiresAuth,
@@ -348,7 +349,7 @@ export function createPublicRoute<
   RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
   TMethod,
   TPath
-> {
+> & { readonly _mastraSchemaRoute: true } {
   return createRoute({
     ...config,
     requiresAuth: false,

@@ -1084,6 +1084,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1392,6 +1394,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
@@ -1700,6 +1704,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "toolResults": [],
               "totalUsage": {
                 "cacheCreationInputTokens": undefined,
+                "cacheCreationInputTokens1h": undefined,
+                "cacheCreationInputTokens5m": undefined,
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,

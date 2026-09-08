@@ -1,15 +1,15 @@
 ---
 title: "Reference: Mastra.addDynamicWorkflow() | Core"
-description: "Documentation for the `Mastra.addDynamicWorkflow()` method, which validates, persists, and live-registers a dynamic workflow definition."
+description: "Use Mastra.addDynamicWorkflow() to validate, persist, and register a dynamic workflow definition as a live workflow on the current Mastra instance."
 packages:
   - "@mastra/core"
 ---
 
 # Mastra.addDynamicWorkflow()
 
-:::experimental
+:::beta
 
-Dynamic workflows are in beta. Breaking changes may occur without a major version bump until the API is stable.
+Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -54,7 +54,7 @@ const result = await run.start({ inputData: { name: 'Ada' } })
   content={[
   {
     name: 'def',
-    type: 'DynamicWorkflowGraph',
+    type: 'DynamicWorkflowGraph | WorkflowBuilderDefinitionInput',
     description:
       'The workflow definition: id, optional description and metadata, JSON Schema input/output schemas, optional state and request-context schemas, and the step graph.',
   },

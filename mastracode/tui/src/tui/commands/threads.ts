@@ -1,4 +1,5 @@
 import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
+import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
@@ -45,7 +46,8 @@ export function showThreadLockPrompt(
     } else if (answer === 'New thread') {
       // pendingNewThread is already true from the caller
     } else {
-      process.exit(0);
+      if (ctx.exit) ctx.exit(0);
+      else process.exit(0);
     }
   })();
 }
@@ -132,6 +134,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         state.pendingNewThread = false;
 
+        disposeAssistantRenderState(state);
         state.chatContainer.clear();
         state.allToolComponents = [];
         state.allSystemReminderComponents = [];

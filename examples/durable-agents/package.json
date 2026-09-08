@@ -36,7 +36,8 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/deployer": "link:../../packages/deployer",
       "@mastra/server": "link:../../packages/server",
-      "mastra": "link:../../packages/cli"
+      "mastra": "link:../../packages/cli",
+      "brace-expansion@>=2.0.0 <2.1.4": "2.1.4"
     }
   }
 }

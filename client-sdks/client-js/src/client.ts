@@ -9,6 +9,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -31,9 +33,10 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  UpdateFeedbackReviewStatusArgs,
+  FeedbackRecord,
   GetFeedbackAggregateArgs,
   GetFeedbackAggregateResponse,
   GetFeedbackBreakdownArgs,
@@ -100,6 +103,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -180,6 +184,7 @@ import type {
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
+  DatasetExperimentResultRow,
   ListExperimentsParams,
   ExperimentReviewCounts,
   CreateDatasetParams,
@@ -191,6 +196,13 @@ import type {
   GenerateDatasetItemsParams,
   GeneratedItem,
   TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
+  CreateDatasetExperimentParams,
+  CreateDatasetExperimentResponse,
+  RunExperimentItemParams,
+  RunExperimentItemResponse,
+  SubmitExperimentResultParams,
+  FinalizeExperimentParams,
   UpdateExperimentResultParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -210,6 +222,7 @@ import type {
   CreateScheduleInput,
   UpdateScheduleInput,
   RunScheduleResponse,
+  AgentControllerInfo,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 import { createSseJsonTransform } from './utils/stream-transforms';
@@ -268,10 +281,10 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists the agent controllers hosted on the connected Mastra instance.
-   * @returns Promise containing an array of agent controller identifiers
+   * @returns Promise containing one record per agent controller, carrying its id
    */
-  public async listAgentControllers(): Promise<{ id: string }[]> {
-    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+  public async listAgentControllers(): Promise<AgentControllerInfo[]> {
+    const body = await this.request<{ agentControllers: AgentControllerInfo[] }>('/agent-controller');
     return body.agentControllers;
   }
 
@@ -1077,6 +1090,11 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
+  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.observability.queryTraces(params);
+  }
+
   /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
@@ -1109,6 +1127,16 @@ export class MastraClient extends BaseResource {
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
     return this.observability.listScoresBySpan(params);
+  }
+
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
   }
 
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
@@ -1174,6 +1202,11 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Updates a feedback record's review workflow status. */
+  updateFeedbackReviewStatus(params: UpdateFeedbackReviewStatusArgs): Promise<FeedbackRecord> {
+    return this.observability.updateFeedbackReviewStatus(params);
   }
 
   /** Returns an aggregated feedback value with optional period-over-period comparison. */
@@ -1985,6 +2018,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(
+    datasetId: string,
+    itemId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Batch inserts items to a dataset
    */
   public batchInsertDatasetItems(
@@ -2142,6 +2189,59 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Updates a dataset experiment's name, description or metadata
+   */
+  public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
    * Lists results for a dataset experiment
    */
   public listDatasetExperimentResults(
@@ -2189,6 +2289,7 @@ export class MastraClient extends BaseResource {
       input: unknown;
       output: unknown | null;
       groundTruth: unknown | null;
+      metadata?: Record<string, unknown> | null;
       error: string | null;
       startedAt: string | Date;
       completedAt: string | Date;
@@ -2207,6 +2308,65 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Creates an experiment without starting the in-process runner, so the caller
+   * drives the loop (e.g. a Temporal workflow). With a target, execute items
+   * server-side via `runExperimentItem`; without one, ingest results via
+   * `submitExperimentResult`. Idempotent when a caller-supplied `id` is provided.
+   */
+  public createDatasetExperiment(params: CreateDatasetExperimentParams): Promise<CreateDatasetExperimentResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body: { ...body, start: false },
+    });
+  }
+
+  /**
+   * Executes the experiment's target against one dataset item server-side,
+   * runs the resolved scorers, and upserts the result row keyed by
+   * (experimentId, itemId, attempt) — safe to retry.
+   */
+  public runExperimentItem(params: RunExperimentItemParams): Promise<RunExperimentItemResponse> {
+    const { datasetId, experimentId, itemId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/items/${encodeURIComponent(itemId)}/run`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Submits (or re-submits) one item result for a target-less (ingestion) experiment.
+   * Upsert semantics on (experimentId, itemId, attempt) — safe to retry.
+   */
+  public submitExperimentResult(params: SubmitExperimentResultParams): Promise<DatasetExperimentResultRow> {
+    const { datasetId, experimentId, ...body } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Finalizes an external experiment. The server computes counts from persisted results. Idempotent.
+   */
+  public finalizeExperiment(params: FinalizeExperimentParams): Promise<DatasetExperiment> {
+    const { datasetId, experimentId } = params;
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/finalize`,
+      {
+        method: 'POST',
+        body: {},
+      },
+    );
   }
 
   /**

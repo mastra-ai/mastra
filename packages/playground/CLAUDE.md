@@ -40,7 +40,7 @@ Rules:
 
 ### Root Commands (run from monorepo root)
 
-- `pnpm dev:playground`: Start dev servers for playground, playground-ui, and react client SDK
+- `pnpm dev:playground:full`: Start dev servers for playground, playground-ui, and react client SDK
 - `pnpm build:cli`: Build the CLI (includes playground and playground-ui as dependencies)
 
 ## Package Architecture

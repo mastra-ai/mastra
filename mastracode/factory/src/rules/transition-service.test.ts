@@ -1,13 +1,53 @@
+import assert from 'node:assert';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { BoardDefinition } from '../boards/define-board.js';
+import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
+import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from './types.js';
+import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+
+function lifecycleOptions({
+  version,
+  handlers,
+}: {
+  version: string;
+  handlers: BoardDefinition<string, string>['rules'];
+}) {
+  const stages = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+  const board = defineBoard({
+    id: 'lifecycle-test',
+    title: 'Lifecycle test',
+    initialPhase: 'intake',
+    phases: Object.fromEntries(
+      stages.map(stage => [
+        stage,
+        {
+          title: stage,
+          kind: workBoard.phaseKind(stage),
+          ...(workBoard.isWorking(stage) ? { role: workBoard.roleForPhase(stage) } : {}),
+          outcomes: Object.fromEntries(stages.filter(next => next !== stage).map(next => [next, next])),
+          onEnter: Object.fromEntries(
+            Object.entries(handlers[stage] ?? {}).map(([source, leaf]) => [source, leaf?.onEnter]),
+          ),
+          onExit: Object.fromEntries(
+            Object.entries(handlers[stage] ?? {}).map(([source, leaf]) => [source, leaf?.onExit]),
+          ),
+        },
+      ]),
+    ),
+  });
+  return {
+    configVersion: version,
+    boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+  };
+}
 
 async function createItem(
   storage: WorkItemsStorage,
@@ -15,7 +55,9 @@ async function createItem(
     orgId: string;
     source: 'github-issue' | 'github-pr' | 'slack-thread';
     sourceKey: string;
+    board: string;
     stages: string[];
+    metadata: Record<string, unknown>;
   }> = {},
 ) {
   const orgId = overrides.orgId ?? 'org-1';
@@ -26,6 +68,7 @@ async function createItem(
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
       input: {
+        ...(overrides.board ? { board: overrides.board } : {}),
         externalSource: {
           integrationId: source === 'slack-thread' ? 'slack' : 'github',
           type: source === 'slack-thread' ? 'slack-thread' : source === 'github-pr' ? 'pull-request' : 'issue',
@@ -34,14 +77,14 @@ async function createItem(
         title: 'Fix the bug',
         stages: overrides.stages ?? ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: overrides.metadata ?? {},
       },
     })
   ).item;
 }
 
 function request(
-  item: { id: string; revision: number },
+  item: { id: string; revision: number; board?: string | null },
   overrides: Partial<{
     orgId: string;
     board: FactoryRuleBoard;
@@ -55,7 +98,7 @@ function request(
     orgId: overrides.orgId ?? 'org-1',
     factoryProjectId: PROJECT_ID,
     workItemId: item.id,
-    board: overrides.board ?? ('work' as const),
+    board: overrides.board ?? item.board ?? ('work' as const),
     stage: overrides.stage ?? ('execute' as const),
     expectedRevision: overrides.expectedRevision ?? item.revision,
     actor: { type: 'human' as const, id: 'user-1' },
@@ -65,12 +108,492 @@ function request(
   };
 }
 
+describe('installed lifecycle decision targets', () => {
+  const linkedDecision = {
+    type: 'upsertLinkedWorkItem' as const,
+    idempotencyKey: 'release-linked',
+    board: 'distribution',
+    stage: 'waiting',
+    source: 'github-issue' as const,
+    sourceKey: 'mastra-ai/mastra#42',
+    title: 'Distribute release',
+    url: 'https://github.com/mastra-ai/mastra/issues/42',
+  };
+  const transitionDecision = {
+    type: 'transition' as const,
+    idempotencyKey: 'release-shipped',
+    board: 'release',
+    stage: 'shipped',
+  };
+
+  async function setup(exit: FactoryRuleDecision, enter: FactoryRuleDecision) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const onExit = vi.fn(() => exit);
+    const onEnter = vi.fn(() => enter);
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing', onExit: { issue: onExit } },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { issue: onEnter },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const distribution = defineBoard({
+      id: 'distribution',
+      title: 'Distribution',
+      initialPhase: 'waiting',
+      phases: { waiting: { title: 'Waiting', kind: 'resting' } },
+    });
+    const item = await createItem(storage, { board: 'release', stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'release-targets-v1',
+      boards: createBoardRegistry({ boards: [release, distribution], includeDefaultBoards: false }),
+    });
+    const input = {
+      ...request(item, { stage: 'preparing' }),
+      actor: { type: 'system' as const, id: 'release-coordinator' },
+      ingress: { type: 'rule' as const, identity: 'release-prepare' },
+    };
+    return { storage, item, service, input, onExit, onEnter };
+  }
+
+  it('accepts custom lifecycle transitions and cross-installed linked items before persistence', async () => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(linkedDecision, transitionDecision);
+    const result = await service.transition(input);
+    expect(result).toMatchObject({ status: 'accepted', stage: 'preparing' });
+    expect(onEnter).toHaveBeenCalledWith(expect.objectContaining({ configVersion: 'release-targets-v1' }));
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['preparing'],
+      revision: item.revision + 1,
+    });
+    const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decisions).toHaveLength(2);
+    expect(decisions.map(record => record.decision)).toEqual(
+      expect.arrayContaining([linkedDecision, transitionDecision]),
+    );
+
+    const restarted = new FactoryTransitionService({
+      storage,
+      configVersion: 'release-targets-v2',
+      boards: createBoardRegistry({ includeDefaultBoards: false }),
+    });
+    expect(await restarted.transition(input)).toEqual(result);
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(2);
+  });
+
+  it.each([
+    ['unknown transition board', { ...transitionDecision, board: 'missing' }],
+    ['unknown transition phase', { ...transitionDecision, stage: 'missing' }],
+    ['phase belonging to another board', { ...transitionDecision, stage: 'waiting' }],
+    ['transition board reassignment', { ...transitionDecision, board: 'distribution', stage: 'waiting' }],
+    ['unknown linked board', { ...linkedDecision, board: 'missing' }],
+    ['foreign linked phase', { ...linkedDecision, stage: 'preparing' }],
+  ] as const)('rejects %s atomically after an earlier valid lifecycle decision', async (_label, decision) => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(linkedDecision, decision);
+    expect(await service.transition(input)).toMatchObject({ status: 'rejected', code: 'rule_error' });
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['queued'],
+      revision: item.revision,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('rejects an invalid exit target before invoking entry or persisting effects', async () => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(
+      { ...linkedDecision, stage: 'missing' },
+      transitionDecision,
+    );
+    expect(await service.transition(input)).toMatchObject({ status: 'rejected', code: 'rule_error' });
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      stages: ['queued'],
+      revision: item.revision,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+});
+
+describe('installed board transition policies', () => {
+  async function setup(
+    transitionPolicy?: BoardTransitionPolicy,
+    onEnter: (context: FactoryStageRuleContext) => undefined | Promise<undefined> = () => undefined,
+  ) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'approval',
+      transitionPolicy,
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'working', role: 'release', onEnter: { issue: onEnter } },
+      },
+    });
+    const item = await createItem(storage, { board: board.id, stages: ['approval'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    });
+    return { storage, board, item, service };
+  }
+
+  it('lets an installed release policy reject before lifecycle or writes', async () => {
+    const onEnter = vi.fn(() => undefined);
+    const { storage, item, service } = await setup(
+      context =>
+        context.isHumanTransition
+          ? undefined
+          : { type: 'reject', code: 'approval_required', reason: 'Approve the release.' },
+      onEnter,
+    );
+    const result = await service.transition({
+      ...request(item, { stage: 'shipped' }),
+      actor: { type: 'system', id: 'sweep' },
+      ingress: { type: 'rule', identity: 'release-denied' },
+    });
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      revision: item.revision,
+      stages: ['approval'],
+      acceptedAt: null,
+      triageType: null,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+    expect(await service.transition(request(item, { stage: 'shipped' }))).toMatchObject({ status: 'accepted' });
+    expect(onEnter).toHaveBeenCalledOnce();
+  });
+
+  it('evaluates policy on same-stage, initial entry and reentry but never on completed replay', async () => {
+    const policy = vi.fn<BoardTransitionPolicy>(() => undefined);
+    const { item, service, storage } = await setup(policy);
+    for (const flags of [{}, { initialEntry: true }, { reenter: true }]) {
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      assert(current);
+      const input = { ...request(current, { stage: 'approval', identity: JSON.stringify(flags) }), ...flags };
+      const result = await service.transition(input);
+      expect(result.status).toBe('accepted');
+      expect(await service.transition(input)).toEqual(result);
+    }
+    expect(policy).toHaveBeenCalledTimes(3);
+    expect(policy.mock.calls[1][0]).toMatchObject({ initialEntry: true, reenter: false });
+    expect(policy.mock.calls[2][0]).toMatchObject({ initialEntry: false, reenter: true });
+  });
+
+  it('commits authorized acceptance once and never stamps stale requests', async () => {
+    const policy = vi.fn<BoardTransitionPolicy>(() => ({ type: 'allow', accept: true }));
+    const { item, storage, board } = await setup(policy);
+    const onAccepted = vi.fn();
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      onAccepted,
+    });
+    expect(
+      await service.transition(
+        request(item, { stage: 'shipped', expectedRevision: item.revision + 1, identity: 'stale' }),
+      ),
+    ).toMatchObject({ status: 'rejected', code: 'stale' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ acceptedAt: null });
+    expect(onAccepted).not.toHaveBeenCalled();
+    const input = request(item, { stage: 'shipped' });
+    expect(await service.transition(input)).toMatchObject({ status: 'accepted' });
+    expect(await service.transition(input)).toMatchObject({ status: 'accepted' });
+    expect(onAccepted).toHaveBeenCalledOnce();
+    expect(policy).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares the policy/lifecycle timeout and ignores late completion', async () => {
+    vi.useFakeTimers();
+    try {
+      const onEnter = vi.fn(async () => {
+        await new Promise(resolve => setTimeout(resolve, 60));
+        return undefined;
+      });
+      const policy: BoardTransitionPolicy = async () => {
+        await new Promise(resolve => setTimeout(resolve, 60));
+        return { type: 'allow', accept: true };
+      };
+      const { item, storage, board } = await setup(policy, onEnter);
+      const service = new FactoryTransitionService({
+        storage,
+        configVersion: 'policy-test',
+        boards: createBoardRegistry({ boards: [board] }),
+        timeoutMs: 100,
+      });
+      const pending = service.transition(request(item, { stage: 'shipped' }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await pending).toMatchObject({ status: 'rejected', code: 'timeout' });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(onEnter).toHaveBeenCalledOnce();
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        revision: item.revision,
+        acceptedAt: null,
+        stages: ['approval'],
+      });
+      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a malformed policy result before lifecycle', async () => {
+    const onEnter = vi.fn(() => undefined);
+    // @ts-expect-error Exercise an untyped JavaScript policy at the runtime boundary.
+    const { item, service, storage } = await setup(() => ({ type: 'allow', accept: false }), onEnter);
+    expect(await service.transition(request(item, { stage: 'shipped' }))).toMatchObject({
+      status: 'rejected',
+      code: 'rule_error',
+    });
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      acceptedAt: null,
+      revision: item.revision,
+    });
+  });
+
+  it.each(['error', 'reject'] as const)('discards policy intents on lifecycle %s', async failure => {
+    const { item, storage, board } = await setup(() => ({ type: 'allow', accept: true }));
+    const rejecting = defineBoard({
+      id: board.id,
+      title: board.title,
+      initialPhase: 'approval',
+      transitionPolicy: board.transitionPolicy,
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: {
+          title: 'Shipped',
+          kind: 'working',
+          role: 'release',
+          onEnter: {
+            issue: () => {
+              if (failure === 'error') throw new Error('Lifecycle failed');
+              return { type: 'reject', code: 'forbidden', reason: 'Lifecycle denied' };
+            },
+          },
+        },
+      },
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [rejecting] }),
+    });
+    expect(await service.transition(request(item, { stage: 'shipped' }))).toMatchObject({
+      status: 'rejected',
+      code: failure === 'error' ? 'rule_error' : 'forbidden',
+    });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      acceptedAt: null,
+      revision: item.revision,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('keeps identical board IDs isolated across installed registries', async () => {
+    const denied = await setup(() => ({ type: 'reject', code: 'forbidden', reason: 'Denied here' }));
+    const allowed = await setup(() => ({ type: 'allow' }));
+    expect(await denied.service.transition(request(denied.item, { stage: 'shipped' }))).toMatchObject({
+      status: 'rejected',
+      code: 'forbidden',
+    });
+    expect(await allowed.service.transition(request(allowed.item, { stage: 'shipped' }))).toMatchObject({
+      status: 'accepted',
+    });
+  });
+
+  it('does not give Review a triage-role classification requirement', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'review', source: 'github-pr', metadata: { authorTrusted: true } });
+    const service = new FactoryTransitionService({ storage, configVersion: 'policy-test' });
+    expect(
+      await service.transition({
+        ...request(item, { stage: 'review' }),
+        actor: { type: 'agent', bindingId: 'review-agent', role: 'triage' },
+        ingress: { type: 'agent', identity: 'review-transition' },
+      }),
+    ).toMatchObject({ status: 'accepted' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ triageType: null, acceptedAt: null });
+  });
+
+  it('keeps external-author safety shared even when a custom policy allows', async () => {
+    const onEnter = vi.fn(() => undefined);
+    const policy = vi.fn<BoardTransitionPolicy>(() => ({ type: 'allow' }));
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'external',
+      title: 'External',
+      initialPhase: 'intake',
+      transitionPolicy: policy,
+      phases: {
+        intake: { title: 'Intake', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Shipping', kind: 'working', role: 'shipper', onEnter: { issue: onEnter } },
+      },
+    });
+    const item = await createItem(storage, { board: board.id });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [board] }),
+    });
+    expect(
+      await service.transition({
+        ...request(item, { stage: 'shipping' }),
+        actor: { type: 'agent', bindingId: 'bound', role: 'shipper' },
+        ingress: { type: 'agent', identity: 'external-resume' },
+      }),
+    ).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(policy).toHaveBeenCalledOnce();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      revision: item.revision,
+      stages: ['intake'],
+    });
+  });
+
+  it('does not invoke policy for topology-invalid requests', async () => {
+    const policy = vi.fn<BoardTransitionPolicy>(() => ({ type: 'allow', accept: true }));
+    const { item, service } = await setup(policy);
+    expect(await service.transition(request(item, { stage: 'execute' }))).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    expect(policy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    () => ({ type: 'allow', accept: true }),
+    () => ({ type: 'allow', triageType: 'bug' }),
+  ] satisfies BoardTransitionPolicy[])('rejects unauthorized mutation intents', async policy => {
+    const onEnter = vi.fn(() => undefined);
+    const { item, service, storage } = await setup(policy, onEnter);
+    expect(
+      await service.transition({ ...request(item, { stage: 'shipped' }), actor: { type: 'system', id: 'sweep' } }),
+    ).toMatchObject({ status: 'rejected', code: 'rule_error' });
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      acceptedAt: null,
+      triageType: null,
+      revision: item.revision,
+    });
+  });
+
+  it('isolates nested policy snapshots from the request and lifecycle', async () => {
+    const onEnter = vi.fn((context: FactoryStageRuleContext) => {
+      expect(context.actor).toEqual({ type: 'human', id: 'user-1' });
+      expect(context.item.stages).toEqual(['approval']);
+      return undefined;
+    });
+    const { item, service } = await setup(context => {
+      expect(Reflect.set(context.actor, 'type', 'system')).toBe(false);
+      expect(Reflect.set(context.item.stages, '0', 'shipped')).toBe(false);
+      expect(Reflect.set(context.item.metadata!, 'autoStartCandidate', true)).toBe(false);
+      expect(Reflect.set(context.ingress, 'type', 'agent')).toBe(false);
+      return undefined;
+    }, onEnter);
+    const input = request(item, { stage: 'shipped' });
+    expect(await service.transition(input)).toMatchObject({ status: 'accepted' });
+    expect(input.actor.type).toBe('human');
+    expect(onEnter).toHaveBeenCalledOnce();
+  });
+
+  it('does not stamp acceptance or classification on a no-policy board with Work phase and role names', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'custom-work',
+      title: 'Custom',
+      initialPhase: 'intake',
+      phases: {
+        intake: { title: 'Intake', kind: 'resting', next: 'triage' },
+        triage: { title: 'Triage', kind: 'working', role: 'triage', next: 'planning' },
+        planning: { title: 'Planning', kind: 'working', role: 'plan', next: 'execute' },
+        execute: { title: 'Execute', kind: 'working', role: 'work' },
+      },
+    });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'policy-test',
+      boards: createBoardRegistry({ boards: [board] }),
+    });
+    let item = await createItem(storage, { board: board.id, metadata: { authorTrusted: true } });
+    for (const stage of ['triage', 'planning']) {
+      expect(
+        await service.transition({
+          ...request(item, { stage, identity: stage }),
+          actor: { type: 'agent', bindingId: 'triage-agent', role: 'triage' },
+          ingress: { type: 'agent', identity: stage },
+        }),
+      ).toMatchObject({ status: 'accepted' });
+      item = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+    }
+    expect(await service.transition({ ...request(item), triageType: 'feature request' })).toMatchObject({
+      status: 'accepted',
+    });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      acceptedAt: null,
+      triageType: null,
+      stages: ['execute'],
+    });
+  });
+});
+
+// A person's move injects its own stage notice; the rules' own effects are what these assert on.
+async function ruleDecisionKeys(storage: WorkItemsStorage, orgId: string) {
+  const rows = await storage.listDeferredDecisions(orgId, PROJECT_ID);
+  return rows.map(row => row.idempotencyKey).filter(key => !key.startsWith('factory-stage:'));
+}
+
 describe('FactoryTransitionService', () => {
+  it.each(['github-issue', 'slack-thread'] as const)(
+    'does not auto-start %s on manual intake entry even with candidate metadata',
+    async source => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { source, metadata: { autoStartCandidate: true } });
+      const service = new FactoryTransitionService({
+        storage,
+        configVersion: 'manual-entry',
+      });
+      await expect(
+        service.transition({ ...request(item, { stage: 'intake' }), initialEntry: true }),
+      ).resolves.toMatchObject({ status: 'accepted' });
+      expect(await ruleDecisionKeys(storage, 'org-1')).toEqual([]);
+      const entered = await storage.get({ orgId: 'org-1', id: item.id });
+      await expect(
+        service.transition(request(entered!, { stage: 'triage', identity: 'explicit-triage' })),
+      ).resolves.toMatchObject({ status: 'accepted' });
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(row => row.decision.type === 'invokeSkill'),
+      ).toEqual(
+        source === 'github-issue'
+          ? [expect.objectContaining({ decision: expect.objectContaining({ skillName: 'factory-triage' }) })]
+          : [],
+      );
+    },
+  );
+
   it('replays concurrent transitions with the same ingress identity', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -80,15 +603,356 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision + 1);
   });
 
+  it('persists a feature classification without allowing a triage agent into Planning', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'triage-feature' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-feature' },
+      triageType: 'feature request',
+    });
+
+    expect(classified).toMatchObject({ status: 'accepted', revision: item.revision + 1 });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.triageType).toBe('feature request');
+    const rejected = await service.transition({
+      ...request({ id: item.id, revision: item.revision + 1 }, { stage: 'planning', identity: 'plan-agent' }),
+      actor: { type: 'agent', bindingId: 'binding-2', role: 'triage' },
+      ingress: { type: 'agent', identity: 'plan-agent' },
+      triageType: 'feature request',
+    });
+
+    expect(rejected).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it.each(['planning', 'execute'] as const)(
+    'requires both human actor and human ingress to approve %s',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage);
+      const service = new FactoryTransitionService({
+        configVersion: 'human-approval',
+        storage,
+      });
+      await service.transition({
+        ...request(item, { stage: 'intake', identity: 'classify' }),
+        actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+        ingress: { type: 'agent', identity: 'classify' },
+        triageType: 'feature request',
+      });
+      const classified = await storage.get({ orgId: 'org-1', id: item.id });
+      assert(classified);
+      for (const [actor, ingress] of [
+        [
+          { type: 'human', id: 'user-1' },
+          { type: 'rule', identity: 'approved-rule' },
+        ],
+        [
+          { type: 'system', id: 'dispatcher' },
+          { type: 'human', identity: 'not-a-human' },
+        ],
+      ] as const) {
+        await expect(service.transition({ ...request(classified, { stage }), actor, ingress })).resolves.toMatchObject({
+          status: 'rejected',
+          code: 'approval_required',
+        });
+      }
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        revision: classified.revision,
+        acceptedAt: null,
+        stages: ['intake'],
+      });
+      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+      await expect(service.transition(request(classified, { stage }))).resolves.toMatchObject({ status: 'accepted' });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeInstanceOf(Date);
+    },
+  );
+
+  it('allows a human to approve a classified feature into Planning', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await service.transition({
+      ...request(item, { stage: 'intake', identity: 'triage-feature' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-feature' },
+      triageType: 'feature request',
+    });
+
+    const approved = await service.transition(
+      request({ id: item.id, revision: item.revision + 1 }, { stage: 'planning' }),
+    );
+    expect(approved).toMatchObject({ status: 'accepted', stage: 'planning' });
+  });
+
+  it('rejects every non-human ingress at both protected gates even when autonomy is armed', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const armed = await service.transition({
+      ...request(
+        { id: item.id, revision: (classified as { revision: number }).revision },
+        { stage: 'triage', identity: 'arm' },
+      ),
+      ingress: { type: 'human', identity: 'arm' },
+      cause: 'board_drag',
+    });
+    const revision = (armed as { revision: number }).revision;
+    for (const [actor, ingress] of [
+      [
+        { type: 'agent', bindingId: 'agent', role: 'triage' },
+        { type: 'agent', identity: 'agent-plan' },
+      ],
+      [
+        { type: 'system', id: 'dispatcher' },
+        { type: 'rule', identity: 'rule-plan' },
+      ],
+      [
+        { type: 'system', id: 'tool-result' },
+        { type: 'toolResult', identity: 'tool-plan' },
+      ],
+      [
+        { type: 'github', login: 'octocat', trusted: true, factoryAuthored: true },
+        { type: 'github', identity: 'github-plan' },
+      ],
+    ] as const) {
+      await expect(
+        service.transition({
+          ...request({ id: item.id, revision }, { stage: 'planning', identity: ingress.identity }),
+          actor,
+          ingress,
+          ...(actor.type === 'agent' && actor.role === 'triage' ? { triageType: 'feature request' as const } : {}),
+        }),
+      ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
+    }
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+    const approved = await service.transition({
+      ...request({ id: item.id, revision }, { stage: 'planning', identity: 'human-plan' }),
+      cause: 'board_drag',
+    });
+    expect(approved).toMatchObject({ status: 'accepted', stage: 'planning' });
+    const planningRevision = (approved as { revision: number }).revision;
+    // The person's move out of Triage is the approval; it is recorded once so
+    // the plan agent's own hop into Execute needs no second gesture.
+    const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
+    expect(acceptedAt).toBeInstanceOf(Date);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+        row => row.decision.type === 'invokeSkill' && row.decision.role === 'plan',
+      ),
+    ).toHaveLength(1);
+    const executed = await service.transition({
+      ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'agent-execute' }),
+      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
+    });
+    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+        row => row.decision.type === 'invokeSkill' && row.decision.role === 'work',
+      ),
+    ).toHaveLength(1);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
+    const reviewed = await service.transition(
+      request(
+        { id: item.id, revision: (executed as { revision: number }).revision },
+        { stage: 'review', identity: 'review' },
+      ),
+    );
+    expect(reviewed).toMatchObject({ status: 'accepted', stage: 'review' });
+  });
+
+  it.each(['planning', 'execute'] as const)(
+    'requires approval after an intermediate Review move into %s',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { metadata: { authorTrusted: true } });
+      const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+      const reviewed = await service.transition({
+        ...request(item, { stage: 'review', identity: 'classify-review' }),
+        actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+        ingress: { type: 'agent', identity: 'classify-review' },
+        triageType: 'feature request',
+      });
+      assert(reviewed.status === 'accepted');
+      const before = await storage.get({ orgId: 'org-1', id: item.id });
+      expect(before).toMatchObject({ stages: ['review'], triageType: 'feature request', acceptedAt: null });
+      const decisionsBefore = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      const result = await service.transition({
+        ...request({ ...item, revision: reviewed.revision }, { stage }),
+        actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+        ingress: { type: 'agent', identity: `review-${stage}` },
+      });
+      expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toEqual(before);
+      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual(decisionsBefore);
+
+      const approved = await service.transition(
+        request({ ...item, revision: reviewed.revision }, { stage, identity: 'approve-review' }),
+      );
+      assert(approved.status === 'accepted');
+      const acceptedAt = (await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt;
+      expect(acceptedAt).toBeInstanceOf(Date);
+      const continued = await service.transition({
+        ...request({ ...item, revision: approved.revision }, { stage: stage === 'planning' ? 'execute' : 'planning' }),
+        actor: { type: 'agent', bindingId: 'agent', role: 'work' },
+        ingress: { type: 'agent', identity: 'continue-approved' },
+      });
+      expect(continued.status).toBe('accepted');
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toEqual(acceptedAt);
+    },
+  );
+
+  it('requires approval for a historical non-bug card without an acceptance stamp', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn();
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const planned = await service.transition({
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+    // A card accepted before acceptance was recorded: in Planning, no stamp.
+    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: null });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeNull();
+
+    const executed = await service.transition({
+      ...request({ id: item.id, revision: (planned as { revision: number }).revision }, { stage: 'execute' }),
+      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      ingress: { type: 'agent', identity: 'agent-execute' },
+    });
+    expect(executed).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      stages: ['planning'],
+      revision: (planned as { revision: number }).revision,
+      acceptedAt: null,
+    });
+
+    const reworked = await service.transition({
+      ...request(
+        { id: item.id, revision: (planned as { revision: number }).revision },
+        { stage: 'execute', identity: 'human-rework' },
+      ),
+      cause: 'board_drag',
+    });
+    expect(reworked).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.acceptedAt).toBeInstanceOf(Date);
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(2));
+  });
+
+  it('fires onAccepted once, with the accepted row, and never lets the hook fail the transition', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onAccepted = vi.fn().mockRejectedValue(new Error('label sync down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      onAccepted,
+    });
+    const classified = await service.transition({
+      ...request(item, { stage: 'intake', identity: 'classify' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'classify' },
+      triageType: 'feature request',
+    });
+    const accepted = await service.transition({
+      ...request({ id: item.id, revision: (classified as { revision: number }).revision }, { stage: 'planning' }),
+      cause: 'board_drag',
+    });
+    expect(accepted).toMatchObject({ status: 'accepted', stage: 'planning' });
+    await vi.waitFor(() => expect(onAccepted).toHaveBeenCalledTimes(1));
+    expect(onAccepted.mock.calls[0]?.[0]).toMatchObject({
+      orgId: 'org-1',
+      workItemId: item.id,
+      item: { id: item.id, acceptedAt: expect.any(Date) },
+    });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+    const moved = await service.transition({
+      ...request(
+        { id: item.id, revision: (accepted as { revision: number }).revision },
+        { stage: 'execute', identity: 'human-execute' },
+      ),
+      cause: 'board_drag',
+    });
+    expect(moved).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const bug = await createItem(storage, { metadata: { authorTrusted: true } });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const planned = await service.transition({
+      ...request(bug, { stage: 'planning', identity: 'bug-plan' }),
+      actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+      ingress: { type: 'agent', identity: 'bug-plan' },
+      triageType: 'bug',
+    });
+    const executed = await service.transition({
+      ...request(
+        { id: bug.id, revision: (planned as { revision: number }).revision },
+        { stage: 'execute', identity: 'bug-execute' },
+      ),
+      actor: { type: 'agent', bindingId: 'work', role: 'work' },
+      ingress: { type: 'agent', identity: 'bug-execute' },
+    });
+    expect(executed).toMatchObject({ status: 'accepted', stage: 'execute' });
+    const legacy = await createItem(storage, { stages: ['planning'], sourceKey: 'legacy' });
+    await expect(
+      service.transition({
+        ...request(legacy, { stage: 'execute', identity: 'legacy-execute' }),
+        actor: { type: 'agent', bindingId: 'work', role: 'work' },
+        ingress: { type: 'agent', identity: 'legacy-execute' },
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+    const closed = await createItem(storage, { sourceKey: 'closed-feature' });
+    await expect(
+      service.transition({
+        ...request(closed, { stage: 'done', identity: 'feature-close' }),
+        actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
+        ingress: { type: 'agent', identity: 'feature-close' },
+        triageType: 'feature request',
+      }),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'done' });
+  });
+
   it('does not run GitHub issue rules against a Slack thread card', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { source: 'slack-thread', stages: ['execute'] });
+    const item = await createItem(storage, { board: 'lifecycle-test', source: 'slack-thread', stages: ['execute'] });
     const issueRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'issue-effect', title: 'Issue' }));
     const manualRule = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'manual-effect', title: 'Manual' }));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
+      ...lifecycleOptions({
         version: 'rules-v1',
-        overrides: { work: { review: { issue: { onEnter: issueRule }, manual: { onEnter: manualRule } } } },
+        handlers: { review: { issue: { onEnter: issueRule }, manual: { onEnter: manualRule } } },
       }),
       storage,
     });
@@ -100,12 +964,36 @@ describe('FactoryTransitionService', () => {
     expect(manualRule).toHaveBeenCalledTimes(1);
   });
 
+  it('hands the intake-stamped facts to the rule that runs on the stage', async () => {
+    // Rules that read intake facts — who reported the issue, which repository it
+    // came from — are unreachable unless the stamped metadata survives into the
+    // context, and a rule reading `undefined` fails silently rather than loudly.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'lifecycle-test', metadata: { author: 'octocat' } });
+    const rule = vi.fn((_context: FactoryStageRuleContext) => ({
+      type: 'notify' as const,
+      idempotencyKey: 'effect-1',
+      title: 'Ran',
+    }));
+    const service = new FactoryTransitionService({
+      ...lifecycleOptions({
+        version: 'rules-v1',
+        handlers: { execute: { issue: { onEnter: rule } } },
+      }),
+      storage,
+    });
+
+    await service.transition(request(item, { stage: 'execute' }));
+
+    expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
+  });
+
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const onTerminalStage = vi.fn();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
     });
@@ -128,6 +1016,7 @@ describe('FactoryTransitionService', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       stage: 'done',
+      revision: expect.any(Number),
     });
   });
 
@@ -136,7 +1025,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage);
     const onTerminalStage = vi.fn().mockRejectedValue(new Error('release failed'));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
     });
@@ -153,7 +1042,7 @@ describe('FactoryTransitionService', () => {
     // Never settles — models a hung sandbox-provider call during cleanup.
     const onTerminalStage = vi.fn(() => new Promise<void>(() => {}));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
       terminalCleanupTimeoutMs: 20,
@@ -165,16 +1054,128 @@ describe('FactoryTransitionService', () => {
     expect(onTerminalStage).toHaveBeenCalledOnce();
   });
 
-  it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
+  it('arms autonomy when a person moves a card, so its follow-up runs instead of parking', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['triage'] });
+    const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
+      storage,
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+
+    const result = await service.transition(request(item, { stage: 'triage' }));
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('arms autonomy when a person creates a card straight into a working lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
       storage,
     });
 
     const result = await service.transition({
-      ...request(item, { stage: 'execute' }),
+      ...request(item, { stage: 'planning' }),
+      cause: 'manual_creation',
+    });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('disarms autonomy when a person parks the card, so later events suggest instead of restarting it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+    const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+    assert(dragged.status === 'accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+
+    const parked = await service.transition({
+      ...request(item, { stage: 'intake', expectedRevision: dragged.revision, identity: 'request-2' }),
+      cause: 'board_drag',
+    });
+
+    expect(parked.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
+  it('takes the factory hand off a card whoever rests it, so a push cannot restart finished work', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+    const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
+    assert(dragged.status === 'accepted');
+
+    const rested = await service.transition({
+      ...request(item, { stage: 'done', expectedRevision: dragged.revision, identity: 'request-2' }),
+      actor: { type: 'system', id: 'reconciler' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+    });
+
+    expect(rested.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
+  it("pre-approves the run an agent's working-lane move queues, naming the agent", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: false } });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'planning' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
+      ingress: { type: 'agent', identity: 'triage-verdict' },
+      triageType: 'bug',
+    });
+
+    expect(result.status).toBe('accepted');
+    const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: 'agent:binding-1' });
+    expect(plan?.approvedAt).not.toBeNull();
+  });
+
+  it('leaves autonomy unarmed when the mover is not a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'triage' }),
+      actor: { type: 'system', id: 'reconciler' },
+      ingress: { type: 'rule', identity: 'rule-1' },
+      cause: 'board_drag',
+    });
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+  });
+
+  it('queues an urgent wake-up when a move has no skill follow-up', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'canceled' }),
       cause: 'board_drag',
     });
 
@@ -183,21 +1184,21 @@ describe('FactoryTransitionService', () => {
       decisions: [
         {
           type: 'sendMessage',
-          role: 'work',
-          message: 'This work was moved from the triage stage to the execute stage.',
+          message: 'This work was moved from the triage stage to the canceled stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
-          prepareBinding: true,
         },
       ],
     });
+    assert(result.status === 'accepted');
+    expect(result.decisions[0]).not.toHaveProperty('role');
   });
 
-  it('attaches a persisted notice to a skill triggered by a board drag', async () => {
+  it('attaches a persisted notice to a skill triggered by a move', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -221,33 +1222,31 @@ describe('FactoryTransitionService', () => {
 
   it('runs onExit before onEnter and atomically persists accepted decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     const order: string[] = [];
-    const rules = defaultFactoryRules({
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: {
-          intake: {
-            issue: {
-              onExit: () => {
-                order.push('exit');
-                return { type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving intake' };
-              },
+      handlers: {
+        intake: {
+          issue: {
+            onExit: () => {
+              order.push('exit');
+              return { type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving intake' };
             },
           },
-          execute: {
-            issue: {
-              onEnter: () => {
-                order.push('enter');
-                return { type: 'sendMessage', idempotencyKey: 'message-enter', role: 'work', message: 'Build it.' };
-              },
+        },
+        execute: {
+          issue: {
+            onEnter: () => {
+              order.push('enter');
+              return { type: 'sendMessage', idempotencyKey: 'message-enter', role: 'work', message: 'Build it.' };
             },
           },
         },
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(order).toEqual(['exit', 'enter']);
     expect(result).toMatchObject({ status: 'accepted', revision: 2, stage: 'execute' });
@@ -255,27 +1254,206 @@ describe('FactoryTransitionService', () => {
       'intake',
       'execute',
     ]);
+    expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['notify-exit', 'message-enter']);
+  });
+
+  it('rejects Review board moves outside its declared lifecycle', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition(request(item, { board: 'review', stage: 'planning' }));
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The Review board does not allow moving from review to planning.',
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it('starts nothing when a person parks a card back in Intake', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'intake' }),
+      cause: 'board_drag',
+    });
+
+    assert(result.status === 'accepted');
+    // No role: the notice goes to whichever session is live on the card, so a
+    // park lands regardless of which seat was running when the person parked it.
+    expect(result.decisions).toEqual([
+      {
+        type: 'sendMessage',
+        idempotencyKey: expect.stringContaining('factory-stage:'),
+        message: 'This work was moved from the review stage to the intake stage.',
+        priority: 'urgent',
+        idleBehavior: 'wake',
+      },
+    ]);
+  });
+
+  it('still opens a session when a person drags a card into a working lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'sendMessage', role: 'work', prepareBinding: true }],
+    });
+  });
+
+  it('starts no second run when a run start records the card entering its own lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      cause: 'run_start',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('lets the bound agent walk its parked card back into its lane without racing a second run', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, {
+      source: 'github-pr',
+      stages: ['intake'],
+      metadata: { authorTrusted: true },
+    });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'request-1' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'review', decisions: [] });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('refuses an agent pulling an externally authored card out of rest', async () => {
+    // The card's own content can steer the agent; leaving rest on a card from
+    // outside the write-access circle takes a person's gesture, never the agent's.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, {
+      source: 'github-pr',
+      stages: ['intake'],
+      metadata: { authorTrusted: false },
+    });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'self-resume-1' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('refuses the agent resume on a GitHub card missing its trust stamp', async () => {
+    // Pre-stamp cards fail closed: absence of `authorTrusted` is not trust.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'self-resume-2' },
+      cause: 'user asked to resume the review',
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+  });
+
+  it('still hands the next seat its run when an agent moves the card past its own stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['planning'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
+      ingress: { type: 'agent', identity: 'request-1' },
+      cause: 'plan approved',
+    });
+
+    assert(result.status === 'accepted');
+    expect(result.decisions).toMatchObject([{ type: 'invokeSkill', role: 'work' }]);
+  });
+
+  it('still runs the left lane onExit when a run start skips the entered lane', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'lifecycle-test', stages: ['triage'] });
+    const rules = lifecycleOptions({
+      version: 'rules-v1',
+      handlers: {
+        triage: {
+          issue: { onExit: () => ({ type: 'notify', idempotencyKey: 'notify-exit', title: 'Leaving triage' }) },
+        },
+      },
+    });
+
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition({
+      ...request(item, { stage: 'execute' }),
+      cause: 'run_start',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(entry => entry.idempotencyKey)).toEqual([
       'notify-exit',
-      'message-enter',
     ]);
   });
 
   it('persists rule rejection without moving or queuing decisions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
-    const rules = defaultFactoryRules({
+    const item = await createItem(storage, { board: 'lifecycle-test' });
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: {
-          execute: {
-            issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Approval is required.' }) },
-          },
+      handlers: {
+        execute: {
+          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Approval is required.' }) },
         },
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(result).toMatchObject({ status: 'rejected', code: 'forbidden', reason: 'Approval is required.' });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
@@ -284,15 +1462,13 @@ describe('FactoryTransitionService', () => {
 
   it('turns thrown rules into bounded safe rejection', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
-    const rules = defaultFactoryRules({
+    const item = await createItem(storage, { board: 'lifecycle-test' });
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: {
-        work: { execute: { issue: { onEnter: () => Promise.reject(new Error('provider unavailable')) } } },
-      },
+      handlers: { execute: { issue: { onEnter: () => Promise.reject(new Error('provider unavailable')) } } },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const result = await new FactoryTransitionService({ ...rules, storage }).transition(request(item));
 
     expect(result).toMatchObject({ status: 'rejected', code: 'rule_error' });
     expect(result.status === 'rejected' ? result.reason : '').toContain('provider unavailable');
@@ -300,19 +1476,19 @@ describe('FactoryTransitionService', () => {
 
   it('applies one timeout to the full primary evaluation and ignores late resolution', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     let resolveRule!: (value: { type: 'notify'; idempotencyKey: string; title: string }) => void;
     const lateRule = new Promise<{ type: 'notify'; idempotencyKey: string; title: string }>(resolve => {
       resolveRule = resolve;
     });
-    const rules = defaultFactoryRules({
+    const rules = lifecycleOptions({
       version: 'rules-v1',
-      overrides: { work: { execute: { issue: { onEnter: () => lateRule } } } },
+      handlers: { execute: { issue: { onEnter: () => lateRule } } },
     });
 
     vi.useFakeTimers();
     try {
-      const transition = new FactoryTransitionService({ rules, storage }).transition(request(item));
+      const transition = new FactoryTransitionService({ ...rules, storage }).transition(request(item));
       await vi.advanceTimersByTimeAsync(5_000);
       const result = await transition;
       expect(result).toMatchObject({ status: 'rejected', code: 'timeout' });
@@ -330,7 +1506,7 @@ describe('FactoryTransitionService', () => {
   it('always returns typed stale on CAS loss and never overwrites canonical state', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-2', patch: { title: 'Changed concurrently' } });
 
     const result = await service.transition(request(item));
@@ -341,18 +1517,18 @@ describe('FactoryTransitionService', () => {
 
   it('replays immutable ingress across rule version changes without re-evaluation', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage);
+    const item = await createItem(storage, { board: 'lifecycle-test' });
     const first = await new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      ...lifecycleOptions({ version: 'rules-v1', handlers: {} }),
       storage,
     }).transition(request(item));
     const laterRule = vi.fn(() => ({ type: 'reject' as const, code: 'forbidden' as const, reason: 'new policy' }));
-    const rulesV2 = defaultFactoryRules({
+    const rulesV2 = lifecycleOptions({
       version: 'rules-v2',
-      overrides: { work: { execute: { issue: { onEnter: laterRule } } } },
+      handlers: { execute: { issue: { onEnter: laterRule } } },
     });
 
-    const replay = await new FactoryTransitionService({ rules: rulesV2, storage }).transition(
+    const replay = await new FactoryTransitionService({ ...rulesV2, storage }).transition(
       request(item, { stage: 'planning' }),
     );
 
@@ -365,13 +1541,13 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const handler = vi.fn(() => ({ type: 'notify' as const, idempotencyKey: 'never', title: 'Never' }));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({
+      ...lifecycleOptions({
         version: 'rules-v1',
-        overrides: { work: { execute: { issue: { onEnter: handler } } } },
+        handlers: { execute: { issue: { onEnter: handler } } },
       }),
       storage,
     });
-    const missing = { id: '00000000-0000-4000-8000-000000000099', revision: 1 };
+    const missing = { board: 'lifecycle-test', id: '00000000-0000-4000-8000-000000000099', revision: 1 };
 
     const first = await service.transition(request(missing, { identity: 'missing-event' }));
     const replay = await service.transition(request(missing, { identity: 'missing-event', stage: 'done' }));
@@ -385,7 +1561,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const result = await new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     }).transition(request(item, { stage: 'intake' }));
 
@@ -400,7 +1576,7 @@ describe('FactoryTransitionService', () => {
       source: 'github-pr',
       sourceKey: 'github-pr:2',
     });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     const causalChain = Array.from({ length: MAX_FACTORY_RULE_CAUSAL_DEPTH + 1 }, (_, index) => ({
       ingressId: `ingress-${index}`,
       decisionType: 'transition' as const,
@@ -427,7 +1603,7 @@ describe('FactoryTransitionService', () => {
   it('accepts a human cancel and can revive the item out of canceled', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['review'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
     expect(discard).toMatchObject({ status: 'accepted', stage: 'canceled' });
@@ -444,19 +1620,239 @@ describe('FactoryTransitionService', () => {
 
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const first = await createItem(storage, { orgId: 'org-1', sourceKey: 'github-issue:one' });
-    const second = await createItem(storage, { orgId: 'org-2', sourceKey: 'github-issue:two' });
-    const handler = () => ({ type: 'notify' as const, idempotencyKey: 'same-effect-key', title: 'Moved' });
-    const rules = defaultFactoryRules({
-      version: 'rules-v1',
-      overrides: { work: { execute: { issue: { onEnter: handler } } } },
+    const first = await createItem(storage, { board: 'lifecycle-test', orgId: 'org-1', sourceKey: 'github-issue:one' });
+    const second = await createItem(storage, {
+      board: 'lifecycle-test',
+      orgId: 'org-2',
+      sourceKey: 'github-issue:two',
     });
-    const service = new FactoryTransitionService({ rules, storage });
+    const handler = () => ({ type: 'notify' as const, idempotencyKey: 'same-effect-key', title: 'Moved' });
+    const rules = lifecycleOptions({
+      version: 'rules-v1',
+      handlers: { execute: { issue: { onEnter: handler } } },
+    });
+    const service = new FactoryTransitionService({ ...rules, storage });
 
     await service.transition(request(first, { identity: 'same-ingress' }));
     await service.transition(request(second, { orgId: 'org-2', identity: 'same-ingress' }));
 
-    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
-    expect(await storage.listDeferredDecisions('org-2', PROJECT_ID)).toHaveLength(1);
+    expect(await ruleDecisionKeys(storage, 'org-1')).toEqual(['same-effect-key']);
+    expect(await ruleDecisionKeys(storage, 'org-2')).toEqual(['same-effect-key']);
+  });
+
+  it('requires legacy items to be assigned before custom-only transitions', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const board = createTestBoard();
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-legacy' })),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: expect.stringContaining('Assign an installed board and phase'),
+    });
+  });
+
+  it('validates and runs phase behavior from an installed custom board', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'release', stages: ['queued'] });
+    const onEnter = vi.fn();
+    const board = createTestBoard({ onShipped: onEnter });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      storage,
+    });
+
+    await expect(
+      service.transition(request(item, { board: 'release', stage: 'shipped', identity: 'ship-release' })),
+    ).resolves.toMatchObject({ status: 'accepted', stage: 'shipped' });
+    expect(onEnter).toHaveBeenCalledOnce();
+    await expect(
+      service.transition(
+        request(
+          { id: item.id, revision: item.revision + 1 },
+          { board: 'work', stage: 'done', identity: 'work-disabled' },
+        ),
+      ),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason: 'The work item belongs to board "release", not "work".',
+    });
+  });
+});
+
+describe('phase semantics', () => {
+  it.each([
+    ['triage', 'triage'],
+    ['planning', 'plan'],
+    ['execute', 'work'],
+    ['review', 'work'],
+  ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({ ...request(item, { stage }), cause: 'board_drag' });
+
+    assert(result.status === 'accepted');
+    expect(
+      result.decisions.find(decision => decision.type === 'sendMessage' || decision.type === 'invokeSkill'),
+    ).toMatchObject({ role });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('seats a human kickoff into Review review with the review role', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({
+      ...request(item, { board: 'review', stage: 'review' }),
+      cause: 'board_drag',
+    });
+
+    assert(result.status === 'accepted');
+    expect(result.decisions[0]).toMatchObject({ role: 'review' });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+  });
+
+  it('guards an agent moving an externally authored card from Work rest into work, but not between working lanes', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['intake'], metadata: { authorTrusted: false } });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    const agent = { type: 'agent' as const, bindingId: 'agent', role: 'work' };
+
+    await expect(service.transition({ ...request(item, { stage: 'planning' }), actor: agent })).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'approval_required',
+    });
+
+    const moved = await service.transition({
+      ...request(item, { stage: 'planning', identity: 'human-1' }),
+      cause: 'board_drag',
+    });
+    assert(moved.status === 'accepted');
+    await expect(
+      service.transition({
+        ...request(item, { stage: 'execute', expectedRevision: moved.revision, identity: 'agent-2' }),
+        actor: agent,
+      }),
+    ).resolves.toMatchObject({ status: 'accepted' });
+  });
+
+  describe('custom board declarations', () => {
+    async function setup(stages: string[] = ['queued']) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, { board: 'release', stages });
+      const onTerminalStage = vi.fn();
+      const service = new FactoryTransitionService({
+        configVersion: 'rules-v1',
+        boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+        storage,
+        onTerminalStage,
+      });
+      return { storage, item, service, onTerminalStage };
+    }
+
+    it('arms autonomy and seats the declared role when a person moves into a working phase', async () => {
+      const { storage, item, service, onTerminalStage } = await setup();
+
+      const result = await service.transition({
+        ...request(item, { board: 'release', stage: 'shipping' }),
+        cause: 'board_drag',
+      });
+
+      assert(result.status === 'accepted');
+      expect(result.decisions[0]).toMatchObject({ type: 'sendMessage', role: 'release', prepareBinding: true });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+      expect(onTerminalStage).not.toHaveBeenCalled();
+    });
+
+    it('disarms, sends an unseated notice, and releases resources when a person moves into a terminal phase', async () => {
+      const { storage, item, service, onTerminalStage } = await setup(['shipping']);
+
+      const result = await service.transition({
+        ...request(item, { board: 'release', stage: 'shipped' }),
+        cause: 'board_drag',
+      });
+
+      assert(result.status === 'accepted');
+      expect(result.decisions[0]).toMatchObject({ type: 'sendMessage' });
+      expect(result.decisions[0]).not.toHaveProperty('role');
+      expect(result.decisions[0]).not.toHaveProperty('prepareBinding');
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
+      expect(onTerminalStage).toHaveBeenCalledWith(
+        expect.objectContaining({ workItemId: item.id, stage: 'shipped', revision: result.revision }),
+      );
+    });
+
+    it('guards an agent moving an externally authored card from a custom resting phase into work', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const item = await createItem(storage, {
+        board: 'release',
+        stages: ['queued'],
+        metadata: { authorTrusted: false },
+      });
+      const service = new FactoryTransitionService({
+        configVersion: 'rules-v1',
+        boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+        storage,
+      });
+
+      await expect(
+        service.transition({
+          ...request(item, { board: 'release', stage: 'shipping' }),
+          actor: { type: 'agent', bindingId: 'agent', role: 'release' },
+        }),
+      ).resolves.toMatchObject({ status: 'rejected', code: 'approval_required' });
+    });
+
+    it('gives a board that reuses Work phase names exactly what it declared', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const board = defineBoard({
+        id: 'bot-board',
+        title: 'Bot board',
+        initialPhase: 'intake',
+        phases: {
+          intake: { title: 'Intake', kind: 'resting', outcomes: { start: 'triage', finish: 'done' } },
+          triage: { title: 'Triage', kind: 'working', role: 'bot', outcomes: { next: 'execute', finish: 'done' } },
+          execute: { title: 'Execute', kind: 'working', role: 'bot', outcomes: { park: 'done' } },
+          // Named like Work's terminal phase but declared working: the card stays seated here.
+          done: { title: 'Done', kind: 'working', role: 'bot', outcomes: { reopen: 'intake' } },
+        },
+      });
+      const onTerminalStage = vi.fn();
+      const service = new FactoryTransitionService({
+        configVersion: 'rules-v1',
+        boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+        storage,
+        onTerminalStage,
+      });
+      const item = await createItem(storage, { board: board.id, stages: ['intake'] });
+
+      const triaged = await service.transition({
+        ...request(item, { board: board.id, stage: 'triage' }),
+        cause: 'board_drag',
+      });
+      assert(triaged.status === 'accepted');
+      expect(triaged.decisions[0]).toMatchObject({ role: 'bot', prepareBinding: true });
+
+      const done = await service.transition({
+        ...request(item, { board: board.id, stage: 'done', expectedRevision: triaged.revision, identity: 'human-2' }),
+        cause: 'board_drag',
+      });
+      assert(done.status === 'accepted');
+      expect(done.decisions[0]).toMatchObject({ role: 'bot', prepareBinding: true });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeInstanceOf(Date);
+      expect(onTerminalStage).not.toHaveBeenCalled();
+    });
   });
 });

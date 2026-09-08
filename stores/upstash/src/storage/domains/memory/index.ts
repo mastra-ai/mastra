@@ -47,6 +47,7 @@ function getMessageIndexKey(messageId: string): string {
 }
 
 export class StoreMemoryUpstash extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   private client: Redis;
   #db: UpstashDB;
   constructor(config: UpstashDomainConfig) {

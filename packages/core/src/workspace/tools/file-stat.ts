@@ -9,6 +9,7 @@ export const fileStatTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT,
   description:
     'Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.',
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path to check'),
   }),

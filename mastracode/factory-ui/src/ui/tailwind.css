@@ -10,9 +10,19 @@
  * uncompiled theme lets Tailwind read @theme and generate DS utilities without
  * treating theme.css as the component stylesheet. */
 @import '@mastra/playground-ui/theme.css';
-@import './domains/factory/metrics-theme.css';
 
 @custom-variant dark (&:is(.dark *));
+
+/* Mona Sans everywhere, same as Studio. Faces come from
+ * @fontsource-variable/mona-sans, imported in main.tsx. */
+@layer base {
+  :root {
+    --font-display:
+      'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+      'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-body: var(--font-display);
+  }
+}
 
 /* Alias the `icon` text ramp onto the design-system `neutral` ramp.
  * The web UI uses `text-icon1..6` for its text hierarchy, but the DS theme
@@ -28,6 +38,15 @@
   --color-icon5: var(--neutral5);
   --color-icon6: var(--neutral6);
   --color-pr-merged: var(--pr-merged);
+}
+
+/* The board card's corner. It is not a free number: a card is a rounded box with
+ * a capsule pill sitting in its bottom corner, and the two only look concentric
+ * while the card's radius is the pill's plus the padding between them —
+ * `1.375rem = 0.875rem (h-form-sm capsule) + 0.5rem (p-2)`. Move one, move all
+ * three. */
+@theme {
+  --radius-card: 1.375rem;
 }
 
 /* Merged pull requests read purple everywhere; the DS accent ramp has no purple.

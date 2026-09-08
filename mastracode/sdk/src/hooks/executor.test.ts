@@ -12,10 +12,15 @@ vi.mock('node:child_process', () => ({
 
 const { executeHook } = await import('./executor.js');
 
+class FakeStdin extends EventEmitter {
+  write = vi.fn();
+  end = vi.fn();
+}
+
 class FakeChildProcess extends EventEmitter {
   stdout = new EventEmitter();
   stderr = new EventEmitter();
-  stdin = { write: vi.fn(), end: vi.fn() };
+  stdin = new FakeStdin();
   kill = vi.fn();
 }
 
@@ -70,5 +75,31 @@ describe('executeHook Windows argument handling', () => {
 
     const callOptions = spawnMock.mock.calls[0]?.[2] as Record<string, unknown>;
     expect(callOptions).not.toHaveProperty('windowsVerbatimArguments');
+  });
+});
+
+describe('executeHook stdin failures', () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+  });
+
+  it('survives an EPIPE when the hook closes stdin without reading it', async () => {
+    const fakeChild = new FakeChildProcess();
+    const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE', errno: -32 });
+
+    spawnMock.mockImplementation(() => {
+      setImmediate(() => {
+        // An EventEmitter with no 'error' listener rethrows on emit, which is
+        // exactly how this used to take the whole host process down.
+        fakeChild.stdin.emit('error', epipe);
+        fakeChild.emit('close', 0);
+      });
+      return fakeChild;
+    });
+
+    const result = await executeHook(makeHook('echo ignoring-stdin'), makeStdin());
+
+    expect(result.exitCode).toBe(0);
+    expect(result.timedOut).toBe(false);
   });
 });

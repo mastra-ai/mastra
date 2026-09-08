@@ -18,32 +18,16 @@ export type {
 } from './resources/a2a';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
-  AgentControllerInfo,
   MastraDBMessage,
   MastraMessageContentV2,
   MastraMessagePart,
   AgentControllerEvent,
   KnownAgentControllerEvent,
   OtherAgentControllerEvent,
-  CreateAgentControllerSessionResponse,
   AgentControllerRequestOptions,
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
-  AgentControllerSessionState,
-  AgentControllerSessionSettings,
-  AgentControllerOMProgress,
-  AgentControllerModeInfo,
-  AgentControllerThreadInfo,
-  AgentControllerTaskSnapshot,
-  AgentControllerAvailableModel,
-  AgentControllerWorkspaceStatus,
-  AgentControllerGoalRecord,
-  SendNotificationInput,
-  SendNotificationResult,
   PlanResume,
-  PermissionPolicy,
-  PermissionRules,
-  ToolCategory,
 } from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most

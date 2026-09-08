@@ -74,12 +74,7 @@ export function ScoresOverTimeCard({
                 )}
               </TabContent>
               <TabContent value="summary">
-                <DataList
-                  columns="auto auto auto auto auto"
-                  className="max-h-80"
-                  mask={{ left: false }}
-                  stickyHeaderBackground="tinted"
-                >
+                <DataList columns="auto auto auto auto auto" className="max-h-80" mask={{ left: false }}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
                     <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>
@@ -89,9 +84,7 @@ export function ScoresOverTimeCard({
                   </DataList.Top>
                   {summaryData.map(row => (
                     <DataList.RowStatic key={row.scorer}>
-                      <DataList.RowHeaderCell height="compact" className="text-ui-sm">
-                        {row.scorer}
-                      </DataList.RowHeaderCell>
+                      <DataList.RowHeaderCell className="text-ui-sm">{row.scorer}</DataList.RowHeaderCell>
                       <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
                       <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>

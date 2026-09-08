@@ -94,6 +94,8 @@ beforeAll(async () => {
 
   expect(first.build.buildId).not.toBe(second.build.buildId);
   expect(first.build.createdAt).not.toBe(second.build.createdAt);
+  expect(first.files).toEqual(second.files);
+  expect(first.artifact.contentDigest).toBe(second.artifact.contentDigest);
   expect({
     ...first,
     build: undefined,

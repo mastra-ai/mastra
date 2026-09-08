@@ -35,12 +35,6 @@ export interface BundlerOptions {
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
-  /**
-   * Extra process entries to emit beside the server bundle, as output name ->
-   * absolute source path. Already resolved and validated against the user's
-   * `bundler.entries` config; see `resolveExtraEntries`.
-   */
-  entries?: Record<string, string>;
 }
 
 /**

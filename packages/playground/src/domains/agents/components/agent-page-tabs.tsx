@@ -2,12 +2,12 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
+import { ExternalLink, EyeIcon, FlaskConical, ClipboardCheck, GitBranch, LayoutPanelLeft } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
-/** Tabs that render a pill in the bar. Routes without a pill (e.g. settings) pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+/** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
+export type AgentPageTab = 'overview' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
@@ -108,7 +108,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
-    chat: `/agents/${agentId}/chat/new`,
+    overview: `/agents/${agentId}/overview`,
     versions: `/agents/${agentId}/editor`,
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
@@ -131,7 +131,7 @@ export function AgentPageTabs({
         className="min-w-0 flex-1 max-lg:flex-auto"
       >
         <TabList variant="pill-ghost">
-          <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
+          <AgentTab value="overview" icon={<LayoutPanelLeft />} label="Overview" />
           <AgentTab
             value="versions"
             icon={<GitBranch />}

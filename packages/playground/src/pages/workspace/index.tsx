@@ -16,6 +16,7 @@ import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-i
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { isImageFile, isVideoFile } from '@/domains/workspace/file-type-utils';
 import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
 import {
   useWorkspaceInfo,
@@ -127,10 +128,18 @@ export default function Workspace() {
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Selected file content - pass workspaceId
+  // Selected file content - pass workspaceId. Request base64 for images and
+  // videos: reading binary content as text (the default) corrupts it, and
+  // previewing that text as if it were base64 throws "btoa: characters
+  // outside Latin1 range" downstream (images) or renders raw garbled bytes
+  // (videos, no crash but useless). isImageFile/isVideoFile are the same
+  // predicates FileViewer uses to decide how to render — they must stay in
+  // sync, or a file requested as text gets rendered as media (or vice versa).
+  const selectedFileIsMedia = isImageFile(selectedFile ?? '') || isVideoFile(selectedFile ?? '');
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
     enabled: !!selectedFile,
     workspaceId: effectiveWorkspaceId,
+    encoding: selectedFileIsMedia ? 'base64' : undefined,
   });
 
   // Skills - pass workspaceId to get skills from the selected workspace
@@ -354,8 +363,10 @@ export default function Workspace() {
     );
   }
 
+  const showSkillsEmptyState = activeTab === 'skills' && hasSkills && !isSkillsConfigured && !isLoadingSkills;
+
   return (
-    <PageLayout>
+    <PageLayout className={showSkillsEmptyState ? 'flex min-h-full flex-col' : undefined}>
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">
@@ -366,7 +377,7 @@ export default function Workspace() {
         </PageLayout.TopArea>
       )}
 
-      <PageLayout.MainArea className="grid content-start gap-6">
+      <PageLayout.MainArea className={showSkillsEmptyState ? 'flex flex-1 flex-col gap-6' : 'grid content-start gap-6'}>
         {/* Workspace Selector - shown when multiple workspaces exist */}
         {workspaces.length > 1 && (
           <div className="relative">
@@ -479,7 +490,12 @@ export default function Workspace() {
         )}
 
         {(hasFilesystem || hasSkills) && (
-          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={activeTab}>
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            defaultTab={activeTab}
+            className={showSkillsEmptyState ? 'flex flex-1 flex-col' : undefined}
+          >
             <TabList>
               {hasFilesystem && (
                 <Tab value="files">
@@ -535,7 +551,7 @@ export default function Workspace() {
             )}
 
             {hasSkills && (
-              <TabContent value="skills" className="pb-8">
+              <TabContent value="skills" className={showSkillsEmptyState ? 'flex-1 pb-8' : 'pb-8'}>
                 <SkillsTable
                   skills={skills}
                   isLoading={isLoadingSkills}

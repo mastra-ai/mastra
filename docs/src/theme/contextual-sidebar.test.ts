@@ -104,6 +104,22 @@ describe('contextual sidebar model', () => {
     expect(items).not.toBe(category.items)
   })
 
+  it('uses a custom label for the contextual category link', () => {
+    const category = createCategory()
+    category.customProps = {
+      ...category.customProps,
+      contextualSidebarLabel: 'Multi-agent systems',
+    }
+
+    const items = createContextualSidebarItems({ ...category, href: '/docs/guides/multi-agent-systems' })
+
+    expect(items[0]).toEqual({
+      type: 'link',
+      label: 'Multi-agent systems',
+      href: '/docs/guides/multi-agent-systems',
+    })
+  })
+
   it('collects nested local destinations and normalizes exact pathnames', () => {
     const category = createCategory()
     if (!category.href) {

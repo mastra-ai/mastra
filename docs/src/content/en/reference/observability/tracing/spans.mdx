@@ -1,6 +1,6 @@
 ---
 title: "Reference: Spans | Observability"
-description: Span interfaces, methods, and lifecycle events
+description: "Span interface, used internally for tracing. Extends BaseSpan with lifecycle methods and properties."
 packages:
   - "@mastra/core"
 ---
@@ -80,7 +80,7 @@ interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
 ### Properties
 
-```typescript prettier:false
+```typescript oxfmt:false
 /** Returns TRUE if the span is the root span of a trace */
 get isRootSpan(): boolean
 
@@ -98,7 +98,7 @@ exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined
 
 #### end
 
-```typescript prettier:false
+```typescript oxfmt:false
 end(options?: EndSpanOptions<TType>): void
 ```
 
@@ -129,7 +129,7 @@ Ends the span and triggers export to configured exporters. Sets the `endTime` an
 
 #### error
 
-```typescript prettier:false
+```typescript oxfmt:false
 error(options: ErrorSpanOptions<TType>): void
 ```
 
@@ -166,7 +166,7 @@ Records an error on the span. Sets the `errorInfo` field and can optionally end 
 
 #### update
 
-```typescript prettier:false
+```typescript oxfmt:false
 update(options: UpdateSpanOptions<TType>): void
 ```
 
@@ -203,7 +203,7 @@ Updates span data while it's still active. Can modify `input`, `output`, `metada
 
 #### `createChildSpan`
 
-```typescript prettier:false
+```typescript oxfmt:false
 createChildSpan<TChildType extends SpanType>(
   options: ChildSpanOptions<TChildType>
 ): Span<TChildType>
@@ -248,7 +248,7 @@ Creates a child span under this span. Child spans track sub-operations and inher
 
 #### `createEventSpan`
 
-```typescript prettier:false
+```typescript oxfmt:false
 createEventSpan<TChildType extends SpanType>(
   options: ChildEventOptions<TChildType>
 ): Span<TChildType>
@@ -365,7 +365,7 @@ When tracing is disabled (sampling returns false), NO-OP spans are returned:
 
 ### `NoOpSpan`
 
-```typescript prettier:false
+```typescript oxfmt:false
 class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
 ```
 

@@ -8,6 +8,7 @@ export {
   type UseTraceOrBranchSpansArgs,
   type UseTraceOrBranchSpansResult,
 } from './use-trace-or-branch-spans';
+export { useTraceSearch, type UseTraceSearchResult } from './use-trace-search';
 export { useTraceSpans } from './use-trace-spans';
 export { useTraces } from './use-traces';
 export { useTags } from './use-tags';
@@ -22,8 +23,4 @@ export {
   type UseTraceUrlStateOptions,
   type SetURLSearchParamsLike,
 } from './use-trace-url-state';
-export {
-  useTraceFilterPersistence,
-  type UseTraceFilterPersistenceResult,
-  type TraceFilterPersistenceOptions,
-} from './use-trace-filter-persistence';
+export { useTraceFilterPersistence, type TraceFilterPersistenceOptions } from './use-trace-filter-persistence';

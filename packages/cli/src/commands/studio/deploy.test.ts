@@ -489,11 +489,12 @@ describe('getDeployEnvFiles', () => {
     await expect(getDeployEnvFiles('/project')).resolves.toEqual([]);
   });
 
-  it('returns sorted deploy env files, excluding .example files', async () => {
+  it('returns sorted deploy env files, excluding .example and .env.schema files', async () => {
     const { readdir } = await import('node:fs/promises');
     vi.mocked(readdir).mockResolvedValue([
       { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
       { name: '.env.example', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env.schema', isFile: () => true, isSymbolicLink: () => false },
       { name: '.env', isFile: () => true, isSymbolicLink: () => false },
       { name: 'package.json', isFile: () => true, isSymbolicLink: () => false },
     ] as unknown as Awaited<ReturnType<typeof readdir>>);

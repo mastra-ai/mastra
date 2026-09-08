@@ -8,14 +8,18 @@ export function getPlansDir(): string {
   return process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
 }
 
-/** Local (project-scoped) plans directory where the agent writes named plan files. */
-export function getLocalPlansDir(projectPath: string): string {
-  return path.join(projectPath, DEFAULT_CONFIG_DIR, 'plans');
+export interface LocalPlansOptions {
+  factoryProjectId?: string | null;
 }
 
 /** Workspace-relative directory the agent writes plan files into. */
-export function getLocalPlansRelativeDir(): string {
-  return path.join(DEFAULT_CONFIG_DIR, 'plans');
+export function getLocalPlansRelativeDir(options: LocalPlansOptions = {}): string {
+  return options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
+}
+
+/** Local (project-scoped) plans directory where the agent writes named plan files. */
+export function getLocalPlansDir(projectPath: string, options: LocalPlansOptions = {}): string {
+  return path.join(projectPath, getLocalPlansRelativeDir(options));
 }
 
 function slugify(str: string): string {
@@ -35,9 +39,9 @@ export function getPlanFilename(title: string): string {
  * Suggested workspace-relative path for a new plan file, shown in plan-mode prompts.
  * Without a title we fall back to a generic name the agent can rename later.
  */
-export function getSuggestedPlanRelativePath(title?: string): string {
+export function getSuggestedPlanRelativePath(title?: string, options: LocalPlansOptions = {}): string {
   const filename = title ? getPlanFilename(title) : 'plan.md';
-  return path.join(getLocalPlansRelativeDir(), filename);
+  return path.join(getLocalPlansRelativeDir(options), filename);
 }
 
 /**
@@ -51,16 +55,16 @@ export function resolvePlanPath(projectPath: string, submittedPath: string): str
 
 /**
  * Whether `targetPath` (absolute or project-relative) is a valid plan file: a `.md`
- * file located directly inside the project's `.mastracode/plans/` directory. Used by the
+ * file located directly inside the project's configured plan directory. Used by the
  * plan-mode write guard so the agent can write any named plan file there, but nothing
  * outside that directory.
  */
-export function isPlanFilePath(projectPath: string, targetPath: string): boolean {
+export function isPlanFilePath(projectPath: string, targetPath: string, options: LocalPlansOptions = {}): boolean {
   const abs = resolvePlanPath(projectPath, targetPath);
   if (!abs) return false;
   if (path.extname(abs).toLowerCase() !== '.md') return false;
 
-  const plansDir = path.resolve(getLocalPlansDir(projectPath));
+  const plansDir = path.resolve(getLocalPlansDir(projectPath, options));
   const rel = path.relative(plansDir, abs);
   // Must be directly inside the plans dir (no nested subdirectories, no escaping it).
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;

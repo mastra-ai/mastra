@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
+import { kimiCodingOAuthProvider } from './providers/kimi-coding.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
 import { xaiOAuthProvider } from './providers/xai.js';
 import type {
@@ -29,6 +30,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
+  'kimi-for-coding': 'kimi-for-coding/kimi-for-coding',
   xai: 'xai/grok-4.5',
 };
 
@@ -37,6 +39,7 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
+  [kimiCodingOAuthProvider.id, kimiCodingOAuthProvider],
   [xaiOAuthProvider.id, xaiOAuthProvider],
 ]);
 
@@ -59,6 +62,7 @@ export function getOAuthProviders(): OAuthProviderInterface[] {
  */
 export class AuthStorage {
   private data: AuthStorageData = {};
+  private refreshPromises = new Map<string, Promise<string | undefined>>();
 
   constructor(private authPath: string = join(getAppDataDir(), 'auth.json')) {
     this.reload();
@@ -216,16 +220,25 @@ export class AuthStorage {
         return undefined;
       }
 
-      // Check if token needs refresh
+      // Share one refresh when concurrent requests observe the same expired token.
       if (Date.now() >= cred.expires) {
-        try {
-          const newCreds = await provider.refreshToken(cred);
-          this.set(providerId, { type: 'oauth', ...newCreds });
-          return provider.getApiKey(newCreds);
-        } catch {
-          // Refresh failed - user needs to re-login
-          return undefined;
-        }
+        const pendingRefresh = this.refreshPromises.get(providerId);
+        if (pendingRefresh) return pendingRefresh;
+
+        const refresh = (async () => {
+          try {
+            const newCreds = await provider.refreshToken(cred);
+            this.set(providerId, { type: 'oauth', ...newCreds });
+            return provider.getApiKey(newCreds);
+          } catch {
+            // Refresh failed - user needs to re-login
+            return undefined;
+          } finally {
+            this.refreshPromises.delete(providerId);
+          }
+        })();
+        this.refreshPromises.set(providerId, refresh);
+        return refresh;
       }
 
       return provider.getApiKey(cred);

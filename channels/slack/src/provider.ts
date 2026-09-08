@@ -409,14 +409,14 @@ export class SlackProvider implements ChannelProvider {
         }
       } catch (err) {
         throw new Error(
-          '[Slack] Failed to resolve Mastra storage. Ensure your Mastra instance has storage configured (e.g. LibSQLStore or PostgresStore).',
+          '[Slack] Failed to resolve Mastra storage. Ensure your Mastra instance has storage configured (e.g. LibSQLStore or PostgresStore). See https://mastra.ai/docs/storage',
           { cause: err },
         );
       }
     }
 
     throw new Error(
-      '[Slack] No storage available. SlackProvider requires persistent storage — configure a storage backend on your Mastra instance.',
+      '[Slack] No storage available. SlackProvider requires persistent storage, configure a storage backend on your Mastra instance. See https://mastra.ai/docs/storage',
     );
   }
 

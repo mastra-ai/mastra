@@ -278,10 +278,6 @@ describe('Thread', () => {
       expect(screen.getByRole('navigation', { name: 'Conversation timeline' })).toBeTruthy();
       expect(screen.getAllByRole('button', { name: /Jump to/ })).toHaveLength(2);
       const rail = screen.getByTestId('thread-rail');
-      expect(screen.getByTestId('thread-rail-container').className).toContain('thread-rail-container');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('thread-rail-layer');
-      expect(screen.getByTestId('thread-rail-layer').className).toContain('left-4');
-      expect(screen.getByTestId('thread-rail-layer').className).not.toContain('xl:block');
       expect(screen.getByTestId('thread-rail-scroll-area')).toBeTruthy();
       expect(screen.getByTestId('thread-message-column').contains(rail)).toBe(false);
 
@@ -609,7 +605,7 @@ describe('Thread', () => {
 
     // The attachment chip row appears and the popover closes.
     await waitFor(() => {
-      expect(document.querySelector('[data-attachments-row]')).toBeTruthy();
+      expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();
@@ -760,7 +756,9 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop, taskCook]);
 
     expect(await screen.findByTestId('task-panel')).toBeTruthy();
-    expect(screen.getByText('0/3 completed')).toBeTruthy();
+    const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('0');
+    expect(progress.getAttribute('aria-valuemax')).toBe('3');
     expect(screen.getByText('Planning menu')).toBeTruthy();
     expect(screen.getByText('Create shopping list')).toBeTruthy();
     expect(screen.getByText('Cook meal')).toBeTruthy();
@@ -776,7 +774,11 @@ describe('TaskPanel', () => {
     await pushTasks([taskPlanMenu, taskShop]);
     await pushTasks([completedPlan, activeShop], 'task-list-update');
 
-    expect(await screen.findByText('1/2 completed')).toBeTruthy();
+    await waitFor(() => {
+      const progress = screen.getByRole('progressbar', { name: 'Task completion' });
+      expect(progress.getAttribute('aria-valuenow')).toBe('1');
+      expect(progress.getAttribute('aria-valuemax')).toBe('2');
+    });
     expect(screen.getByText('Plan menu')).toBeTruthy();
     expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
     expect(screen.queryByText('Planning menu')).toBeFalsy();

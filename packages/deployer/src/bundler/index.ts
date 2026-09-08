@@ -18,7 +18,6 @@ import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { resolveExtraEntries } from './entries';
 import {
   collectTransitiveWorkspaceDependencies,
   getWorkspaceInformation,
@@ -386,6 +385,10 @@ export abstract class Bundler extends MastraBundler {
 
   protected pnpmNodeLinker?: 'hoisted';
 
+  protected getAdditionalEntries(): Record<string, string> {
+    return {};
+  }
+
   protected async installDependencies(
     outputDirectory: string,
     rootDir = process.cwd(),
@@ -494,7 +497,8 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap, enableMinify, enableEsmShim, externals, entries }: BundlerOptions,
+    { enableSourcemap, enableMinify, enableEsmShim, externals }: BundlerOptions,
+    additionalEntries: Record<string, string>,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -516,24 +520,29 @@ export abstract class Bundler extends MastraBundler {
         externalsPreset: externals === true,
       },
     );
-    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
+    const entryInputs: Record<string, string> = {};
+    const virtualEntries: Record<string, string> = {};
+    const entries = { index: serverFile, ...additionalEntries };
 
-    // User-declared extra entries (`bundler.entries`) are emitted beside the server
-    // bundle as their own `<name>.mjs`. They share this input map so they also share
-    // the `#mastra` chunk and the analyzed dependency graph.
-    const extraEntries = entries ?? {};
-
-    if (isVirtual) {
-      inputOptions.input = { index: '#entry', ...extraEntries, ...toolsInputOptions };
-
-      if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual({ '#entry': serverFile }));
+    for (const [name, entry] of Object.entries(entries)) {
+      if (entry.includes('\n') || !existsSync(entry)) {
+        const virtualId = name === 'index' ? '#entry' : `#entry-${name}`;
+        entryInputs[name] = virtualId;
+        virtualEntries[virtualId] = entry;
       } else {
-        inputOptions.plugins = [virtual({ '#entry': serverFile })];
+        entryInputs[name] = entry;
       }
-    } else {
-      inputOptions.input = { index: serverFile, ...extraEntries, ...toolsInputOptions };
+    }
+
+    inputOptions.input = { ...entryInputs, ...toolsInputOptions };
+
+    if (Object.keys(virtualEntries).length > 0) {
+      if (Array.isArray(inputOptions.plugins)) {
+        inputOptions.plugins.unshift(virtual(virtualEntries));
+      } else {
+        inputOptions.plugins = [virtual(virtualEntries)];
+      }
     }
 
     return inputOptions;
@@ -615,31 +624,22 @@ export abstract class Bundler extends MastraBundler {
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
+    const additionalEntries = this.getAdditionalEntries();
 
     const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-    // Throws a USER-category MastraError on bad config, deliberately outside the try
-    // blocks below so it surfaces as-is instead of as an analyze/bundle stage failure.
-    const extraEntries = resolveExtraEntries(bundlerOptions.entries, mastraEntryFile);
     const internalBundlerOptions: BundlerOptions = {
       enableSourcemap: !!bundlerOptions.sourcemap,
       enableMinify: !!bundlerOptions.minify,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
-      entries: extraEntries,
     };
-
-    if (Object.keys(extraEntries).length > 0) {
-      this.logger.info('Found additional entries', { entries: Object.keys(extraEntries) });
-    }
 
     let analyzedBundleInfo;
     try {
       const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
-        // Extra entries are analyzed too — otherwise their externals never reach the
-        // generated package.json and the emitted bundle cannot resolve them at runtime.
-        [serverFile, ...Object.values(extraEntries), ...Object.values(resolvedToolsPaths)],
+        [serverFile, ...Object.values(additionalEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
           outputDir: analyzeDir,
@@ -726,6 +726,7 @@ export abstract class Bundler extends MastraBundler {
         analyzedBundleInfo,
         toolsPaths,
         internalBundlerOptions,
+        additionalEntries,
       );
 
       const bundler = await this.createBundler(
@@ -801,7 +802,10 @@ export const tools = [${toolsExports.join(', ')}]`,
         );
       }
     } catch (error) {
-      if (error instanceof MastraError && error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING') {
+      if (
+        error instanceof MastraError &&
+        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
+      ) {
         throw error;
       }
 

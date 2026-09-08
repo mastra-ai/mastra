@@ -17,6 +17,7 @@ export function useInvalidateWorkspaceChangesOnRunCompletion(
 
     if (runCompleted && workspacePath) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
       if (threadId) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(workspacePath, threadId) });
       }

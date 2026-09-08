@@ -125,6 +125,11 @@ function shouldRemoveElement(el: Element): boolean {
   const props = el.properties
   if (!props) return false
 
+  // Components can explicitly exclude non-content UI from generated LLMS output.
+  if (props.dataLlmsIgnore !== undefined) {
+    return true
+  }
+
   // Check className - test each class individually AND the full string
   const className = props.className
   if (className) {

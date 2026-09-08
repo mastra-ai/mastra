@@ -15,7 +15,7 @@ export const startupScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
     await runtime.waitForScreenText(/Branch:\s+\S+/i, terminal);
-    await runtime.waitForScreenText(/User:\s+mc-e2e/i, terminal);
+    await runtime.waitForScreenTextAbsent(/User:/i, terminal, 2_000);
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/help');

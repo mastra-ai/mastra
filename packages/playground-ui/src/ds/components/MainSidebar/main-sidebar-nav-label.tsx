@@ -27,7 +27,7 @@ export function MainSidebarNavLabel({ children, className, state: stateProp, ...
     return <VisuallyHidden>{children}</VisuallyHidden>;
   }
   return (
-    <span {...rest} className={cn('min-w-0 flex-1 truncate text-left', className)}>
+    <span {...rest} className={cn('min-w-0 flex-1 truncate text-left font-[450]', className)}>
       {children}
     </span>
   );

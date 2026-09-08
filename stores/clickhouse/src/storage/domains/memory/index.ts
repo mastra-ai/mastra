@@ -83,6 +83,7 @@ function appendClickhouseMessageMetadataFilter(
 }
 
 export class MemoryStorageClickhouse extends MemoryStorage {
+  override readonly supportsPartialThreadUpdate = true;
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
   constructor(config: ClickhouseDomainConfig) {

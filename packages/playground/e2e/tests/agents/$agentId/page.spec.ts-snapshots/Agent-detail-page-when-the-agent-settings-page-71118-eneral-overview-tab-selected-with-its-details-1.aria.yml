@@ -1,45 +1,54 @@
-- tabpanel "General":
-    - heading "Agents" [level=3]:
-        - text: ''
-        - link:
-            - /url: https://mastra.ai/en/docs/agents/overview
-    - list:
-        - listitem:
-            - link "Sub Agent":
-                - /url: /agents/subAgent/chat/new
-                - img
-                - text: ''
-    - heading "Tools" [level=3]:
-        - text: ''
-        - link:
-            - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
-    - list:
-        - listitem:
-            - link "weatherInfo":
-                - /url: /agents/weather-agent/tools/weatherInfo
-                - img
-                - text: ''
-        - listitem:
-            - link "simpleMcpTool":
-                - /url: /agents/weather-agent/tools/simpleMcpTool
-                - img
-                - text: ''
-    - heading "Workflows" [level=3]:
-        - text: ''
-        - link:
-            - /url: https://mastra.ai/en/docs/workflows/overview
-    - list:
-        - listitem:
-            - link "lessComplexWorkflow":
-                - /url: /workflows/lessComplexWorkflow
-                - img
-                - text: ''
-    - heading "Skills" [level=3]:
-        - text: ''
-        - link:
-            - /url: https://mastra.ai/en/docs/workspace/skills
-    - paragraph: No skills
-    - heading "Scorers" [level=3]
-    - paragraph: No Scorers
-    - heading "System Prompt" [level=3]
-    - textbox
+- heading "Capabilities" [level=3]
+- paragraph: Everything this agent can call at runtime
+- heading "Agents 1" [level=3]:
+  - text: ""
+  - link:
+    - /url: https://mastra.ai/en/docs/agents/overview
+- list:
+  - listitem:
+    - link "Sub Agent":
+      - /url: /agents/subAgent/overview
+      - img
+      - text: ""
+- heading "Tools 2" [level=3]:
+  - text: ""
+  - link:
+    - /url: https://mastra.ai/en/docs/agents/using-tools-and-mcp
+- list:
+  - listitem:
+    - link "weatherInfo":
+      - /url: /agents/weather-agent/tools/weatherInfo
+      - img
+      - text: ""
+  - listitem:
+    - link "simpleMcpTool":
+      - /url: /agents/weather-agent/tools/simpleMcpTool
+      - img
+      - text: ""
+- heading "Workflows 1" [level=3]:
+  - text: ""
+  - link:
+    - /url: https://mastra.ai/en/docs/workflows/overview
+- list:
+  - listitem:
+    - link "lessComplexWorkflow":
+      - /url: /workflows/lessComplexWorkflow
+      - img
+      - text: ""
+- heading "Skills 0" [level=3]:
+  - text: ""
+  - link:
+    - /url: https://mastra.ai/en/docs/workspace/skills
+- paragraph: No skills
+- heading "Scorers" [level=3]
+- paragraph: No Scorers
+- heading "System Prompt" [level=3]
+- textbox
+- heading "Memory" [level=3]
+- button "General" [expanded]
+- term: Memory Enabled
+- definition: "Yes"
+- term: Last Messages
+- definition: /\d+/
+- term: Auto-generate Titles
+- definition: "Yes"

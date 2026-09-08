@@ -1,13 +1,13 @@
 {
   "name": "@mastra/core",
-  "version": "1.58.0-alpha.11",
+  "version": "1.65.0-alpha.10",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "CHANGELOG.md",
+    "LICENSE.md",
     "./**/*.d.ts"
   ],
   "exports": {
@@ -389,6 +389,16 @@
       "require": {
         "types": "./dist/processor-provider/index.d.ts",
         "default": "./dist/processor-provider/index.cjs"
+      }
+    },
+    "./predicate": {
+      "import": {
+        "types": "./dist/predicate/index.d.ts",
+        "default": "./dist/predicate/index.js"
+      },
+      "require": {
+        "types": "./dist/predicate/index.d.ts",
+        "default": "./dist/predicate/index.cjs"
       }
     },
     "./processors": {
@@ -861,17 +871,18 @@
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsdown --silent --config tsdown.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
-    "prepack": "tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts && node -e \"require('node:fs').copyFileSync('../../LICENSE.md', 'LICENSE.md')\"",
+    "postpack": "node -e \"require('node:fs').rmSync('LICENSE.md', { force: true })\"",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "tsx scripts/generate-providers.ts",
-    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm oxfmt:changed",
+    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && pnpm format:model-router",
+    "format:model-router": "cd ../.. && pnpm oxfmt packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ && cd docs && pnpm oxfmt 'src/content/en/models/**/*.{ts,js}' --ignore-path /dev/null --no-error-on-unmatched-pattern",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test": "npm run test:unit"
   },
   "dependencies": {
     "@a2a-js/sdk-v0_3": "npm:@a2a-js/sdk@~0.3.14",
     "@a2a-js/sdk-v1": "npm:@a2a-js/sdk@~1.0.1",
-    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.30",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.40",
     "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.13",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",

@@ -1,8 +1,22 @@
+export * from './trace-query';
+
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import type {
+  CreateFeedbackRecord,
+  CreateSpanRecord,
+  ObservabilityStorage,
+  TraceQueryRequest,
+} from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
+import {
+  normalizeTraceQueryResponse,
+  TRACE_QUERY_CONFORMANCE_CASES,
+  TRACE_QUERY_FIXTURE_DATA,
+  TRACE_QUERY_ORDINAL_FIXTURE_DATA,
+} from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -16,6 +30,14 @@ export interface ObservabilityVNextCapabilities {
    * tests live in adapter test files until they are lifted into this suite.
    */
   preferredStrategy: 'event-sourced' | 'insert-only' | 'batch-with-updates';
+  /** Whether this adapter implements the advanced trusted trace-query plan. */
+  traceQuery?: boolean;
+  /**
+   * The write model used to seed trace-query conformance fixtures. Completion-only
+   * adapters receive only each fixture's final completed record, because they do
+   * not accept pending events or logical replacement writes.
+   */
+  traceQueryWriteModel?: 'current-record' | 'completion-only';
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -65,6 +87,27 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+function completionOnlyTraceQueryFixture() {
+  const roots = new Map<string | null, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
+  const spans = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.spans)[number]>();
+  for (const span of TRACE_QUERY_FIXTURE_DATA.spans) {
+    if (span.parentSpanId === null) {
+      roots.set(span.traceId, span);
+    } else {
+      spans.set(`${span.traceId}\u0000${span.spanId}`, span);
+    }
+  }
+
+  const scores = new Map<string, (typeof TRACE_QUERY_FIXTURE_DATA.scores)[number]>();
+  for (const score of TRACE_QUERY_FIXTURE_DATA.scores) scores.set(score.scoreId, score);
+
+  return {
+    spans: [...roots.values()].filter(root => !root.isPending),
+    relatedSpans: [...spans.values()],
+    scores: [...scores.values()],
+  };
+}
+
 async function waitFor<T>(
   fn: () => Promise<T>,
   predicate: (value: T) => boolean,
@@ -103,6 +146,128 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
     });
+
+    if (capabilities.traceQuery) {
+      it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
+        const fixture =
+          capabilities.traceQueryWriteModel === 'completion-only'
+            ? completionOnlyTraceQueryFixture()
+            : {
+                spans: TRACE_QUERY_FIXTURE_DATA.spans,
+                relatedSpans: [],
+                scores: TRACE_QUERY_FIXTURE_DATA.scores,
+              };
+        const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
+          .filter(span => span.traceId !== null)
+          .map(span => ({
+            traceId: span.traceId!,
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.spanId,
+            spanType: span.spanType as SpanType,
+            isEvent: false,
+            startedAt: new Date(span.startedAt),
+            endedAt: span.endedAt ? new Date(span.endedAt) : null,
+            threadId: span.threadId,
+            resourceId: span.resourceId,
+            entityName: span.entityName,
+            entityType: span.entityType as EntityType,
+            environment: span.environment,
+            error: span.error as CreateSpanRecord['error'],
+          }));
+        for (const span of records) await storage.createSpan({ span });
+
+        const scores = fixture.scores
+          .filter(score => score.traceId !== null && score.score !== null)
+          .map(score => {
+            const timestamp = score.timestamp
+              ? new Date(score.timestamp)
+              : new Date(Date.UTC(2026, 7, 1, 0, 0, 0, score.cursorId));
+            return {
+              id: score.scoreId,
+              scoreId: score.scoreId,
+              traceId: score.traceId!,
+              scorerId: score.scorerId,
+              score: score.score!,
+              timestamp,
+              createdAt: timestamp,
+              updatedAt: null,
+            };
+          });
+        for (const score of scores) await storage.createScore({ score });
+
+        for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          const response = await storage.queryTraces(plan);
+          expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
+        }
+
+        const pagedTraceIds: string[] = [];
+        let after: string | undefined;
+        do {
+          const pagePlan = planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              page: { limit: 2, ...(after ? { after } : {}) },
+            }),
+          );
+          const response = await storage.queryTraces(pagePlan);
+          if (!('traces' in response)) throw new Error('Expected trace results');
+          pagedTraceIds.push(...response.traces.map(trace => trace.traceId));
+          after = response.page.next ?? undefined;
+        } while (after);
+        expect(pagedTraceIds).toEqual(['trace-d', 'trace-c', 'trace-a', 'trace-b']);
+        expect(new Set(pagedTraceIds).size).toBe(pagedTraceIds.length);
+      });
+
+      it('paginates mixed-case and non-ASCII trace and thread IDs in ordinal order', async () => {
+        for (const span of TRACE_QUERY_ORDINAL_FIXTURE_DATA.spans) {
+          await storage.createSpan({
+            span: {
+              traceId: span.traceId!,
+              spanId: span.spanId,
+              parentSpanId: span.parentSpanId,
+              name: span.spanId,
+              spanType: span.spanType as SpanType,
+              isEvent: false,
+              startedAt: new Date(span.startedAt),
+              endedAt: span.endedAt ? new Date(span.endedAt) : null,
+              threadId: span.threadId,
+              resourceId: span.resourceId,
+              entityName: span.entityName,
+              entityType: span.entityType as EntityType,
+              environment: span.environment,
+              error: span.error as CreateSpanRecord['error'],
+            },
+          });
+        }
+
+        const collectPages = async (request: TraceQueryRequest) => {
+          const values: string[] = [];
+          let after: string | undefined;
+          do {
+            const plan = planTraceQuery(
+              parseTraceQueryRequest({ ...request, page: { limit: 1, ...(after ? { after } : {}) } }),
+            );
+            const response = await storage.queryTraces(plan);
+            if ('traces' in response) {
+              values.push(...response.traces.map(trace => trace.traceId));
+            } else {
+              values.push(...response.groups.map(group => group.threadId));
+            }
+            after = response.page.next ?? undefined;
+          } while (after);
+          return values;
+        };
+
+        const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+        const expected = ['A', 'a', 'é', 'Ω'];
+        await expect(collectPages({ timeRange, orderBy: [{ field: 'startedAt', direction: 'asc' }] })).resolves.toEqual(
+          expected,
+        );
+        await expect(collectPages({ timeRange, group: { by: ['threadId'] } })).resolves.toEqual(expected);
+      });
+    }
 
     it('gets a score by ID without paginating through list results', async () => {
       const now = new Date('2026-01-02T00:00:00.000Z');
@@ -844,7 +1009,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         coreFeatures.delete('observability-delta-polling');
 
         try {
-          expect(storage.getFeatures()).toBeUndefined();
+          expect(storage.getFeatures()).not.toContain('delta-polling');
 
           const page = await storage.listLogs({});
           expect(page.deltaCursor).toBeUndefined();
@@ -1766,20 +1931,267 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
       });
 
-      it('batch deletes traces', async () => {
-        await storage.createSpan({
-          span: makeSpan({
+      it('batch deletes traces and cascades to signal events', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'trace-del', spanId: 'span-del', name: 'delete-me', startedAt: ts }),
+            makeSpan({ traceId: 'trace-keep', spanId: 'span-keep', name: 'keep-me', startedAt: ts }),
+          ],
+        });
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-del',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-del',
+            },
+            {
+              metricId: 'metric-keep',
+              timestamp: ts,
+              name: 'cascade_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-keep',
+            },
+          ],
+        });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-del',
+              timestamp: ts,
+              level: 'info',
+              message: 'del',
+              traceId: 'trace-del',
+              spanId: 'span-del',
+            },
+            {
+              logId: 'log-keep',
+              timestamp: ts,
+              level: 'info',
+              message: 'keep',
+              traceId: 'trace-keep',
+              spanId: 'span-keep',
+            },
+          ],
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-del',
+            timestamp: ts,
             traceId: 'trace-del',
-            spanId: 'span-del',
-            name: 'delete-me',
-            startedAt: new Date('2026-02-03T00:00:00Z'),
-            endedAt: null,
-          }),
+            spanId: null,
+            scorerId: 'q',
+            score: 0.5,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createScore({
+          score: {
+            scoreId: 'score-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            scorerId: 'q',
+            score: 0.8,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        // Trace-less score: must survive the cascade untouched.
+        await storage.createScore({
+          score: {
+            scoreId: 'score-no-trace',
+            timestamp: ts,
+            traceId: null,
+            spanId: null,
+            scorerId: 'q',
+            score: 0.9,
+            reason: null,
+            experimentId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-del',
+            timestamp: ts,
+            traceId: 'trace-del',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
+        });
+        await storage.createFeedback({
+          feedback: {
+            feedbackId: 'feedback-keep',
+            timestamp: ts,
+            traceId: 'trace-keep',
+            spanId: null,
+            feedbackSource: 'user',
+            feedbackType: 'thumbs',
+            value: 2,
+            comment: null,
+            experimentId: null,
+            feedbackUserId: null,
+            sourceId: null,
+            metadata: null,
+          },
         });
 
         await storage.batchDeleteTraces({ traceIds: ['trace-del'] });
-        const result = await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' });
-        expect(result).toBeNull();
+
+        expect(await storage.getSpan({ traceId: 'trace-del', spanId: 'span-del' })).toBeNull();
+        expect((await storage.getSpan({ traceId: 'trace-keep', spanId: 'span-keep' }))?.span.spanId).toBe('span-keep');
+
+        const traces = await waitFor(
+          () => storage.listTraces({}),
+          value => value.spans.every(span => span.traceId !== 'trace-del'),
+        );
+        expect(traces.spans.map(span => span.traceId)).toEqual(['trace-keep']);
+
+        const metrics = await storage.listMetrics({ filters: { name: ['cascade_metric'] } });
+        expect(metrics.metrics.map(metric => metric.metricId)).toEqual(['metric-keep']);
+
+        const logs = await storage.listLogs({});
+        expect(logs.logs.map(log => log.logId)).toEqual(['log-keep']);
+
+        const scores = await storage.listScores({});
+        expect(scores.scores.map(score => score.scoreId).sort()).toEqual(['score-keep', 'score-no-trace']);
+
+        const feedback = await storage.listFeedback({});
+        expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['feedback-keep']);
+      });
+
+      it('batch delete with tenant scope only deletes matching rows and signals', async () => {
+        const ts = new Date('2026-02-03T00:00:00Z');
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-org-a',
+              name: 'org-a',
+              startedAt: ts,
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            }),
+            makeSpan({
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              name: 'org-b',
+              startedAt: ts,
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            }),
+          ],
+        });
+        await storage.batchCreateMetrics({
+          metrics: [
+            {
+              metricId: 'metric-org-a',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 1,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              metricId: 'metric-org-b',
+              timestamp: ts,
+              name: 'scope_metric',
+              value: 2,
+              labels: {},
+              traceId: 'trace-scope',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
+        });
+        await storage.batchCreateLogs({
+          logs: [
+            {
+              logId: 'log-org-a',
+              timestamp: ts,
+              level: 'info',
+              message: 'a',
+              traceId: 'trace-scope',
+              spanId: 'span-org-a',
+              organizationId: 'org-a',
+              resourceId: 'res-a',
+            },
+            {
+              logId: 'log-org-b',
+              timestamp: ts,
+              level: 'info',
+              message: 'b',
+              traceId: 'trace-scope',
+              spanId: 'span-org-b',
+              organizationId: 'org-b',
+              resourceId: 'res-b',
+            },
+          ],
+        });
+        for (const organization of ['a', 'b']) {
+          await storage.createScore({
+            score: {
+              scoreId: `score-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              scorerId: 'q',
+              score: 0.5,
+              reason: null,
+              experimentId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+          await storage.createFeedback({
+            feedback: {
+              feedbackId: `feedback-org-${organization}`,
+              timestamp: ts,
+              traceId: 'trace-scope',
+              spanId: null,
+              feedbackSource: 'user',
+              feedbackType: 'thumbs',
+              value: 1,
+              comment: null,
+              experimentId: null,
+              feedbackUserId: null,
+              sourceId: null,
+              metadata: null,
+              organizationId: `org-${organization}`,
+              resourceId: `res-${organization}`,
+            },
+          });
+        }
+
+        await storage.batchDeleteTraces({ traceIds: ['trace-scope'], organizationId: 'org-a', resourceId: 'res-a' });
+
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-a' })).toBeNull();
+        expect(await storage.getSpan({ traceId: 'trace-scope', spanId: 'span-org-b' })).not.toBeNull();
+        expect(
+          (await storage.listMetrics({ filters: { name: ['scope_metric'] } })).metrics.map(item => item.metricId),
+        ).toEqual(['metric-org-b']);
+        expect((await storage.listLogs({})).logs.map(item => item.logId)).toEqual(['log-org-b']);
+        expect((await storage.listScores({})).scores.map(item => item.scoreId)).toEqual(['score-org-b']);
+        expect((await storage.listFeedback({})).feedback.map(item => item.feedbackId)).toEqual(['feedback-org-b']);
       });
     });
 
@@ -3015,6 +3427,101 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.scores[0]!.traceId).toBe('trace-legacy-score');
         expect(result.scores[0]!.scoreSource).toBe('manual');
       });
+
+      describe('metadata filtering', () => {
+        const seedMetadataScores = async () => {
+          const seeds: Array<{ scoreId: string; metadata: Record<string, unknown> | null }> = [
+            { scoreId: 'score-meta-string', metadata: { env: 'prod', region: 'us' } },
+            { scoreId: 'score-meta-typed', metadata: { count: 5, active: true, note: null } },
+            { scoreId: 'score-meta-nested', metadata: { config: { retries: 2, mode: 'fast' } } },
+            { scoreId: 'score-meta-none', metadata: null },
+          ];
+          for (const seed of seeds) {
+            await storage.createScore({
+              score: {
+                scoreId: seed.scoreId,
+                timestamp: new Date('2026-01-01T00:00:00Z'),
+                traceId: 'trace-meta',
+                spanId: null,
+                scorerId: 'meta-scorer',
+                score: 1,
+                reason: null,
+                experimentId: null,
+                metadata: seed.metadata,
+              },
+            });
+          }
+        };
+
+        it('filters scores by string metadata values with exact equality', async () => {
+          await seedMetadataScores();
+
+          const filtered = await storage.listScores({ filters: { metadata: { env: 'prod' } } });
+          expect(filtered.scores.map(s => s.scoreId)).toEqual(['score-meta-string']);
+
+          const multi = await storage.listScores({ filters: { metadata: { env: 'prod', region: 'us' } } });
+          expect(multi.scores.map(s => s.scoreId)).toEqual(['score-meta-string']);
+
+          const miss = await storage.listScores({ filters: { metadata: { env: 'staging' } } });
+          expect(miss.scores).toHaveLength(0);
+        });
+
+        it('filters scores by typed scalar metadata values (number, boolean, null)', async () => {
+          await seedMetadataScores();
+
+          const byNumber = await storage.listScores({ filters: { metadata: { count: 5 } } });
+          expect(byNumber.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const byBoolean = await storage.listScores({ filters: { metadata: { active: true } } });
+          expect(byBoolean.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const byNull = await storage.listScores({ filters: { metadata: { note: null } } });
+          expect(byNull.scores.map(s => s.scoreId)).toEqual(['score-meta-typed']);
+
+          const wrongNumber = await storage.listScores({ filters: { metadata: { count: 6 } } });
+          expect(wrongNumber.scores).toHaveLength(0);
+
+          const wrongType = await storage.listScores({ filters: { metadata: { count: '5' } } });
+          expect(wrongType.scores).toHaveLength(0);
+        });
+
+        it('matches nested metadata values with exact top-level equality (no partial matching)', async () => {
+          await seedMetadataScores();
+
+          const exact = await storage.listScores({
+            filters: { metadata: { config: { retries: 2, mode: 'fast' } } },
+          });
+          expect(exact.scores.map(s => s.scoreId)).toEqual(['score-meta-nested']);
+
+          const partial = await storage.listScores({
+            filters: { metadata: { config: { retries: 2 } } },
+          });
+          expect(partial.scores).toHaveLength(0);
+        });
+
+        it('matches nested metadata values structurally regardless of key order', async () => {
+          await seedMetadataScores();
+
+          const reordered = await storage.listScores({
+            filters: { metadata: { config: { mode: 'fast', retries: 2 } } },
+          });
+          expect(reordered.scores.map(s => s.scoreId)).toEqual(['score-meta-nested']);
+        });
+
+        it('treats an empty metadata filter as a no-op', async () => {
+          await seedMetadataScores();
+
+          const result = await storage.listScores({ filters: { metadata: {} } });
+          expect(result.scores).toHaveLength(4);
+        });
+
+        it('excludes scores without metadata when a metadata filter is set', async () => {
+          await seedMetadataScores();
+
+          const filtered = await storage.listScores({ filters: { metadata: { env: 'prod' } } });
+          expect(filtered.scores.map(s => s.scoreId)).not.toContain('score-meta-none');
+        });
+      });
     });
 
     describe('feedback (create + list)', () => {
@@ -3108,6 +3615,161 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(result.feedback).toHaveLength(1);
         expect(result.feedback[0]!.traceId).toBe('trace-legacy-feedback');
         expect(result.feedback[0]!.feedbackSource).toBe('manual');
+      });
+    });
+
+    describe('feedback (review status)', () => {
+      const baseFeedback = {
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+      };
+
+      it('defaults reviewStatus to needs-review when omitted', async () => {
+        await storage.createFeedback({
+          feedback: { ...baseFeedback, feedbackId: 'feedback-review-default', traceId: 'trace-review-1' },
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-1' } });
+        expect(result.feedback).toHaveLength(1);
+        expect(result.feedback[0]!.reviewStatus).toBe('needs-review');
+      });
+
+      it('persists a caller-supplied reviewStatus', async () => {
+        await storage.createFeedback({
+          feedback: {
+            ...baseFeedback,
+            feedbackId: 'feedback-review-explicit',
+            traceId: 'trace-review-2',
+            reviewStatus: 'reviewed',
+          },
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-2' } });
+        expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
+      });
+
+      it('persists reviewStatus on batch create', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...baseFeedback, feedbackId: 'feedback-review-batch-1', traceId: 'trace-review-batch' },
+            {
+              ...baseFeedback,
+              feedbackId: 'feedback-review-batch-2',
+              traceId: 'trace-review-batch',
+              reviewStatus: 'reviewed',
+            },
+          ],
+        });
+
+        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-batch' } });
+        const byId = new Map(result.feedback.map(fb => [fb.feedbackId, fb.reviewStatus]));
+        expect(byId.get('feedback-review-batch-1')).toBe('needs-review');
+        expect(byId.get('feedback-review-batch-2')).toBe('reviewed');
+      });
+
+      it('filters by reviewStatus', async () => {
+        await storage.batchCreateFeedback({
+          feedbacks: [
+            { ...baseFeedback, feedbackId: 'feedback-review-filter-1', traceId: 'trace-review-filter' },
+            {
+              ...baseFeedback,
+              feedbackId: 'feedback-review-filter-2',
+              traceId: 'trace-review-filter',
+              reviewStatus: 'reviewed',
+            },
+          ],
+        });
+
+        const needsReview = await storage.listFeedback({
+          filters: { traceId: 'trace-review-filter', reviewStatus: 'needs-review' },
+        });
+        expect(needsReview.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-1']);
+        expect(needsReview.pagination?.total).toBe(1);
+
+        const reviewed = await storage.listFeedback({
+          filters: { traceId: 'trace-review-filter', reviewStatus: 'reviewed' },
+        });
+        expect(reviewed.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-2']);
+      });
+
+      it.each([0, 'Corrected answer'])(
+        'preserves all feedback fields when updating reviewStatus (value: %j)',
+        async value => {
+          const feedback = {
+            feedbackId: 'feedback-review-update',
+            timestamp: new Date('2026-01-01T12:34:56.789Z'),
+            traceId: 'trace-review-update',
+            spanId: 'span-review-update',
+            experimentId: 'experiment-review-update',
+            entityType: EntityType.TOOL,
+            entityId: 'tool-id',
+            entityName: 'Tool',
+            entityVersionId: 'tool-version',
+            parentEntityType: EntityType.AGENT,
+            parentEntityId: 'agent-id',
+            parentEntityName: 'Agent',
+            parentEntityVersionId: 'agent-version',
+            rootEntityType: EntityType.WORKFLOW_RUN,
+            rootEntityId: 'workflow-id',
+            rootEntityName: 'Workflow',
+            rootEntityVersionId: 'workflow-version',
+            userId: 'reviewer-id',
+            organizationId: 'organization-id',
+            resourceId: 'resource-id',
+            runId: 'run-id',
+            sessionId: 'session-id',
+            threadId: 'thread-id',
+            requestId: 'request-id',
+            environment: 'test',
+            executionSource: 'api',
+            serviceName: 'feedback-service',
+            feedbackUserId: 'reviewer-id',
+            sourceId: 'dataset-item-id',
+            feedbackSource: 'reviewer',
+            feedbackType: 'correction',
+            value,
+            comment: 'Preserve this comment when marking the feedback reviewed.',
+            tags: ['quality', 'review'],
+            metadata: { reviewer: { team: 'quality' }, confidence: 0, approved: false },
+            scope: { tenant: 'tenant-id', groups: ['reviewers', 'editors'] },
+            reviewStatus: 'needs-review',
+          } satisfies Omit<Required<CreateFeedbackRecord>, 'source'>;
+
+          await storage.createFeedback({
+            feedback: structuredClone(feedback),
+          });
+
+          // Compare against the input so a lossy read mapper cannot hide missing fields.
+          const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(before.feedback).toMatchObject([feedback]);
+
+          const updated = await storage.updateFeedbackReviewStatus({
+            feedbackId: feedback.feedbackId,
+            reviewStatus: 'reviewed',
+          });
+          const expected = { ...feedback, reviewStatus: 'reviewed' };
+          expect(updated).toMatchObject(expected);
+
+          // Append-only stores (ClickHouse) implement the update as a replacement
+          // row; the read side must still expose a single, latest version.
+          const result = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(result.feedback).toMatchObject([expected]);
+          expect(result.pagination?.total).toBe(1);
+        },
+      );
+
+      it('throws when updating reviewStatus of a missing feedback record', async () => {
+        await expect(
+          storage.updateFeedbackReviewStatus({ feedbackId: 'feedback-does-not-exist', reviewStatus: 'reviewed' }),
+        ).rejects.toThrow();
       });
     });
 

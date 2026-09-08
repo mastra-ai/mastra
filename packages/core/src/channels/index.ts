@@ -16,7 +16,11 @@ export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
 export { resolveWaitUntil } from './wait-until';
 export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
+export { formatToolApproval } from './formatting';
+export { renderBuiltInToolEvent } from './stream-helpers';
 export type {
+  ActionChannelHandler,
+  ActionChannelHandlerConfig,
   ChannelAdapterBaseConfig,
   ChannelAdapterConfig,
   ChannelAdapterLegacyConfig,
@@ -41,6 +45,8 @@ export type {
   ResolveResourceIdContext,
   ResolveThreadId,
   ResolveThreadIdContext,
+  SlashCommandChannelHandler,
+  SlashCommandChannelHandlerConfig,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,
@@ -53,4 +59,4 @@ export type {
 } from './types';
 
 // Re-export Chat SDK types for convenience
-export type { ChatConfig } from 'chat';
+export type { ActionEvent, ChatConfig, SlashCommandEvent } from 'chat';

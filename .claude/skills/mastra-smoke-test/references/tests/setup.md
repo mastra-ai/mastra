@@ -182,11 +182,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### 4. Install Playwright
+### 4. Verify a Local Chromium Browser
 
-```bash
-<pm> exec playwright install chromium
-```
+Stagehand launches an installed local Chromium browser, such as Google Chrome. No separate Playwright browser install is required.
 
 ### 5. Runtime requirement: pass thread + resource on every call
 

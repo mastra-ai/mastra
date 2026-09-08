@@ -1,7 +1,7 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
 import type { WaitUntilFn } from '../channels/wait-until';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -12,10 +12,11 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { MastraStreamTransformOptions } from '../stream/types';
-import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { MCPToolExecutionContext, RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
+import type { SubAgentGenerateResult } from './subagent';
 import type {
   AgentMemoryOption,
   ToolsetsInput,
@@ -155,6 +156,24 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /**
+     * Why the sub-agent stopped generating (e.g. 'stop', 'tool-calls').
+     * Use this to detect a sub-agent that stopped on a tool-calls step and
+     * returned empty text. Populated on the generate and stream paths for
+     * v2 models; undefined on legacy (v1) paths.
+     */
+    finishReason?: SubAgentGenerateResult['finishReason'];
+    /**
+     * Results of the tools the sub-agent executed during the delegation.
+     * Always attached on the generate and stream paths for v2 models.
+     */
+    subAgentToolResults?: Array<{
+      toolName: string;
+      toolCallId: string;
+      result?: unknown;
+      args?: unknown;
+      isError?: boolean;
+    }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
       inputTokens: number;
@@ -202,8 +221,9 @@ export interface DelegationCompleteResult {
    * `feedback` is persisted to the parent's memory and therefore only reaches the
    * model on the next turn. Use `resultText` when the sub-agent's own result would
    * mislead the parent right now — for example when the sub-agent stopped on a
-   * tool-calls step and returned empty text, which reads to the model as a
-   * successful but empty delegation.
+   * tool-calls step and returned empty text, or when a failed delegation needs a
+   * more useful error message. Replacing the text does not recover a failed
+   * delegation; the parent still receives a failed tool result.
    */
   resultText?: string;
 }
@@ -214,6 +234,29 @@ export interface DelegationCompleteResult {
 export type OnDelegationCompleteHandler = (
   context: DelegationCompleteContext,
 ) => DelegationCompleteResult | void | Promise<DelegationCompleteResult | void>;
+
+/**
+ * A delegation lifecycle hook that threw.
+ *
+ * Recorded on the run's request context under `__mastra_delegationHookErrors`
+ * whenever a hook throws, regardless of the configured
+ * {@link DelegationConfig.hookErrorStrategy}, so callers can detect
+ * "delegation completed but the hook failed" without inspecting logs.
+ */
+export interface DelegationHookError {
+  /** Which hook threw */
+  hook: 'onDelegationStart' | 'onDelegationComplete' | 'messageFilter';
+  /** The ID of the delegated primitive */
+  primitiveId: string;
+  /** Tool call ID from the LLM */
+  toolCallId: string;
+  /** ID of the current run */
+  runId: string;
+  /** The error name */
+  name: string;
+  /** The error message */
+  message: string;
+}
 
 // ============================================================================
 // Iteration Hook Types
@@ -332,6 +375,20 @@ export interface DelegationConfig {
    * ```
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+
+  /**
+   * How a throwing delegation hook is handled.
+   *
+   * - `'warn'` (default): log the error and continue with unmodified values.
+   * - `'throw'`: fail the delegation. A throwing `onDelegationStart` blocks it,
+   *   and a throwing `messageFilter` or `onDelegationComplete` surfaces as a
+   *   tool failure to the parent agent.
+   *
+   * Regardless of the strategy, hook failures are recorded on the run's request
+   * context under `__mastra_delegationHookErrors` as {@link DelegationHookError}
+   * entries, so a completed-but-hook-failed delegation is always detectable.
+   */
+  hookErrorStrategy?: 'warn' | 'throw';
 }
 /**
  * Configuration for the routing agent's behavior.
@@ -516,6 +573,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Trusted server-side signal for this agent FGA check. */
   actor?: ActorSignal;
 
+  /** MCP protocol context forwarded to tools executed by this agent. */
+  mcp?: MCPToolExecutionContext;
+
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -575,7 +635,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   modelSettings?: LoopOptions['modelSettings'];
 
   /** Evaluation scorers to run on the execution results */
-  scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  scorers?:
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig; filter?: ScoringFilter }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
   /** tracing options for starting new traces */

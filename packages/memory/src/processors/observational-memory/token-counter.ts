@@ -1221,6 +1221,7 @@ export class TokenCounter {
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
+  private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // 3.8 remains a practical average across providers for OM thresholding.
@@ -1312,6 +1313,12 @@ export class TokenCounter {
   private countMultimodalToolResultContent(part: CacheablePart, toolResult: unknown): number | undefined {
     if (!toolResult || typeof toolResult !== 'object') {
       return undefined;
+    }
+
+    const resultKey = buildEstimateKey('tool-result-multimodal-content-source', JSON.stringify(toolResult));
+    const cached = this.multimodalToolResultCounts.get(part);
+    if (cached?.resultKey === resultKey) {
+      return cached.tokens;
     }
 
     const output = toolResult as Record<string, unknown>;
@@ -1431,12 +1438,14 @@ export class TokenCounter {
       return undefined;
     }
 
-    return this.readOrPersistFixedPartEstimate(
+    const estimate = this.readOrPersistFixedPartEstimate(
       part,
       'tool-result-multimodal-content',
       JSON.stringify({ type: 'content', value: cacheParts }),
       tokens,
     );
+    this.multimodalToolResultCounts.set(part, { resultKey, tokens: estimate });
+    return estimate;
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {

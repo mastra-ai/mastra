@@ -71,6 +71,41 @@ export function createExperimentsTests({
         expect(exp.id).toBe(customId);
       });
 
+      it('createExperiment round-trips a null target and scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'caller-driven-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: null,
+          targetId: null,
+          scorerIds: null,
+          totalItems: 3,
+        });
+
+        expect(exp.targetType).toBeNull();
+        expect(exp.targetId).toBeNull();
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.targetType).toBeNull();
+        expect(fetched?.targetId).toBeNull();
+        expect(fetched?.scorerIds ?? null).toBeNull();
+      });
+
+      it('createExperiment round-trips scorerIds', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'scorer-ids-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          scorerIds: ['accuracy', 'fluency'],
+          totalItems: 3,
+        });
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.scorerIds).toEqual(['accuracy', 'fluency']);
+      });
+
       it('persists provenance, runner attestation, and grouping identity', async () => {
         const exp = await experimentsStorage.createExperiment({
           name: 'provenance-exp',
@@ -448,6 +483,175 @@ export function createExperimentsTests({
         expect(result.output).toBeNull();
         expect(result.error).toEqual(errorObj);
         expect(result.retryCount).toBe(1);
+      });
+
+      it('upsertExperimentResult creates a row when none exists for the natural key', async () => {
+        const result = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-1',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        expect(result.id).toBeDefined();
+        expect(result.attempt).toBe(0);
+        expect(result.output).toEqual({ a: 'v1' });
+      });
+
+      it('upsertExperimentResult converges retried submissions onto a single row', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-2',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-2',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.output).toEqual({ a: 'v2' });
+
+        const listed = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const matching = listed.results.filter(r => r.itemId === 'item-up-2');
+        expect(matching).toHaveLength(1);
+        expect(matching[0]!.output).toEqual({ a: 'v2' });
+      });
+
+      it('upsertExperimentResult defaults attempt to 0 when omitted and converges with explicit attempt 0', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+        });
+
+        expect(first.attempt).toBe(0);
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-default',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.attempt).toBe(0);
+      });
+
+      it('upsertExperimentResult preserves createdAt across retries', async () => {
+        const first = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 25));
+
+        const second = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-created-at',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'v2' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 1,
+          attempt: 0,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(new Date(second.createdAt).getTime()).toBe(new Date(first.createdAt).getTime());
+      });
+
+      it('upsertExperimentResult keeps separate rows per attempt', async () => {
+        const a0 = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-3',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'trial-0' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 0,
+        });
+        const a1 = await experimentsStorage.upsertExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-up-3',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: { a: 'trial-1' },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          attempt: 1,
+        });
+
+        expect(a1.id).not.toBe(a0.id);
+        expect(a0.attempt).toBe(0);
+        expect(a1.attempt).toBe(1);
+
+        const listed = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(listed.results.filter(r => r.itemId === 'item-up-3')).toHaveLength(2);
       });
 
       const toolMockReportFixture = {

@@ -18,6 +18,7 @@ interface CachedValue<T = unknown> {
  */
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
+  private getOwnerId?: () => string | null;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
@@ -27,8 +28,9 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage) {
+  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null) {
     this.memoryStore = memoryStore;
+    this.getOwnerId = getOwnerId;
   }
 
   async connect(): Promise<void> {
@@ -58,18 +60,26 @@ export class MastraStateAdapter implements StateAdapter {
     // Find the Mastra thread mapped to this external thread ID and mark it
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return; // Thread not yet mapped — subscribe will be a no-op
-    await this.memoryStore.updateThread({
+    await this.memoryStore.patchThread({
       id: thread.id,
-      metadata: { ...thread.metadata, channel_subscribed: 'true' },
+      metadata: {
+        ...thread.metadata,
+        channel_subscribed: 'true',
+        ...this.ownerStamp(thread.metadata as Record<string, unknown> | undefined),
+      },
     });
   }
 
   async unsubscribe(threadId: string): Promise<void> {
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return;
-    await this.memoryStore.updateThread({
+    await this.memoryStore.patchThread({
       id: thread.id,
-      metadata: { ...((thread.metadata ?? {}) as Record<string, unknown>), channel_subscribed: 'false' },
+      metadata: {
+        ...((thread.metadata ?? {}) as Record<string, unknown>),
+        channel_subscribed: 'false',
+        ...this.ownerStamp(thread.metadata as Record<string, unknown> | undefined),
+      },
     });
   }
 
@@ -229,14 +239,57 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   /**
+   * Claim stamp for write paths: when an owner id is known and the thread has
+   * not been claimed yet, include `channel_ownerId` so the write adopts the
+   * legacy thread. Read paths (`isSubscribed`) never claim.
+   */
+  private ownerStamp(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+    const ownerId = this.getOwnerId?.() ?? null;
+    if (ownerId === null) return {};
+    if (metadata && 'channel_ownerId' in metadata) return {};
+    return { channel_ownerId: ownerId };
+  }
+
+  /**
    * Find a Mastra thread by its external (SDK) thread ID.
    * External thread IDs are stored in `channel_externalThreadId` metadata.
+   *
+   * When an owner id is available, the lookup is scoped per agent via the
+   * `channel_ownerId` metadata key, with a legacy fallback that matches only
+   * threads no agent has claimed yet. Threads claimed by a different agent
+   * are never returned. Without an owner id the old unscoped behavior is
+   * preserved.
    */
   private async findThreadByExternalId(externalThreadId: string) {
-    const { threads } = await this.memoryStore.listThreads({
-      filter: { metadata: { channel_externalThreadId: externalThreadId } },
+    const ownerId = this.getOwnerId?.() ?? null;
+
+    if (ownerId === null) {
+      const { threads } = await this.memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: externalThreadId } },
+        perPage: 1,
+      });
+      return threads[0] ?? null;
+    }
+
+    // Primary lookup: the thread scoped to this agent.
+    const { threads: scoped } = await this.memoryStore.listThreads({
+      filter: { metadata: { channel_externalThreadId: externalThreadId, channel_ownerId: ownerId } },
       perPage: 1,
     });
-    return threads[0] ?? null;
+    if (scoped[0]) return scoped[0];
+
+    // Legacy fallback: metadata filters match subsets, so this also returns
+    // threads claimed by other agents - only unclaimed rows are usable.
+    const { threads: candidates } = await this.memoryStore.listThreads({
+      filter: { metadata: { channel_externalThreadId: externalThreadId } },
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    return (
+      candidates.find(candidate => {
+        const metadata = (candidate.metadata ?? {}) as Record<string, unknown>;
+        return !('channel_ownerId' in metadata);
+      }) ?? null
+    );
   }
 }

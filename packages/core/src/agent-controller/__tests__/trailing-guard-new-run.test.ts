@@ -37,12 +37,22 @@ function createController() {
   });
 }
 
-async function processSubscribedChunks(session: Session<any>, chunks: any[], activeRunId = 'run-b') {
+async function processSubscribedChunks(
+  session: Session<any>,
+  chunks: any[],
+  activeRunId = 'run-b',
+  requestContexts = new Map<string, RequestContext>(),
+) {
+  let currentRequestContext: RequestContext | undefined;
   const subscription = {
     stream: (async function* () {
-      for (const chunk of chunks) yield chunk;
+      for (const chunk of chunks) {
+        if (chunk.runId) currentRequestContext = requestContexts.get(chunk.runId);
+        yield chunk;
+      }
     })(),
     activeRunId: () => activeRunId,
+    __getCurrentRunRequestContext: () => currentRequestContext,
     abort: () => {},
     unsubscribe: () => {},
   };
@@ -95,96 +105,46 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     expect(processedChunkTypes).toContain('data-om-status');
   });
 
-  it('uses the latest caller context when an approval arrives on the subscribed stream', async () => {
+  it('uses the request context owned by each subscribed run', async () => {
     const controller = createController();
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const requestContext = new RequestContext();
-    requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
-    session.runEngine.setRequestContext(requestContext);
+    const firstContext = new RequestContext();
+    firstContext.set('user', { id: 'first-user' });
+    const secondContext = new RequestContext();
+    secondContext.set('user', { id: 'second-user' });
+    const contexts = new Map([
+      ['run-a', firstContext],
+      ['run-b', secondContext],
+    ]);
+
     vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
     const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
 
-    await processSubscribedChunks(session, [
-      { type: 'start', runId: 'run-a' },
-      {
-        type: 'tool-call-approval',
-        runId: 'run-a',
-        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
-      },
-      { type: 'finish', runId: 'run-a', payload: { stepResult: { reason: 'stop' } } },
-    ]);
+    await processSubscribedChunks(
+      session,
+      [
+        { type: 'start', runId: 'run-a' },
+        {
+          type: 'tool-call-approval',
+          runId: 'run-a',
+          payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
+        },
+        { type: 'finish', runId: 'run-a', payload: { stepResult: { reason: 'stop' } } },
+        { type: 'start', runId: 'run-b' },
+        {
+          type: 'tool-call-approval',
+          runId: 'run-b',
+          payload: { toolCallId: 'tool-call-2', toolName: 'factory_transition_work_item', args: {} },
+        },
+        { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
+      ],
+      'run-b',
+      contexts,
+    );
 
-    expect(approveToolCall).toHaveBeenCalledOnce();
-    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
-      id: 'user-1',
-      organizationId: 'org-1',
-    });
-  });
-
-  // Resuming is a caller-authenticated entry point that starts the subscription
-  // itself, so an approval arriving after it must not fall back to whatever
-  // identity a previous send happened to leave behind — or to none at all.
-  it('uses the resuming caller context for an approval that follows a resume', async () => {
-    const controller = createController();
-    await controller.init();
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    session.suspensions.register({ toolCallId: 'suspended-1', runId: 'run-a', toolName: 'ask_user' });
-
-    const requestContext = new RequestContext();
-    requestContext.set('user', { id: 'resuming-user', organizationId: 'org-1' });
-    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
-    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
-
-    await session
-      .resumeToolCall({ resumeData: 'answer', toolCallId: 'suspended-1', requestContext })
-      .catch(() => undefined);
-
-    await processSubscribedChunks(session, [
-      { type: 'start', runId: 'run-b' },
-      {
-        type: 'tool-call-approval',
-        runId: 'run-b',
-        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
-      },
-      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
-    ]);
-
-    expect(approveToolCall).toHaveBeenCalledOnce();
-    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
-      id: 'resuming-user',
-      organizationId: 'org-1',
-    });
-  });
-
-  it('uses the notifying caller context for an approval that follows a notification signal', async () => {
-    const controller = createController();
-    await controller.init();
-    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
-
-    const requestContext = new RequestContext();
-    requestContext.set('user', { id: 'notifying-user', organizationId: 'org-1' });
-    vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
-    const approveToolCall = vi.spyOn(session, 'approveToolCall').mockResolvedValue();
-
-    await session
-      .sendNotificationSignal({ tagName: 'system', contents: 'ping' } as any, { requestContext })
-      .catch(() => undefined);
-
-    await processSubscribedChunks(session, [
-      { type: 'start', runId: 'run-b' },
-      {
-        type: 'tool-call-approval',
-        runId: 'run-b',
-        payload: { toolCallId: 'tool-call-1', toolName: 'factory_transition_work_item', args: {} },
-      },
-      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
-    ]);
-
-    expect(approveToolCall).toHaveBeenCalledOnce();
-    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({
-      id: 'notifying-user',
-      organizationId: 'org-1',
-    });
+    expect(approveToolCall).toHaveBeenCalledTimes(2);
+    expect(approveToolCall.mock.calls[0]?.[0].requestContext?.get('user')).toEqual({ id: 'first-user' });
+    expect(approveToolCall.mock.calls[1]?.[0].requestContext?.get('user')).toEqual({ id: 'second-user' });
   });
 });

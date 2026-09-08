@@ -1,8 +1,8 @@
-import type { InValue } from '@libsql/client';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { SqliteInValue as InValue } from './client';
 
 // Guards against unbounded recursion on pathologically deep values (e.g. long
 // chained Error.cause), which would otherwise throw an uncaught

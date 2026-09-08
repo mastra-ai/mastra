@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryDB } from '../inmemory-db';
 import { InMemorySkillsStorage } from './inmemory';
 
@@ -296,6 +296,55 @@ describe('InMemorySkillsStorage', () => {
       const result = await storage.listResolved({ authorId: 'user-1' });
       expect(result.skills).toHaveLength(1);
       expect(result.skills[0]!.name).toBe('Skill A');
+    });
+
+    it('should batch-fetch active versions instead of one lookup per entity', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        const id = `published-${i}`;
+        ids.push(id);
+        await storage.create({ skill: { id, name: `Published ${i}`, description: 'd', instructions: `instr ${i}` } });
+        const latest = await storage.getLatestVersion(id);
+        await storage.update({ id, activeVersionId: latest!.id, status: 'published' });
+      }
+
+      const getVersionsSpy = vi.spyOn(storage, 'getVersions');
+      const getLatestVersionSpy = vi.spyOn(storage, 'getLatestVersion');
+
+      const result = await storage.listResolved({ perPage: false, status: 'published' });
+
+      expect(result.skills).toHaveLength(10);
+      expect(getVersionsSpy).toHaveBeenCalledTimes(1);
+      expect(getVersionsSpy.mock.calls[0]![0]).toHaveLength(10);
+      expect(getLatestVersionSpy).not.toHaveBeenCalled();
+      for (const skill of result.skills) {
+        expect(skill.resolvedVersionId).toBe(skill.activeVersionId);
+        expect(skill.instructions).toBe(`instr ${skill.id.replace('published-', '')}`);
+      }
+    });
+
+    it('should fall back to the latest version when the active version is missing', async () => {
+      await storage.create({ skill: { id: 'orphan', name: 'Orphan', description: 'd', instructions: 'v1' } });
+      const latest = await storage.getLatestVersion('orphan');
+      await storage.update({ id: 'orphan', activeVersionId: latest!.id, status: 'published' });
+      // Add a second version, then drop the active one so the pointer dangles.
+      await storage.createVersion({
+        id: 'orphan-v2',
+        skillId: 'orphan',
+        versionNumber: 2,
+        name: 'Orphan',
+        description: 'd',
+        instructions: 'v2',
+      });
+      await storage.deleteVersion(latest!.id);
+
+      const getLatestVersionSpy = vi.spyOn(storage, 'getLatestVersion');
+      const result = await storage.listResolved({ status: 'published' });
+
+      expect(result.skills).toHaveLength(1);
+      expect(result.skills[0]!.instructions).toBe('v2');
+      expect(result.skills[0]!.resolvedVersionId).not.toBe(latest!.id);
+      expect(getLatestVersionSpy).toHaveBeenCalledTimes(1);
     });
   });
 

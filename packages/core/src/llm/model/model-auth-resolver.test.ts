@@ -63,4 +63,27 @@ describe('resolveModelAuth', () => {
     expect(auth).toMatchObject({ apiKey: 'legacy-key', source: 'legacy' });
     expect(getApiKey).toHaveBeenCalledWith('test-gateway/test-provider/test-model');
   });
+
+  it('falls back to legacy getApiKey when gateway auth contains empty headers', async () => {
+    const getApiKey = vi.fn(async () => 'legacy-key');
+    const gateway = createGateway({ resolveAuth: vi.fn(() => ({ headers: {} })), getApiKey });
+
+    const auth = await resolveModelAuth({ gateway, request });
+
+    expect(auth).toEqual({ apiKey: 'legacy-key', source: 'legacy' });
+    expect(getApiKey).toHaveBeenCalledWith('test-gateway/test-provider/test-model');
+  });
+
+  it('ignores empty explicit headers and continues to gateway auth', async () => {
+    const gateway = createGateway({
+      resolveAuth: vi.fn(() => ({ apiKey: 'gateway-key' })),
+      getApiKey: vi.fn(async () => 'legacy-key'),
+    });
+
+    const auth = await resolveModelAuth({ gateway, request, explicit: { headers: {} } });
+
+    expect(auth).toEqual({ apiKey: 'gateway-key', source: 'gateway' });
+    expect(gateway.resolveAuth).toHaveBeenCalledWith(request);
+    expect(gateway.getApiKey).not.toHaveBeenCalled();
+  });
 });

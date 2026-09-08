@@ -277,6 +277,27 @@ describe('AgentControllerChannels', () => {
     });
   }, 30_000);
 
+  it('stamps newly mapped threads with the controller id as channel_ownerId', async () => {
+    const { adapter, mastra, channels } = await createSetup();
+    const chatThread = createChatThread(adapter, 'chan-agent:t-1');
+
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'hello controller'),
+      mastra,
+      new RequestContext(),
+    );
+
+    const threads = await getChannelThreads(mastra, 'chan-agent:t-1');
+    expect(threads).toHaveLength(1);
+    expect(threads[0]!.metadata).toMatchObject({
+      channel_platform: 'discord',
+      channel_externalThreadId: 'chan-agent:t-1',
+      channel_externalChannelId: 'chan-agent',
+      channel_ownerId: 'ctrl-1',
+    });
+  }, 30_000);
+
   it('reuses the same session and Mastra thread for a second message in the same chat thread', async () => {
     const { adapter, controller, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-1');

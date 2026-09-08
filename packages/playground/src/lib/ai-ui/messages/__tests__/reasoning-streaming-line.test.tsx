@@ -8,9 +8,7 @@ describe('ReasoningStreamingLine', () => {
     render(<ReasoningStreamingLine text="Reasoning..." />);
 
     const label = screen.getByText('Reasoning...');
-    expect(label).not.toBeNull();
-    // The shared Shimmer leaf drives the shimmer-text animation.
-    expect(label.style.animation).toContain('shimmer-text');
+    expect(label.className).toContain('shimmer-text');
   });
 
   it('renders a spinner alongside the shimmer label', () => {

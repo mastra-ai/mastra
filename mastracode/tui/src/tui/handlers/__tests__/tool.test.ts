@@ -1,6 +1,7 @@
 import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_RENDER_COALESCE_MS } from '../../render-scheduler.js';
 import {
   clearPendingShellOutputs,
   clearToolInputParsers,
@@ -21,7 +22,7 @@ async function flushParserMicrotasks(): Promise<void> {
 
 async function flushParser(): Promise<void> {
   await flushParserMicrotasks();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
 function createShellOutputContext() {
@@ -110,6 +111,31 @@ describe('tool event handlers', () => {
     expect(appendStreamingOutput).toHaveBeenCalledWith('hello world');
     expect(updateResult).toHaveBeenCalled();
     expect(requestRender).toHaveBeenCalled();
+  });
+
+  it('inserts task-tool errors before streaming output without invalidating completed chat children', () => {
+    const completed = new Container();
+    const streaming = new Container();
+    const component = { updateResult: vi.fn() };
+    const invalidate = vi.fn();
+    const ctx = {
+      state: {
+        pendingTools: new Map([['call-1', component]]),
+        pendingTaskToolIds: new Set(['call-1']),
+        pendingSubagents: new Map(),
+        pendingAskUserComponents: new Map(),
+        pendingSubmitPlanComponents: new Map(),
+        allToolComponents: [],
+        chatContainer: { children: [completed, streaming], invalidate },
+        streamingComponent: streaming,
+        ui: { requestRender: vi.fn() },
+      },
+    } as any;
+
+    handleToolEnd(ctx, 'call-1', { content: 'failed' }, true);
+
+    expect(ctx.state.chatContainer.children.indexOf(component)).toBe(1);
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it('does not append cleared shell output after abort/error lifecycle cleanup', () => {

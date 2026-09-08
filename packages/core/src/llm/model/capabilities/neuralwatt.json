@@ -1,22 +1,20 @@
 {
   "attachment": [
-    "Qwen/Qwen3.6-35B-A3B",
     "gemma-4-31b",
-    "kimi-k2.5-fast",
-    "kimi-k2.6-fast",
-    "kimi-k2.6-flex",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-fast",
     "kimi-k2.7-code-flex",
     "kimi-k3",
     "kimi-k3-fast",
-    "moonshotai/Kimi-K2.5",
-    "moonshotai/Kimi-K2.6",
-    "moonshotai/Kimi-K2.7-Code",
+    "kimi-k3-flex",
+    "qwen-3.8-27b",
+    "qwen3.6-35b",
     "qwen3.6-35b-fast"
   ],
   "temperature": [
-    "Qwen/Qwen3.5-397B-A17B-FP8",
-    "Qwen/Qwen3.6-35B-A3B",
     "deepseek-v4-flash",
+    "deepseek-v4-flash-flex",
+    "deepseek-v4-pro",
     "gemma-4-31b",
     "glm-5.2",
     "glm-5.2-fast",
@@ -25,20 +23,24 @@
     "glm-5.2-short-fast",
     "glm-5.2-short-fast-flex",
     "glm-5.2-short-flex",
-    "kimi-k2.5-fast",
-    "kimi-k2.6-fast",
-    "kimi-k2.6-flex",
-    "moonshotai/Kimi-K2.5",
-    "moonshotai/Kimi-K2.6",
-    "qwen3.5-397b-fast",
+    "glm-5.3",
+    "qwen-3.8-27b",
+    "qwen3.6-35b",
     "qwen3.6-35b-fast"
   ],
   "structuredOutput": [
     "deepseek-v4-flash",
+    "deepseek-v4-flash-flex",
+    "deepseek-v4-pro",
     "gemma-4-31b",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-fast",
     "kimi-k2.7-code-flex",
     "kimi-k3",
     "kimi-k3-fast",
-    "moonshotai/Kimi-K2.7-Code"
+    "kimi-k3-flex",
+    "qwen-3.8-27b",
+    "qwen3.6-35b",
+    "qwen3.6-35b-fast"
   ]
 }

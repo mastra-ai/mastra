@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.6.0-alpha.13",
+  "version": "0.13.0-alpha.16",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -8,8 +8,7 @@
   },
   "files": [
     "dist",
-    "factory-skills",
-    "CHANGELOG.md"
+    "factory-skills"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,6 +17,12 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      }
+    },
+    "./boards": {
+      "import": {
+        "types": "./dist/boards/index.d.ts",
+        "default": "./dist/boards/index.js"
       }
     },
     "./*": {
@@ -30,6 +35,7 @@
   },
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
     "smoke:dist": "node --input-type=module -e \"import('./dist/index.js').then(() => console.log('dist import ok')).catch(e => { console.error(e.message); process.exit(1); })\"",
     "check": "tsc --noEmit",
     "test": "vitest run",
@@ -63,6 +69,7 @@
     "chat": "^4.34.0",
     "@octokit/rest": "^22.0.1",
     "hono": "^4.12.8",
+    "posthog-node": "^5.46.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -70,10 +77,11 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
-    "typescript": "catalog:",
+    "typescript": "catalog:ts6",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
   },

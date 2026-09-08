@@ -1,11 +1,3 @@
-/**
- * Browser-side helpers for the Factory audit-trail endpoints.
- *
- * Mirrors the server's audit read API (`src/web/audit/routes.ts`): an
- * org+project-scoped event list with keyset pagination, plus an optional
- * one-time WorkOS Admin Portal link for the enterprise audit-log viewer.
- */
-
 export interface AuditTarget {
   type: string;
   id: string;
@@ -20,46 +12,100 @@ export interface AuditActorProfile {
 
 export interface AuditEvent {
   id: string;
-  orgId: string;
-  /** WorkOS user id of whoever performed the action, or `agent:<threadId>`. */
   actorId: string;
-  /** Whether a human or an agent (inside a run) performed the action. */
   actorType: 'human' | 'agent';
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
   action: string;
   targets: AuditTarget[];
-  /** Bounded event summary — never full payloads. */
   metadata: Record<string, unknown>;
-  githubProjectId: string | null;
-  context: { location?: string; userAgent?: string };
-  /** ISO timestamp. */
   occurredAt: string;
 }
 
 export interface AuditEventPage {
   events: AuditEvent[];
   actors: Record<string, AuditActorProfile>;
-  /** Pass back as `before` to fetch the next (older) page; absent at the end. */
   nextCursor?: string;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
+}
+
+function isAuditTarget(value: unknown): value is AuditTarget {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return (
+    'type' in value &&
+    typeof value.type === 'string' &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    (!('name' in value) || isOptionalString(value.name))
+  );
+}
+
+function isAuditActorProfile(value: unknown): value is AuditActorProfile {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return (
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'name' in value &&
+    typeof value.name === 'string' &&
+    (!('avatarUrl' in value) || isOptionalString(value.avatarUrl))
+  );
+}
+
+function isAuditEvent(value: unknown): value is AuditEvent {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return (
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'actorId' in value &&
+    typeof value.actorId === 'string' &&
+    'actorType' in value &&
+    (value.actorType === 'human' || value.actorType === 'agent') &&
+    'action' in value &&
+    typeof value.action === 'string' &&
+    'targets' in value &&
+    Array.isArray(value.targets) &&
+    value.targets.every(isAuditTarget) &&
+    'metadata' in value &&
+    typeof value.metadata === 'object' &&
+    value.metadata !== null &&
+    !Array.isArray(value.metadata) &&
+    'occurredAt' in value &&
+    typeof value.occurredAt === 'string'
+  );
+}
+
+function isAuditEventPage(value: unknown): value is AuditEventPage {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return (
+    'events' in value &&
+    Array.isArray(value.events) &&
+    value.events.every(isAuditEvent) &&
+    'actors' in value &&
+    typeof value.actors === 'object' &&
+    value.actors !== null &&
+    !Array.isArray(value.actors) &&
+    Object.values(value.actors).every(isAuditActorProfile) &&
+    (!('nextCursor' in value) || isOptionalString(value.nextCursor))
+  );
 }
 
 async function throwRequestError(res: Response): Promise<never> {
   let message = `Request failed (${res.status})`;
   try {
-    const body = (await res.json()) as { error?: string; message?: string };
-    if (body.message) message = body.message;
-    else if (body.error) message = body.error;
-  } catch {
-    /* ignore non-JSON */
-  }
+    const body: unknown = await res.json();
+    if (typeof body === 'object' && body !== null) {
+      if ('message' in body && typeof body.message === 'string') message = body.message;
+      else if ('error' in body && typeof body.error === 'string') message = body.error;
+    }
+  } catch {}
   throw new Error(message);
 }
 
-/** Fetch one page of the Factory project's audit trail, newest-first. */
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { actions?: string[]; actorIds?: string[]; before?: string; limit?: number } = {},
+  options: { actions?: string[]; actorIds?: string[]; before?: string; limit?: number; signal?: AbortSignal } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.actions && options.actions.length > 0) query.set('actions', options.actions.join(','));
@@ -70,15 +116,15 @@ export async function fetchAuditEvents(
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/audit${qs}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
+    signal: options.signal,
   });
   if (!res.ok) return throwRequestError(res);
-  return (await res.json()) as AuditEventPage;
+
+  const data: unknown = await res.json();
+  if (!isAuditEventPage(data)) throw new Error('Invalid audit event response');
+  return data;
 }
 
-/**
- * Fetch a one-time WorkOS Admin Portal URL for the audit-log viewer, or
- * `null` when WorkOS isn't configured (the UI hides the button).
- */
 export async function fetchAuditPortalLink(baseUrl: string): Promise<string | null> {
   const res = await fetch(`${baseUrl}/web/audit/portal-link`, {
     headers: { Accept: 'application/json' },
@@ -86,6 +132,10 @@ export async function fetchAuditPortalLink(baseUrl: string): Promise<string | nu
   });
   if (res.status === 404) return null;
   if (!res.ok) return throwRequestError(res);
-  const data = (await res.json()) as { url: string };
+
+  const data: unknown = await res.json();
+  if (typeof data !== 'object' || data === null || !('url' in data) || typeof data.url !== 'string') {
+    throw new Error('Invalid audit portal response');
+  }
   return data.url;
 }

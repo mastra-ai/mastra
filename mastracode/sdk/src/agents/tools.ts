@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { createNotificationInboxTool, NotificationsStorage } from '@mastra/core/notifications';
 import type {
@@ -15,14 +16,20 @@ import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
+import { createConfiguredWebTools, requestSandboxAccessTool } from '../tools/index.js';
+import { createWorkflowTool } from '../tools/workflows/create-workflow.js';
+import { deleteWorkflowTool } from '../tools/workflows/delete-workflow.js';
+import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
+import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
+import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
+import { WORKFLOW_MANAGEMENT_TOOL_IDS } from '../tools/workflows/tool-ids.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
-class LazyNotificationsStorage extends NotificationsStorage {
+export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
     super();
   }
@@ -117,7 +124,7 @@ export function createDynamicTools(
     requestContext,
   }: {
     requestContext: RequestContext;
-  }): Record<string, ToolLike> | Promise<Record<string, ToolLike>> {
+  }): ToolsInput | Promise<ToolsInput> {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
@@ -130,6 +137,14 @@ export function createDynamicTools(
     // Only tools without a workspace equivalent remain here.
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
+      // Workflow surface. `create-workflow` delegates to the workflow-builder
+      // sub-agent; the other four are Dynamic Workflow management operations.
+      // Permission categories live in permissions.ts (TOOL_CATEGORY_MAP).
+      [WORKFLOW_MANAGEMENT_TOOL_IDS.createWorkflow]: createWorkflowTool,
+      [WORKFLOW_MANAGEMENT_TOOL_IDS.listWorkflows]: listWorkflowsTool,
+      [WORKFLOW_MANAGEMENT_TOOL_IDS.getWorkflow]: getWorkflowTool,
+      [WORKFLOW_MANAGEMENT_TOOL_IDS.runWorkflow]: runWorkflowTool,
+      [WORKFLOW_MANAGEMENT_TOOL_IDS.deleteWorkflow]: deleteWorkflowTool,
     };
 
     if (storage) {
@@ -138,9 +153,9 @@ export function createDynamicTools(
       });
     }
 
-    if (hasTavilyKey()) {
-      tools.web_search = createWebSearchTool();
-      tools.web_extract = createWebExtractTool();
+    const configuredWebTools = createConfiguredWebTools();
+    if (configuredWebTools) {
+      Object.assign(tools, configuredWebTools);
     } else if (isAnthropicModel) {
       const anthropic = createAnthropic({});
       tools.web_search = anthropic.tools.webSearch_20250305();
@@ -188,7 +203,7 @@ export function createDynamicTools(
         }
       }
 
-      return tools;
+      return tools as ToolsInput;
     };
 
     if (typeof extraTools === 'function') {

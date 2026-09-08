@@ -68,26 +68,27 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
 
-  const generateWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
-    const output = await opts.agent.generate(prompt, {
+  const streamWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
+    const output = await opts.agent.stream(prompt, {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
       ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       ...opts.observabilityContext,
     });
+    const object = await output.object;
 
-    if (output.object === undefined) {
+    if (object === undefined) {
       throw new Error('structuredOutput object is undefined');
     }
 
-    return output.object;
+    return object;
   };
 
   let object: Record<string, unknown>;
   let retryEmptyObject = false;
   try {
-    object = await generateWithStructuredOutput();
+    object = await streamWithStructuredOutput();
     retryEmptyObject = shouldRetryEmptyStructuredObject(object, structuredExtractors);
   } catch (error) {
     if (isAbortError(error, opts.abortSignal)) {
@@ -96,7 +97,7 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
 
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
-      object = await generateWithStructuredOutput(fallbackJsonPromptInjection);
+      object = await streamWithStructuredOutput(fallbackJsonPromptInjection);
     } catch (fallbackError) {
       if (isAbortError(fallbackError, opts.abortSignal)) {
         throw fallbackError;
@@ -113,7 +114,7 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   if (retryEmptyObject) {
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
-      object = await generateWithStructuredOutput(fallbackJsonPromptInjection);
+      object = await streamWithStructuredOutput(fallbackJsonPromptInjection);
     } catch (fallbackError) {
       if (isAbortError(fallbackError, opts.abortSignal)) {
         throw fallbackError;

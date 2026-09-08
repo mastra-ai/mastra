@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useEffect, useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
 
@@ -157,4 +158,61 @@ Some content here.
 
 More content after the divider.`,
   },
+};
+
+const STREAMED_REPLY = `Here is what I found in the router.
+
+The redirect runs before the session is read, so a signed-in visitor is sent to
+the login page and back again.
+
+\`\`\`ts
+if (!session) return redirect('/login');
+\`\`\`
+
+Moving the guard below the loader fixes it.`;
+
+/** Chunks land in clumps, the way a proxy flushes them, not one word at a time. */
+function useReplay(reply: string): string {
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    let landed = 0;
+    const timer = setInterval(() => {
+      landed = Math.min(reply.length, landed + 12 + Math.floor(Math.random() * 45));
+      setText(reply.slice(0, landed));
+      if (landed === reply.length) clearInterval(timer);
+    }, 130);
+
+    return () => clearInterval(timer);
+  }, [reply]);
+
+  return text;
+}
+
+function ArrivingReply() {
+  const arriving = useReplay(STREAMED_REPLY);
+
+  return <MarkdownRenderer streaming={arriving !== STREAMED_REPLY}>{arriving}</MarkdownRenderer>;
+}
+
+function StreamCadence() {
+  const [run, setRun] = useState(0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <button
+        type="button"
+        onClick={() => setRun(count => count + 1)}
+        className="text-icon5 border-border1 text-ui-sm self-start rounded-md border px-3 py-1"
+      >
+        Replay
+      </button>
+      <ArrivingReply key={run} />
+    </div>
+  );
+}
+
+/** The clumps the replay feeds in should not be readable in the cadence that comes out. */
+export const Streaming: Story = {
+  render: () => <StreamCadence />,
 };

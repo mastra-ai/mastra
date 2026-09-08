@@ -87,7 +87,7 @@ test.describe('Agent observability tabs', () => {
       let traceListUrl: URL | undefined;
       await mockTraceLists(page, url => (traceListUrl = url));
 
-      await page.goto('/agents/weather-agent/chat/new');
+      await page.goto('/agents/weather-agent/overview');
       await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
       await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
       await page.getByRole('tab', { name: 'Traces' }).click();
@@ -109,7 +109,7 @@ test.describe('Agent observability tabs', () => {
     test('keeps the agent observability tabs disabled', async ({ page }) => {
       await mockSystemPackages(page, false);
 
-      await page.goto('/agents/weather-agent/chat/new');
+      await page.goto('/agents/weather-agent/overview');
       await page.getByRole('tab', { name: 'Traces' }).hover();
 
       await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();

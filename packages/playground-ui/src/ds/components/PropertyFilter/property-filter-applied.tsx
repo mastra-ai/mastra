@@ -155,7 +155,7 @@ type PickMultiTokenPillProps = {
   field: Extract<PropertyFilterField, { kind: 'pick-multi' }>;
   token: PropertyFilterToken;
   tokens: PropertyFilterToken[];
-  onChange: (fieldId: string, value: string | string[] | undefined) => void;
+  onChange: (fieldId: string, value: string | string[]) => void;
   onRemove: () => void;
   disabled?: boolean;
 };
@@ -260,17 +260,10 @@ export function PropertyFilterApplied({
               token={token}
               tokens={tokens}
               disabled={disabled}
-              onChange={(fieldId, value) => {
-                // Unselecting everything (empty array) keeps the pill alive in
-                // a neutral state — the user explicitly removes it via ×. This
-                // lets the page-level Reset neutralize values without dropping
-                // the pill structure.
-                if (value === undefined) {
-                  removeTokenAt(index);
-                  return;
-                }
-                replaceTokenAt(index, { fieldId, value });
-              }}
+              // Unselecting everything (empty array) keeps the pill alive in a
+              // neutral state — the user explicitly removes it via ×. This lets
+              // the page-level Reset neutralize values without dropping the pill.
+              onChange={(fieldId, value) => replaceTokenAt(index, { fieldId, value })}
               onRemove={() => removeTokenAt(index)}
             />
           );

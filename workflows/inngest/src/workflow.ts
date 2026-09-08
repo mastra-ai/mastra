@@ -371,6 +371,19 @@ export class InngestWorkflow<
           );
         }
 
+        if (resume && (initialState === undefined || resume.stepResults === undefined)) {
+          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+          const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: this.id,
+            runId,
+          });
+
+          initialState ??= snapshot?.value;
+          if (resume.stepResults === undefined && snapshot?.context !== undefined) {
+            resume = { ...resume, stepResults: snapshot.context };
+          }
+        }
+
         // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`
         // (Inngest SDK v4 client API), which auto-includes the current runId from the
         // function's async context.
@@ -571,6 +584,13 @@ export class InngestWorkflow<
                     resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
                     result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                     error: result.status === 'failed' ? result.error : undefined,
+                    requestContext: requestContext.toJSON(),
+                    tracingContext: workflowSpanData
+                      ? {
+                          traceId: workflowSpanData.traceId,
+                          spanId: workflowSpanData.id,
+                        }
+                      : undefined,
                     timestamp: Date.now(),
                   },
                 });

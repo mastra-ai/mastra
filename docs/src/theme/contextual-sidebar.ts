@@ -146,7 +146,10 @@ export function createContextualSidebarItems(
 ): readonly PropSidebarItem[] {
   const overview: PropSidebarItemLink = {
     type: 'link',
-    label: 'Overview',
+    label:
+      typeof category.customProps?.contextualSidebarLabel === 'string'
+        ? category.customProps.contextualSidebarLabel
+        : 'Overview',
     href: category.href,
   }
   return [overview, ...category.items]

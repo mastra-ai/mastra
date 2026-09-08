@@ -1,15 +1,24 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
+
+vi.mock('./event-worker.js', () => ({
+  PlatformLinearEventWorker: class {
+    readonly name = 'platform-linear-events';
+
+    constructor(readonly config: unknown) {}
+  },
+}));
+
 import { PlatformLinearIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 const workspace = {
@@ -69,7 +78,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
@@ -450,7 +459,7 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
     const requestContext = new RequestContext();
-    requestContext.set('controller', { resourceId: projectRecord.id });
+    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
 
     expect(integration.id).toBe('linear');
     expect(integration.intake).toBeDefined();
@@ -497,7 +506,9 @@ describe('PlatformLinearIntegration', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = createIntegration(fetchImpl);
+    vi.stubGlobal('fetch', fetchImpl);
+    const onEvent = vi.fn();
+    const integration = new PlatformLinearIntegration({ rules: { issueObserved: onEvent } });
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
@@ -508,7 +519,6 @@ describe('PlatformLinearIntegration', () => {
       userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       storage: {
@@ -517,12 +527,10 @@ describe('PlatformLinearIntegration', () => {
         projects: seed.projects,
         intake: seed.intake,
       },
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-          overrides: { linear: { issueObserved: { onEvent } } },
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
       stateSigner: {},
       baseUrl: 'https://factory.example',
@@ -549,33 +557,79 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
+  it('defaults the integrations API URL and requires a platform credential', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.mastra.ai',
+      endpointHost: 'integrations.mastra.ai',
     });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'injected-token');
+    expect(() => new PlatformLinearIntegration()).not.toThrow();
+
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    expect(() => new PlatformLinearIntegration()).toThrow(/MASTRA_PLATFORM_ACCESS_TOKEN/);
   });
+
+  const workerContext = {
+    controller: {},
+    storage: {
+      generic: {},
+      sourceControl: {},
+      projects: { listAll: async () => [] },
+      intake: {},
+    },
+    runtime: { configVersion: 'test-v1', workItems: {} },
+  };
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {
     const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-    const context = {
-      controller: {},
-      storage: {
-        generic: {},
-        sourceControl: {},
-        projects: { listAll: async () => [] },
-        intake: {},
-      },
-      rules: { config: {}, workItems: {} },
+      workers(
+        ctx: unknown,
+      ): Array<{ name: string; config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
-    expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-linear-events']);
+    expect(integration.workers(workerContext)).toEqual([
+      expect.objectContaining({
+        name: 'platform-linear-events',
+        config: expect.objectContaining({ pollEventsEnabled: true, reconcileFactoryState: expect.any(Function) }),
+      }),
+    ]);
+  });
+
+  it('keeps event polling active when issue reconciliation is disabled', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
+    };
+
+    const config = integration.workers(workerContext)[0]?.config;
+    expect(config?.pollEventsEnabled).toBe(true);
+    expect(config).not.toHaveProperty('reconcileFactoryState');
+  });
+
+  it('registers only issue reconciliation when event polling is disabled', () => {
+    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
+    };
+
+    expect(integration.workers(workerContext)[0]?.config).toMatchObject({
+      pollEventsEnabled: false,
+      reconcileFactoryState: expect.any(Function),
+    });
+  });
+
+  it('does not register when polling and issue reconciliation are disabled', () => {
+    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
+    const integration = new PlatformLinearIntegration() as unknown as {
+      workers(ctx: unknown): Array<{ name: string }>;
+    };
+
+    expect(integration.workers(workerContext)).toEqual([]);
   });
 });

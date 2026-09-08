@@ -44,7 +44,7 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('searchDocs'));
+    fireEvent.click(screen.getByText('SearchDocs'));
 
     const toolArgs = screen.getByTestId('tool-args');
 
@@ -70,12 +70,51 @@ describe('ToolBadge', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('getWeather'));
+    fireEvent.click(screen.getByText('GetWeather'));
 
     const toolResult = screen.getByTestId('tool-result');
 
     expect(toolResult.textContent).toContain('"temperature": 20');
     expect(toolResult.textContent).toContain('"conditions": "cloudy"');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
+  });
+
+  it('renders a result of false, since a falsy value is still an answer', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="checkAccess"
+        args={{ user: 'ada' }}
+        result={false}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('CheckAccess'));
+
+    expect(screen.getByTestId('tool-result').textContent).toBe('false');
+  });
+});
+
+describe('ToolBadge edit body', () => {
+  it('shows an edit-style call as a diff instead of raw arguments', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="mastra_workspace_edit_file"
+        args={{ path: 'a.ts', old_string: 'x', new_string: 'y' }}
+        result={undefined}
+        toolOutput={[]}
+        toolCallId="call-3"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Edit'));
+
+    expect(screen.getByRole('group', { name: 'File change' })).toBeTruthy();
+    expect(screen.queryByTestId('tool-args')).toBeNull();
   });
 });

@@ -148,16 +148,19 @@ export class ConvexDB extends MastraBase {
     tableName,
     id,
     record,
+    expected,
   }: {
     tableName: ConvexStorageTable;
     id: string;
     record: Record<string, any>;
+    expected?: Record<string, any>;
   }): Promise<boolean> {
     return this.client.callStorage<boolean>({
       op: 'patch',
       tableName,
       id,
       record: this.normalizePatch(record),
+      expected,
     });
   }
 
@@ -293,7 +296,7 @@ export class ConvexDB extends MastraBase {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
-  }): Promise<WorkflowRunState> {
+  }): Promise<WorkflowRunState | undefined> {
     const snapshot = await this.client.callStorage<string>({
       op: 'mergeWorkflowState',
       tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -301,6 +304,10 @@ export class ConvexDB extends MastraBase {
       runId,
       opts: JSON.stringify(opts),
     });
+    if (snapshot === '') {
+      // The `expectedStatus` guard did not match, so the server applied nothing.
+      return undefined;
+    }
     if (!snapshot) {
       throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);
     }

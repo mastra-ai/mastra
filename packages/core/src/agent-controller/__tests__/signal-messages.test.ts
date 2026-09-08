@@ -12,9 +12,18 @@ function createSubscription(activeRunId: () => string | null) {
 }
 
 function createAgentMock(activeRunId: () => string | null) {
+  let mastra: unknown;
   return {
     id: 'agent-1',
-    getMastraInstance: vi.fn(() => undefined),
+    getMastraInstance: vi.fn(() => mastra),
+    __setLogger: vi.fn(),
+    __registerMastra: vi.fn((nextMastra: unknown) => {
+      mastra = nextMastra;
+    }),
+    __registerPrimitives: vi.fn(),
+    getConfiguredProcessorWorkflows: vi.fn(async () => []),
+    listScorers: vi.fn(async () => []),
+    getChannels: vi.fn(() => null),
     subscribeToThread: vi.fn(async () => createSubscription(activeRunId)),
     sendSignal: vi.fn((signal: any, _options?: any) => ({
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),

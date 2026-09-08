@@ -53,8 +53,14 @@ export interface SandboxExec {
 export interface SandboxFilesystemOptions {
   /** Live sandbox to run commands in. */
   sandbox: SandboxExec;
-  /** Absolute path inside the sandbox that is the workspace root. */
-  workdir: string;
+  /**
+   * Absolute path inside the sandbox that is the workspace root — or a lazy
+   * resolver for it. The resolver form exists for sandboxes whose workspace
+   * root is only knowable once the VM is running (e.g. `$HOME/<repo>` under
+   * a provider-chosen home dir): it is awaited on the first file operation
+   * (which itself may lazily start the VM) and the result is memoized.
+   */
+  workdir: string | (() => Promise<string> | string);
   /** Optional stable id; defaults to a sandbox-derived id. */
   id?: string;
 }
@@ -80,32 +86,71 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'SandboxFilesystem';
   readonly provider = 'sandbox';
-  readonly basePath: string;
   status: ProviderStatus = 'ready';
 
   private readonly sandbox: SandboxExec;
+  private readonly workdirSource: string | (() => Promise<string> | string);
+  private resolvedBase?: string;
+  private resolvingBase?: Promise<string>;
 
   constructor(options: SandboxFilesystemOptions) {
     this.sandbox = options.sandbox;
-    this.basePath = options.workdir;
-    // Include the workdir: one sandbox can back several filesystems rooted at
-    // different worktrees, and each needs a distinct id.
-    this.id = options.id ?? `sandbox-fs:${options.sandbox.id}:${options.workdir}`;
+    this.workdirSource = options.workdir;
+    if (typeof options.workdir === 'string') this.resolvedBase = options.workdir;
+    // Include the workdir when known: one sandbox can back several
+    // filesystems rooted at different checkouts, and each needs a distinct
+    // id. Lazy-workdir callers pass an explicit id.
+    this.id =
+      options.id ??
+      (typeof options.workdir === 'string'
+        ? `sandbox-fs:${options.sandbox.id}:${options.workdir}`
+        : `sandbox-fs:${options.sandbox.id}`);
+  }
+
+  /** The resolved workspace root; empty until a lazy workdir first resolves. */
+  get basePath(): string {
+    return this.resolvedBase ?? '';
+  }
+
+  /** Await (and memoize) the workspace root, resolving a lazy workdir once. */
+  private async base(): Promise<string> {
+    if (this.resolvedBase) return this.resolvedBase;
+    const source = this.workdirSource;
+    if (typeof source === 'string') return (this.resolvedBase = source);
+    this.resolvingBase ??= Promise.resolve()
+      .then(source)
+      .then(resolved => {
+        if (!resolved) throw new Error('Sandbox workspace root resolution returned an empty path');
+        return (this.resolvedBase = resolved);
+      })
+      .finally(() => {
+        this.resolvingBase = undefined;
+      });
+    return this.resolvingBase;
   }
 
   // ── Path handling ──────────────────────────────────────────────────────
 
   /**
    * Resolve a workspace path to an absolute path inside the sandbox, enforcing
-   * that it stays within the workdir.
+   * that it stays within the workdir. Awaits the workspace root first, which
+   * for a lazy workdir may start the VM.
+   */
+  private async resolveAsync(inputPath: string): Promise<string> {
+    return this.resolveAgainst(await this.base(), inputPath);
+  }
+
+  /**
+   * Resolve a workspace path against a known base, enforcing that it stays
+   * within the workdir.
    *
    * Accepts both workspace-relative paths (`src/foo.ts`, `/src/foo.ts`) and
    * absolute sandbox paths that already live under the workdir — the agent's
    * prompt advertises the workdir as its working directory, so tools are
    * routinely called with fully-qualified paths like `<workdir>/src/foo.ts`.
    */
-  private resolve(inputPath: string): string {
-    const base = posixPath.normalize(this.basePath);
+  private resolveAgainst(basePath: string, inputPath: string): string {
+    const base = posixPath.normalize(basePath);
     const normalizedInput = posixPath.normalize(inputPath);
     const rel =
       normalizedInput === base
@@ -115,16 +160,18 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
           : inputPath.startsWith('/')
             ? inputPath.slice(1)
             : inputPath;
-    const resolved = posixPath.normalize(posixPath.join(this.basePath, rel));
-    const root = posixPath.normalize(this.basePath);
-    if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+    const resolved = posixPath.normalize(posixPath.join(base, rel));
+    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
       throw new Error(`Path escapes workspace root: ${inputPath}`);
     }
     return resolved;
   }
 
   resolveAbsolutePath(inputPath: string): string | undefined {
-    return this.resolve(inputPath);
+    // Sync interface: a lazy workdir that has not resolved yet has no
+    // absolute form to offer.
+    if (!this.resolvedBase) return undefined;
+    return this.resolveAgainst(this.resolvedBase, inputPath);
   }
 
   // ── Command helper ─────────────────────────────────────────────────────
@@ -198,7 +245,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── File operations ────────────────────────────────────────────────────
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     // Guard clauses first: redirecting from a directory "succeeds" with empty
     // output on some shells, so classify before reading.
@@ -218,7 +265,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     const dir = posixPath.dirname(abs);
@@ -239,7 +286,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async appendFile(path: string, content: FileContent): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     await this.execOk(
@@ -249,7 +296,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     // Contain the parent's realpath: deleting `link/file` where `link` points
     // outside the workdir must fail, while deleting a symlink entry itself
     // (which lives inside the workdir) stays allowed.
@@ -270,8 +317,8 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const srcAbs = this.resolve(src);
-    const destAbs = this.resolve(dest);
+    const srcAbs = await this.resolveAsync(src);
+    const destAbs = await this.resolveAsync(dest);
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
@@ -313,8 +360,8 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const srcAbs = this.resolve(src);
-    const destAbs = this.resolve(dest);
+    const srcAbs = await this.resolveAsync(src);
+    const destAbs = await this.resolveAsync(dest);
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
@@ -350,14 +397,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Directory operations ───────────────────────────────────────────────
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedDest(abs, path);
     const flag = options?.recursive === false ? '' : '-p ';
     await this.execOk(`mkdir ${flag}${shellQuote(abs)}`, `mkdir ${path}`);
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     // Same parent containment as deleteFile — `rm -r` through a symlinked
     // parent would otherwise delete outside the workspace.
     await this.assertContainedRealpath(posixPath.dirname(abs), path);
@@ -373,7 +420,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
       // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
@@ -435,13 +482,13 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Path / metadata ────────────────────────────────────────────────────
 
   async exists(path: string): Promise<boolean> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     const result = await this.exec(`test -e ${shellQuote(abs)}`);
     return result.exitCode === 0;
   }
 
   async stat(path: string): Promise<FileStat> {
-    const abs = this.resolve(path);
+    const abs = await this.resolveAsync(path);
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
@@ -472,7 +519,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   async init(): Promise<void> {
-    await this.execOk(`mkdir -p ${shellQuote(this.basePath)}`, 'init workdir');
+    await this.execOk(`mkdir -p ${shellQuote(await this.base())}`, 'init workdir');
   }
 
   async destroy(): Promise<void> {
@@ -480,7 +527,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   async isReady(): Promise<boolean> {
-    const result = await this.exec(`test -d ${shellQuote(this.basePath)}`);
+    const result = await this.exec(`test -d ${shellQuote(await this.base())}`);
     return result.exitCode === 0;
   }
 

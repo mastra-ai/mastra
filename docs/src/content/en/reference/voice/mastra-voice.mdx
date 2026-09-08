@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraVoice | Voice"
-description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities."
+description: "The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra."
 packages:
   - "@mastra/core"
 ---
@@ -198,7 +198,7 @@ These methods must be implemented by unknown class extending MastraVoice.
 
 Converts text to speech using the configured speech model.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract speak(
   input: string | NodeJS.ReadableStream,
   options?: {
@@ -220,7 +220,7 @@ Purpose:
 
 Converts speech to text using the configured listening model.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract listen(
   audioStream: NodeJS.ReadableStream,
   options?: {
@@ -241,7 +241,7 @@ Purpose:
 
 Returns a list of available voices supported by the provider.
 
-```typescript prettier:false
+```typescript oxfmt:false
 abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>>
 ```
 
@@ -260,7 +260,7 @@ These methods have default implementations but can be overridden by voice provid
 
 Establishes a WebSocket or WebRTC connection for communication.
 
-```typescript prettier:false
+```typescript oxfmt:false
 connect(config?: unknown): Promise<void>
 ```
 
@@ -275,7 +275,7 @@ Purpose:
 
 Streams audio data in real-time to the voice provider.
 
-```typescript prettier:false
+```typescript oxfmt:false
 send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>
 ```
 
@@ -290,7 +290,7 @@ Purpose:
 
 Triggers the voice provider to generate a response.
 
-```typescript prettier:false
+```typescript oxfmt:false
 answer(): Promise<void>
 ```
 
@@ -304,7 +304,7 @@ Purpose:
 
 Equips the voice provider with tools that can be used during conversations.
 
-```typescript prettier:false
+```typescript oxfmt:false
 addTools(tools: Array<Tool>): void
 ```
 
@@ -318,7 +318,7 @@ Purpose:
 
 Disconnects from the WebSocket or WebRTC connection.
 
-```typescript prettier:false
+```typescript oxfmt:false
 close(): void
 ```
 
@@ -332,7 +332,7 @@ Purpose:
 
 Registers an event listener for voice events.
 
-```typescript prettier:false
+```typescript oxfmt:false
 on<E extends VoiceEventType>(
   event: E,
   callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
@@ -350,7 +350,7 @@ Purpose:
 
 Removes an event listener.
 
-```typescript prettier:false
+```typescript oxfmt:false
 off<E extends VoiceEventType>(
   event: E,
   callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,

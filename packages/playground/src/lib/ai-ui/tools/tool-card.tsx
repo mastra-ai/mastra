@@ -1,42 +1,29 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useContext } from 'react';
 import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
+import { CodeModeBadge } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
+import { SubmitPlanTool } from './submit-plan-tool';
 import {
-  isBrowserTool,
-  isBrowserToolError,
-  useBrowserToolCallsSafe,
-} from '@/domains/agents/context/browser-tool-calls-context';
-import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
+  badgeStatus,
+  codeModeCall,
+  isAgentCall,
+  isSettledState,
+  isWorkflowCall,
+  toolCardKind,
+  toolInteraction,
+} from './tool-card-kind';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
-import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
-import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
+import { ChatAgentContext, useChatRunning, useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
-/**
- * Plain-prop tool dispatcher for the main agent chat, replacing assistant-ui's
- * `ToolFallback` (which read `ToolCallMessagePartProps`/`useAui`). `MessageRow`
- * normalizes both v4 `ToolInvocation` and v5 `DynamicTool` parts into this shape.
- *
- * It is a real component (not a render function) on purpose: it must host hooks —
- * notably `useWorkflowStream(output)` inside `WorkflowRunProvider` so a streaming
- * workflow run keeps animating a live `WorkflowGraph`, exactly as before.
- */
-/**
- * A `data`-typed message part emitted by the agent via `writer.custom`, scoped to
- * a tool call by `data.toolCallId`. `MessageRow` collects these from the parent
- * `MastraDBMessage` and forwards them so badges (file-tree, sandbox) can read live
- * streaming metadata without reaching into assistant-ui state.
- */
+/** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
 export interface DataMessagePart {
   type: string;
   name?: string;
@@ -53,10 +40,14 @@ export interface ToolCardProps {
   metadata?: MessageMetadata;
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
+  /** Historical rendering mode: preserve presentation while suppressing executable actions and side effects. */
+  readOnly?: boolean;
 }
 
-const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
+const stripPrefix = (toolName: string, prefix: string): string =>
+  toolName.startsWith(prefix) ? toolName.slice(prefix.length) : toolName;
 
+/** Its own workflow run scope, so a streaming workflow result can drive a live graph inside the card. */
 export const ToolCard = (props: ToolCardProps) => {
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
@@ -65,258 +56,198 @@ export const ToolCard = (props: ToolCardProps) => {
   );
 };
 
-export const ToolCardInner = ({ toolName, input, output, toolCallId, state, metadata, dataParts }: ToolCardProps) => {
-  // All hooks must run unconditionally before any conditional returns.
-  const browserCtx = useBrowserToolCallsSafe();
-  const isBrowser = isBrowserTool(toolName);
-  const { activateSkill } = useActivatedSkills();
-  const { data: mcpAppToolsMap } = useMcpAppTools();
+export const ToolCardInner = ({
+  toolName,
+  input,
+  output,
+  toolCallId,
+  state,
+  metadata,
+  dataParts,
+  readOnly = false,
+}: ToolCardProps) => {
+  const { data: mcpAppTools } = useMcpAppTools();
   const send = useChatSend();
-  const queryClient = useQueryClient();
-
-  const args = input;
-  const result = output;
-  const isComplete = state === 'output-available' || state === 'result';
-
+  const chatAgent = useContext(ChatAgentContext);
+  const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
       send({ message: content });
     },
     [send],
   );
+  useWorkflowStream(output);
 
-  useEffect(() => {
-    if (!isBrowser || !browserCtx) return;
-
-    let status: 'pending' | 'complete' | 'error' = 'pending';
-    if (result !== undefined) {
-      status = isBrowserToolError(result) ? 'error' : 'complete';
-    }
-
-    browserCtx.registerToolCall({
-      toolCallId,
-      toolName,
-      args: typeof args === 'object' ? args : {},
-      result,
-      status,
-      timestamp: Date.now(),
-    });
-
-    // Seeing any browser tool call means the server has an active session for
-    // this thread, so the probe can flip to `hasSession: true` immediately.
-    // `setQueriesData` always notifies observers, so read synchronously via
-    // `getQueriesData` first and only write entries that need to change.
-    // Preserve each probe's existing `screencastAvailable`.
-    const cachedProbes = queryClient.getQueriesData<BrowserSessionProbe>({
-      queryKey: ['browser-session-probe'],
-    });
-    const needsUpdate = cachedProbes.some(([, data]) => data?.screencastAvailable && !data.hasSession);
-    if (needsUpdate) {
-      queryClient.setQueriesData<BrowserSessionProbe>({ queryKey: ['browser-session-probe'] }, prev => {
-        if (!prev) return prev;
-        if (!prev.screencastAvailable) return prev;
-        if (prev.hasSession) return prev;
-        return { ...prev, hasSession: true };
-      });
-    }
-  }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
-
-  // Detect skill activation tool calls.
-  useEffect(() => {
-    if (toolName !== 'skill') return;
-    if (!args?.name) return;
-    if (!isComplete) return;
-    activateSkill(args.name);
-  }, [toolName, args?.name, isComplete, activateSkill]);
-
-  useWorkflowStream(result);
-
-  // OM observation markers render as ObservationMarkerBadge.
-  if (toolName === 'mastra-memory-om-observation') {
-    const omData = result?.omData ?? args;
-    return (
-      <ObservationMarkerBadge
-        toolName={toolName}
-        args={omData}
-        metadata={metadata ? { ...metadata, omData } : undefined}
-      />
-    );
-  }
-
-  const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
-  const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
-
+  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, mcpAppTools });
+  const { approval: toolApprovalMetadata, suspended: suspendedToolMetadata } = toolInteraction(
+    metadata,
+    toolName,
+    toolCallId,
+  );
+  const status = badgeStatus(state, isRunning);
   const isNetwork = metadata?.mode === 'network';
+  const toolCalled = isNetwork && metadata?.hasMoreMessages ? true : undefined;
+  const agentToolName = stripPrefix(toolName, 'agent-');
+  const workflowToolName = stripPrefix(toolName, 'workflow-');
 
-  const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
-  const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
-
-  const requireApprovalMetadata = metadata?.requireApprovalMetadata;
-  const suspendedTools = metadata?.suspendedTools;
-
-  const toolApprovalMetadata = requireApprovalMetadata
-    ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
-    : undefined;
-
-  const suspendedToolMetadata = suspendedTools
-    ? (suspendedTools?.[toolName] ?? suspendedTools?.[toolCallId])
-    : undefined;
-
-  const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
-
-  const isBackgroundTaskResult =
-    result && typeof result === 'string' && result.toLowerCase().includes('background task');
-
-  if (toolName === 'updateWorkingMemory') {
-    // Hide the updateWorkingMemory tool call in the UI.
-    return null;
+  switch (kind) {
+    case 'hidden':
+      return null;
+    case 'observation': {
+      const omData = output?.omData ?? input;
+      return (
+        <ObservationMarkerBadge
+          toolName={toolName}
+          args={omData}
+          metadata={metadata ? { ...metadata, omData } : undefined}
+        />
+      );
+    }
+    case 'ask_user':
+      if (!readOnly) {
+        return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+      }
+      break;
+    case 'submit_plan':
+      if (chatAgent) {
+        return (
+          <SubmitPlanTool
+            agentId={chatAgent.agentId}
+            agentVersionId={chatAgent.agentVersionId}
+            requestContext={chatAgent.requestContext}
+            toolName={toolName}
+            toolCallId={toolCallId}
+            output={output}
+            metadata={metadata}
+          />
+        );
+      }
+      break;
+    case 'background': {
+      const isAgent = isAgentCall(metadata, toolName);
+      const isWorkflow = isWorkflowCall(metadata, toolName);
+      return (
+        <ToolBadge
+          toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
+          args={input}
+          result={output}
+          toolOutput={[]}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          suspendPayload={suspendedToolMetadata?.suspendPayload}
+          isNetwork={isNetwork}
+          toolCalled={toolCalled}
+          withoutArgs={isAgent || isWorkflow}
+          status={status}
+        />
+      );
+    }
+    case 'agent':
+      return (
+        <AgentBadgeWrapper
+          agentId={agentToolName}
+          result={output}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          toolName={toolName}
+          isNetwork={isNetwork}
+          suspendPayload={suspendedToolMetadata?.suspendPayload}
+          toolCalled={toolCalled}
+          isComplete={isSettledState(state)}
+        />
+      );
+    case 'workflow':
+      return (
+        <WorkflowBadge
+          workflowId={workflowToolName}
+          isStreaming={metadata?.mode === 'stream' || isNetwork}
+          result={output}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          suspendPayload={suspendedToolMetadata?.suspendPayload}
+          toolName={toolName}
+          isNetwork={isNetwork}
+          toolCalled={toolCalled}
+        />
+      );
+    case 'file_tree':
+      return (
+        <FileTreeBadge
+          toolName={toolName}
+          args={input}
+          result={output}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          isNetwork={isNetwork}
+          toolCalled={toolCalled}
+          dataParts={dataParts}
+        />
+      );
+    case 'sandbox':
+      return (
+        <SandboxExecutionBadge
+          toolName={toolName}
+          args={input}
+          result={output}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          isNetwork={isNetwork}
+          toolCalled={toolCalled}
+          dataParts={dataParts}
+        />
+      );
+    case 'code_mode': {
+      const call = codeModeCall(input, output);
+      if (call) {
+        return (
+          <CodeModeBadge
+            toolName={toolName}
+            code={call.code}
+            result={call.result}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            toolCalled={toolCalled}
+          />
+        );
+      }
+      break;
+    }
+    case 'mcp_app':
+    case 'plain':
+      break;
   }
 
-  // Task tool calls are rendered in the docked TaskPanel (bottom of chat) instead
-  // of inline to avoid repetition. Hide them entirely here.
-  if (TASK_TOOL_NAMES.has(toolName)) {
-    return null;
-  }
-
-  // ask_user tool renders a dedicated interactive component for answering questions.
-  if (toolName === 'ask_user') {
-    return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
-  }
-
-  if (isBackgroundTaskResult) {
-    return (
-      <ToolBadge
-        toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
-        args={args}
-        result={result}
-        toolOutput={[]}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-        withoutArgs={isAgent || isWorkflow}
-      />
-    );
-  }
-
-  if (isAgent) {
-    return (
-      <AgentBadgeWrapper
-        agentId={agentToolName}
-        result={result}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
-        toolCalled={toolCalled}
-        isComplete={isComplete}
-      />
-    );
-  }
-
-  if (isWorkflow) {
-    const isStreaming = metadata?.mode === 'stream' || metadata?.mode === 'network';
-
-    return (
-      <WorkflowBadge
-        workflowId={workflowToolName}
-        isStreaming={isStreaming}
-        result={result}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
-        toolName={toolName}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-      />
-    );
-  }
-
-  const isListFiles = toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
-
-  if (isListFiles) {
-    return (
-      <FileTreeBadge
-        toolName={toolName}
-        args={args}
-        result={result}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        isNetwork={isNetwork ?? false}
-        toolCalled={toolCalled}
-        dataParts={dataParts}
-      />
-    );
-  }
-
-  const isSandboxExecution =
-    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ||
-    toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
-    toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS;
-
-  if (isSandboxExecution) {
-    return (
-      <SandboxExecutionBadge
-        toolName={toolName}
-        args={args}
-        result={result}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-        dataParts={dataParts}
-      />
-    );
-  }
-
-  // Code Mode (`execute_typescript`) calls carry a `code` string arg and a
-  // `CodeModeResult` shape. Detect by shape since the tool id is configurable.
-  const codeModeCall = getCodeModeCall(args, result);
-
-  if (codeModeCall) {
-    return (
-      <CodeModeBadge
-        toolName={toolName}
-        code={codeModeCall.code}
-        result={codeModeCall.result}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-      />
-    );
-  }
-
-  const mcpAppInfo = mcpAppToolsMap?.[toolName];
+  const mcpAppInfo = mcpAppTools?.[toolName];
 
   return (
     <>
       <ToolBadge
         toolName={toolName}
-        args={args}
-        result={result}
-        toolOutput={result?.toolOutput || []}
+        args={input}
+        result={output}
+        toolOutput={output?.toolOutput || []}
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+        status={status}
       />
-      {mcpAppInfo && result !== undefined && (
+      {mcpAppInfo && output !== undefined && (
         <McpAppToolResult
           appInfo={mcpAppInfo}
-          toolArgs={args}
-          toolResult={result}
+          toolArgs={input}
+          toolResult={output}
           onSendMessage={handleMcpAppSendMessage}
+          readOnly={readOnly}
         />
       )}
     </>

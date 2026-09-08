@@ -5,7 +5,7 @@
     "testName": "tool approval and suspension > requireToolApproval > should call findUserTool with requireToolApproval and decline via generate",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:51:26.105Z",
-    "updatedAt": "2026-08-06T09:03:13.206Z"
+    "updatedAt": "2026-08-12T23:59:16.772Z"
   },
   "recordings": [
     {
@@ -53,7 +53,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1786006989748
+        "timestamp": 1786579153833
       },
       "response": {
         "status": 200,
@@ -62,35 +62,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a26cdde5ed351849-DEL",
+          "cf-ray": "a2a36ebfaa33cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Thu, 06 Aug 2026 09:03:10 GMT",
+          "date": "Wed, 12 Aug 2026 23:59:14 GMT",
           "openai-organization": "redacted",
-          "openai-processing-ms": "870",
+          "openai-processing-ms": "708",
           "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9980",
-          "x-ratelimit-remaining-tokens": "199711",
-          "x-ratelimit-reset-requests": "2m50.004s",
-          "x-ratelimit-reset-tokens": "86ms",
-          "x-request-id": "req_538898c32ad7495f94a1cc8ca83bebfc"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999711",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "8ms",
+          "x-request-id": "req_8b852774239d4184b9ae556d8f34c8fd"
         },
         "body": {
-          "id": "resp_0c3be5a096c7f4f7006a744dcdfc2c8198a33d65eaa4a216fc",
+          "id": "resp_0fd96a9f1dbf00be006a7d08d1e8c8819bb5d80b5f2ae803e0",
           "object": "response",
-          "created_at": 1786006990,
+          "created_at": 1786579153,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1786006990,
+          "completed_at": 1786579154,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -101,11 +101,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0c3be5a096c7f4f7006a744dce96c4819881acdd5998b8b56c",
+              "id": "fc_0fd96a9f1dbf00be006a7d08d25970819bae64071090e03d0c",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\"}",
-              "call_id": "call_nnPZ9K8gAnvEXeGPQtu7a6HR",
+              "call_id": "call_FiX9pI9olKh2pXHf4L3gBOCY",
               "name": "findUserTool"
             }
           ],
@@ -192,7 +192,7 @@
       }
     },
     {
-      "hash": "bd039c3154fcbcbb",
+      "hash": "4bb28b274815c4ac",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -214,11 +214,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0c3be5a096c7f4f7006a744dce96c4819881acdd5998b8b56c"
+              "id": "fc_0fd96a9f1dbf00be006a7d08d25970819bae64071090e03d0c"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_nnPZ9K8gAnvEXeGPQtu7a6HR",
+              "call_id": "call_FiX9pI9olKh2pXHf4L3gBOCY",
               "output": "Tool call was not approved by the user"
             }
           ],
@@ -245,7 +245,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1786006991941
+        "timestamp": 1786579155741
       },
       "response": {
         "status": 200,
@@ -254,35 +254,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a26cddf39d5a1849-DEL",
+          "cf-ray": "a2a36ecbaf70cf2e-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Thu, 06 Aug 2026 09:03:13 GMT",
+          "date": "Wed, 12 Aug 2026 23:59:16 GMT",
           "openai-organization": "redacted",
-          "openai-processing-ms": "971",
+          "openai-processing-ms": "733",
           "openai-project": "redacted",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9979",
-          "x-ratelimit-remaining-tokens": "199676",
-          "x-ratelimit-reset-requests": "2m56.381s",
-          "x-ratelimit-reset-tokens": "97ms",
-          "x-request-id": "req_1c1f67ef55e7427482f3c26e7acc085b"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999676",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "9ms",
+          "x-request-id": "req_815da56c27b14b0483df2426e597e2ee"
         },
         "body": {
-          "id": "resp_0c3be5a096c7f4f7006a744dd022a481989778172cd6d0a3fc",
+          "id": "resp_0fd96a9f1dbf00be006a7d08d3d76c819b960206df1c6e490e",
           "object": "response",
-          "created_at": 1786006992,
+          "created_at": 1786579155,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1786006992,
+          "completed_at": 1786579156,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -293,7 +293,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0c3be5a096c7f4f7006a744dd0b6c88198a762b7ff80d9aa02",
+              "id": "msg_0fd96a9f1dbf00be006a7d08d4557c819b8215a4b57962debc",
               "type": "message",
               "status": "completed",
               "content": [
@@ -301,7 +301,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I can't access user information without your permission. If you'd like to proceed, please approve the request."
+                  "text": "I can't access the information for the user you requested. If you need help with something else, feel free to ask!"
                 }
               ],
               "role": "assistant"
@@ -377,11 +377,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 22,
+            "output_tokens": 26,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 129
+            "total_tokens": 133
           },
           "user": null,
           "metadata": {}

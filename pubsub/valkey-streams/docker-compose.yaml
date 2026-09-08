@@ -1,0 +1,10 @@
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - '6381:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 10

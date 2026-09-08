@@ -56,6 +56,14 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
   if (stateSchema != null) def.stateSchema = stateSchema;
   const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema != null) def.requestContextSchema = requestContextSchema;
+  try {
+    const schedule = parseJson(row.schedule, 'schedule', row.id);
+    if (schedule != null) def.schedule = schedule as WorkflowDefinition['schedule'];
+  } catch {
+    // Preserve the malformed value so lenient rehydration can report it while
+    // still loading the workflow without a schedule.
+    def.schedule = row.schedule as unknown as WorkflowDefinition['schedule'];
+  }
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;
 }
@@ -89,6 +97,11 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_WORKFLOW_DEFINITIONS, schema: WORKFLOW_DEFINITIONS_SCHEMA });
+    await this.db.alterTable({
+      tableName: TABLE_WORKFLOW_DEFINITIONS,
+      schema: WORKFLOW_DEFINITIONS_SCHEMA,
+      ifNotExists: ['schedule'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -151,6 +164,7 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
         stateSchema: input.stateSchema ?? null,
         requestContextSchema: input.requestContextSchema ?? null,
         graph: input.graph,
+        schedule: 'schedule' in input ? (input.schedule ?? null) : null,
         status: 'active',
         source: 'storage',
         authorId: 'authorId' in input ? (input.authorId ?? null) : null,
@@ -186,6 +200,7 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
     if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
+    if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;
     if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 

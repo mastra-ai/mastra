@@ -9,7 +9,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { PlusIcon } from 'lucide-react';
+import { CircleSlashIcon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import {
@@ -73,9 +73,9 @@ export default function AgentBuilderAgentsPage() {
 
     if (agents.length === 0) {
       return (
-        <div className="flex items-center justify-center pt-16">
+        <div className="flex items-center-safe justify-center-safe">
           <EmptyState
-            iconSlot={<AgentIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
             titleSlot="No agents yet"
             descriptionSlot="Start building your first agent with the Agent Builder."
             actionSlot={
@@ -94,7 +94,7 @@ export default function AgentBuilderAgentsPage() {
   })();
 
   return (
-    <PageLayout className="px-4 md:px-10">
+    <PageLayout height="full" className="px-4 md:px-10">
       <PageLayout.TopArea>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
           <PageHeader>

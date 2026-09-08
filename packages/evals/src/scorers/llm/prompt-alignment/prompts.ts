@@ -16,31 +16,47 @@ Evaluation Guidelines:
 
 Score each dimension from 0.0 (completely misaligned) to 1.0 (perfectly aligned).`;
 
+function createConversationHistoryContext(conversationHistory?: string) {
+  if (!conversationHistory) return '';
+
+  return `Conversation History (prior turns, for context only):
+${conversationHistory}
+
+`;
+}
+
+const CONVERSATION_HISTORY_GUIDANCE = `
+Note on conversation history:
+- The conversation history is provided only to resolve the meaning of the current prompt. Use it to interpret short or referential prompts (e.g. "A", "yes", "the second one") against what was previously asked or offered.
+- Evaluate only the agent response to the current prompt. Do not score earlier turns, and do not credit or penalise the agent for anything it said in them.`;
+
 export function createAnalyzePrompt({
   userPrompt,
   systemPrompt,
   agentResponse,
   evaluationMode,
+  conversationHistory,
 }: {
   userPrompt: string;
   systemPrompt?: string;
   agentResponse: string;
   evaluationMode: 'user' | 'system' | 'both';
+  conversationHistory?: string;
 }) {
   // Build the prompt based on evaluation mode
-  let promptContext = '';
+  let promptContext = createConversationHistoryContext(conversationHistory);
   let evaluationTarget = '';
 
   if (evaluationMode === 'user') {
-    promptContext = `User Prompt:
+    promptContext += `User Prompt:
 ${userPrompt}`;
     evaluationTarget = "the user's prompt";
   } else if (evaluationMode === 'system') {
-    promptContext = `System Prompt:
+    promptContext += `System Prompt:
 ${systemPrompt}`;
     evaluationTarget = "the system's behavioral guidelines and constraints";
   } else {
-    promptContext = `User Prompt:
+    promptContext += `User Prompt:
 ${userPrompt}
 
 System Prompt:
@@ -54,6 +70,7 @@ ${promptContext}
 
 Agent Response:
 ${agentResponse}
+${conversationHistory ? CONVERSATION_HISTORY_GUIDANCE : ''}
 
 Evaluate the following aspects:
 
@@ -237,6 +254,7 @@ export function createReasonPrompt({
   scale,
   analysis,
   evaluationMode,
+  conversationHistory,
 }: {
   userPrompt: string;
   systemPrompt?: string;
@@ -244,16 +262,18 @@ export function createReasonPrompt({
   scale: number;
   analysis: AnalysisResult;
   evaluationMode: 'user' | 'system' | 'both';
+  conversationHistory?: string;
 }) {
   const fulfilledCount = analysis.requirementsFulfillment.requirements.filter(r => r.isFulfilled).length;
   const totalRequirements = analysis.requirementsFulfillment.requirements.length;
 
   const promptContext =
-    evaluationMode === 'system'
+    createConversationHistoryContext(conversationHistory) +
+    (evaluationMode === 'system'
       ? `System Prompt:\n${systemPrompt}`
       : evaluationMode === 'user'
         ? `User Prompt:\n${userPrompt}`
-        : `User Prompt:\n${userPrompt}\n\nSystem Prompt:\n${systemPrompt}`;
+        : `User Prompt:\n${userPrompt}\n\nSystem Prompt:\n${systemPrompt}`);
 
   const alignmentDescription =
     evaluationMode === 'system'

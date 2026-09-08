@@ -1,6 +1,8 @@
 import { Composer } from './Composer';
 
-const composerPanelClass = 'min-w-0 w-full max-w-full shrink-0';
+import './chat-enter.css';
+
+const composerPanelClass = 'composer-enter min-w-0 w-full max-w-full shrink-0';
 
 type ComposerPanelProps = {
   composerVariant?: 'inline' | 'textarea';

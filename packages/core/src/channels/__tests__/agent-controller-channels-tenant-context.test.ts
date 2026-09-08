@@ -124,6 +124,7 @@ describe('AgentControllerChannels tenant context', () => {
     // host resolves the sender itself and writes the tenant before deferring.
     const onDirectMessage: ChannelHandler = async (thread, message, defaultHandler, ctx) => {
       ctx.requestContext.set('user', { id: 'tenant-user-9', organizationId: 'org-9' });
+      ctx.signalMetadata.attachments = [{ id: 'file-1', mediaType: 'application/pdf' }];
       await defaultHandler(thread, message);
     };
 
@@ -131,15 +132,17 @@ describe('AgentControllerChannels tenant context', () => {
     const chatThread = createSlackChatThread(adapter, 'C-1:t-1');
 
     let signalUser: unknown;
+    let signalMetadata: unknown;
     let createSessionUser: unknown;
     const createSession = controller.createSession.bind(controller);
     vi.spyOn(controller, 'createSession').mockImplementation(async (opts: any) => {
       createSessionUser = opts?.requestContext?.get('user');
       const session = await createSession(opts);
       const sendSignal = session.sendSignal.bind(session);
-      vi.spyOn(session, 'sendSignal').mockImplementation((signalArgs: any) => {
-        signalUser = signalArgs.requestContext?.get('user');
-        return sendSignal(signalArgs);
+      vi.spyOn(session, 'sendSignal').mockImplementation((signalArgs: any, signalOptions: any) => {
+        signalUser = signalOptions?.requestContext?.get('user');
+        signalMetadata = signalArgs.metadata;
+        return sendSignal(signalArgs, signalOptions);
       });
       return session;
     });
@@ -150,6 +153,9 @@ describe('AgentControllerChannels tenant context', () => {
     // The tenant reached the run's requestContext as `user` — the single seam
     // `resolveCredentialStore` reads to load the sender's model credentials.
     expect(signalUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
+    expect(signalMetadata).toEqual({
+      attachments: [{ id: 'file-1', mediaType: 'application/pdf' }],
+    });
 
     // Session creation saw the same stamped context: a dynamic workspace factory
     // resolves once at creation time, and it must see the tenant or a

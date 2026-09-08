@@ -1,6 +1,7 @@
 import type { Mastra } from '../../mastra';
 import { resolveObservabilityContext } from '../../observability';
 import type { ToolStepEntry } from '../types';
+import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
 
 /**
@@ -28,12 +29,14 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     state,
     setState,
     abortSignal,
+    actor,
     ...rest
   } = ctx;
   const observabilityContext = resolveObservabilityContext(rest);
   const toolContext = {
     mastra: ctxMastra,
     requestContext,
+    actor: resolveEntryActor(entry.options as Record<string, unknown> | undefined, actor),
     ...observabilityContext,
     abortSignal,
     resumeData,

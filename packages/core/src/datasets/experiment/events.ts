@@ -38,6 +38,7 @@ export interface ExperimentItemCompletedEvent extends ExperimentEventBase {
   input: ExperimentJsonValue;
   output: ExperimentJsonValue;
   groundTruth: ExperimentJsonValue;
+  metadata: ExperimentJsonValue;
   error: ExperimentJsonValue;
   persistenceError: ExperimentJsonValue;
   scores: ExperimentJsonValue;
@@ -174,6 +175,7 @@ export function createItemCompletedEvent(
     input: toExperimentJsonValue(result.input),
     output: toExperimentJsonValue(result.output),
     groundTruth: toExperimentJsonValue(result.groundTruth),
+    metadata: toExperimentJsonValue(result.metadata ?? null),
     error: toExperimentJsonValue(result.error),
     persistenceError: toExperimentJsonValue(result.persistenceError ?? null),
     scores: toExperimentJsonValue(result.scores),

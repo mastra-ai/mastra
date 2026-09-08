@@ -55,8 +55,10 @@ async function zipOutput(projectDir: string): Promise<string> {
     archive.on('error', reject);
 
     archive.pipe(output);
-    // Ship only the pre-built .mastra/output + package.json for dependency metadata
-    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'] }, { prefix: '.mastra/output' });
+    // Ship only the pre-built .mastra/output + package.json for dependency metadata.
+    // `dot` keeps the .npmrc that the build copies into the output so
+    // private-registry installs work remotely (`**` skips dotfiles by default).
+    archive.glob('**', { cwd: outputDir, ignore: ['node_modules/**'], dot: true }, { prefix: '.mastra/output' });
     archive.file(join(projectDir, 'package.json'), { name: 'package.json' });
     void archive.finalize();
   });

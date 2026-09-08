@@ -324,30 +324,28 @@ const TEST_TIMEOUT = 300000; // 5 minutes
 const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
 const modelsToTestV1 = [
-  // openrouter('anthropic/claude-3.7-sonnet'),
-  // openrouter('anthropic/claude-sonnet-4.5'),
+  openrouter('anthropic/claude-sonnet-4.5'),
   openrouter('anthropic/claude-haiku-4.5'),
-  // openrouter('openai/gpt-4o-mini'),
-  // openrouter('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai('o3-mini'),
+  openrouter('openai/gpt-4o-mini'),
+  openrouter('openai/gpt-4.1-mini'),
+  openai('o3-mini'),
   openai('o4-mini'),
-  // openrouter('google/gemini-2.5-pro'),
-  // openrouter('google/gemini-2.5-flash'),
-  openrouter('google/gemini-2.0-flash-lite-001'),
+  openrouter('google/gemini-2.5-pro'),
+  openrouter('google/gemini-2.5-flash'),
+  // gemini-2.0-flash-lite-001 was delisted from OpenRouter; use the current lite tier
+  openrouter('google/gemini-3.1-flash-lite'),
 ];
 const modelsToTestV2 = [
-  // openrouter_v5('anthropic/claude-3.7-sonnet'),
-  // openrouter_v5('anthropic/claude-sonnet-4.5'),
+  openrouter_v5('anthropic/claude-sonnet-4.5'),
   openrouter_v5('anthropic/claude-haiku-4.5'),
-  // openrouter_v5('openai/gpt-4o-mini'),
-  // openrouter_v5('openai/gpt-4.1-mini'),
-  // openrouter_v5('openai/o3-mini'),
-  // openai_v5('o3-mini'),
+  openrouter_v5('openai/gpt-4o-mini'),
+  openrouter_v5('openai/gpt-4.1-mini'),
+  openrouter_v5('openai/o3-mini'),
+  openai_v5('o3-mini'),
   openai_v5('o4-mini'),
-  // openrouter_v5('google/gemini-2.5-pro'),
-  // openrouter_v5('google/gemini-2.5-flash'),
-  openrouter_v5('google/gemini-2.0-flash-lite-001'),
+  openrouter_v5('google/gemini-2.5-pro'),
+  openrouter_v5('google/gemini-2.5-flash'),
+  openrouter_v5('google/gemini-3.1-flash-lite'),
 ];
 
 // Specify which schemas to test - empty array means test all
@@ -554,8 +552,9 @@ describe('CoreToolBuilder ID Preservation', () => {
 });
 
 describe('Tool Tracing Context Injection', () => {
-  it('should inject tracingContext for Mastra tools when agentSpan is available', async () => {
+  it('should inject tracingContext and a span-backed observe helper for Mastra tools when agentSpan is available', async () => {
     let receivedTracingContext: any = null;
+    const info = vi.fn();
 
     const testTool = createTool({
       id: 'tracing-test-tool',
@@ -563,12 +562,23 @@ describe('Tool Tracing Context Injection', () => {
       inputSchema: z.object({ message: z.string() }),
       execute: async (inputData, context) => {
         receivedTracingContext = context?.tracingContext;
+        context?.observe.log('info', 'tool executed', { message: inputData.message });
         return { result: `processed: ${inputData.message}` };
       },
     });
 
     // Mock agent span
     const mockToolSpan = {
+      isValid: true,
+      observabilityInstance: {
+        getLoggerContext: vi.fn(() => ({
+          debug: vi.fn(),
+          info,
+          warn: vi.fn(),
+          error: vi.fn(),
+          fatal: vi.fn(),
+        })),
+      },
       end: vi.fn(),
       error: vi.fn(),
     };
@@ -619,6 +629,7 @@ describe('Tool Tracing Context Injection', () => {
     // Verify tracingContext was injected with the tool span
     expect(receivedTracingContext).toBeTruthy();
     expect(receivedTracingContext.currentSpan).toBe(mockToolSpan);
+    expect(info).toHaveBeenCalledWith('tool executed', { message: 'test' });
 
     // Verify tool span was ended with result and success attribute
     expect(mockToolSpan.end).toHaveBeenCalledWith({

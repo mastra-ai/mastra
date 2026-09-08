@@ -41,10 +41,13 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
   return useMutation({
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
-      return requireAgentControllerSession(session).state();
+      return requireAgentControllerSession(session).state({ threadId });
     },
     onSuccess: state => {
-      queryClient.setQueryData(queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope), state);
+      queryClient.setQueryData(
+        queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, state.threadId),
+        state,
+      );
     },
   });
 }

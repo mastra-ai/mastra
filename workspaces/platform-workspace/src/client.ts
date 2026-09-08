@@ -1,6 +1,21 @@
 export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
+  actingUserId?: string;
+  sandboxProvider?: SandboxProvider;
+  /**
+   * Advisory correlation id for the factory session driving this client.
+   * Sent as `x-mastra-session-id` on every proxy request so proxy-side logs
+   * can be joined back to the calling session without a multi-store hand-join
+   * (`threadId → sessionId → sandboxId → providerResourceId`). Never used for
+   * authorization — the Bearer token remains the only credential.
+   */
+  sessionId?: string;
+  /**
+   * Advisory correlation id for the factory thread, sent as
+   * `x-mastra-thread-id` when present. See {@link PlatformClientOptions.sessionId}.
+   */
+  threadId?: string;
   fetch?: typeof fetch;
 }
 
@@ -8,7 +23,27 @@ export interface PlatformRequestOptions extends RequestInit {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
+export type SandboxProvider = 'railway' | 'e2b';
+
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
+const REGIONAL_PROXY_URLS: Record<'us' | 'eu', string> = {
+  us: 'https://workspaces.us.mastra.ai',
+  eu: 'https://workspaces.eu.mastra.ai',
+};
+
+/**
+ * Resolves the workspace proxy URL, preferring an explicit
+ * `MASTRA_WORKSPACE_PROXY_URL` override, then a regional replica selected by
+ * `MASTRA_PLATFORM_REGION` (case-insensitive `us` or `eu`), then the global
+ * default. Unknown region values fall through to the global default.
+ */
+function resolveProxyUrl(): string {
+  const override = process.env.MASTRA_WORKSPACE_PROXY_URL?.trim();
+  if (override) return override;
+  const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
+  if (region === 'us' || region === 'eu') return REGIONAL_PROXY_URLS[region];
+  return DEFAULT_PROXY_URL;
+}
 
 /**
  * Default per-request timeout for calls to the workspace proxy. Applied only
@@ -22,11 +57,26 @@ export function requireOption(value: string | undefined, name: string): string {
   return value;
 }
 
+function resolveSandboxProvider(value: string | undefined): SandboxProvider {
+  const provider = value?.trim() || 'e2b';
+  if (provider !== 'railway' && provider !== 'e2b') {
+    throw new Error('SANDBOX_PROVIDER must be either "railway" or "e2b"');
+  }
+  return provider;
+}
+
 export function resolvePlatformOptions(options: PlatformClientOptions) {
+  const environmentSandboxProvider = process.env.SANDBOX_PROVIDER?.trim();
+  const configuredSandboxProvider = options.sandboxProvider ?? environmentSandboxProvider;
+
   return {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
-    proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    actingUserId: options.actingUserId?.trim() || undefined,
+    proxyUrl: resolveProxyUrl().replace(/\/$/, ''),
+    sandboxProvider: resolveSandboxProvider(configuredSandboxProvider),
+    sessionId: options.sessionId,
+    threadId: options.threadId,
     fetch: options.fetch ?? fetch,
   };
 }
@@ -82,25 +132,50 @@ export class PlatformApiError extends Error {
 export class PlatformClient {
   readonly accessToken: string;
   readonly projectId: string;
+  readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
+  readonly sandboxProvider: SandboxProvider;
+  /** Advisory session correlation id — see {@link PlatformClientOptions.sessionId}. */
+  readonly sessionId: string | undefined;
+  /** Advisory thread correlation id — see {@link PlatformClientOptions.threadId}. */
+  readonly threadId: string | undefined;
   readonly fetch: typeof fetch;
 
   constructor(options: PlatformClientOptions) {
     const resolved = resolvePlatformOptions(options);
     this.accessToken = resolved.accessToken;
     this.projectId = resolved.projectId;
+    this.actingUserId = resolved.actingUserId;
     this.proxyUrl = resolved.proxyUrl;
+    this.sandboxProvider = resolved.sandboxProvider;
+    this.sessionId = resolved.sessionId;
+    this.threadId = resolved.threadId;
     this.fetch = resolved.fetch;
   }
 
   async request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
-    const url = new URL(`${this.proxyUrl}/v1/projects/${encodeURIComponent(this.projectId)}${path}`);
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
+  }
+
+  async requestProvider(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
+  }
+
+  private async requestAtPath(providerPath: string, path: string, options: PlatformRequestOptions): Promise<Response> {
+    const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
 
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${this.accessToken}`);
+    if (this.actingUserId) headers.set('x-acting-user-id', this.actingUserId);
+    // Advisory correlation headers — the proxy folds them into its log lines
+    // so proxy-side events can be joined back to the calling factory session
+    // without a cross-store hand-join. Unknown headers are passthrough for
+    // older proxies; these are never used for authorization.
+    if (this.sessionId) headers.set('x-mastra-session-id', this.sessionId);
+    if (this.threadId) headers.set('x-mastra-thread-id', this.threadId);
 
     // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
     const { query: _query, ...fetchOptions } = options;

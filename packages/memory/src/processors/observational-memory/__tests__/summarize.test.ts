@@ -30,16 +30,22 @@ function createTestMessage(
   };
 }
 
-/** Mock model: doStream serves the summarizer output, doGenerate serves the structured-extraction follow-up. */
-function createMockSummarizerModel(streamText: string, generateObjectJson?: string, onDoStream?: (args: any) => void) {
+/** Mock model: the first stream serves summarization and later streams serve structured extraction. */
+function createMockSummarizerModel(
+  streamText: string,
+  structuredOutputJson?: string,
+  onDoStream?: (args: any) => void,
+) {
+  let streamCall = 0;
   const doStream = vi.fn(async (args: any) => {
     onDoStream?.(args);
+    const text = streamCall++ === 0 ? streamText : (structuredOutputJson ?? '{}');
     return {
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'sum-1', modelId: 'mock-summarizer', timestamp: new Date() },
         { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: streamText },
+        { type: 'text-delta', id: 'text-1', delta: text },
         { type: 'text-end', id: 'text-1' },
         {
           type: 'finish',
@@ -51,15 +57,8 @@ function createMockSummarizerModel(streamText: string, generateObjectJson?: stri
       warnings: [],
     };
   });
-  const doGenerate = vi.fn(async () => ({
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop' as const,
-    usage: { inputTokens: 40, outputTokens: 20, totalTokens: 60 },
-    warnings: [],
-    content: [{ type: 'text' as const, text: generateObjectJson ?? '{}' }],
-  }));
-  const model = new MockLanguageModelV2({ doStream, doGenerate } as any);
-  return { model, doStream, doGenerate };
+  const model = new MockLanguageModelV2({ doStream } as any);
+  return { model, doStream };
 }
 
 const OBSERVATION_OUTPUT = `<observations>
@@ -124,7 +123,7 @@ describe('summarizeConversation()', () => {
   });
 
   it('runs structured extractors through the follow-up extraction call', async () => {
-    const { model, doGenerate } = createMockSummarizerModel(
+    const { model, doStream } = createMockSummarizerModel(
       OBSERVATION_OUTPUT,
       JSON.stringify({ 'call-summary': { summary: 'Caller asked about pricing.', sentiment: 'positive' } }),
     );
@@ -142,7 +141,7 @@ describe('summarizeConversation()', () => {
       ],
     });
 
-    expect(doGenerate).toHaveBeenCalled();
+    expect(doStream).toHaveBeenCalledTimes(2);
     expect(result.extracted['call-summary']).toEqual({
       summary: 'Caller asked about pricing.',
       sentiment: 'positive',
@@ -179,13 +178,12 @@ describe('summarizeConversation()', () => {
   });
 
   it('returns an empty result without calling the model when there are no messages', async () => {
-    const { model, doStream, doGenerate } = createMockSummarizerModel(OBSERVATION_OUTPUT);
+    const { model, doStream } = createMockSummarizerModel(OBSERVATION_OUTPUT);
 
     const result = await summarizeConversation({ model: model as any, messages: [] });
 
     expect(result).toEqual({ summary: '', extracted: {} });
     expect(doStream).not.toHaveBeenCalled();
-    expect(doGenerate).not.toHaveBeenCalled();
   });
 });
 

@@ -26,6 +26,8 @@ export const scoringEntityTypeSchema = z.enum([
   'WORKFLOW',
   'TRAJECTORY',
   'STEP',
+  // Externally executed experiment items (targetType: 'external')
+  'EXTERNAL',
   ...Object.values(SpanType),
 ] as [string, string, ...string[]]);
 
@@ -222,11 +224,22 @@ export type ScoreRowData = z.infer<typeof scoreRowDataSchema>;
 // Save Score Payload (for creating new scores)
 // ============================================================================
 
-export const saveScorePayloadSchema = scoreRowDataSchema.omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const saveScorePayloadSchema = scoreRowDataSchema
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    /**
+     * Optional caller-supplied stable id. When provided, storage adapters
+     * upsert by this id (latest write wins) instead of inserting a new row
+     * with a random id. Used by caller-driven experiments so retried
+     * submissions converge on one score row per (experiment, item, attempt,
+     * scorer).
+     */
+    id: z.string().optional(),
+  });
 
 export type SaveScorePayload = z.infer<typeof saveScorePayloadSchema>;
 
@@ -768,6 +781,11 @@ const SKIPPED_SPAN_TYPES = new Set([
   SpanType.SCORER_RUN,
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
+  // Retained for traces recorded before skill spans moved to SKILL_ACTION.
+  // SKILL_ACTION is deliberately NOT skipped: it now also covers the skill
+  // tools (activate/search/read), which are model-initiated trajectory steps
+  // and were never skipped when they were WORKSPACE_ACTION spans.
+  SpanType.SKILL_RESOLUTION,
   SpanType.MODEL_STEP,
   SpanType.MODEL_INFERENCE,
   SpanType.MODEL_CHUNK,

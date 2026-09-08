@@ -187,6 +187,10 @@ export function hydrateMastraDBMessageFields(
   context: InputConversionContext,
   messageSource: MessageSource,
 ): MastraDBMessage {
+  message.content.parts = Array.isArray(message.content.parts)
+    ? message.content.parts.filter(part => part !== null && typeof part === 'object')
+    : [];
+
   // Generate ID if missing
   if (!message.id) {
     message.id = context.newMessageId();

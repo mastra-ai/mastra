@@ -40,6 +40,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/merge-gateway',
+          label: 'Merge Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/neon',
           label: 'Neon',
         },
@@ -121,6 +126,21 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/above',
+          label: 'above.dev',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agentrouter',
+          label: 'AgentRouter',
+        },
+        {
+          type: 'doc',
+          id: 'providers/agnes',
+          label: 'Agnes AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/ai-router',
           label: 'AI-ROUTER',
         },
@@ -133,6 +153,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
+        },
+        {
+          type: 'doc',
+          id: 'providers/aixy',
+          label: 'Aixy',
         },
         {
           type: 'doc',
@@ -181,8 +206,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/amd',
+          label: 'AMD',
+        },
+        {
+          type: 'doc',
           id: 'providers/anyapi',
           label: 'AnyAPI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/arcee',
+          label: 'Arcee',
         },
         {
           type: 'doc',
@@ -218,6 +253,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/blueclaw',
           label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
+          id: 'providers/bothub',
+          label: 'Bothub',
         },
         {
           type: 'doc',
@@ -271,6 +311,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/coralbricks',
+          label: 'CoralBricks',
+        },
+        {
+          type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
         },
@@ -283,6 +328,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/crossmodel',
           label: 'CrossModel',
+        },
+        {
+          type: 'doc',
+          id: 'providers/crusoe',
+          label: 'Crusoe',
         },
         {
           type: 'doc',
@@ -306,6 +356,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'DevPass (LLM Gateway)',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },
@@ -318,6 +373,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ebcloud',
           label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/echo',
+          label: 'Echo',
+        },
+        {
+          type: 'doc',
+          id: 'providers/edenai',
+          label: 'Eden AI',
         },
         {
           type: 'doc',
@@ -431,6 +496,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/iteracompute',
+          label: 'IteraCompute',
+        },
+        {
+          type: 'doc',
+          id: 'providers/jalapeno',
+          label: 'Jalapeno Cloud',
+        },
+        {
+          type: 'doc',
           id: 'providers/jiekou',
           label: 'Jiekou.AI',
         },
@@ -451,6 +526,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/klokintegration',
+          label: 'klokintegration.se',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kosmik',
+          label: 'Kosmik Compute',
+        },
+        {
+          type: 'doc',
           id: 'providers/kuae-cloud-coding-plan',
           label: 'KUAE Cloud Coding Plan',
         },
@@ -466,8 +551,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/llmgateway',
+          id: 'providers/llmgateway-providers',
           label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
+          id: 'providers/llmtech',
+          label: 'LLM Tech',
         },
         {
           type: 'doc',
@@ -571,6 +661,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nan',
+          label: 'NaN',
+        },
+        {
+          type: 'doc',
           id: 'providers/nano-gpt',
           label: 'NanoGPT',
         },
@@ -583,6 +678,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/neosmith',
+          label: 'NeoSmith',
         },
         {
           type: 'doc',
@@ -631,6 +731,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/openreason',
+          label: 'OpenReason',
+        },
+        {
+          type: 'doc',
+          id: 'providers/opper',
+          label: 'Opper',
+        },
+        {
+          type: 'doc',
           id: 'providers/orcarouter',
           label: 'OrcaRouter',
         },
@@ -638,6 +748,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pendra',
+          label: 'Pendra',
         },
         {
           type: 'doc',
@@ -681,6 +796,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/qvac',
+          label: 'QVAC',
+        },
+        {
+          type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
         },
@@ -693,6 +813,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/routing-run',
           label: 'routing.run',
+        },
+        {
+          type: 'doc',
+          id: 'providers/runinfra',
+          label: 'RunInfra',
         },
         {
           type: 'doc',
@@ -711,8 +836,18 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/scx',
+          id: 'providers/scnet-token-plan',
+          label: 'SCNet Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/scx-ai',
           label: 'SCX.ai',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sensenova',
+          label: 'SenseNova (China)',
         },
         {
           type: 'doc',
@@ -733,6 +868,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/standardcompute',
+          label: 'Standard Compute',
         },
         {
           type: 'doc',
@@ -811,6 +951,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tokengo',
+          label: 'TokenGo',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tokenrouter',
+          label: 'TokenRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/trustedrouter',
           label: 'TrustedRouter',
         },
@@ -836,8 +986,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/vancine',
+          label: 'Vancine',
+        },
+        {
+          type: 'doc',
           id: 'providers/vivgrid',
           label: 'Vivgrid',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine',
+          label: 'Volcengine Ark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/volcengine-coding-plan',
+          label: 'Volcengine Ark Coding Plan',
         },
         {
           type: 'doc',

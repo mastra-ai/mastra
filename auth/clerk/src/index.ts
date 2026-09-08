@@ -4,10 +4,12 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraAuthRequest,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
+import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -342,15 +344,12 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(
-    token: string,
-    request?: Request | { header(name: string): string | undefined },
-  ): Promise<ClerkUser | null> {
+  async authenticateToken(token: string, request?: MastraAuthRequest): Promise<ClerkUser | null> {
     // When SSO is enabled, try the encrypted session cookie first (like Okta pattern).
     // The auth middleware may call this with an empty token for browser requests
     // that only carry a session cookie.
     if (this.ssoEnabled && request) {
-      const sessionUser = await this.getUserFromSessionCookie(request as Request);
+      const sessionUser = await this.getUserFromSessionCookie(request);
       if (sessionUser) return sessionUser as unknown as ClerkUser;
     }
 
@@ -482,14 +481,8 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   /**
    * Extract user from the encrypted SSO session cookie.
    */
-  private async getUserFromSessionCookie(
-    request: Request | { header(name: string): string | undefined },
-  ): Promise<EEUser | null> {
-    // Handle both standard Request and HonoRequest (.header() vs .headers.get())
-    const cookie =
-      'header' in request && typeof (request as any).header === 'function'
-        ? (request as any).header('cookie')
-        : (request as Request).headers?.get('cookie');
+  private async getUserFromSessionCookie(request: MastraAuthRequest): Promise<EEUser | null> {
+    const cookie = getRequestHeader(request, 'cookie');
     if (!cookie) return null;
 
     const match = cookie.match(new RegExp(`(?:^|;\\s*)${escapeRegex(this.cookieName)}=([^;]+)`));

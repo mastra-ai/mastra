@@ -14,7 +14,7 @@ const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
   ['vertex.maas', 'google-vertex'],
 ]);
 
-type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
+type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'icwt5m' | 'icwt1h' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
 
 interface MinifiedCondition {
@@ -46,6 +46,8 @@ const MINIFIED_METER_TO_CANONICAL: Record<MinifiedMeterKey, PricingMeter> = {
   ot: 'output_tokens',
   icrt: 'input_cache_read_tokens',
   icwt: 'input_cache_write_tokens',
+  icwt5m: 'input_cache_write_5m_tokens',
+  icwt1h: 'input_cache_write_1h_tokens',
   iat: 'input_audio_tokens',
   oat: 'output_audio_tokens',
   ort: 'output_reasoning_tokens',
@@ -124,6 +126,20 @@ function parsePricingModelText(content: string): Map<string, PricingModel> {
   return pricingModels;
 }
 
+function expandRates(row: MinifiedPricingModelRow, tier: MinifiedTier): Partial<Record<PricingMeter, number>> {
+  const rates = Object.fromEntries(
+    Object.entries(tier.r).map(([meter, value]) => [MINIFIED_METER_TO_CANONICAL[meter as MinifiedMeterKey], value!.c]),
+  ) as Partial<Record<PricingMeter, number>>;
+
+  const cacheWriteRate = rates.input_cache_write_tokens;
+  if (row.m.includes('claude') && typeof cacheWriteRate === 'number') {
+    rates.input_cache_write_5m_tokens ??= cacheWriteRate;
+    rates.input_cache_write_1h_tokens ??= cacheWriteRate * 1.6;
+  }
+
+  return rates;
+}
+
 function expandPricingModelRow(row: MinifiedPricingModelRow): PricingModel {
   return new PricingModel({
     id: row.i,
@@ -140,12 +156,7 @@ function expandPricingModelRow(row: MinifiedPricingModelRow): PricingModel {
             op: condition.op,
             value: condition.value,
           })),
-          rates: Object.fromEntries(
-            Object.entries(tier.r).map(([meter, value]) => [
-              MINIFIED_METER_TO_CANONICAL[meter as MinifiedMeterKey],
-              value!.c,
-            ]),
-          ) as Partial<Record<PricingMeter, number>>,
+          rates: expandRates(row, tier),
         }),
     ),
   });

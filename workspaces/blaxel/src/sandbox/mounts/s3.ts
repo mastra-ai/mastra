@@ -5,7 +5,7 @@ import type { FilesystemMountConfig } from '@mastra/core/workspace';
 import { shellQuote } from '../../utils/shell-quote';
 import {
   LOG_PREFIX,
-  validateBucketName,
+  validateS3BucketName,
   validateEndpoint,
   validatePrefix,
   runCommand,
@@ -49,7 +49,7 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
-  validateBucketName(config.bucket);
+  validateS3BucketName(config.bucket);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);
   }
