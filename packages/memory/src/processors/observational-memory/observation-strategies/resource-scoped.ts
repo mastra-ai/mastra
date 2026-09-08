@@ -517,7 +517,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           operationType: 'observation',
           startedAt: this.startedAt,
           tokensAttempted,
-          error: error instanceof Error ? error.message : String(error),
+          error,
           recordId: this.opts.record.id,
           threadId,
         });

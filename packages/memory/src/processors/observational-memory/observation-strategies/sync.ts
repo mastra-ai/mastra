@@ -277,7 +277,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
         operationType: 'observation',
         startedAt: this.startedAt,
         tokensAttempted: this.tokensToObserve,
-        error: error instanceof Error ? error.message : String(error),
+        error,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

@@ -245,7 +245,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       operationType: 'observation',
       startedAt: this.startedAt,
       tokensAttempted,
-      error: error instanceof Error ? error.message : String(error),
+      error,
       recordId: record.id,
       threadId,
     });

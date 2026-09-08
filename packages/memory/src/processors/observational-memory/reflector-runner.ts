@@ -672,7 +672,7 @@ export class ReflectorRunner {
               operationType: 'reflection',
               startedAt: new Date().toISOString(),
               tokensAttempted: observationTokens,
-              error: reflectionError.message,
+              error,
               recordId: record.id,
               threadId: record.threadId ?? '',
             });
@@ -1382,7 +1382,7 @@ export class ReflectorRunner {
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: observationTokens,
-          error: error instanceof Error ? error.message : String(error),
+          error,
           recordId: record.id,
           threadId,
         });
