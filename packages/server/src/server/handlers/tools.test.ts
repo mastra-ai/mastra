@@ -4,6 +4,7 @@ import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
+import { parse } from 'superjson';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -744,6 +745,87 @@ describe('Tools Handlers', () => {
         expect(result).toHaveProperty(mockTool.id);
         expect(result).toHaveProperty('mcp-calculator');
         expect(result['mcp-calculator'].inputSchema).toBeDefined();
+      });
+    });
+  });
+
+  describe('injected override fields stripping', () => {
+    // Simulates a tool whose inputSchema was mutated by CoreToolBuilder's
+    // background/resume override injection.
+    const injectedTool = createTool({
+      id: 'injected-tool',
+      description: 'A tool with injected runtime override fields',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string' },
+          _background: { type: 'object' },
+          suspendedToolRunId: { type: ['string', 'null'], description: 'The runId of the suspended tool' },
+          resumeData: { description: 'The resumeData object created from the resumeSchema of suspended tool' },
+        },
+        required: ['url', 'suspendedToolRunId'],
+      } as any,
+      execute: async () => ({ ok: true }),
+    });
+
+    // A tool with a user-authored field that happens to share the injected name
+    // but not the injected description — it must survive serialization.
+    const lookalikeTool = createTool({
+      id: 'lookalike-tool',
+      description: 'A tool with a genuine suspendedToolRunId field',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          suspendedToolRunId: { type: 'string', description: 'A user-defined run id' },
+        },
+        required: ['suspendedToolRunId'],
+      } as any,
+      execute: async () => ({ ok: true }),
+    });
+
+    const getProperties = (serialized: string | undefined) => {
+      expect(serialized).toBeDefined();
+      const schema = parse(serialized!) as { properties?: Record<string, unknown>; required?: string[] };
+      return schema;
+    };
+
+    describe('listToolsHandler', () => {
+      it('strips injected override fields from serialized input schemas', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [injectedTool.id]: injectedTool } as any,
+        });
+        const schema = getProperties(result['injected-tool'].inputSchema);
+        expect(schema.properties).toHaveProperty('url');
+        expect(schema.properties).not.toHaveProperty('_background');
+        expect(schema.properties).not.toHaveProperty('suspendedToolRunId');
+        expect(schema.properties).not.toHaveProperty('resumeData');
+        expect(schema.required).toEqual(['url']);
+      });
+
+      it('preserves user-authored fields that share injected names but not descriptions', async () => {
+        const mastra = new Mastra({ logger: false });
+        const result = await LIST_TOOLS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          registeredTools: { [lookalikeTool.id]: lookalikeTool } as any,
+        });
+        const schema = getProperties(result['lookalike-tool'].inputSchema);
+        expect(schema.properties).toHaveProperty('suspendedToolRunId');
+        expect(schema.required).toEqual(['suspendedToolRunId']);
+      });
+    });
+
+    describe('getSerializedAgentTools', () => {
+      it('strips injected override fields from serialized agent tool input schemas', async () => {
+        const result = await getSerializedAgentTools({
+          [injectedTool.id]: injectedTool as any,
+        });
+        const schema = getProperties(result['injected-tool'].inputSchema);
+        expect(schema.properties).toHaveProperty('url');
+        expect(schema.properties).not.toHaveProperty('_background');
+        expect(schema.properties).not.toHaveProperty('suspendedToolRunId');
+        expect(schema.properties).not.toHaveProperty('resumeData');
       });
     });
   });

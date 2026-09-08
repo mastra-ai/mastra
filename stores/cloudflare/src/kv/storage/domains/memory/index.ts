@@ -270,7 +270,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Get all message keys for this thread first
-      const messageKeys = await this.#db.listKV(TABLE_MESSAGES);
+      const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
+      const messageKeys = await this.#db.listKV(TABLE_MESSAGES, { prefix: `${prefix}${TABLE_MESSAGES}:${threadId}:` });
       const threadMessageKeys = messageKeys.filter(key => key.name.includes(`${TABLE_MESSAGES}:${threadId}:`));
 
       // Delete all messages and their order atomically

@@ -1,0 +1,14 @@
+{
+  "attachment": [
+    "neosmith.intelligent-basic",
+    "neosmith.intelligent-maestro",
+    "neosmith.intelligent-pro",
+    "neosmith.neolite"
+  ],
+  "temperature": [
+    "neosmith.intelligent-basic",
+    "neosmith.intelligent-maestro",
+    "neosmith.intelligent-pro",
+    "neosmith.neolite"
+  ]
+}

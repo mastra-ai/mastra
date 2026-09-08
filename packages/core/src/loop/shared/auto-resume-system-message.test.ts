@@ -134,6 +134,20 @@ describe('buildAutoResumeSystemMessageSuffix', () => {
     expect(suffix!).toContain('fooTool');
   });
 
+  it('returns null when only approval suspensions are present', () => {
+    expect(buildAutoResumeSystemMessageSuffix([{ toolName: 'chargeCard', type: 'approval' }])).toBeNull();
+  });
+
+  it('excludes approval suspensions when generic suspensions are also present', () => {
+    const suffix = buildAutoResumeSystemMessageSuffix([
+      { toolName: 'chargeCard', type: 'approval' },
+      { toolName: 'collectAddress', type: 'suspension' },
+    ]);
+
+    expect(suffix).toContain('collectAddress');
+    expect(suffix).not.toContain('chargeCard');
+  });
+
   it('omits parentRunId from the serialized suspended tools', () => {
     const suffix = buildAutoResumeSystemMessageSuffix([
       {

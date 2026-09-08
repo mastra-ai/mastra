@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import type { TUI } from '@earendil-works/pi-tui';
+import stripAnsi from 'strip-ansi';
+import { describe, expect, it, vi } from 'vitest';
 import type { ModelItem } from '../model-selector.js';
-import { makeCustomModelItem } from '../model-selector.js';
+import { makeCustomModelItem, ModelSelectorComponent } from '../model-selector.js';
 
 const models: ModelItem[] = [
   {
@@ -62,5 +64,26 @@ describe('makeCustomModelItem', () => {
       hasApiKey: false,
       apiKeyEnvVar: undefined,
     });
+  });
+
+  it('selects an unmatched bare model id', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models,
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    for (const character of 'unmatched-bare-id') selector.handleInput(character);
+
+    expect(
+      selector
+        .render(100)
+        .map(line => stripAnsi(line))
+        .join('\n'),
+    ).toContain('Use: unmatched-bare-id');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'unmatched-bare-id' }));
   });
 });

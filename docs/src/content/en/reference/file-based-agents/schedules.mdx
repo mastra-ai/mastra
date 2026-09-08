@@ -1,6 +1,6 @@
 ---
 title: "Schedules | File-based Agents"
-description: Declare recurring cron tasks for a file-based agent under schedules/.
+description: "A file-based agent discovers schedules from its schedules/ directory. Each file declares one recurring task: a cron expression plus what the agent should do when it fires."
 packages:
   - "@mastra/core"
 ---
@@ -261,9 +261,9 @@ Schedules created at runtime through `mastra.schedules.create(...)` live in a se
 
 ## Limits
 
-**Root agents only.** Schedules must be declared on a top-level agent. A `schedules/` directory under `subagents/` is a build error, because subagents are wired into their parent rather than registered on the Mastra instance, so the scheduler could never resolve one as a target. Give the parent the schedule and let it delegate.
+**Root agents only.** Declare schedules on a top-level agent. A `schedules/` directory under `subagents/` causes a build error because subagents are wired into their parent instead of being registered on the Mastra instance, leaving the scheduler unable to resolve them as targets. Give the parent the schedule and let it delegate.
 
-**Storage required.** Schedules are persisted rows, so the instance needs [storage](/reference/file-based-agents/storage) configured. Rows in an in-memory store don't survive a restart.
+**Storage required.** Because schedules are persisted rows and rows in an in-memory store don't survive a restart, the instance needs [storage](/reference/file-based-agents/storage) configured.
 
 **Hosting.** The scheduler runs as a background worker inside the Mastra process, so it needs a host that keeps that process alive. Long-running Node servers and containers work. Environments that freeze or recycle the process between requests, which includes most serverless function platforms, will miss fires. Use the platform's own cron to call the run endpoint there instead.
 

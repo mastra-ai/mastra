@@ -21,7 +21,6 @@
  *   - factory.run.started
  *   - factory.worktree.created
  *   - factory.worktree.deleted
- *   - factory.triage.started
  *   - factory.git.commit
  *   - factory.git.push
  *   - factory.git.pr_opened

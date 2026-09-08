@@ -5,9 +5,9 @@ import { History } from 'lucide-react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
+import { CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 
-const CREATED_ACTION = 'factory.work_item.created';
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -19,7 +19,8 @@ const ACTION_LABELS: Record<string, string> = {
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.deleted': 'Removed the item',
   'factory.run.started': 'Started a run',
-  'factory.triage.started': 'Started triage',
+  'factory.run.approved': 'Started a suggested run',
+  'factory.run.dismissed': 'Dismissed a suggested run',
 };
 
 function actionLabel(action: string): string {
@@ -44,13 +45,21 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
   return actors[event.actorId];
 }
 
-function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<string, AuditActorProfile> }) {
+export function ActivityEvent({
+  event,
+  actors,
+  className,
+}: {
+  event: AuditEvent;
+  actors: Record<string, AuditActorProfile>;
+  className?: string;
+}) {
   const actor = eventActor(event, actors);
   if (!actor) return null;
   const modelId = event.actorType === 'agent' ? metadataString(event, 'modelId') : undefined;
   const isCreated = event.action === CREATED_ACTION;
   return (
-    <li className="flex items-start gap-2">
+    <div className={cn('flex items-start gap-2', className)}>
       <Avatar src={actor.avatarUrl} name={actor.name} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-ui-xs text-icon5 truncate font-medium">
@@ -74,7 +83,7 @@ function ActivityEvent({ event, actors }: { event: AuditEvent; actors: Record<st
           )}
         </span>
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -99,12 +108,12 @@ export function WorkItemActivity({
           <button
             type="button"
             draggable={false}
-            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative z-20 flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="text-ui-xs text-icon4 hover:text-icon6 focus-visible:outline-accent1 relative flex min-w-0 items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label={`View activity by ${worker.name}`}
             onPointerDown={event => event.stopPropagation()}
           >
-            <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
             <span className="max-w-32 truncate">{worker.name}</span>
+            <Avatar src={worker.avatarUrl} name={worker.name} size="sm" interactive />
           </button>
         }
       />
@@ -128,7 +137,9 @@ export function WorkItemActivity({
           {timeline.length > 0 ? (
             <ol className="flex flex-col gap-2.5">
               {timeline.map(event => (
-                <ActivityEvent key={event.id} event={event} actors={mergedActors} />
+                <li key={event.id}>
+                  <ActivityEvent event={event} actors={mergedActors} />
+                </li>
               ))}
             </ol>
           ) : (

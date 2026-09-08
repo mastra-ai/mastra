@@ -1,0 +1,110 @@
+---
+title: "Reference: TanStack Start adapter | Server"
+description: "The @mastra/tanstack-start package provides a server adapter for running Mastra with TanStack Start."
+packages:
+  - "@mastra/tanstack-start"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# TanStack Start adapter
+
+The `@mastra/tanstack-start` package mounts Mastra in a TanStack Start application. See [Server Adapters](/docs/server/server-adapters) for general adapter concepts.
+
+## Installation
+
+Install the TanStack Start adapter and its Hono peer dependency:
+
+```bash npm2yarn
+npm install @mastra/tanstack-start@latest hono
+```
+
+## Usage example
+
+Mount the adapter in a catch-all splat route:
+
+```typescript title="src/routes/api/$.ts"
+import { createStartRouteHandler } from '@mastra/tanstack-start'
+import { createFileRoute } from '@tanstack/react-router'
+import { mastra } from '../../mastra'
+
+export const Route = createFileRoute('/api/$')({
+  server: {
+    handlers: createStartRouteHandler({ mastra }),
+  },
+})
+```
+
+The `prefix` option defaults to `/api` and must match the splat route's mount path. For example, when mounting at `src/routes/api/mastra/$.ts`, use `createStartRouteHandler({ mastra, prefix: '/api/mastra' })`.
+
+## Signature
+
+```typescript
+function createStartRouteHandler(options: StartRouteHandlerOptions): StartRouteHandlers
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance whose server configuration and registered resources are exposed',
+    isOptional: false,
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    typeDescription: 'Record<string, ToolAction | VercelTool>',
+    description: 'Additional tools to register with the server',
+    isOptional: true,
+    defaultValue: '{}',
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'API route prefix, which must match the splat route mount path',
+    isOptional: true,
+    defaultValue: "'/api'",
+  },
+]}
+/>
+
+## Return value
+
+Returns a `StartRouteHandlers` object with `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, and `HEAD` properties. Each property is a handler with this signature:
+
+```typescript
+(context: StartHandlerContext) => Response | Promise<Response>
+```
+
+The context type contains the incoming request and the splat route parameters:
+
+```typescript
+type StartHandlerContext = {
+  request: Request
+  params: Record<string, string>
+}
+```
+
+## Serverless deployments & lazy initialization
+
+The adapter exports its route handlers synchronously, then creates the underlying Hono app and `MastraServer` when the first request arrives. That initialized app is reused for subsequent requests in the same process, which supports serverless runtimes without top-level asynchronous initialization.
+
+It uses the same Hono-based `MastraServer` core as the [Next.js adapter](/reference/server/next-adapter). A2A endpoints use an in-memory task store, so task state lasts only for the lifetime of the process and isn't shared between serverless instances.
+
+## Body size limit
+
+Request bodies have a default limit of 4.5 MB. Requests that exceed the limit receive `{ error: 'Request body too large' }`.
+
+Set `server.bodySizeLimit` on the `Mastra` instance to configure the limit.
+
+## Middleware
+
+Middleware configured with `server.middleware` or `setServerMiddleware()` runs through the adapter's Hono-based server, except on framework-public routes such as those marked `requiresAuth: false`. See [Server middleware](/docs/server/middleware).
+
+## Related
+
+- [Server Adapters](/docs/server/server-adapters)
+- [MastraServer](/reference/server/mastra-server)

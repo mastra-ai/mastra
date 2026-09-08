@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../logger';
 import { resolveAgentById } from '../../mastra/resolve-agent';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+import { computeScheduleDefinitionHash } from '../../workflows/scheduler/definition-hash';
 import { Scheduler } from '../../workflows/scheduler/scheduler';
 import type { SchedulerConfig } from '../../workflows/scheduler/types';
 import { MastraWorker } from '../worker';
@@ -11,9 +12,8 @@ import type { WorkerDeps } from '../worker';
  * for due schedules, computes next fire times, and publishes
  * workflow.start events. Does not consume events — only produces them.
  *
- * This is the **single** scheduler code path. The Mastra constructor
- * adds the worker to the default workers list (guarded by
- * `#shouldEnableScheduler()`), and `startWorkers()` initializes it.
+ * This is the **single** scheduler code path. `Mastra.startWorkers()` adds it
+ * when scheduling work exists or the scheduler is explicitly enabled.
  */
 export class SchedulerWorker extends MastraWorker {
   readonly name = 'scheduler';
@@ -71,10 +71,40 @@ export class SchedulerWorker extends MastraWorker {
         }
       : undefined;
 
+    // Bind a stale-build fence (#19169): scheduled runs execute `localOnly`
+    // in the claiming process against its own workflow registry, so an
+    // instance whose local step graph differs from the hash recorded on the
+    // schedule row (a straggler from a previous deploy) must not claim the
+    // fire. Fails open for rows without a hash (legacy/imperative
+    // schedules) and for agent targets, which have no step graph.
+    const isTargetCurrent = mastra
+      ? (target: ScheduleTarget) => {
+          if (target.type !== 'workflow' || !target.definitionHash) return true;
+          try {
+            const workflow = mastra.getWorkflowById(target.workflowId);
+            const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+            // Unhashable local graph → can't compare, fail open.
+            if (!localHash) return true;
+            return localHash === target.definitionHash;
+          } catch {
+            // Missing workflow is the readiness predicate's concern.
+            return true;
+          }
+        }
+      : undefined;
+
+    // Claim/execute affinity (#19169). Workers receive the *raw* pubsub, not
+    // the `Mastra.pubsub` proxy that tags run-scoped workflow events
+    // `localOnly`, so without this the scheduler's fire always fans out to
+    // every instance on the shared topic. Evaluated per fire rather than
+    // captured here because execution workers can start lazily
+    // (`__ensureExecutionWorkersStarted`) after the scheduler is already up.
+    const canExecuteLocally = mastra ? () => mastra.__hasLocalWorkflowExecution() : undefined;
+
     this.#scheduler = new Scheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: { ...this.#config, isTargetReady },
+      config: { ...this.#config, isTargetReady, isTargetCurrent, canExecuteLocally },
     });
     this.#scheduler.__setLogger(deps.logger as IMastraLogger);
 

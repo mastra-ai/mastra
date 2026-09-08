@@ -1,0 +1,300 @@
+---
+title: "Reference: MastraAuthNeon and MastraRBACNeon | Auth"
+description: API reference for the MastraAuthNeon authentication provider and MastraRBACNeon role-based access control provider.
+packages:
+  - "@mastra/auth-neon"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable"
+
+# `MastraAuthNeon` and `MastraRBACNeon`
+
+[`MastraAuthNeon`](https://github.com/mastra-ai/mastra/tree/main/auth/neon) connects Mastra authentication to [Neon Auth](https://neon.com/docs/guides/neon-auth). It authenticates JWT bearer tokens with Neon Auth's JWKS endpoint and falls back to validating Neon Auth session cookies through its session API. The provider also supports email-and-password sign-in, sign-up, and session management.
+
+`MastraRBACNeon` maps Neon Auth organization roles to Mastra permissions. Register it separately when your application uses Neon Auth organization memberships for role-based access control.
+
+## Usage
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon'
+
+const auth = new MastraAuthNeon()
+
+const rbac = new MastraRBACNeon({
+  roleMapping: {
+    admin: ['*'],
+    member: ['agents:read', 'workflows:read'],
+    _default: [],
+  },
+})
+
+export const mastra = new Mastra({
+  server: {
+    auth,
+    rbac,
+  },
+})
+```
+
+Set `NEON_AUTH_BASE_URL` to your Neon Auth service URL. You can also pass `baseUrl` directly to both constructors.
+
+## `MastraAuthNeon`
+
+### Constructor parameters
+
+The `MastraAuthNeon` constructor accepts an optional `MastraAuthNeonOptions` object.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'baseUrl?',
+    type: 'string',
+    description:
+      'Neon Auth service URL. Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed.',
+  },
+  {
+    name: 'jwksUrl?',
+    type: 'string',
+    description:
+      'JWKS endpoint used to verify bearer tokens. Falls back to NEON_AUTH_JWKS_URL, then <baseUrl>/auth/jwks.',
+  },
+  {
+    name: 'sessionCookieName?',
+    type: 'string',
+    description: 'Name of the Neon Auth session cookie. Defaults to neonauth.session_token.',
+  },
+  {
+    name: 'signUpEnabled?',
+    type: 'boolean',
+    description: 'Whether credentials-based sign-up is enabled. Defaults to true.',
+  },
+  {
+    name: 'name?',
+    type: 'string',
+    description: 'Provider name. Defaults to neon.',
+  },
+  {
+    name: 'authorizeUser?',
+    type: 'AuthorizeUserFn<NeonAuthUser>',
+    description: 'Custom authorization function called after authentication.',
+  },
+  {
+    name: 'mapUserToResourceId?',
+    type: '(user: NeonAuthUser) => string | undefined | null',
+    description: 'Maps an authenticated user to a Mastra memory resource ID.',
+  },
+  {
+    name: 'protected?',
+    type: "MastraAuthConfig['protected']",
+    description: 'Routes that require authentication.',
+  },
+  {
+    name: 'public?',
+    type: "MastraAuthConfig['public']",
+    description: 'Routes that do not require authentication.',
+  },
+]}
+/>
+
+### Environment variables
+
+<PropertiesTable
+  content={[
+  {
+    name: 'NEON_AUTH_BASE_URL',
+    type: 'string',
+    description: 'Default Neon Auth service URL when baseUrl is not passed to the constructor.',
+  },
+  {
+    name: 'NEON_AUTH_JWKS_URL',
+    type: 'string',
+    description: 'Default JWKS endpoint when jwksUrl is not passed to the constructor.',
+  },
+]}
+/>
+
+### Authentication methods
+
+#### `authenticateToken()`
+
+```typescript
+await auth.authenticateToken(token, request)
+```
+
+Verifies the token as a JWT with the configured JWKS endpoint. If JWT verification fails, the provider validates it as a Neon Auth session token through the session API. Returns the authenticated `NeonAuthUser`, or `null` when neither method succeeds.
+
+#### `authorizeUser()`
+
+```typescript
+await auth.authorizeUser(user, request)
+```
+
+Runs the configured custom authorization function when one is provided. Otherwise, it requires a Neon Auth user ID and rejects expired JWT payloads.
+
+### Credentials methods
+
+#### `signIn()`
+
+```typescript
+const result = await auth.signIn(email, password, request)
+```
+
+Authenticates email-and-password credentials through Neon Auth. Returns the authenticated user, optional token, and response cookies.
+
+#### `signUp()`
+
+```typescript
+const result = await auth.signUp(email, password, name, request)
+```
+
+Creates a Neon Auth account using email-and-password credentials. `name` is optional; when omitted, the provider derives a display name from the email address. Returns the authenticated user, optional token, and response cookies.
+
+#### `isSignUpEnabled()`
+
+```typescript
+const enabled = auth.isSignUpEnabled()
+```
+
+Returns the configured `signUpEnabled` value.
+
+### Session methods
+
+#### `createSession()`
+
+```typescript
+const session = await auth.createSession(userId, metadata)
+```
+
+Creates a normalized Mastra session with a generated ID and a seven-day expiration without creating a remote Neon Auth session.
+
+#### `validateSession()`
+
+```typescript
+const session = await auth.validateSession(sessionId)
+```
+
+Validates a Neon Auth session token and returns a normalized Mastra session, or `null` when the session is invalid.
+
+#### `refreshSession()`
+
+```typescript
+const session = await auth.refreshSession(sessionId)
+```
+
+Validates the session through Neon Auth. Neon Auth refreshes sessions automatically when its configured update interval is reached.
+
+#### `destroySession()`
+
+```typescript
+await auth.destroySession(sessionId)
+```
+
+Completes without a remote request. Neon Auth handles session destruction through its sign-out endpoint, while `getClearSessionHeaders()` returns the headers used to clear local session cookies.
+
+## `MastraRBACNeon`
+
+### Constructor parameters
+
+The `MastraRBACNeon` constructor accepts a `MastraRBACNeonOptions` object.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'roleMapping',
+    type: 'RoleMapping',
+    description:
+      'Maps Neon Auth role names to Mastra permission patterns. Use _default to define permissions for unmapped roles.',
+    isOptional: false,
+  },
+  {
+    name: 'baseUrl?',
+    type: 'string',
+    description:
+      'Neon Auth service URL. Falls back to the NEON_AUTH_BASE_URL environment variable. Trailing slashes are removed.',
+  },
+  {
+    name: 'organizationId?',
+    type: 'string',
+    description: 'Restricts membership lookup to one Neon Auth organization.',
+  },
+  {
+    name: 'getUserRoles?',
+    type: '(user: EEUser) => Promise<string[]> | string[]',
+    description:
+      'Custom function for extracting role names. When omitted, the provider fetches organization memberships from Neon Auth.',
+  },
+  {
+    name: 'cache?',
+    type: '{ ttlMs?: number; maxSize?: number }',
+    description: 'Role lookup cache configuration. The defaults are 30,000 ms and 1,000 entries.',
+  },
+]}
+/>
+
+### Methods
+
+#### `getRoles()`
+
+```typescript
+const roles = await rbac.getRoles(user)
+```
+
+Returns roles from the configured `getUserRoles` function, the user's JWT `role` claim, or Neon Auth organization memberships. When `organizationId` is set, only memberships for that organization are considered.
+
+#### `hasRole()`
+
+```typescript
+const allowed = await rbac.hasRole(user, 'admin')
+```
+
+Checks whether the user has the requested role.
+
+#### `getPermissions()`
+
+```typescript
+const permissions = await rbac.getPermissions(user)
+```
+
+Resolves the user's roles through `roleMapping` and returns Mastra permission patterns.
+
+#### `hasPermission()`
+
+```typescript
+const allowed = await rbac.hasPermission(user, 'agents:read')
+```
+
+Checks whether the resolved permissions allow the requested permission.
+
+#### `hasAllPermissions()` and `hasAnyPermission()`
+
+```typescript
+const canReadAndRun = await rbac.hasAllPermissions(user, ['agents:read', 'agents:execute'])
+const canReadAnything = await rbac.hasAnyPermission(user, ['agents:read', 'workflows:read'])
+```
+
+Checks whether the user has all or at least one of the requested permissions.
+
+#### `getAvailableRoles()`
+
+```typescript
+const roles = await rbac.getAvailableRoles()
+```
+
+Returns the configured role names except `_default`.
+
+#### `getRolePermissions()`
+
+```typescript
+const permissions = await rbac.getRolePermissions('member')
+```
+
+Resolves the permission patterns configured for a role.
+
+## Related
+
+- [Authentication overview](https://mastra.ai/docs/auth/overview)
+- [Custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider)
+- [Role-based access control](https://mastra.ai/reference/auth/fga)
+- [Source code](https://github.com/mastra-ai/mastra/tree/main/auth/neon)

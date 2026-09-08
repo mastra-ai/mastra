@@ -4,7 +4,8 @@
     "qwen2.5-vl-72b-instruct",
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.6-27b",
+    "qwen3.8-27b"
   ],
   "temperature": [
     "meta-llama-3_3-70b-instruct",
@@ -17,6 +18,7 @@
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
     "qwen3.6-27b",
+    "qwen3.8-27b",
     "qwen3guard-gen-0.6b",
     "qwen3guard-gen-8b"
   ],
@@ -32,6 +34,7 @@
     "qwen3-coder-30b-a3b-instruct",
     "qwen3.5-397b-a17b",
     "qwen3.5-9b",
-    "qwen3.6-27b"
+    "qwen3.6-27b",
+    "qwen3.8-27b"
   ]
 }

@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -34,7 +34,7 @@ const useDefaultHandlers = () => {
   );
 };
 
-const renderSettingsRoute = (initialEntry = `/agents/${AGENT_ID}/settings`) => {
+const renderSettingsRoute = (initialEntry = `/agents/${AGENT_ID}/overview`) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -44,8 +44,8 @@ const renderSettingsRoute = (initialEntry = `/agents/${AGENT_ID}/settings`) => {
         <MemoryRouter initialEntries={[initialEntry]}>
           <TooltipProvider>
             <Routes>
-              <Route path="/agents/:agentId/settings" element={<Agent view="settings" />} />
-              <Route path="/agents/:agentId/chat/:threadId" element={<div data-testid="chat-route" />} />
+              <Route path="/agents/:agentId/overview" element={<Agent />} />
+              <Route path="/agents/:agentId/threads/:threadId" element={<div data-testid="chat-route" />} />
             </Routes>
           </TooltipProvider>
         </MemoryRouter>
@@ -66,7 +66,8 @@ describe('Agent settings view', () => {
     renderSettingsRoute();
 
     expect(screen.getByTestId('agent-route-skeleton')).not.toBeNull();
-    expect(screen.getByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
+    // No thread sidebar on the overview page — the skeleton must not show one.
+    expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
     expect(screen.getByTestId('agent-settings-skeleton')).not.toBeNull();
   });
 
@@ -77,23 +78,22 @@ describe('Agent settings view', () => {
     expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
     // Overview content = AgentMetadata sections. Generous timeout: parallel
     // suite runs make the first metadata render slow under worker load.
-    expect(await screen.findByRole('heading', { name: 'Tools' }, { timeout: 10_000 })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: /^Tools/ }, { timeout: 10_000 })).not.toBeNull();
     // The chat is replaced, not rendered alongside
     expect(screen.queryByTestId('thread-wrapper')).toBeNull();
   });
 
-  it('shows the static memory configuration under the memory tab', async () => {
+  it('shows the static memory configuration inline on the overview page', async () => {
     useDefaultHandlers();
-    renderSettingsRoute(`/agents/${AGENT_ID}/settings?tab=memory`);
+    renderSettingsRoute();
 
     expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
-    // 'General' appears both as the first settings tab and as a memory config
-    // section title, so assert on the collection rather than a unique match.
-    expect((await screen.findAllByText('General')).length).toBeGreaterThan(0);
+    // Memory config is stacked below the metadata — no sub-tabs anymore.
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
     expect(await screen.findByText('Semantic Recall')).not.toBeNull();
   });
 
-  it('shows a Channels tab in settings when channel platforms exist', async () => {
+  it('shows the channels section inline when channel platforms exist', async () => {
     server.use(
       http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(v2Agent)),
       http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
@@ -108,31 +108,24 @@ describe('Agent settings view', () => {
       http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(slackPlatform)),
       http.get(`${BASE_URL}/api/channels/slack/installations`, () => HttpResponse.json([])),
     );
-    renderSettingsRoute(`/agents/${AGENT_ID}/settings?tab=channels`);
+    renderSettingsRoute();
 
-    expect(await screen.findByRole('tab', { name: 'Channels' })).not.toBeNull();
     expect(await screen.findByText('Slack')).not.toBeNull();
   });
 
-  it('hides the Channels tab in settings when no channel platforms exist', async () => {
+  it('hides the channels section when no channel platforms exist', async () => {
     useDefaultHandlers();
     renderSettingsRoute();
 
-    expect(await screen.findByRole('tab', { name: 'General' })).not.toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Channels' })).toBeNull();
+    expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
+    expect(screen.queryByText('Slack')).toBeNull();
   });
 
-  it('closes back to the chat from the view header toggle', async () => {
+  it('shows no Close toggle and keeps the share button next to the agent name', async () => {
     useDefaultHandlers();
     renderSettingsRoute();
 
-    const toggle = await screen.findByTestId('agent-view-header-toggle');
-    expect(toggle.textContent).toMatch(/close/i);
-
-    await act(async () => {
-      fireEvent.click(toggle);
-    });
-
-    expect(await screen.findByTestId('chat-route')).not.toBeNull();
+    expect(await screen.findByTestId('agent-entity-header-share')).not.toBeNull();
+    expect(screen.queryByTestId('agent-view-header-toggle')).toBeNull();
   });
 });

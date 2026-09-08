@@ -78,6 +78,17 @@ export const MODEL_SETTINGS_PROPERTIES = [
   {
     parameters: [
       {
+        name: 'timeout',
+        type: 'object',
+        isOptional: true,
+        description:
+          'Time-based execution budget for the run. Accepts `totalMs`, the maximum duration of the entire agent run across every loop iteration, tool call and retry, and `stepMs`, the maximum duration of a single model call including the time spent consuming its stream. Exceeding either budget fails with a `MastraTimeoutError`. A `totalMs` timeout ends the run and does not try fallback models, because it is a hard deadline for the whole run. A `stepMs` timeout is not retried against the same model but does advance to the next entry in `models` when fallback models are configured.',
+      },
+    ],
+  },
+  {
+    parameters: [
+      {
         name: 'stopSequences',
         type: 'string[]',
         isOptional: true,

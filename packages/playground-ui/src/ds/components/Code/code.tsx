@@ -1,19 +1,17 @@
 import * as React from 'react';
-import type { ThemedToken } from 'shiki/core';
 
-import { highlight } from '../CodeEditor/highlight';
+import { tokenStyle, useHighlight } from './use-highlight';
+import type { Highlighted } from './use-highlight';
 
 export interface CodeProps extends React.HTMLAttributes<HTMLPreElement> {
   code: string;
   lang?: string;
 }
 
-function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
-  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    return token.htmlStyle as React.CSSProperties;
-  }
-
-  return token.color ? { color: token.color } : undefined;
+/** Colors from an earlier pass still hold when the new code only appends to the old. */
+function usableHighlight(highlighted: Highlighted | null, code: string, lang?: string): Highlighted | null {
+  if (!highlighted || highlighted.lang !== lang) return null;
+  return code.startsWith(highlighted.code) ? highlighted : null;
 }
 
 /**
@@ -23,39 +21,27 @@ function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
  * the `.dark` root class, so theme switching is pure CSS — no ThemeProvider
  * required. Renders plain text while highlighting is pending or when the
  * language is missing/unknown.
+ *
+ * A streaming fence re-renders on every delta while highlighting stays a frame
+ * behind. Dropping the previous tokens each time would strobe the whole block
+ * between colored and plain, so the settled prefix keeps its colors and only
+ * the newly arrived tail waits, uncolored, for the next pass.
  */
 export const Code = React.memo(function Code({ code, lang, ...props }: CodeProps) {
-  const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
+  const highlighted = useHighlight(code, lang);
 
-  React.useEffect(() => {
-    setTokens(null);
-    if (!lang) return;
-
-    let cancelled = false;
-
-    void highlight(code, lang)
-      .then(result => {
-        if (!cancelled) setTokens(result);
-      })
-      .catch(() => {
-        if (!cancelled) setTokens(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [code, lang]);
-
-  if (!tokens?.length) {
+  const usable = usableHighlight(highlighted, code, lang);
+  if (!usable) {
     return <pre {...props}>{code}</pre>;
   }
 
+  const tail = code.slice(usable.code.length);
   let codeOffset = 0;
 
   return (
     <pre {...props}>
       <code>
-        {tokens.map((line, lineIndex) => {
+        {usable.tokens.map((line, lineIndex) => {
           const lineOffset = codeOffset;
           let tokenOffset = lineOffset;
           const tokenSpans = line.map(token => {
@@ -74,10 +60,11 @@ export const Code = React.memo(function Code({ code, lang, ...props }: CodeProps
           return (
             <React.Fragment key={lineOffset}>
               <span>{tokenSpans}</span>
-              {lineIndex !== tokens.length - 1 && '\n'}
+              {lineIndex !== usable.tokens.length - 1 && '\n'}
             </React.Fragment>
           );
         })}
+        {tail}
       </code>
     </pre>
   );

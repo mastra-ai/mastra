@@ -1,0 +1,5 @@
+{
+  "attachment": ["Qwen3.8-Max"],
+  "temperature": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
+  "structuredOutput": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"]
+}

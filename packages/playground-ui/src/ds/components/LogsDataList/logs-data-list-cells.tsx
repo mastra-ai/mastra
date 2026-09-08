@@ -1,4 +1,4 @@
-import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
+import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
@@ -25,7 +25,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
   const config = LEVEL_CONFIG[level];
 
   return (
-    <DataListCell height="compact">
+    <DataListCell>
       <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
@@ -63,7 +63,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   const type = entityType ?? '';
 
   return (
-    <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
+    <DataListCell className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
       {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
@@ -79,11 +79,7 @@ export interface LogsDataListMessageCellProps {
 }
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
-  return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">
-      {message}
-    </DataListCell>
-  );
+  return <DataListCell className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">{message}</DataListCell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +92,7 @@ export interface LogsDataListDataCellProps {
 
 export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
   if (!data || Object.keys(data).length === 0) {
-    return <DataListCell height="compact">{null}</DataListCell>;
+    return <DataListCell>{null}</DataListCell>;
   }
 
   const summary = Object.entries(data)
@@ -110,5 +106,5 @@ export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
     })
     .join(', ');
 
-  return <DataListMonoCell>{summary}</DataListMonoCell>;
+  return <DataListTextCell font="mono">{summary}</DataListTextCell>;
 }

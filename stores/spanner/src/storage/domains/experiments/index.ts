@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { Database } from '@google-cloud/spanner';
+import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   calculatePagination,
   createStorageErrorId,
   ExperimentsStorage,
   normalizePerPage,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
@@ -24,6 +26,7 @@ import type {
   ListExperimentsOutput,
   UpdateExperimentInput,
   UpdateExperimentResultInput,
+  UpsertExperimentResultInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -51,8 +54,9 @@ function rowToExperiment(row: Record<string, any>): Experiment {
     datasetVersion: t.datasetVersion == null ? null : Number(t.datasetVersion),
     organizationId: (t.organizationId as string | null | undefined) ?? null,
     projectId: (t.projectId as string | null | undefined) ?? null,
-    targetType: t.targetType,
-    targetId: String(t.targetId),
+    targetType: t.targetType ?? null,
+    targetId: t.targetId == null ? null : String(t.targetId),
+    scorerIds: t.scorerIds ?? null,
     status: t.status,
     totalItems: Number(t.totalItems ?? 0),
     succeededCount: Number(t.succeededCount ?? 0),
@@ -78,10 +82,12 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     input: t.input ?? null,
     output: t.output ?? null,
     groundTruth: t.groundTruth ?? null,
+    metadata: t.metadata ?? null,
     error: (t.error ?? null) as ExperimentResult['error'],
     startedAt: toDate(t.startedAt),
     completedAt: toDate(t.completedAt),
     retryCount: Number(t.retryCount ?? 0),
+    attempt: t.attempt == null ? 0 : Number(t.attempt),
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
@@ -113,6 +119,58 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     this.indexes = indexes?.filter(idx => (ExperimentsSpanner.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  async #withPurgeBarrier<T>(
+    experimentId: string,
+    itemId: string,
+    fn: (tx: Transaction, purgeMetadata: Record<string, unknown> | null) => Promise<T>,
+  ): Promise<T> {
+    return this.db.runWithAbortRetry(() =>
+      this.database.runTransactionAsync(async tx => {
+        try {
+          const [experimentRows] = await tx.run({
+            sql: `SELECT ${quoteIdent('datasetId', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                  WHERE ${quoteIdent('id', 'column name')} = @experimentId`,
+            params: { experimentId },
+            json: true,
+          });
+          const datasetId = (experimentRows[0]?.toJSON?.() ?? experimentRows[0])?.datasetId as
+            | string
+            | null
+            | undefined;
+          let purgeMetadata: Record<string, unknown> | null = null;
+          if (datasetId) {
+            // A no-op DML write takes an exclusive lock on the dataset row. Purge uses
+            // the same mutation so either transaction retries and observes the winner.
+            await tx.runUpdate({
+              sql: `UPDATE ${quoteIdent(TABLE_DATASETS, 'table name')}
+                    SET ${quoteIdent('version', 'column name')} = ${quoteIdent('version', 'column name')}
+                    WHERE ${quoteIdent('id', 'column name')} = @datasetId`,
+              params: { datasetId },
+            });
+            const [itemRows] = await tx.run({
+              sql: `SELECT ${quoteIdent('metadata', 'column name')} FROM ${quoteIdent(TABLE_DATASET_ITEMS, 'table name')}
+                    WHERE ${quoteIdent('id', 'column name')} = @itemId AND ${quoteIdent('datasetId', 'column name')} = @datasetId
+                      AND JSON_VALUE(${quoteIdent('metadata', 'column name')}, '$.__purged') = 'true'
+                    LIMIT 1`,
+              params: { itemId, datasetId },
+              json: true,
+            });
+            const itemRow = itemRows[0]?.toJSON?.() ?? itemRows[0];
+            purgeMetadata = (itemRow?.metadata as Record<string, unknown> | undefined) ?? null;
+          }
+          const result = await fn(tx, purgeMetadata);
+          await tx.commit();
+          return result;
+        } catch (error) {
+          await tx.rollback().catch(rollbackError => {
+            throw new AggregateError([error, rollbackError], 'Transaction and rollback both failed');
+          });
+          throw error;
+        }
+      }),
+    );
+  }
+
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_EXPERIMENTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS] });
     await this.db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS] });
@@ -131,12 +189,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         'comparisonId',
         'variantId',
         'trialIndex',
+        'scorerIds',
       ],
     });
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['comment', 'organizationId', 'projectId'],
+      ifNotExists: ['comment', 'metadata', 'organizationId', 'projectId', 'attempt'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -160,10 +219,11 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         columns: ['experimentId', 'startedAt'],
       },
       {
-        // One result per (experiment, item).
-        name: 'mastra_experiment_results_exp_item_idx',
+        // One result per (experiment, item, attempt) — external runners can
+        // record repeated trials as separate rows.
+        name: 'mastra_experiment_results_exp_item_attempt_idx',
         table: TABLE_EXPERIMENT_RESULTS,
-        columns: ['experimentId', 'itemId'],
+        columns: ['experimentId', 'itemId', 'attempt'],
         unique: true,
       },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
@@ -182,6 +242,10 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async createDefaultIndexes(): Promise<void> {
     if (this.skipDefaultIndexes) return;
+    // Legacy unique index without `attempt` — superseded by mastra_experiment_results_exp_item_attempt_idx.
+    // Best-effort: never let a failed legacy drop (e.g. a concurrent init
+    // dropping it first) block creation of the current indexes.
+    await this.db.dropIndex('mastra_experiment_results_exp_item_idx').catch(() => {});
     await this.db.createIndexes(this.getDefaultIndexDefinitions());
   }
 
@@ -214,8 +278,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         datasetVersion: input.datasetVersion ?? null,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
-        targetType: input.targetType,
-        targetId: input.targetId,
+        targetType: input.targetType ?? null,
+        targetId: input.targetId ?? null,
+        scorerIds: input.scorerIds ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -246,6 +311,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           projectId: experiment.projectId,
           targetType: experiment.targetType,
           targetId: experiment.targetId,
+          scorerIds: experiment.scorerIds,
           status: experiment.status,
           totalItems: experiment.totalItems,
           succeededCount: 0,
@@ -527,50 +593,62 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     try {
       const now = new Date();
       const id = input.id ?? randomUUID();
-      const result: ExperimentResult = {
-        id,
-        experimentId: input.experimentId,
-        itemId: input.itemId,
-        itemDatasetVersion: input.itemDatasetVersion ?? null,
-        organizationId: input.organizationId ?? null,
-        projectId: input.projectId ?? null,
-        input: input.input ?? null,
-        output: input.output ?? null,
-        groundTruth: input.groundTruth ?? null,
-        error: input.error ?? null,
-        startedAt: input.startedAt,
-        completedAt: input.completedAt,
-        retryCount: input.retryCount,
-        traceId: input.traceId ?? null,
-        status: input.status ?? null,
-        tags: input.tags ?? null,
-        toolMockReport: input.toolMockReport ?? null,
-        createdAt: now,
-      };
-      await this.db.insert({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        record: {
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
+        const result: ExperimentResult = {
           id,
-          experimentId: result.experimentId,
-          itemId: result.itemId,
-          itemDatasetVersion: result.itemDatasetVersion,
-          organizationId: result.organizationId,
-          projectId: result.projectId,
-          input: result.input,
-          output: result.output,
-          groundTruth: result.groundTruth,
-          error: result.error,
-          startedAt: result.startedAt,
-          completedAt: result.completedAt,
-          retryCount: result.retryCount,
-          traceId: result.traceId,
-          status: result.status,
-          tags: result.tags,
-          toolMockReport: result.toolMockReport,
+          experimentId: input.experimentId,
+          itemId: input.itemId,
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          input: marker ? null : (input.input ?? null),
+          output: marker ? null : (input.output ?? null),
+          groundTruth: marker ? null : (input.groundTruth ?? null),
+          metadata: marker ?? input.metadata ?? null,
+          error: marker ? null : (input.error ?? null),
+          startedAt: input.startedAt,
+          completedAt: input.completedAt,
+          retryCount: input.retryCount,
+          attempt: input.attempt ?? 0,
+          traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: marker ? null : (input.tags ?? null),
+          toolMockReport: marker ? null : (input.toolMockReport ?? null),
           createdAt: now,
-        },
+        };
+        await tx.runUpdate({
+          sql: `INSERT INTO ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} (
+                  ${['id', 'experimentId', 'itemId', 'itemDatasetVersion', 'organizationId', 'projectId', 'input', 'output', 'groundTruth', 'metadata', 'error', 'startedAt', 'completedAt', 'retryCount', 'attempt', 'traceId', 'status', 'tags', 'toolMockReport', 'createdAt'].map(column => quoteIdent(column, 'column name')).join(', ')}
+                ) VALUES (@id, @experimentId, @itemId, @itemDatasetVersion, @organizationId, @projectId,
+                  @input, @output, @groundTruth, @metadata, @error, @startedAt, @completedAt, @retryCount,
+                  @attempt, @traceId, @status, @tags, @toolMockReport, @createdAt)`,
+          params: {
+            ...result,
+            input: JSON.stringify(result.input),
+            output: JSON.stringify(result.output),
+            groundTruth: JSON.stringify(result.groundTruth),
+            metadata: JSON.stringify(result.metadata),
+            error: JSON.stringify(result.error),
+            tags: JSON.stringify(result.tags),
+            toolMockReport: JSON.stringify(result.toolMockReport),
+          },
+          types: {
+            itemDatasetVersion: 'int64',
+            organizationId: 'string',
+            projectId: 'string',
+            input: 'json',
+            output: 'json',
+            groundTruth: 'json',
+            metadata: 'json',
+            error: 'json',
+            traceId: 'string',
+            status: 'string',
+            tags: 'json',
+            toolMockReport: 'json',
+          },
+        });
+        return result;
       });
-      return result;
     } catch (error) {
       throw new MastraError(
         {
@@ -584,73 +662,168 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
+  async upsertExperimentResult(input: UpsertExperimentResultInput): Promise<ExperimentResult> {
+    try {
+      const attempt = input.attempt ?? 0;
+      return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
+        const [rows] = await tx.run({
+          sql: `SELECT * FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+                WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId
+                  AND ${quoteIdent('itemId', 'column name')} = @itemId
+                  AND COALESCE(${quoteIdent('attempt', 'column name')}, 0) = @attempt`,
+          params: { experimentId: input.experimentId, itemId: input.itemId, attempt },
+          json: true,
+        });
+        const existingRow = rows[0]?.toJSON?.() ?? rows[0];
+        const values = {
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          input: marker ? null : input.input,
+          output: marker ? null : (input.output ?? null),
+          groundTruth: marker ? null : (input.groundTruth ?? null),
+          metadata: marker ?? input.metadata ?? null,
+          error: marker ? null : (input.error ?? null),
+          startedAt: input.startedAt,
+          completedAt: input.completedAt,
+          retryCount: input.retryCount,
+          attempt,
+          traceId: input.traceId ?? null,
+          status: input.status ?? null,
+          tags: marker ? null : (input.tags ?? null),
+          toolMockReport: marker ? null : (input.toolMockReport ?? null),
+        };
+
+        if (!existingRow) {
+          const result: ExperimentResult = {
+            id: randomUUID(),
+            experimentId: input.experimentId,
+            itemId: input.itemId,
+            ...values,
+            createdAt: new Date(),
+          };
+          await this.db.insert({ tableName: TABLE_EXPERIMENT_RESULTS, record: result, transaction: tx });
+          return result;
+        }
+
+        const existing = rowToExperimentResult(existingRow as Record<string, any>);
+        await this.db.runDml(
+          {
+            sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} SET
+                    ${quoteIdent('itemDatasetVersion', 'column name')} = @itemDatasetVersion,
+                    ${quoteIdent('organizationId', 'column name')} = @organizationId,
+                    ${quoteIdent('projectId', 'column name')} = @projectId,
+                    ${quoteIdent('input', 'column name')} = @input,
+                    ${quoteIdent('output', 'column name')} = @output,
+                    ${quoteIdent('groundTruth', 'column name')} = @groundTruth,
+                    ${quoteIdent('metadata', 'column name')} = @metadata,
+                    ${quoteIdent('error', 'column name')} = @error,
+                    ${quoteIdent('startedAt', 'column name')} = @startedAt,
+                    ${quoteIdent('completedAt', 'column name')} = @completedAt,
+                    ${quoteIdent('retryCount', 'column name')} = @retryCount,
+                    ${quoteIdent('attempt', 'column name')} = @attempt,
+                    ${quoteIdent('traceId', 'column name')} = @traceId,
+                    ${quoteIdent('status', 'column name')} = @status,
+                    ${quoteIdent('tags', 'column name')} = @tags,
+                    ${quoteIdent('toolMockReport', 'column name')} = @toolMockReport,
+                    ${quoteIdent('comment', 'column name')} = @comment
+                  WHERE ${quoteIdent('id', 'column name')} = @id`,
+            params: {
+              id: existing.id,
+              ...values,
+              input: JSON.stringify(values.input),
+              output: JSON.stringify(values.output),
+              groundTruth: JSON.stringify(values.groundTruth),
+              metadata: JSON.stringify(values.metadata),
+              error: JSON.stringify(values.error),
+              tags: JSON.stringify(values.tags),
+              toolMockReport: JSON.stringify(values.toolMockReport),
+              comment: marker ? null : existing.comment,
+            },
+            types: {
+              itemDatasetVersion: 'int64',
+              retryCount: 'int64',
+              attempt: 'int64',
+              organizationId: 'string',
+              projectId: 'string',
+              input: 'json',
+              output: 'json',
+              groundTruth: 'json',
+              metadata: 'json',
+              error: 'json',
+              traceId: 'string',
+              status: 'string',
+              tags: 'json',
+              toolMockReport: 'json',
+              comment: 'string',
+            },
+          },
+          tx,
+        );
+        return { ...existing, ...values, comment: marker ? null : existing.comment };
+      });
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'UPSERT_EXPERIMENT_RESULT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { experimentId: input.experimentId, itemId: input.itemId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
-      if (input.status === undefined && input.tags === undefined && input.comment === undefined) {
-        const existing = await this.getExperimentResultById({ id: input.id });
-        // Honor the experimentId scope even on the no-op path: a result that
-        // belongs to a different experiment must not be returned.
-        if (!existing || (input.experimentId !== undefined && existing.experimentId !== input.experimentId)) {
+      const existing = await this.getExperimentResultById({ id: input.id });
+      if (!existing || (input.experimentId !== undefined && existing.experimentId !== input.experimentId)) {
+        throw new MastraError({
+          id: createStorageErrorId('SPANNER', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Experiment result ${input.id} not found`,
+          details: { id: input.id },
+        });
+      }
+
+      return await this.#withPurgeBarrier(existing.experimentId, existing.itemId, async (tx, marker) => {
+        const updated = {
+          ...existing,
+          status: input.status !== undefined ? input.status : existing.status,
+          tags: marker ? null : input.tags !== undefined ? input.tags : existing.tags,
+          comment: marker ? null : input.comment !== undefined ? input.comment : existing.comment,
+        };
+        const rowCount = await this.db.runDml(
+          {
+            sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+                  SET ${quoteIdent('status', 'column name')} = @status,
+                      ${quoteIdent('tags', 'column name')} = @tags,
+                      ${quoteIdent('comment', 'column name')} = @comment
+                  WHERE ${quoteIdent('id', 'column name')} = @id${input.experimentId ? ` AND ${quoteIdent('experimentId', 'column name')} = @experimentId` : ''}`,
+            params: {
+              id: input.id,
+              ...(input.experimentId ? { experimentId: input.experimentId } : {}),
+              status: updated.status,
+              tags: updated.tags === null ? null : JSON.stringify(updated.tags),
+              comment: updated.comment,
+            },
+            types: { status: 'string', tags: 'json', comment: 'string' },
+          },
+          tx,
+        );
+        if (rowCount === 0) {
           throw new MastraError({
             id: createStorageErrorId('SPANNER', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
-            text: `Experiment result ${input.id} not found`,
             details: { id: input.id },
           });
         }
-        return existing;
-      }
-
-      const setClauses: string[] = [];
-      const params: Record<string, any> = { id: input.id };
-      const types: Record<string, any> = {};
-      if (input.status !== undefined) {
-        setClauses.push(`${quoteIdent('status', 'column name')} = @status`);
-        params.status = input.status;
-        if (input.status === null) types.status = 'string';
-      }
-      if (input.tags !== undefined) {
-        setClauses.push(`${quoteIdent('tags', 'column name')} = @tags`);
-        params.tags = input.tags === null ? null : JSON.stringify(input.tags);
-        types.tags = 'json';
-      }
-      if (input.comment !== undefined) {
-        setClauses.push(`${quoteIdent('comment', 'column name')} = @comment`);
-        params.comment = input.comment;
-        if (input.comment === null) types.comment = 'string';
-      }
-      const whereClauses = [`${quoteIdent('id', 'column name')} = @id`];
-      if (input.experimentId !== undefined) {
-        whereClauses.push(`${quoteIdent('experimentId', 'column name')} = @experimentId`);
-        params.experimentId = input.experimentId;
-      }
-      const rowCount = await this.db.runDml({
-        sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
-              SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`,
-        params,
-        types,
+        return updated;
       });
-      if (rowCount === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Experiment result ${input.id} not found`,
-          details: { id: input.id },
-        });
-      }
-      const updated = await this.getExperimentResultById({ id: input.id });
-      if (!updated) {
-        throw new MastraError({
-          id: createStorageErrorId('SPANNER', 'UPDATE_EXPERIMENT_RESULT', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          text: `Experiment result ${input.id} not found`,
-          details: { id: input.id },
-        });
-      }
-      return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

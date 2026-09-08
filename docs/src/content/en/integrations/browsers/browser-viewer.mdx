@@ -1,13 +1,13 @@
 ---
-title: "BrowserViewer | Browser"
-description: "Use BrowserViewer for CLI-based browser automation with automatic CDP injection and Studio screencast."
+title: 'BrowserViewer | Browser'
+description: 'Run CLI browser tools through BrowserViewer with a Playwright-managed Chrome session, CDP access, live viewing, and Mastra workspace integration.'
 packages:
-  - "@mastra/browser-viewer"
+  - '@mastra/browser-viewer'
 ---
 
 # BrowserViewer
 
-The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/browse). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/browse). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [sandbox tools](/docs/sandbox/overview#using-the-sandbox).
 
 ## When to use BrowserViewer
 
@@ -34,7 +34,7 @@ Install the CLI tool in your workspace environment. This example uses `browser-u
 pip install browser-use
 ```
 
-Install the corresponding [skill](/docs/workspace/skills) so the agent knows how to use the CLI:
+Install the corresponding [skill](/docs/sandbox/skills) so the agent knows how to use the CLI:
 
 ```bash
 npx skills add browser-use/browser-use --skill browser-use
@@ -78,7 +78,13 @@ export const mastra = new Mastra({
 })
 ```
 
-When the agent runs a CLI command like `browser-use open https://example.com`, Mastra automatically launches Chrome and injects the CDP connection, plus starts streaming the screencast to Studio.
+When the agent runs a browser CLI command, Mastra automatically launches Chrome, passes the CDP connection to the CLI, and starts streaming the screencast to Studio. For Browser Use, the agent can pass Python through stdin:
+
+```bash
+browser-use <<'PY'
+print("Connected to the managed browser")
+PY
+```
 
 ## How it works
 
@@ -89,7 +95,7 @@ When the agent runs a CLI command like `browser-use open https://example.com`, M
 
 ## Supported CLIs
 
-BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
+BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/sandbox/skills) that teaches the agent its commands and workflows.
 
 Set the `cli` option to match the CLI your agent uses:
 
@@ -116,7 +122,9 @@ pip install browser-use
 npx skills add browser-use/browser-use --skill browser-use
 ```
 
-CDP flag: `--cdp-url`
+For direct stdin invocations (`browser-use`, `browseruse`, `browser`, or `bu`, optionally followed by `<` redirection or a heredoc), Mastra sets `BU_CDP_WS` to the managed browser's CDP URL and `BU_NAME` to a stable daemon name. The name is unique to the thread and browser endpoint, so repeated calls reuse the same daemon while different threads or endpoints stay isolated. Mastra preserves the stdin script without adding CLI arguments.
+
+Legacy subcommands retain `--cdp-url` and `--session` injection for compatibility. These flags aren't added to stdin invocations.
 
 ### `browse`
 
@@ -129,8 +137,8 @@ CDP flag: `--ws` See [BrowserViewer reference](/reference/browser/browser-viewer
 
 ## Related
 
-- [Browser overview](/docs/browser/overview)
+- [Browser overview](/docs/browser)
 - [AgentBrowser](/integrations/browsers/agent-browser)
 - [Stagehand](/integrations/browsers/stagehand)
-- [Workspace overview](/docs/workspace/overview)
-- [Workspace skills](/docs/workspace/skills)
+- [Sandbox](/docs/sandbox/overview)
+- [Workspace skills](/docs/sandbox/skills)

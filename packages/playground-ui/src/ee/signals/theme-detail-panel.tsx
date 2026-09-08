@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { getSignalHue } from './signal-colors';
-import { formatSnapshotDate, shareSentence, SIGNAL_DESCRIPTIONS } from './signal-formatting';
-import type { ThemeSelection } from './theme-drilldown-data';
+import { formatSnapshotDate, shareSentence, signalDescription, signalLabel } from './signal-formatting';
+import type { SelectedTheme, ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
 import { ThemeTrendChart } from './theme-trend-chart';
 import { TraceInsightView } from './trace-insight-view';
+import { useTraceIntelligence } from './use-trace-intelligence';
 import {
   Drawer,
   DrawerBody,
@@ -24,7 +25,9 @@ interface ThemeDetailPanelProps {
   entityType: string;
   snapshotId: string;
   snapshotTotal: number;
-  selection: ThemeSelection | undefined;
+  selection: SelectedTheme | undefined;
+  filters?: ThemeSelection[];
+  filteredStats?: ThemeSelectionStats;
   onClose: () => void;
 }
 
@@ -34,9 +37,15 @@ export function ThemeDetailPanel({
   snapshotId,
   snapshotTotal,
   selection,
+  filters = [],
+  filteredStats,
   onClose,
 }: ThemeDetailPanelProps) {
-  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}`;
+  const { signalCatalog } = useTraceIntelligence();
+  const filterKey = filters
+    .map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`)
+    .join(',');
+  const examplesContextKey = `${snapshotId}:${selection?.signalName ?? ''}:${selection?.themeId ?? ''}:${filterKey}`;
   const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
   const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
@@ -55,6 +64,7 @@ export function ThemeDetailPanel({
     selection?.themeId,
     EXAMPLES_PAGE_SIZE,
     examplesOffset,
+    filters,
   );
   const historyQuery = useThemeHistory(
     entityId,
@@ -64,6 +74,8 @@ export function ThemeDetailPanel({
   );
   const title = detailQuery.data?.theme?.label ?? selection?.label ?? 'Theme details';
   const signalName = selection?.signalName;
+  const signalDisplayLabel = signalName ? signalLabel(signalCatalog, signalName) : undefined;
+  const signalDisplayDescription = signalName ? signalDescription(signalCatalog, signalName) : undefined;
   const historyPoints = historyQuery.data ? chronologicalHistoryPoints(historyQuery.data.points) : [];
   const oldestHistoryPoint = historyPoints[0];
 
@@ -88,10 +100,16 @@ export function ThemeDetailPanel({
               className="font-mono text-xs font-semibold tracking-widest"
               style={{ color: nodeColor(getSignalHue(signalName)) }}
             >
-              <Tooltip>
-                <TooltipTrigger className="cursor-default uppercase">{signalName}</TooltipTrigger>
-                <TooltipContent>{SIGNAL_DESCRIPTIONS[signalName]}</TooltipContent>
-              </Tooltip>
+              {signalDisplayDescription ? (
+                <Tooltip>
+                  <TooltipTrigger aria-label={signalDisplayLabel} className="cursor-default uppercase">
+                    {signalDisplayLabel}
+                  </TooltipTrigger>
+                  <TooltipContent>{signalDisplayDescription}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <span className="uppercase">{signalDisplayLabel}</span>
+              )}
             </span>
           )}
           <DrawerTitle>{title}</DrawerTitle>
@@ -123,7 +141,10 @@ export function ThemeDetailPanel({
                       {detailQuery.data.theme.description ?? 'No description available.'}
                     </p>
                     <p className="text-neutral5 mt-3 font-mono text-sm tabular-nums">
-                      {shareSentence(detailQuery.data.theme.traceCount, detailQuery.data.theme.coverage)}
+                      {shareSentence(
+                        filteredStats?.traceCount ?? detailQuery.data.theme.traceCount,
+                        filteredStats?.stageShare ?? detailQuery.data.theme.coverage,
+                      )}
                     </p>
                   </section>
 
@@ -157,7 +178,7 @@ export function ThemeDetailPanel({
                           </ul>
                         )}
                         <ExamplesPager
-                          traceCount={detailQuery.data.theme.traceCount}
+                          traceCount={filteredStats?.traceCount ?? detailQuery.data.theme.traceCount}
                           offset={examplesOffset}
                           onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
                         />

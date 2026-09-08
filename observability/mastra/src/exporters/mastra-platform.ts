@@ -49,6 +49,11 @@ const QUOTA_EXCEEDED_STATUS = 402;
 const OBSERVABILITY_STATUS_HEADER = 'x-mastra-observability';
 const OBSERVABILITY_DISABLED_VALUE = 'disabled';
 const OBSERVABILITY_RETRY_AFTER_HEADER = 'x-mastra-observability-retry-after';
+// Advertises that this exporter understands the quota-pause contract. The
+// collector uses its presence to decide between 402 (capable clients pause and
+// probe) and 204 (legacy clients that would otherwise blindly retry).
+export const OBSERVABILITY_CAPABILITIES_HEADER = 'x-mastra-observability-capabilities';
+export const QUOTA_PAUSE_CAPABILITY = 'quota-pause-v1';
 const DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS = 300;
 // Node.js timers overflow above 2^31 - 1 ms and fire after ~1ms instead.
 const MAX_QUOTA_PROBE_INTERVAL_SECONDS = Math.floor(0x7fffffff / 1000);
@@ -287,7 +292,12 @@ export class MastraPlatformExporter extends BaseExporter {
       this.setDisabled('MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set.', 'debug');
     }
 
-    const tracesEndpointOverride = config.tracesEndpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT;
+    // MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT is the documented override (also
+    // consumed by Studio); MASTRA_CLOUD_TRACES_ENDPOINT is the legacy name.
+    // `||` lets an empty legacy value fall through to the platform variable.
+    const tracesEndpointOverride =
+      config.tracesEndpoint ??
+      (process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined);
     let baseEndpoint: string | undefined;
     let tracesEndpoint: string;
 
@@ -620,6 +630,7 @@ export class MastraPlatformExporter extends BaseExporter {
     return {
       Authorization: `Bearer ${this.platformConfig.accessToken}`,
       'Content-Type': 'application/json',
+      [OBSERVABILITY_CAPABILITIES_HEADER]: QUOTA_PAUSE_CAPABILITY,
     };
   }
 
@@ -701,7 +712,7 @@ export class MastraPlatformExporter extends BaseExporter {
     this.resetBuffer();
 
     this.logger.warn(
-      `Mastra observability paused: quota exhausted, dropping telemetry and probing every ${retryAfterSeconds}s`,
+      `Mastra observability export paused: platform quota exhausted (OBSERVABILITY_QUOTA_EXCEEDED). Dropping telemetry and retrying in ${retryAfterSeconds} seconds. Check Platform billing/usage to restore telemetry.`,
     );
 
     this.scheduleQuotaProbe();

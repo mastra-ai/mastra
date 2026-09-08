@@ -11,6 +11,8 @@ import {
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryProject, GithubRepo } from '../ui/domains/workspaces/services/github';
+import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
+import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -57,15 +59,28 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
+/**
+ * Also feeds the caller's issue intake. The link lands first, so the Factory list
+ * refreshes even when the intake write fails; the server link is idempotent, so retrying is safe.
+ */
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const saveIntakeConfig = useSaveIntakeConfigMutation();
   return useMutation({
     mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: GithubRepo }) => {
       const connectionId = await connectInstallation(baseUrl, factoryProjectId, repo.installationStorageId);
-      return linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, repo);
+      try {
+        const config = await fetchIntakeConfig(baseUrl);
+        const githubSelection = selectIntakeSource(config.github, repo.fullName);
+        if (githubSelection !== config.github)
+          await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+      } finally {
+        invalidateFactories(queryClient);
+      }
+      return linked;
     },
-    onSuccess: () => invalidateFactories(queryClient),
   });
 }
 
@@ -84,7 +99,7 @@ export function useUnlinkRepositoryMutation() {
   });
 }
 
-export function useRemoveFactoryMutation() {
+export function useDeleteFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({

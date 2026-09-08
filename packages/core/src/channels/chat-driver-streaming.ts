@@ -124,6 +124,7 @@ export async function runStreamingDriver({
   // and a plain `let` would get narrowed to its initial `null` between
   // iterations of the for-await loop).
   const sessionRef: { current: StreamingSession | null } = { current: null };
+  const pendingInitialText: string[] = [];
 
   // Tracks OM cycles currently in `'in_progress'` so we can flush them as
   // `'complete'` before closing the session. OM buffering runs async in the
@@ -239,7 +240,10 @@ export async function runStreamingDriver({
 
   const closeSession = async () => {
     const s = sessionRef.current;
-    if (!s) return;
+    if (!s) {
+      pendingInitialText.length = 0;
+      return;
+    }
     // OM buffering is background work that often finishes after the session
     // closes. The chat-SDK plan widget flips any still-`in_progress` task to
     // an error icon at stream end, so optimistically mark pending OM tasks
@@ -266,6 +270,10 @@ export async function runStreamingDriver({
    */
   const pushToSession = (piece: string | StreamChunk) => {
     if (!sessionRef.current) sessionRef.current = openSession();
+    for (const pendingPiece of pendingInitialText) {
+      sessionRef.current.push(pendingPiece);
+    }
+    pendingInitialText.length = 0;
     sessionRef.current.push(piece);
   };
 
@@ -295,7 +303,7 @@ export async function runStreamingDriver({
    * Mirrors the static driver's guard in `renderToolEvent`.
    */
   const isBlankToolMessage = (message: PostableMessage): boolean => {
-    if (typeof message === 'string') return message.length === 0;
+    if (typeof message === 'string') return message.trim().length === 0;
     return 'markdown' in message && message.markdown.trim().length === 0;
   };
 
@@ -440,6 +448,10 @@ export async function runStreamingDriver({
     if (chunk.type === 'text-delta') {
       const piece = chunk.payload.text;
       if (!piece) continue;
+      if (!sessionRef.current && !piece.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()) {
+        pendingInitialText.push(piece);
+        continue;
+      }
       pushToSession(piece);
       continue;
     }
@@ -472,7 +484,6 @@ export async function runStreamingDriver({
     }
 
     if (chunk.type === 'finish') {
-      await closeSession();
       tracker.reset();
       continue;
     }
@@ -728,10 +739,27 @@ export async function runStreamingDriver({
         });
       }
       await closeSession();
-      // Approval cards are always rendered as Block Kit (`useCards: true`)
-      // so the Approve/Deny buttons render — non-cards modes never opt out
-      // of rich approval rendering.
-      const approvalMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
+      // Approval cards default to Block Kit (`useCards: true`) so the
+      // Approve/Deny buttons render — string modes never opt out of rich
+      // approval rendering. A custom `toolDisplayFn` may supply the message
+      // instead; nullish / blank / `stream` results fall back to the built-in
+      // card so the approval always stays actionable (mirrors the static
+      // driver's `renderToolEvent`).
+      let approvalMessage: PostableMessage = formatToolApproval(enr.displayName, enr.argsSummary, enr.toolCallId, true);
+      if (toolDisplayFn) {
+        const approvalEvent: ToolDisplayEvent = {
+          kind: 'approval',
+          toolCallId: enr.toolCallId,
+          toolName: enr.toolName,
+          displayName: enr.displayName,
+          argsSummary: enr.argsSummary,
+          args: enr.args,
+        };
+        const result = toolDisplayFn(approvalEvent, { mode: 'streaming', platform });
+        if (result?.kind === 'post' && result.message != null && !isBlankToolMessage(result.message)) {
+          approvalMessage = result.message;
+        }
+      }
       // Prefer editing the running tool-card posted by `tool-call` (cards
       // mode stashes it in `toolMessageIds`) so the approval buttons replace
       // the running card in-place. Fall back to a re-posted approval message

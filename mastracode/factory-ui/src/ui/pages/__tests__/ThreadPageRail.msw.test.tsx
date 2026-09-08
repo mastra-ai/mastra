@@ -66,15 +66,6 @@ function stubThreadRoute(messages: MastraDBMessage[]) {
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/ensure`, () =>
-      HttpResponse.json({
-        resourceId: SESSION_ID,
-        factoryProjectId: FACTORY_ID,
-        projectRepositoryId: REPOSITORY_ID,
-        sandboxId: 'sandbox-1',
-        sandboxWorkdir: '/workspace/acme',
-      }),
-    ),
     http.post(`${AGENT_CONTROLLER_API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID }),
     ),

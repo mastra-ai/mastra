@@ -23,7 +23,6 @@ export function useSetAgentControllerStateMutation({
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
-          exact: true,
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
@@ -46,7 +45,6 @@ export function useSwitchAgentControllerModeMutation(args: AgentControllerMutati
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-        exact: true,
       }),
   });
 }
@@ -60,7 +58,6 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-        exact: true,
       }),
   });
 }

@@ -1,6 +1,6 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
+import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -50,6 +50,13 @@ export function GlobalSearchNavigationResults({
         onSelect={() => onSelect(`/factories/${factoryId}/audit`, false)}
       />
       <CommandPaletteItem
+        icon={<Brain />}
+        title="Knowledge"
+        subtitle="Factory navigation"
+        value={`Knowledge Factory navigation /factories/${factoryId}/knowledge`}
+        onSelect={() => onSelect(`/factories/${factoryId}/knowledge`, false)}
+      />
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.preferences}
         subtitle="Settings"
@@ -90,6 +97,13 @@ export function GlobalSearchNavigationResults({
         subtitle="Settings"
         value={`Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
+      />
+      <CommandPaletteItem
+        icon={<Settings />}
+        title={SETTINGS_SECTION_LABELS.memory}
+        subtitle="Settings"
+        value={`Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}

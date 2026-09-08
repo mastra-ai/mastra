@@ -51,20 +51,21 @@ function DraftChatModesProvider({ children }: ChatModesProviderProps) {
 }
 
 function LiveChatModesProvider({ children }: ChatModesProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady } = useChatSessionContext();
   const { state } = useChatConnection();
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceReady,
   });
   const switchModeMutation = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
+    // Mode switch is a mutation touching the sandbox — keep on sandboxReady.
     enabled: sessionEnabled,
   });
   const modes = modesQuery.data ?? EMPTY_MODES;

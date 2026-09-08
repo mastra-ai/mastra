@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
-import { expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.describe('Agent detail page', () => {
   test.afterEach(async () => {
@@ -11,27 +10,21 @@ test.describe('Agent detail page', () => {
     test('renders the layout, thread history, and links through to agent settings', async ({ page }) => {
       await page.goto('/agents/weather-agent/chat/1234');
 
-      // Header
       await expect(page).toHaveTitle(/Mastra Studio/);
-      await expectRouteDocsLink(page, 'Agents documentation', 'https://mastra.ai/en/docs/agents/overview');
-      const breadcrumb = page.locator('header>nav');
-      await expect(breadcrumb).toMatchAriaSnapshot();
 
-      // Thread history (with memory)
-      const newChatButton = await page.locator('a:has-text("New Chat")');
+      // Thread sidebar
+      const newChatButton = page.locator('a:has-text("New Chat")');
       await expect(newChatButton).toBeVisible();
-      await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/chat\/.*/);
-      await expect(page.locator('text=Your conversations will appear here once you start chatting!')).toBeVisible();
+      await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
+      await expect(page.getByTestId('thread-list')).toBeAttached();
 
-      // Agent header and settings overview
-      await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
-      await expect(page.getByTestId('agent-entity-header-copy-id')).toBeVisible();
-
-      await page.getByTestId('agent-view-header-toggle').click();
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/settings$/);
-      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      // Back link leads to the agent overview with its settings details
+      const backLink = page.getByRole('link', { name: 'Back to Weather Agent' });
+      await expect(backLink).toHaveAttribute('href', /\/agents\/weather-agent\/overview$/);
+      await backLink.click();
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/overview$/);
+      await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
         /\/agents\/weather-agent\/tools\/weatherInfo$/,
@@ -44,10 +37,11 @@ test.describe('Agent detail page', () => {
       await page.goto('/agents/weather-agent/settings');
 
       await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
 
-      const overview = page.getByRole('tabpanel', { name: 'General' });
+      const overview = page.getByTestId('agent-settings-view');
       await expect(overview).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Capabilities' })).toBeVisible();
       await expect(overview).toMatchAriaSnapshot();
     });
   });

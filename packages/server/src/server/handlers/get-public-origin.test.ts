@@ -2,6 +2,7 @@
  * Tests for getPublicOrigin helper function.
  *
  * Covers reverse proxy header resolution for:
+ * - X-Mastra-Public-Host (proxies whose X-Forwarded-Host is rewritten downstream)
  * - X-Forwarded-Host (traditional reverse proxies)
  * - Host header (AWS ALB with Preserve Host Header)
  * - X-Forwarded-Proto (protocol detection)
@@ -13,6 +14,69 @@ import { describe, it, expect } from 'vitest';
 import { getPublicOrigin } from './auth';
 
 describe('getPublicOrigin — reverse proxy header resolution', () => {
+  it('should use X-Mastra-Public-Host when present', () => {
+    const headers = new Headers({
+      'x-mastra-public-host': 'my-project--qa.studio.example.com',
+      host: 'internal-hostname',
+    });
+    const request = new Request('http://internal-hostname:3000/api/auth/sso/login', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://my-project--qa.studio.example.com');
+  });
+
+  it('should prefer X-Mastra-Public-Host over an X-Forwarded-Host rewritten by the gateway', () => {
+    // Railway's gateway overwrites X-Forwarded-Host with its own internal domain,
+    // so the edge sends the browser-facing host in X-Mastra-Public-Host. Trusting
+    // X-Forwarded-Host here is what produced a *.up.railway.app OAuth redirect_uri.
+    const headers = new Headers({
+      'x-mastra-public-host': 'my-project--qa.studio.example.com',
+      'x-forwarded-host': 'my-project-qa-qa.up.railway.app',
+    });
+    const request = new Request('http://internal:3000/api/auth/sso/login', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://my-project--qa.studio.example.com');
+  });
+
+  it('should prefer X-Mastra-Public-Host over the Host header', () => {
+    const headers = new Headers({
+      'x-mastra-public-host': 'my-project.studio.example.com',
+      host: 'my-project-qa-qa.up.railway.app',
+      'x-forwarded-proto': 'https',
+    });
+    const request = new Request('https://my-project-qa-qa.up.railway.app/api/auth/sso/login', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://my-project.studio.example.com');
+  });
+
+  it('should always use HTTPS with X-Mastra-Public-Host (ignore X-Forwarded-Proto)', () => {
+    const headers = new Headers({
+      'x-mastra-public-host': 'my-project.studio.example.com',
+      'x-forwarded-proto': 'http',
+    });
+    const request = new Request('http://internal:3000/some-path', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://my-project.studio.example.com');
+  });
+
+  it('should handle comma-separated X-Mastra-Public-Host by using the first value', () => {
+    const headers = new Headers({
+      'x-mastra-public-host': '  my-project.studio.example.com  , other.example.com',
+    });
+    const request = new Request('http://internal:3000/some-path', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://my-project.studio.example.com');
+  });
+
+  it('should fall through to X-Forwarded-Host when X-Mastra-Public-Host is empty', () => {
+    const headers = new Headers({
+      'x-mastra-public-host': '',
+      'x-forwarded-host': 'api.example.com',
+    });
+    const request = new Request('http://internal:3000/some-path', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://api.example.com');
+  });
+
   it('should use X-Forwarded-Host when present (reverse proxy)', () => {
     const headers = new Headers({
       'x-forwarded-host': 'api.example.com',

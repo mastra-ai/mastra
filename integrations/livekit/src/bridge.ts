@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { llm, voice } from '@livekit/agents';
-import type { Agent as MastraAgent, AgentExecutionOptionsBase } from '@mastra/core/agent';
+import type { Agent as MastraAgent, AgentExecutionOptionsBase, AgentMemoryOption } from '@mastra/core/agent';
 import type { TracingContext } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
@@ -126,6 +126,14 @@ export function mapTurnUsage(usage: unknown): VoiceTurnUsage | undefined {
 export interface MastraVoiceAgentMemory {
   thread: string;
   resource?: string;
+  /**
+   * Per-call Mastra memory config forwarded to the agent as `memory.options` (see core's
+   * `AgentMemoryOption`). The notable use is `{ readOnly: true }`: the agent still reads thread
+   * history but persists nothing, which keeps LiveKit's preemptive (speculative) turns from writing
+   * partial user and assistant messages to the thread. With `readOnly` the caller owns persistence
+   * of committed turns (e.g. from `onTurnComplete` via `memory.saveMessages`).
+   */
+  options?: AgentMemoryOption['options'];
 }
 
 /**

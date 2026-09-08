@@ -8,8 +8,6 @@ Docker container sandbox provider for Mastra workspaces. Uses long-lived contain
 npm install @mastra/docker
 ```
 
-Requires [Docker Engine](https://docs.docker.com/engine/install/) running on the host machine.
-
 ## Usage
 
 ```typescript
@@ -31,50 +29,15 @@ const agent = new Agent({
 });
 ```
 
-### Bind Mounts
-
-Mount host directories into the container:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new DockerSandbox({
-    image: 'node:22-slim',
-    volumes: {
-      '/my/project': '/workspace/project',
-      '/shared/data': '/data',
-    },
-  }),
-});
-```
-
-### Reconnection
-
-Containers can be reconnected by providing a fixed `id`. On `start()`, an existing container with a matching label is reused instead of creating a new one:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new DockerSandbox({
-    id: 'persistent-sandbox',
-    image: 'node:22-slim',
-  }),
-});
-```
-
-### Docker Connection Options
-
-Connect to remote Docker hosts or use custom socket paths:
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new DockerSandbox({
-    dockerOptions: {
-      host: '192.168.1.100',
-      port: 2376,
-    },
-  }),
-});
-```
-
 ## Documentation
 
-For more information, see the [DockerSandbox reference](https://mastra.ai/docs/reference/workspace/docker-sandbox).
+- [Docker Sandbox integration guide](https://mastra.ai/integrations/sandboxes/docker)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/docker/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

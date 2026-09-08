@@ -1,7 +1,7 @@
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, extractApiErrorDetail, platformFetch, throwApiError } from '../auth/client.js';
 
-export type DatabaseKind = 'turso' | 'neon' | 'mongodb';
+export type DatabaseKind = 'turso' | 'neon' | 'mongodb' | 'redis';
 export type DatabaseStatus = 'provisioning' | 'ready' | 'failed' | 'deleting' | 'deleted';
 
 export interface ProjectDatabase {
@@ -19,6 +19,12 @@ export interface ProjectDatabase {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+export interface DatabaseCatalogEntry {
+  kind: DatabaseKind;
+  name: string;
+  status: 'available' | 'coming_soon';
 }
 
 export interface DatabaseConnectionEnvVar {
@@ -42,6 +48,7 @@ export const DB_ENV_VAR_NAMES: Record<DatabaseKind, string[]> = {
   turso: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'],
   neon: ['DATABASE_URL'],
   mongodb: [],
+  redis: ['REDIS_URL'],
 };
 
 const ADMIN_REQUIRED_MESSAGE = 'You need the admin role in this organization to manage databases.';
@@ -76,6 +83,29 @@ export async function fetchDatabases(token: string, orgId: string, projectId: st
 
   const data = (await resp.json()) as { databases: ProjectDatabase[] };
   return data.databases;
+}
+
+/**
+ * Provider catalog as the platform exposes it to this caller. The platform
+ * filters the list per-organization (e.g. the `managed-redis` feature flag
+ * hides the `redis` entry), so this is the source of truth for which kinds
+ * the CLI may offer to provision — the same gate the dashboard UI uses.
+ */
+export async function fetchDatabaseCatalog(
+  token: string,
+  orgId: string,
+  projectId: string,
+): Promise<DatabaseCatalogEntry[]> {
+  const resp = await platformFetch(`${getApiUrl()}/v1/server/projects/${projectId}/databases/catalog`, {
+    headers: authHeaders(token, orgId),
+  });
+
+  if (!resp.ok) {
+    await handleFailure(resp, 'Failed to fetch database provider catalog');
+  }
+
+  const data = (await resp.json()) as { providers: DatabaseCatalogEntry[] };
+  return data.providers;
 }
 
 export async function attachDatabase(

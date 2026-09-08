@@ -1,10 +1,12 @@
 /**
  * MCP server configuration loading from filesystem.
- * Loads from:
- *   1. .claude/settings.local.json  (Claude Code compat — lowest priority)
- *   2. ~/.mastracode/mcp.json       (global)
- *   3. .mcp.json                    (project root — Claude Code compatible)
- *   4. .mastracode/mcp.json         (project — highest priority)
+ * Loads from, lowest to highest priority:
+ *   1. ~/.claude.json               (Claude Code global — opt-in)
+ *   2. $CODEX_HOME/config.toml      (Codex CLI global — opt-in)
+ *   3. .claude/settings.local.json  (Claude Code project compatibility)
+ *   4. ~/.mastracode/mcp.json       (Mastra Code global)
+ *   5. .mcp.json                    (project root — Claude Code compatible)
+ *   6. .mastracode/mcp.json         (Mastra Code project)
  *
  * Higher-priority configs override lower ones by server name. The project root
  * `.mcp.json` is read so a project that already keeps MCP servers there for
@@ -14,6 +16,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
@@ -54,13 +57,24 @@ export function resolveOAuthRedirectUrl(oauth: McpHttpOAuthConfig | undefined): 
   return oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL;
 }
 
-export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
+export interface ExternalMcpDiscoveryOptions {
+  claudeCodeGlobal?: boolean;
+  codexGlobal?: boolean;
+}
+
+export function loadMcpConfig(
+  projectDir: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+  externalDiscovery: ExternalMcpDiscoveryOptions = {},
+): McpConfig {
+  const claudeGlobalConfig = externalDiscovery.claudeCodeGlobal ? loadClaudeGlobalConfig() : {};
+  const codexGlobalConfig = externalDiscovery.codexGlobal ? loadCodexGlobalConfig() : {};
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
   const rootConfig = loadSingleConfig(getRootMcpPath(projectDir));
   const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
-  return mergeConfigs(claudeConfig, globalConfig, rootConfig, projectConfig);
+  return mergeConfigs(claudeGlobalConfig, codexGlobalConfig, claudeConfig, globalConfig, rootConfig, projectConfig);
 }
 
 export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
@@ -77,6 +91,88 @@ export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
 
 export function getClaudeSettingsPath(projectDir: string): string {
   return path.join(projectDir, '.claude', 'settings.local.json');
+}
+
+export function getClaudeGlobalMcpPath(): string {
+  return path.join(os.homedir(), '.claude.json');
+}
+
+export function getCodexGlobalMcpPath(): string {
+  const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  return path.join(codexHome, 'config.toml');
+}
+
+function withoutSkippedServers(config: McpConfig): McpConfig {
+  return config.mcpServers ? { mcpServers: config.mcpServers } : {};
+}
+
+function loadClaudeGlobalConfig(): McpConfig {
+  try {
+    const filePath = getClaudeGlobalMcpPath();
+    if (!fs.existsSync(filePath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return withoutSkippedServers(validateConfig({ mcpServers: parsed?.mcpServers }));
+  } catch {
+    return {};
+  }
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value as Record<string, unknown>).filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string',
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeCodexServer(entry: unknown): Record<string, unknown> | undefined {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
+  const raw = entry as Record<string, unknown>;
+  if (raw.enabled === false) return undefined;
+
+  if (typeof raw.command === 'string') {
+    return {
+      command: raw.command,
+      args: Array.isArray(raw.args) && raw.args.every(arg => typeof arg === 'string') ? raw.args : undefined,
+      env: stringRecord(raw.env),
+    };
+  }
+
+  if (typeof raw.url === 'string') {
+    const headers = stringRecord(raw.http_headers) ?? {};
+    if (
+      typeof raw.bearer_token_env_var === 'string' &&
+      /^[A-Za-z_][A-Za-z0-9_]*$/.test(raw.bearer_token_env_var) &&
+      !Object.keys(headers).some(name => name.toLowerCase() === 'authorization')
+    ) {
+      headers.Authorization = `Bearer \${${raw.bearer_token_env_var}}`;
+    }
+    return {
+      url: raw.url,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    };
+  }
+
+  return undefined;
+}
+
+function loadCodexGlobalConfig(): McpConfig {
+  try {
+    const filePath = getCodexGlobalMcpPath();
+    if (!fs.existsSync(filePath)) return {};
+    const parsed = parseToml(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    const rawServers = parsed.mcp_servers;
+    if (!rawServers || typeof rawServers !== 'object' || Array.isArray(rawServers)) return {};
+
+    const mcpServers: Record<string, unknown> = {};
+    for (const [name, entry] of Object.entries(rawServers as Record<string, unknown>)) {
+      const normalized = normalizeCodexServer(entry);
+      if (normalized) mcpServers[name] = normalized;
+    }
+    return withoutSkippedServers(validateConfig({ mcpServers }));
+  } catch {
+    return {};
+  }
 }
 
 function loadSingleConfig(filePath: string): McpConfig {

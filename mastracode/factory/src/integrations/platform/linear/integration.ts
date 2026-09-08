@@ -10,8 +10,14 @@ import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
+import type { LinearEventRules, LinearRuleOverrides } from '../../linear/default-rules.js';
+import { resolveLinearRules } from '../../linear/default-rules.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
+import {
+  linearIssueReconciliationEnabled,
+  linearIssueReconciliationInterval,
+} from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
@@ -247,7 +253,14 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     },
   };
 
-  constructor() {
+  readonly #rules: LinearEventRules;
+
+  get rules(): LinearEventRules {
+    return this.#rules;
+  }
+
+  constructor({ rules }: { rules?: LinearRuleOverrides } = {}) {
+    this.#rules = resolveLinearRules(rules);
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
@@ -362,17 +375,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = process.env.MASTRACODE_LINEAR_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
+    const reconcileEnabled = linearIssueReconciliationEnabled();
     if (!pollingEnabled && !reconcileEnabled) return [];
 
-    const ingest = attachLinearRules(ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this as unknown as LinearIntegration, ctx) : undefined;
-    const workItems = ctx.rules?.workItems;
+    const ingest = attachLinearRules(this, ctx);
+    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];
 
     const pollIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
-    const reconcileIntervalMs = optionalPositiveIntegerEnv('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS');
+    const reconcileIntervalMs = linearIssueReconciliationInterval();
 
     return [
       new PlatformLinearEventWorker({
@@ -399,7 +412,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
-        ingestFactoryIssues: attachLinearRules(ctx),
+        projects: ctx.storage.projects,
+        ingestFactoryIssues: attachLinearRules(this, ctx),
       }).filter(route => !route.path.startsWith('/auth/linear/')),
     ];
   }

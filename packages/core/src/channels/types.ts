@@ -1,4 +1,14 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type {
+  ActionEvent,
+  Adapter,
+  CardElement,
+  ChatConfig,
+  Message,
+  SlashCommandEvent,
+  StateAdapter,
+  StreamChunk,
+  Thread,
+} from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -331,15 +341,24 @@ export interface ChannelHandlerContext {
   /** The Mastra instance that owns the channels, resolved from the bound agent or controller. */
   mastra?: Mastra;
   /**
-   * The request context for the run this message will start, constructed fresh
-   * per message.
+   * The request context used when this message starts a run, constructed fresh
+   * per message. A message delivered to an already-active run does not replace
+   * that run's request context.
    *
    * A handler may write to it before calling `defaultHandler` — for example to
    * stamp the tenant a channel sender maps to, so the run resolves that user's
    * credentials. Core adds the channel and render-context entries afterward and
-   * dispatches with this same instance.
+   * uses this same instance when the Signal wakes an idle run.
    */
   requestContext: RequestContext;
+  /**
+   * Metadata attached to this message's Agent Signal, constructed fresh per
+   * message. A handler may add JSON-serializable, non-sensitive values before
+   * calling `defaultHandler`. Signal metadata may be persisted and published
+   * through PubSub. Unlike run-level request context, it follows the message
+   * through both idle `wake` and active `deliver` paths.
+   */
+  readonly signalMetadata: Record<string, unknown>;
 }
 
 /**
@@ -364,6 +383,35 @@ export type ChannelHandler = (
  *   {@link ChannelHandlerContext} as 4th arg to wrap/extend)
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
+
+/**
+ * Handler function for slash command events.
+ * Receives the original Chat SDK event, the default handler implementation,
+ * and a runtime context carrying the resolved Mastra instance.
+ */
+export type SlashCommandChannelHandler = (
+  event: SlashCommandEvent,
+  defaultHandler: () => Promise<void>,
+  ctx: ChannelHandlerContext,
+) => Promise<void>;
+
+/** Configuration for slash command handling. */
+export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | false | undefined;
+
+/**
+ * Handler function for action events (button clicks, select changes).
+ * Receives the original Chat SDK event, the default handler implementation
+ * (built-in tool approval card handling; a no-op for other action ids), and a
+ * runtime context carrying the resolved Mastra instance.
+ */
+export type ActionChannelHandler = (
+  event: ActionEvent,
+  defaultHandler: () => Promise<void>,
+  ctx: ChannelHandlerContext,
+) => Promise<void>;
+
+/** Configuration for action handling. */
+export type ActionChannelHandlerConfig = ActionChannelHandler | false | undefined;
 
 /**
  * Context passed to {@link ChannelConfig.resolveResourceId}.
@@ -431,6 +479,20 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onSubscribedMessage?: ChannelHandlerConfig;
+
+  /**
+   * Handler for slash commands.
+   * Default: Routes the command and its arguments to agent.stream and posts the response.
+   */
+  onSlashCommand?: SlashCommandChannelHandlerConfig;
+
+  /**
+   * Handler for action events (button clicks, select changes).
+   * Default: Handles the built-in tool approval cards
+   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and ignores other action ids.
+   * Setting `false` also disables the built-in tool approval buttons.
+   */
+  onAction?: ActionChannelHandlerConfig;
 }
 
 /** Configuration for agent chat channels. */

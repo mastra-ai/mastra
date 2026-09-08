@@ -6,6 +6,7 @@ export const buildProject = async (args: {
   root?: string;
   tools?: string;
   studio?: boolean;
+  force?: boolean;
   debug: boolean;
 }) => {
   await analytics.trackCommandExecution({
@@ -17,6 +18,7 @@ export const buildProject = async (args: {
         root: args?.root,
         tools: args?.tools ? args.tools.split(',') : [],
         studio: args?.studio,
+        force: args?.force,
         debug: args.debug,
       });
     },

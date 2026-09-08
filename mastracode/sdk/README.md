@@ -24,69 +24,14 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
-To construct the `Mastra` instance yourself (e.g. in a deployable `mastra` entry file), use `prepareAgentControllerMount`:
+## Documentation
 
-```ts
-import { Mastra } from '@mastra/core/mastra';
-import { prepareAgentControllerMount } from '@mastra/code-sdk';
+- [@mastra/code-sdk documentation](https://mastra.ai/reference/code-sdk/mount-agent-controller)
 
-const prepared = await prepareAgentControllerMount({ cwd: process.cwd() });
+## Changelog
 
-export const mastra = new Mastra(prepared.mastraArgs);
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/mastracode/sdk/CHANGELOG.md) for version history and release notes.
 
-await prepared.finalize();
-```
+## Support
 
-### Add input processors
-
-Embedding surfaces can prepend stateless input processors without replacing Mastra Code's required policy and compatibility processors:
-
-```ts
-const phaseProcessor = {
-  id: 'current-phase',
-  async processInputStep({ messages }) {
-    await reconcileCompletedTools(messages);
-  },
-};
-
-const prepared = await prepareAgentControllerMount({
-  cwd: process.cwd(),
-  inputProcessors: [phaseProcessor],
-});
-```
-
-Configured processors run before Mastra Code's built-in input processors. Keep processor instances stateless because the mounted agent shares them across sessions and runs.
-
-## Dynamic workflows
-
-The local controller registers the Workflow Builder before workers start. In build mode, users can ask the code agent to create a workflow in natural language. The builder discovers registered agents, tools, and workflows, validates a complete definition, then persists and registers it immediately.
-
-Use the workflow service to manage saved workflows from a custom SDK surface:
-
-```ts
-import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
-
-const { workflows } = await listWorkflows(mastra);
-const firstWorkflow = workflows[0];
-if (!firstWorkflow) throw new Error('No Dynamic Workflows are available.');
-
-const definition = await getWorkflow(mastra, firstWorkflow.id);
-if (!definition) throw new Error(`Workflow "${firstWorkflow.id}" was not found.`);
-
-const result = await runWorkflow(mastra, definition.id, { topic: 'dynamic workflows' });
-await deleteWorkflow(mastra, definition.id);
-```
-
-Pass the session request context to `runWorkflow` when workflow agent steps need the session-selected model. You can also pass an event callback as the fifth argument to render workflow step progress.
-
-Deep modules are available as subpath imports, e.g.:
-
-```ts
-import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
-```
-
-> The subpath API surface is still evolving and may change between minor releases while the package is pre-1.0.
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

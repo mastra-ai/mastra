@@ -199,7 +199,7 @@ export const lspInspectTool = createTool({
       };
     }
 
-    const { client, uri } = queryResult;
+    const { client, uri, release } = queryResult;
 
     // LSP uses 0-indexed positions
     const position = { line: line - 1, character: character - 1 };
@@ -325,8 +325,9 @@ export const lspInspectTool = createTool({
     } catch (err) {
       result.error = `LSP query failed: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
-      // Clean up - close the file
+      // Clean up - close the file and release the client lease
       client.notifyClose(absolutePath);
+      release();
     }
 
     span.end({ success: !result.error });

@@ -1,11 +1,5 @@
-/**
- * Board cards clip their title to one line, so long issue titles are
- * unreadable at rest. Hovering a card reveals the untruncated title in a
- * tooltip. The tooltip anchors to the whole card because a work-item card's
- * click target is a full-bleed overlay that paints over the title span — a
- * trigger on the title itself would never receive the pointer.
- */
-import { screen, waitFor } from '@testing-library/react';
+// A failed rule effect keeps its raw error one hover away instead of costing the card a row.
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -62,9 +56,14 @@ const failedDecision: FactoryDecisionSummary = {
   id: 'decision-1',
   evaluationId: 'evaluation-1',
   workItemId: issueWorkItem.id,
-  type: 'startReview',
+  type: 'invokeSkill',
+  role: null,
   status: 'failed',
   attempts: 1,
+  failureOccurrence: 1,
+  source: null,
+  failureCode: 'repository_clone_failed',
+  canRetry: true,
   lastError: DECISION_ERROR,
   createdAt: '2026-07-18T00:00:00.000Z',
   updatedAt: '2026-07-18T00:01:00.000Z',
@@ -120,7 +119,6 @@ function stubBoardEndpoints(decisions: FactoryDecisionSummary[] = []) {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
 
@@ -129,58 +127,18 @@ function renderWorkBoard() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('Board card tooltips', () => {
-  it('shows failed rule effects as a compact badge with the error on hover', async () => {
+describe('Board card error tooltip', () => {
+  it('names what the failed rule effect was doing and keeps its raw error one hover away', async () => {
     stubBoardEndpoints([failedDecision]);
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const errorBadge = await screen.findByRole('alert', { name: `Rule effect failed: ${DECISION_ERROR}` });
-    expect(errorBadge).toHaveTextContent('Error');
-    expect(screen.queryByText(`Rule effect failed: ${DECISION_ERROR}`)).not.toBeInTheDocument();
+    const failure = await screen.findByRole('alert');
+    expect(failure).toHaveTextContent('Automated run could not start');
+    expect(screen.queryByText(DECISION_ERROR)).not.toBeInTheDocument();
 
-    await user.hover(errorBadge);
+    await user.hover(failure);
 
-    expect(await screen.findByText(`Rule effect failed: ${DECISION_ERROR}`)).toBeVisible();
-  });
-
-  it('reveals the full work-item title on hover', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('work-item-card');
-    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-
-    await user.hover(card);
-
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_ITEM_TITLE);
-  });
-
-  it('reveals the full candidate title on hover', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('candidate-card');
-    await user.hover(card);
-
-    const tooltip = await screen.findByRole('tooltip', {}, { timeout: 3000 });
-    expect(tooltip).toHaveTextContent(LONG_CANDIDATE_TITLE);
-  });
-
-  it('hides the tooltip once the pointer leaves the card', async () => {
-    stubBoardEndpoints();
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const card = await screen.findByTestId('work-item-card');
-    await user.hover(card);
-    await screen.findByRole('tooltip', {}, { timeout: 3000 });
-
-    await user.unhover(card);
-
-    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    expect(await screen.findByText(DECISION_ERROR)).toBeVisible();
   });
 });

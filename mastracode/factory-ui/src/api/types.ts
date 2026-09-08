@@ -72,10 +72,23 @@ export interface CustomProvidersResponse {
 export interface ModelPacksResponse {
   packs: ModelPackInfo[];
   activePackId: string | null;
+  sessionPackId: string | null;
 }
 
 export interface OMResponse {
   config: OMConfigInfo;
+}
+
+/** A bundled Factory skill (`GET /web/factory/skills`). */
+export interface FactorySkillInfo {
+  name: string;
+  description: string;
+  /** SKILL.md body with the frontmatter removed. */
+  content: string;
+}
+
+export interface FactorySkillsResponse {
+  skills: FactorySkillInfo[];
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────
@@ -114,7 +127,9 @@ export interface SaveModelPackBody {
 }
 
 export interface ActivateModelPackBody {
-  resourceId: string;
+  target: 'default' | 'session';
+  resourceId?: string;
+  scope?: string;
 }
 
 export interface UpdateOMModelBody {
@@ -159,9 +174,13 @@ export type OAuthPollResponse =
   | { status: 'complete' }
   | { status: 'failed'; error: string };
 
-export interface ActivateModelPackResponse {
+export type ActivateModelPackResponse =
+  | { ok: true; target: 'default'; activePackId: string }
+  | { ok: true; target: 'session'; sessionPackId: string };
+
+export interface ClearDefaultModelPackResponse {
   ok: true;
-  activePackId: string;
+  activePackId: null;
 }
 
 export interface UpdateOMResponse {

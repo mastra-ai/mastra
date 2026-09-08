@@ -2,12 +2,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
+import { useState } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths } from '../hooks';
+import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
-import { buildDrilledThemeFlow } from '../theme-drilldown-data';
+import { buildDrilledThemeFlow, findSelectionStats, findThemeSelectionById } from '../theme-drilldown-data';
 import {
   allThemePathsResponse,
   drilldownThemeFlowResponse,
@@ -63,11 +64,51 @@ function expectExactQuery(url: URL, expected: Record<string, string>) {
   expect(Object.fromEntries(url.searchParams)).toEqual(expected);
 }
 
-function renderSignals() {
+function ControlledSankeySignals({
+  selectedThemeId: initialSelectedThemeId,
+  onSelectedThemeIdChange,
+  onFrameIdChange,
+  ...props
+}: Partial<ComponentProps<typeof SankeySignals>>) {
+  const [selectedThemeId, setSelectedThemeId] = useState(initialSelectedThemeId);
+  const handleSelectedThemeIdChange = (themeId: string | undefined) => {
+    setSelectedThemeId(themeId);
+    onSelectedThemeIdChange?.(themeId);
+  };
+  const [selectedFrameId, setSelectedFrameId] = useState<string>();
+  const snapshotsQuery = useThemeSnapshots(
+    props.entityId ?? 'support-agent',
+    props.entityType ?? 'agent',
+    props.signalNames ?? ['goal', 'outcome', 'behavior'],
+    props.dateFrom,
+    props.dateTo,
+  );
+  const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
+  if (!frameId) return null;
+
+  return (
+    <SankeySignals
+      entityId="support-agent"
+      entityType="agent"
+      signalNames={['goal', 'outcome', 'behavior']}
+      {...props}
+      selectedThemeId={selectedThemeId}
+      onSelectedThemeIdChange={handleSelectedThemeIdChange}
+      selectedFrameId={frameId}
+      onFrameIdChange={nextFrameId => {
+        setSelectedFrameId(nextFrameId);
+        onFrameIdChange?.(nextFrameId);
+      }}
+    />
+  );
+}
+
+function renderSignals(props: Partial<ComponentProps<typeof SankeySignals>> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SankeySignals entityId="support-agent" entityType="agent" signalNames={['goal', 'outcome', 'behavior']} />
+      <ControlledSankeySignals {...props} />
     </QueryClientProvider>,
   );
 }
@@ -100,6 +141,7 @@ function useFlowHandlers(onPathsRequest?: () => void) {
 
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', ChartResizeObserver);
+  vi.stubGlobal('matchMedia', () => ({ matches: true }));
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(680);
 });
@@ -225,7 +267,7 @@ describe('Agent Learning theme drilldown hooks', () => {
             'agent',
             ['goal', 'outcome', 'behavior'],
             'opaque-snapshot-cursor',
-            'theme-101',
+            false,
           ),
         }),
         { wrapper: TestQueryProvider },
@@ -291,7 +333,7 @@ describe('Agent Learning theme drilldown hooks', () => {
       );
 
       const { result } = renderHook(
-        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', '101'),
+        () => useThemePaths('support-agent', 'agent', ['goal', 'outcome', 'behavior'], 'opaque-snapshot-cursor', true),
         { wrapper: TestQueryProvider },
       );
 
@@ -323,44 +365,67 @@ describe('Agent Learning theme drilldown hooks', () => {
   });
 });
 
+describe('findThemeSelectionById', () => {
+  it('returns the matching theme from its signal stage', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, '201')).toEqual({
+      kind: 'theme',
+      signalName: 'outcome',
+      themeId: '201',
+      label: 'Transcript added',
+    });
+  });
+
+  it('does not match other or noise nodes', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-goal-other')).toBeUndefined();
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'flow-behavior-noise')).toBeUndefined();
+  });
+
+  it('returns undefined when the theme is absent', () => {
+    expect(findThemeSelectionById(drilldownThemeFlowResponse, 'missing-theme')).toBeUndefined();
+  });
+});
+
 describe('buildDrilledThemeFlow', () => {
   describe('when paths contain the selected theme', () => {
     it('recomputes counts and keeps noise assignments in the drilled flow', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '101',
-        label: 'Add transcript',
-      });
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(2);
-      expect(result.stages[2]?.nodes).toEqual(
+      expect(result.stages[1]?.nodes).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ label: 'Opened workspace', traceCount: 1, stageShare: 0.5 }),
           expect.objectContaining({ kind: 'noise', traceCount: 1, stageShare: 0.5 }),
         ]),
       );
-      expect(result.links).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ traceCount: 2 }),
-          expect.objectContaining({ traceCount: 1 }),
-        ]),
-      );
+      expect(result.links).toEqual([
+        expect.objectContaining({ traceCount: 1 }),
+        expect.objectContaining({ traceCount: 1 }),
+      ]);
     });
   });
 
   describe('when the selected theme was collapsed into other in the overview', () => {
     it('renders the concrete path theme as its own node', () => {
-      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, {
-        signalName: 'goal',
-        themeId: '102',
-        label: 'Search transcripts',
-      });
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [
+        { kind: 'theme', signalName: 'goal', themeId: '102', label: 'Search transcripts' },
+      ]);
 
       expect(result.snapshot.traceCount).toBe(1);
       expect(result.stages[0]?.nodes).toEqual([
-        expect.objectContaining({ kind: 'theme', themeId: '102', label: 'Search transcripts', traceCount: 1 }),
+        expect.objectContaining({ kind: 'theme', themeId: '202', label: 'Transcript located', traceCount: 1 }),
       ]);
-      expect(result.stages[0]?.nodes[0]?.nodeId).not.toBe('flow-goal-other');
+      expect(result.stages[0]?.nodes[0]?.nodeId).not.toBe('flow-outcome-other');
+    });
+  });
+
+  describe('when selection statistics are requested for an active filter', () => {
+    it('reports full coverage for a non-empty filtered flow', () => {
+      const selection = { kind: 'theme', signalName: 'goal', themeId: '101', label: 'Add transcript' } as const;
+      const result = buildDrilledThemeFlow(drilldownThemeFlowResponse, allThemePathsResponse, [selection]);
+
+      expect(findSelectionStats(result, [selection], selection)).toEqual({ traceCount: 2, stageShare: 1 });
     });
   });
 });
@@ -445,7 +510,8 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
       expect(screen.queryByText(/^birth$/i)).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       expect(await screen.findByText('Save the transcript with the project.')).not.toBeNull();
     });
   });
@@ -569,12 +635,7 @@ describe('SankeySignals drill-in', () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       const result = render(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="support-agent"
-            entityId="support-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="support-agent" entityId="support-agent" />
         </QueryClientProvider>,
       );
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
@@ -582,12 +643,7 @@ describe('SankeySignals drill-in', () => {
 
       result.rerender(
         <QueryClientProvider client={queryClient}>
-          <SankeySignals
-            key="replacement-agent"
-            entityId="replacement-agent"
-            entityType="agent"
-            signalNames={['goal', 'outcome', 'behavior']}
-          />
+          <ControlledSankeySignals key="replacement-agent" entityId="replacement-agent" />
         </QueryClientProvider>,
       );
 
@@ -611,6 +667,36 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('dialog', { name: 'Add transcript' });
 
       expect(screen.queryByRole('heading', { name: 'Trend' })).toBeNull();
+    });
+  });
+
+  describe('when theme selection is controlled', () => {
+    it('opens the selected theme and reports changes to the host', async () => {
+      useFlowHandlers();
+      const onSelectedThemeIdChange = vi.fn();
+      const view = renderSignals({ selectedThemeId: '101', onSelectedThemeIdChange });
+
+      expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(onSelectedThemeIdChange).toHaveBeenCalledWith(undefined);
+
+      view.rerender(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <SankeySignals
+            entityId="support-agent"
+            entityType="agent"
+            signalNames={['goal', 'outcome', 'behavior']}
+            selectedThemeId={undefined}
+            onSelectedThemeIdChange={onSelectedThemeIdChange}
+            selectedFrameId="opaque-snapshot-cursor"
+            onFrameIdChange={() => {}}
+          />
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+
+      fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
+      expect(onSelectedThemeIdChange).toHaveBeenCalledWith('101');
     });
   });
 
@@ -748,12 +834,10 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
-      expect(
-        await screen.findByText(/This drill-in is unavailable for snapshots with more than 2,000 traces/),
-      ).not.toBeNull();
+      expect(await screen.findByText('Filters unavailable for this snapshot')).not.toBeNull();
 
       expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
-      expect(screen.queryByLabelText('Trace signal theme flow')).toBeNull();
+      expect(screen.getByLabelText('Trace signal theme flow')).not.toBeNull();
       expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
     });
   });
@@ -784,6 +868,7 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
       await screen.findByText('Save the transcript with the project.');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));

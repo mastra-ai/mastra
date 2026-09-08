@@ -274,14 +274,22 @@ export async function postFileAttachment(args: {
   logger?: IMastraLogger;
 }): Promise<void> {
   const { chunk, chatThread, logger } = args;
-  const { data, mimeType } = chunk.payload as { data: string | Uint8Array; mimeType: string };
+  const {
+    data,
+    mimeType,
+    filename: payloadFilename,
+  } = chunk.payload as {
+    data: string | Uint8Array;
+    mimeType: string;
+    filename?: string;
+  };
   logger?.debug?.('[CHANNEL] Received file chunk', {
     mimeType,
     dataType: typeof data,
     size: typeof data === 'string' ? data.length : (data as Uint8Array)?.byteLength,
   });
   const ext = mimeType.split('/')[1]?.split(';')[0] || 'bin';
-  const filename = `generated.${ext}`;
+  const filename = payloadFilename ?? `generated.${ext}`;
   const binary =
     typeof data === 'string' ? Buffer.from(data, 'base64') : data instanceof Uint8Array ? Buffer.from(data) : data;
   try {

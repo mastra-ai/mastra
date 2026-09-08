@@ -155,13 +155,16 @@ describe('Composer while a session prepares its workspace', () => {
     const message = () => screen.getByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message()).toBeEnabled());
     await waitFor(() => expect(screen.getByText('Preparing workspace…')).toBeInTheDocument());
+    // Drops are ignored while the composer is still initializing (messages
+    // loading), so type first and wait for send to come online before attaching.
+    await user.type(message(), 'what is wrong here');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
 
     const form = container.querySelector('form');
     assert(form);
     fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
     expect(await screen.findByRole('button', { name: 'Remove image' })).toBeInTheDocument();
 
-    await user.type(message(), 'what is wrong here');
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(session.posted).toEqual(['what is wrong here']));

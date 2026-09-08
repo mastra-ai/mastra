@@ -30,7 +30,6 @@ interface StaleNewTag extends NewTagEntry {
 
 const SIDEBAR_FILES = [
   'src/content/en/docs/sidebars.js',
-  'src/content/en/guides/sidebars.js',
   'src/content/en/integrations/sidebars.js',
   'src/content/en/reference/sidebars.js',
   'src/content/en/models/sidebars.js',

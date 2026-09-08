@@ -2,6 +2,7 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { cn } from '@/lib/utils';
 
 const ContextMenuRoot = ContextMenuPrimitive.Root;
@@ -40,7 +41,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       sideOffset = 0,
       container,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,
@@ -214,7 +215,7 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
       side = 'right',
       sideOffset = -4,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,

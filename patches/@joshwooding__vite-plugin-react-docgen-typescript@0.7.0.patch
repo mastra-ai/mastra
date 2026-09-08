@@ -1,0 +1,81 @@
+diff --git a/dist/chunks/typescript.mjs b/dist/chunks/typescript.mjs
+index c8d0c710c85a755d12bc9ee3d74efea4a17d2259..1c4b136ebff5502d7953a58e5673a71cf6d8c4b8 100644
+--- a/dist/chunks/typescript.mjs
++++ b/dist/chunks/typescript.mjs
+@@ -1,5 +1,5 @@
+ import { dirname } from 'node:path';
+-import ts from 'typescript';
++import ts from 'typescript-classic';
+
+ function formatDiagnostic(diagnostic) {
+   if (typeof diagnostic.messageText === "string") {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 709db24522ce7a4e5a34fb0ae4eb32709f39c523..a44aa7d050b2fd7be0db11fbc34e52dc2381f4e4 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,6 +1,6 @@
+ import { Plugin } from 'vite';
+ import { ParserOptions } from 'react-docgen-typescript';
+-import { CompilerOptions } from 'typescript';
++import { CompilerOptions } from 'typescript-classic';
+
+ interface LoaderOptions {
+     /**
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 321bc4825371c718922f94537988e57c8f484b57..2bd405460b3d4c85c5be7160f267616770803810 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -168,7 +168,7 @@ function createFileSystemCacheNamespace(options, rootDir) {
+       rootDir,
+       moduleDirectory
+     ]),
+-    typescript: resolvePackageVersion("typescript", [rootDir, moduleDirectory])
++    typescript: resolvePackageVersion("typescript-classic", [rootDir, moduleDirectory])
+   };
+   return hashValue(
+     stableStringify({
+@@ -500,7 +500,7 @@ const resolveDocgenRootFiles = async (rootDir, includeArray, excludeArray, proje
+   ].sort();
+ };
+ const resolveTypescriptProject = async (config, rootDir) => {
+-  const { default: ts } = await import('typescript');
++  const { default: ts } = await import('typescript-classic');
+   const includeArray = config.include ?? DEFAULT_INCLUDE;
+   const excludeArray = config.exclude ?? DEFAULT_EXCLUDE;
+   let referencedProjectMetadata = {
+@@ -561,7 +561,7 @@ const resolveTypescriptProject = async (config, rootDir) => {
+   };
+ };
+ const createProgram = async (project, oldProgram) => {
+-  const { default: ts } = await import('typescript');
++  const { default: ts } = await import('typescript-classic');
+   const host = ts.createIncrementalCompilerHost(
+     project.compilerOptions,
+     ts.sys
+@@ -581,7 +581,7 @@ const createStubFileWatcher = () => ({
+   close: doNothing
+ });
+ const createProjectService = async (project) => {
+-  const { default: tsserver } = await import('typescript/lib/tsserverlibrary.js');
++  const { default: tsserver } = await import('typescript-classic/lib/tsserverlibrary.js');
+   const projectServiceRootFiles = project.tsconfigPath ? project.configFiles : project.rootFiles;
+   const system = {
+     ...tsserver.sys,
+@@ -629,7 +629,7 @@ const closeProjectService = (projectService, projectName) => {
+   projectService.close?.();
+ };
+ const startWatch = async (project, onProgramCreatedOrUpdated) => {
+-  const { default: ts } = await import('typescript');
++  const { default: ts } = await import('typescript-classic');
+   const reportWatchStatus = () => {
+   };
+   const startConfiguredWatch = (configuredProject) => {
+@@ -1246,7 +1246,7 @@ function reactDocgenTypescript(config = {}) {
+       return;
+     }
+     initializationPromise = (async () => {
+-      typescriptModule ??= (await import('typescript')).default;
++      typescriptModule ??= (await import('typescript-classic')).default;
+       if (!project || !docGenParser) {
+         project = await resolveTypescriptProject(config, configRoot);
+         docGenParser = await getDocgen(config, project.compilerOptions);

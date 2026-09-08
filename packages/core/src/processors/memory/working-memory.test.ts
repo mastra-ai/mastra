@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
+import { MemoryRunState } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -122,6 +123,48 @@ describe('WorkingMemory', () => {
       expect(resultMessages[0].content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
       expect(resultMessages[0].content).toContain(workingMemoryData);
       expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId });
+    });
+
+    it('reuses resource-scoped working memory within a memory run', async () => {
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        scope: 'resource',
+      });
+      const threadId = 'thread-1';
+      const resourceId = 'resource-1';
+      const runState = new MemoryRunState({ memory: {}, threadId, resourceId });
+      requestContext.set('MastraMemory', {
+        thread: { id: threadId },
+        resourceId,
+        runState: () => runState,
+      });
+      vi.mocked(mockStorage.getResourceById).mockResolvedValue({
+        id: resourceId,
+        workingMemory: '# Cached context',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      for (const id of ['msg-1', 'msg-2']) {
+        const message: MastraDBMessage = {
+          id,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: id }] },
+          createdAt: new Date(),
+        };
+        const messageList = new MessageList();
+        messageList.add(message, 'input');
+        await processor.processInput({
+          messages: [message],
+          messageList,
+          abort: () => {
+            throw new Error('Aborted');
+          },
+          requestContext,
+        });
+      }
+
+      expect(mockStorage.getResourceById).toHaveBeenCalledTimes(1);
     });
 
     it('should use default template when no working memory exists', async () => {

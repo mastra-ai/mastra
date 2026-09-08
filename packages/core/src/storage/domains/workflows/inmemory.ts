@@ -7,6 +7,7 @@ import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '../../types';
+import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
@@ -265,7 +266,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot = { ...snapshot, ...opts };
+    const { expectedStatus, ...state } = opts;
+    if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
+      return;
+    }
+
+    snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
@@ -295,7 +301,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
-      resourceId,
+      // A re-persist without a resourceId (e.g. resume) must not erase a
+      // previously-set value. Matches the persistent stores' COALESCE upserts.
+      resourceId: resourceId ?? existing?.resourceId,
       snapshot,
       // Preserve the original creation time when re-persisting an existing run; only set it
       // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the

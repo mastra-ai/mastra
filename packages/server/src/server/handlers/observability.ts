@@ -13,6 +13,8 @@ import {
   getSpanArgsSchema,
   getSpanResponseSchema,
   dateRangeSchema,
+  toTraceSpans,
+  traceSpanSchema,
 } from '@mastra/core/storage';
 // `branches*`, `listBranches*`, and `getBranch*` schemas are new in
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
@@ -38,6 +40,8 @@ import {
   getBranchArgsSchema,
   getBranchResponseSchema,
   listTracesLightResponseSchema,
+  batchDeleteTracesArgsSchema,
+  batchDeleteTracesResponseSchema,
 } from './observability-storage-schemas';
 
 export * from './observability-new-endpoints';
@@ -274,7 +278,7 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   path: '/observability/traces/:traceId',
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
-  responseSchema: getTraceResponseSchema,
+  responseSchema: getTraceResponseSchema.extend({ spans: z.array(traceSpanSchema) }),
   summary: 'Get AI trace by ID',
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
@@ -288,7 +292,9 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
       }
 
-      return trace;
+      // Stored SpanRecords carry no status field; derive it from error/endedAt so
+      // trace-detail spans match the status shown in trace list rows.
+      return { ...trace, spans: toTraceSpans(trace.spans) };
     } catch (error) {
       return handleError(error, 'Error getting trace');
     }
@@ -379,6 +385,30 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
       return trajectory;
     } catch (error) {
       return handleError(error, 'Error extracting trajectory from trace');
+    }
+  },
+});
+
+/** Route: POST /observability/traces/delete - batch delete traces with cross-signal cascade. */
+export const DELETE_TRACES_ROUTE: ServerRoute = createRoute({
+  method: 'POST',
+  path: '/observability/traces/delete',
+  responseType: 'json',
+  bodySchema: batchDeleteTracesArgsSchema.pick({ traceIds: true }),
+  responseSchema: batchDeleteTracesResponseSchema,
+  maxBodySize: 256 * 1024,
+  summary: 'Delete traces',
+  description:
+    'Deletes traces by ID, cascading to all associated data: spans, trace roots/branches, and signal events (scores, feedback, metrics, logs) that reference the deleted traces. Signals without a trace ID are untouched. Experiment traces are deleted like any other trace. On ClickHouse-backed stores, deletes are lightweight and reads may briefly return deleted rows until the delete is fully applied.',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceIds }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      await observabilityStore.batchDeleteTraces({ traceIds });
+      return { success: true as const };
+    } catch (error) {
+      return handleError(error, 'Error deleting traces');
     }
   },
 });

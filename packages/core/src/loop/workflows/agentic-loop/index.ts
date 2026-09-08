@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../memory';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
@@ -85,6 +86,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           params.workflowStatus === 'suspended'
         );
       },
+      // Excluding `running` means resume claims cannot persist; the agent loop
+      // serializes its own resumes, so suppress the per-resume warning.
+      allowUnclaimedResumes: true,
       // Agent-loop snapshots are pure resume artifacts — strip everything a
       // resume never reads (stale suspend payloads, duplicated message
       // arrays, AI SDK step history) before persisting.
@@ -109,9 +113,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       // fresh response message for the continuation. See issue #19445.
       if (isResumeContinuationPending) {
         isResumeContinuationPending = false;
-        messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
-
-        const nextMessageId = rest.rotateResponseMessageId();
+        const nextMessageId = rest.rotateResponseMessageId(
+          typedInputData.stepResult?.messageId ?? typedInputData.messageId,
+        );
         typedInputData.messageId = nextMessageId;
         if (typedInputData.stepResult) {
           typedInputData.stepResult.messageId = nextMessageId;
@@ -121,13 +125,15 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
       if (pendingSignals.length > 0) {
-        messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
-
-        const nextMessageId = rest.rotateResponseMessageId();
+        const nextMessageId = rest.rotateResponseMessageId(
+          typedInputData.stepResult?.messageId ?? typedInputData.messageId,
+        );
         typedInputData.messageId = nextMessageId;
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = messageList.addSignal(pendingSignal);
-          safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          if (!isSystemReminderSignalType(signalForTranscript.type)) {
+            safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+          }
         }
         if (typedInputData.stepResult) {
           typedInputData.stepResult.messageId = nextMessageId;

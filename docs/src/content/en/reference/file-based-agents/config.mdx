@@ -1,6 +1,6 @@
 ---
 title: "config.ts | File-based Agents"
-description: Set a file-based agent's model and runtime options in config.ts with agentConfig.
+description: "An agent's config.ts sets its model and runtime options. Use it for options that belong to the Agent itself, while sibling files provide instructions, tools, skills, et cetera."
 packages:
   - "@mastra/core"
 ---
@@ -110,7 +110,7 @@ Missing `instructions.md`, `instructions.ts`, and `config.instructions` fails th
 
 ## Discovery lifecycle
 
-File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/`, imports TypeScript and JavaScript modules, reads markdown instructions and skills, copies workspace seed files, and registers the assembled primitives with your Mastra app.
+File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/` and imports TypeScript and JavaScript modules. It also reads markdown instructions and skills. The bundler then copies workspace seed files and registers the assembled primitives with your Mastra app.
 
 After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). Calling it from the Agent API, Studio, workflows, or your application code uses the same runtime as a code-defined agent.
 

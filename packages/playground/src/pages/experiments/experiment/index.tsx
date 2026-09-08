@@ -7,11 +7,14 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useState } from 'react';
+import { Link, Outlet, useNavigate, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
+import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
+import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -24,6 +27,8 @@ function ExperimentPageShell({ children }: { children?: ReactNode }) {
 
 function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
+  const navigate = useNavigate();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -108,22 +113,44 @@ function ExperimentPage() {
   }
 
   return (
-    <PageLayout height="full">
-      <ExperimentTopArea experiment={experiment!} />
+    <ExperimentItemPanelProvider
+      experimentId={experimentId}
+      datasetId={datasetId}
+      experimentStatus={experiment!.status}
+      results={results ?? []}
+      isLoadingResults={resultsLoading}
+      hasNextPage={hasNextPage}
+    >
+      <div className="h-full">
+        <PageLayout height="full">
+          <ExperimentTopArea experiment={experiment!} onDeleteClick={() => setDeleteDialogOpen(true)} />
 
-      <PageLayout.MainArea>
-        <ExperimentPageTabs
+          <PageLayout.MainArea className="overflow-visible">
+            <ExperimentResultsSection
+              experimentId={experimentId}
+              datasetId={datasetId}
+              experimentStatus={experiment!.status}
+              results={results ?? []}
+              isLoading={resultsLoading}
+              setEndOfListElement={setEndOfListElement}
+              isFetchingNextPage={isFetchingNextPage}
+              hasNextPage={hasNextPage}
+            />
+          </PageLayout.MainArea>
+        </PageLayout>
+
+        {/* Item detail sub-route renders here as an absolute overlay panel */}
+        <Outlet />
+
+        <DeleteExperimentDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
           experimentId={experimentId}
-          datasetId={datasetId}
-          experimentStatus={experiment!.status}
-          results={results ?? []}
-          isLoading={resultsLoading}
-          setEndOfListElement={setEndOfListElement}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
+          experimentName={experiment!.name ?? undefined}
+          onSuccess={() => navigate('/experiments')}
         />
-      </PageLayout.MainArea>
-    </PageLayout>
+      </div>
+    </ExperimentItemPanelProvider>
   );
 }
 

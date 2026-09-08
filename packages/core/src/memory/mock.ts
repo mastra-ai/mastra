@@ -27,10 +27,12 @@ import type {
 /**
  * Deep-merge working memory objects.
  * Matches the semantics of `deepMergeWorkingMemory` in `@mastra/memory`:
- * - `null` values delete the corresponding key
+ * - `null` values delete the corresponding key, even when the key or its parent object does
+ *   not exist yet (so padded nulls never get stored literally)
  * - Arrays are replaced entirely (not merged element-by-element)
  * - Nested plain objects are merged recursively
  * - Primitives and new keys are set directly
+ * - The returned object is always newly constructed and never aliases `update`
  */
 function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
@@ -39,11 +41,8 @@ function deepMergeWorkingMemory(
   if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
     return existing && typeof existing === 'object' ? { ...existing } : {};
   }
-  if (!existing || typeof existing !== 'object') {
-    return update;
-  }
-
-  const result: Record<string, unknown> = { ...existing };
+  const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+  const result: Record<string, unknown> = { ...base };
 
   for (const key of Object.keys(update)) {
     const updateValue = update[key];
@@ -53,17 +52,13 @@ function deepMergeWorkingMemory(
       delete result[key];
     } else if (Array.isArray(updateValue)) {
       result[key] = updateValue;
-    } else if (
-      typeof updateValue === 'object' &&
-      updateValue !== null &&
-      typeof existingValue === 'object' &&
-      existingValue !== null &&
-      !Array.isArray(existingValue)
-    ) {
-      result[key] = deepMergeWorkingMemory(
-        existingValue as Record<string, unknown>,
-        updateValue as Record<string, unknown>,
-      );
+    } else if (typeof updateValue === 'object' && updateValue !== null) {
+      const existingBranch =
+        existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)
+          ? (existingValue as Record<string, unknown>)
+          : undefined;
+
+      result[key] = deepMergeWorkingMemory(existingBranch, updateValue as Record<string, unknown>);
     } else {
       result[key] = updateValue;
     }

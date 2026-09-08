@@ -21,7 +21,10 @@ const sidebars = {
           type: 'doc',
           id: 'channels/github',
           label: 'GitHub',
-          customProps: { icon: 'https://cdn.simpleicons.org/github/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/github/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/github/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -76,7 +79,10 @@ const sidebars = {
           type: 'doc',
           id: 'frameworks/express',
           label: 'Express',
-          customProps: { icon: 'https://cdn.simpleicons.org/express/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/express/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/express/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -94,7 +100,10 @@ const sidebars = {
           type: 'doc',
           id: 'frameworks/next-js',
           label: 'Next.js',
-          customProps: { icon: 'https://cdn.simpleicons.org/nextdotjs/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/nextdotjs/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/nextdotjs/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -114,6 +123,15 @@ const sidebars = {
           label: 'SvelteKit',
           customProps: { icon: 'https://cdn.simpleicons.org/svelte?viewbox=auto&size=28' },
         },
+        {
+          type: 'doc',
+          id: 'frameworks/tanstack-start',
+          label: 'TanStack Start',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/tanstack/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28',
+          },
+        },
       ],
     },
     {
@@ -125,7 +143,10 @@ const sidebars = {
           type: 'doc',
           id: 'agentic-ui/ai-sdk-ui',
           label: 'AI SDK UI',
-          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -165,9 +186,18 @@ const sidebars = {
           type: 'doc',
           id: 'sandboxes/apple-container',
           label: 'Apple Container',
-          customProps: { icon: 'https://cdn.simpleicons.org/apple/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/apple/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/apple/white?viewbox=auto&size=28',
+          },
         },
         { type: 'doc', id: 'sandboxes/blaxel', label: 'Blaxel', customProps: { icon: '/img/integrations/blaxel.svg' } },
+        {
+          type: 'doc',
+          id: 'sandboxes/cloudflare-sandbox',
+          label: 'Cloudflare Sandbox',
+          customProps: { icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28' },
+        },
         {
           type: 'doc',
           id: 'sandboxes/daytona',
@@ -188,6 +218,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'sandboxes/e2b-desktop',
+          label: 'E2B Desktop',
+          customProps: { icon: '/img/integrations/e2b.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'link',
+          label: 'Mastra',
+          href: '/reference/workspace/platform-sandbox',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/modal',
           label: 'Modal',
           customProps: { icon: 'https://cdn.simpleicons.org/modal?viewbox=auto&size=28' },
@@ -196,13 +238,19 @@ const sidebars = {
           type: 'doc',
           id: 'sandboxes/railway',
           label: 'Railway',
-          customProps: { icon: 'https://cdn.simpleicons.org/railway/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/railway/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/railway/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
           id: 'sandboxes/vercel',
           label: 'Vercel',
-          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
         },
       ],
     },
@@ -227,7 +275,10 @@ const sidebars = {
           type: 'doc',
           id: 'observability/braintrust',
           label: 'Braintrust',
-          customProps: { icon: 'https://cdn.simpleicons.org/braintrust/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/braintrust/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/braintrust/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -257,25 +308,43 @@ const sidebars = {
           type: 'doc',
           id: 'observability/langsmith',
           label: 'LangSmith',
-          customProps: { icon: 'https://cdn.simpleicons.org/langchaincorporate/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/langchaincorporate/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/langchaincorporate/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/observability',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
           type: 'doc',
           id: 'observability/opentelemetry',
           label: 'OpenTelemetry',
-          customProps: { icon: 'https://cdn.simpleicons.org/opentelemetry/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/opentelemetry/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/opentelemetry/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
           id: 'observability/posthog',
           label: 'PostHog',
-          customProps: { icon: 'https://cdn.simpleicons.org/posthog/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/posthog/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/posthog/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
           id: 'observability/sentry',
           label: 'Sentry',
-          customProps: { icon: 'https://cdn.simpleicons.org/sentry/362d59/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: '/img/integrations/sentry.svg',
+            iconDark: '/img/integrations/sentry-dark.svg',
+          },
         },
       ],
     },
@@ -334,6 +403,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/elasticsearch',
+          label: 'Elasticsearch',
+          customProps: { icon: 'https://cdn.simpleicons.org/elasticsearch?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/spanner',
           label: 'Google Cloud Spanner',
           customProps: { icon: 'https://cdn.simpleicons.org/googlecloudspanner?viewbox=auto&size=28' },
@@ -346,10 +421,22 @@ const sidebars = {
         },
         { type: 'doc', id: 'databases/libsql', label: 'libSQL', customProps: { icon: '/img/integrations/libsql.svg' } },
         {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/database',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
           type: 'doc',
           id: 'databases/mongodb',
           label: 'MongoDB',
           customProps: { icon: 'https://cdn.simpleicons.org/mongodb?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/mysql',
+          label: 'MySQL',
+          customProps: { icon: 'https://cdn.simpleicons.org/mysql?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
@@ -380,6 +467,12 @@ const sidebars = {
           id: 'databases/redis',
           label: 'Redis',
           customProps: { icon: 'https://cdn.simpleicons.org/redis?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'databases/valkey',
+          label: 'Valkey',
+          customProps: { icon: '/img/integrations/valkey.svg' },
         },
         {
           type: 'doc',
@@ -453,21 +546,57 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deploy/kubernetes-helm',
+          label: 'Kubernetes (Helm)',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/helm?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/helm/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'link',
+          label: 'Mastra',
+          href: '/docs/mastra-platform/deploy',
+          customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'deploy/neon',
+          label: 'Neon',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'deploy/netlify',
           label: 'Netlify',
           customProps: { icon: 'https://cdn.simpleicons.org/netlify?viewbox=auto&size=28' },
         },
         {
           type: 'doc',
+          id: 'deploy/render',
+          label: 'Render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'deploy/temporal',
           label: 'Temporal',
-          customProps: { icon: 'https://cdn.simpleicons.org/temporal/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/temporal/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/temporal/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
           id: 'deploy/vercel',
           label: 'Vercel',
-          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
         },
       ],
     },
@@ -487,6 +616,12 @@ const sidebars = {
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/parallel',
+          label: 'Parallel',
+          customProps: { icon: '/img/integrations/parallel.svg' },
         },
         {
           type: 'doc',
@@ -533,7 +668,16 @@ const sidebars = {
           type: 'doc',
           id: 'voice/elevenlabs',
           label: 'ElevenLabs',
-          customProps: { icon: 'https://cdn.simpleicons.org/elevenlabs/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/elevenlabs/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/elevenlabs/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'voice/gladia',
+          label: 'Gladia',
+          customProps: { icon: '/img/integrations/gladia.svg', customCSS: 'dark:invert' },
         },
         {
           type: 'doc',
@@ -551,13 +695,22 @@ const sidebars = {
           type: 'doc',
           id: 'voice/livekit',
           label: 'LiveKit',
-          customProps: { icon: 'https://cdn.simpleicons.org/livekit/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/livekit/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/livekit/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
           id: 'voice/mistral',
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/modelslab',
+          label: 'ModelsLab',
+          customProps: { icon: '/img/integrations/modelslab.svg' },
         },
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {
@@ -604,7 +757,10 @@ const sidebars = {
           type: 'doc',
           id: 'auth/better-auth',
           label: 'Better Auth',
-          customProps: { icon: 'https://cdn.simpleicons.org/betterauth/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/betterauth/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/betterauth/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -653,7 +809,10 @@ const sidebars = {
           type: 'doc',
           id: 'browsers/agent-browser',
           label: 'AgentBrowser',
-          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -729,7 +888,10 @@ const sidebars = {
           type: 'doc',
           id: 'file-storage/vercel-files',
           label: 'Vercel Files',
-          customProps: { icon: 'https://cdn.simpleicons.org/vercel/black/white?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/vercel/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
+          },
         },
       ],
     },

@@ -6,9 +6,11 @@ import { createElement } from 'react';
 import type { ToasterProps } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { sonnerMock, ToasterMock } = vi.hoisted(() => {
+const { sonnerDefault, sonnerMock, ToasterMock } = vi.hoisted(() => {
   const ToasterMock = vi.fn<(props: ToasterProps) => null>(() => null);
   return {
+    // Sonner's own callable export, so tests can see what is handed to it.
+    sonnerDefault: vi.fn((..._args: unknown[]) => undefined),
     sonnerMock: {
       success: vi.fn(),
       error: vi.fn(),
@@ -22,7 +24,7 @@ const { sonnerMock, ToasterMock } = vi.hoisted(() => {
 });
 
 vi.mock('sonner', () => ({
-  toast: Object.assign((..._args: unknown[]) => undefined, sonnerMock),
+  toast: Object.assign(sonnerDefault, sonnerMock),
   Toaster: ToasterMock,
 }));
 
@@ -30,6 +32,7 @@ import { Toaster, toast } from './toast';
 
 beforeEach(() => {
   Object.values(sonnerMock).forEach(fn => fn.mockClear());
+  sonnerDefault.mockClear();
   ToasterMock.mockClear();
 });
 
@@ -153,5 +156,69 @@ describe('toast.promise wrapper', () => {
     });
     const opts = sonnerMock.promise.mock.calls[0][1];
     expect(opts.error(new Error('boom'))).toBe('boom');
+  });
+});
+
+describe('toast entry point', () => {
+  it('emits one sonner call per array item', () => {
+    const result = toast(['one', 'two']);
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
+    expect(sonnerDefault).toHaveBeenCalledTimes(2);
+    expect(sonnerDefault).toHaveBeenNthCalledWith(1, 'one', {});
+    expect(sonnerDefault).toHaveBeenNthCalledWith(2, 'two', {});
+  });
+
+  it('accepts a React element', () => {
+    expect(() => toast(createElement('span', null, 'hi'))).not.toThrow();
+  });
+
+  it('rejects a message it cannot render', () => {
+    expect(() => toast(42 as unknown as string)).toThrow('Invalid message type');
+    expect(() => toast(null)).toThrow('Invalid message type');
+  });
+
+  it('forwards a custom node and a dismiss id', () => {
+    const node = createElement('span', null, 'custom');
+    toast.custom(node);
+    toast.dismiss('toast-1');
+
+    // `custom` goes straight through sonner's callable export.
+    expect(sonnerDefault).toHaveBeenCalledWith(node, {});
+    expect(sonnerMock.dismiss).toHaveBeenCalledWith('toast-1');
+  });
+});
+
+describe('toast.promise fallbacks', () => {
+  it('defaults the loading message', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
+
+    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Loading...');
+  });
+
+  it('falls back to a generic message for a non-Error rejection', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok' });
+
+    expect(sonnerMock.promise.mock.calls[0][1].error('a string reason')).toBe('Error...');
+  });
+
+  it('runs the caller callbacks alongside the messages', () => {
+    const onSuccess = vi.fn();
+    const onError = vi.fn();
+    toast.promise({ myPromise: Promise.resolve({ id: 1 }), successMessage: 'ok', onSuccess, onError });
+
+    const opts = sonnerMock.promise.mock.calls[0][1];
+    opts.success({ id: 1 });
+    opts.error(new Error('boom'));
+
+    expect(onSuccess).toHaveBeenCalledWith({ id: 1 });
+    expect(onError).toHaveBeenCalledWith(new Error('boom'));
+  });
+
+  it('lets caller options override the derived shape', () => {
+    toast.promise({ myPromise: Promise.resolve(null), successMessage: 'ok', options: { loading: 'Mine' } });
+
+    expect(sonnerMock.promise.mock.calls[0][1].loading).toBe('Mine');
   });
 });

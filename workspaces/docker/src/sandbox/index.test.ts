@@ -31,6 +31,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     on: vi.fn(),
     write: vi.fn(),
     end: vi.fn(),
+    writableEnded: false,
   };
 
   const mockExec = {
@@ -103,6 +104,11 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     });
     mockStream.on.mockReset();
     mockStream.write.mockReset();
+    mockStream.writableEnded = false;
+    mockStream.end.mockReset().mockImplementation((callback?: () => void) => {
+      mockStream.writableEnded = true;
+      callback?.();
+    });
   };
 
   return { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults };
@@ -221,6 +227,38 @@ describe('DockerSandbox', () => {
       );
       expect(mockContainer.start).toHaveBeenCalled();
       expect(sandbox.status).toBe('running');
+    });
+
+    it('uses workingDirectory as the container WorkingDir', async () => {
+      const sandbox = new DockerSandbox({ workingDirectory: '/srv/app' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/srv/app' }));
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('workingDirectory wins over the deprecated workingDir alias', async () => {
+      const sandbox = new DockerSandbox({ workingDirectory: '/srv/app', workingDir: '/legacy' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/srv/app' }));
+      expect(sandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('the deprecated workingDir alias still applies', async () => {
+      const sandbox = new DockerSandbox({ workingDir: '/legacy' });
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/legacy' }));
+      expect(sandbox.workingDirectory).toBe('/legacy');
+    });
+
+    it('defaults to /workspace when neither option is set', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(expect.objectContaining({ WorkingDir: '/workspace' }));
+      expect(sandbox.workingDirectory).toBe('/workspace');
     });
 
     it('should include environment variables', async () => {
@@ -876,6 +914,17 @@ describe('DockerSandbox', () => {
       expect(mockExec.start).toHaveBeenCalledWith({ hijack: true, stdin: true });
     });
 
+    it('should close the writable side of the exec stream to signal EOF', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('cat');
+      await handle.closeStdin();
+      await handle.closeStdin();
+
+      expect(mockStream.end).toHaveBeenCalledTimes(1);
+    });
+
     it('should pass per-spawn environment variables', async () => {
       const sandbox = new DockerSandbox({ env: { GLOBAL: 'yes' } });
       await sandbox._start();
@@ -885,6 +934,20 @@ describe('DockerSandbox', () => {
       expect(mockContainer.exec).toHaveBeenCalledWith(
         expect.objectContaining({
           Env: expect.arrayContaining(['GLOBAL=yes', 'LOCAL=yes']),
+        }),
+      );
+    });
+
+    it('setEnv after construction reaches subsequent spawns', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.processes!.spawn('echo hello');
+
+      expect(mockContainer.exec).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: expect.arrayContaining(['GH_TOKEN=tok_1']),
         }),
       );
     });

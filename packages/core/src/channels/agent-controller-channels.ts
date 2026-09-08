@@ -260,13 +260,22 @@ export class AgentControllerChannels extends AgentChannels {
   protected override async dispatchInboundMessage(args: {
     signalContents: AgentSignalContents;
     attributes: Record<string, string | undefined>;
+    signalMetadata: Record<string, unknown>;
     providerOptions: MastraProviderMetadata;
     requestContext: RequestContext;
     thread: StorageThreadType;
     memory: { thread: string; resource: string };
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, providerOptions, requestContext, thread, autoResumeSuspendedTools } = args;
+    const {
+      signalContents,
+      attributes,
+      signalMetadata,
+      providerOptions,
+      requestContext,
+      thread,
+      autoResumeSuspendedTools,
+    } = args;
 
     // The tenant, when there is one, is already stamped on `requestContext` by
     // the channel handler that accepted this message — a host that maps
@@ -288,13 +297,17 @@ export class AgentControllerChannels extends AgentChannels {
       this.autoApproveResourceIds.delete(sessionResourceId);
     }
 
-    const result = session.sendSignal({
-      content: signalContents,
-      ifActive: { attributes },
-      ifIdle: { attributes },
-      requestContext,
-      providerOptions,
-    });
+    const result = session.sendSignal(
+      {
+        type: 'user',
+        tagName: 'user',
+        contents: signalContents,
+        attributes,
+        ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
+        providerOptions,
+      },
+      { requestContext },
+    );
     await result.accepted;
   }
 

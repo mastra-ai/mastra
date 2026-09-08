@@ -496,6 +496,8 @@ describe('loadMcpConfig', () => {
   let homeDir: string;
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
+  let previousCodexHome: string | undefined;
+  let previousCodexToken: string | undefined;
 
   beforeEach(() => {
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-config-'));
@@ -504,6 +506,8 @@ describe('loadMcpConfig', () => {
     homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-home-'));
     previousHome = process.env.HOME;
     previousUserProfile = process.env.USERPROFILE;
+    previousCodexHome = process.env.CODEX_HOME;
+    previousCodexToken = process.env.CODEX_TOKEN;
     process.env.HOME = homeDir;
     process.env.USERPROFILE = homeDir;
   });
@@ -513,6 +517,10 @@ describe('loadMcpConfig', () => {
     else process.env.HOME = previousHome;
     if (previousUserProfile === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = previousUserProfile;
+    if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousCodexHome;
+    if (previousCodexToken === undefined) delete process.env.CODEX_TOKEN;
+    else process.env.CODEX_TOKEN = previousCodexToken;
     fs.rmSync(projectDir, { recursive: true, force: true });
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
@@ -584,5 +592,81 @@ describe('loadMcpConfig', () => {
     const config = loadMcpConfig(projectDir);
 
     expect(config.mcpServers!['shared']).toEqual({ command: 'root-cmd', args: undefined, env: undefined });
+  });
+
+  it('loads the global Claude Code config only when enabled', () => {
+    writeJson(path.join(homeDir, '.claude.json'), {
+      mcpServers: { claudeGlobal: { command: 'claude-global' } },
+    });
+
+    expect(loadMcpConfig(projectDir).mcpServers).toBeUndefined();
+    expect(loadMcpConfig(projectDir, '.mastracode', { claudeCodeGlobal: true }).mcpServers).toEqual({
+      claudeGlobal: { command: 'claude-global', args: undefined, env: undefined },
+    });
+  });
+
+  it('loads and normalizes the global Codex config only when enabled', () => {
+    const codexDir = path.join(homeDir, 'custom-codex');
+    process.env['CODEX_HOME'] = codexDir;
+    fs.mkdirSync(codexDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(codexDir, 'config.toml'),
+      [
+        '[mcp_servers.stdio]',
+        'command = "npx"',
+        'args = ["-y", "example"]',
+        '[mcp_servers.stdio.env]',
+        'TOKEN = "${CODEX_TOKEN}"',
+        '',
+        '[mcp_servers.remote]',
+        'url = "https://example.com/mcp"',
+        'bearer_token_env_var = "CODEX_TOKEN"',
+        '[mcp_servers.remote.http_headers]',
+        'X-Source = "codex"',
+        '',
+        '[mcp_servers.disabled]',
+        'command = "ignored"',
+        'enabled = false',
+      ].join('\n'),
+    );
+    process.env['CODEX_TOKEN'] = 'secret';
+
+    expect(loadMcpConfig(projectDir).mcpServers).toBeUndefined();
+    expect(loadMcpConfig(projectDir, '.mastracode', { codexGlobal: true }).mcpServers).toEqual({
+      stdio: { command: 'npx', args: ['-y', 'example'], env: { TOKEN: 'secret' } },
+      remote: {
+        url: 'https://example.com/mcp',
+        headers: { 'X-Source': 'codex', Authorization: 'Bearer secret' },
+        oauth: undefined,
+      },
+    });
+  });
+
+  it('uses Claude global, then Codex global, then existing Mastra source precedence', () => {
+    writeJson(path.join(homeDir, '.claude.json'), {
+      mcpServers: { shared: { command: 'claude-global' } },
+    });
+    const codexDir = path.join(homeDir, '.codex');
+    fs.mkdirSync(codexDir, { recursive: true });
+    fs.writeFileSync(path.join(codexDir, 'config.toml'), '[mcp_servers.shared]\ncommand = "codex-global"\n');
+    writeJson(path.join(homeDir, '.mastracode', 'mcp.json'), {
+      mcpServers: { shared: { command: 'mastra-global' } },
+    });
+
+    const config = loadMcpConfig(projectDir, '.mastracode', { claudeCodeGlobal: true, codexGlobal: true });
+
+    expect(config.mcpServers!['shared']).toEqual({ command: 'mastra-global', args: undefined, env: undefined });
+  });
+
+  it('silently ignores malformed external config files', () => {
+    fs.writeFileSync(path.join(homeDir, '.claude.json'), '{bad json');
+    const codexDir = path.join(homeDir, '.codex');
+    fs.mkdirSync(codexDir, { recursive: true });
+    fs.writeFileSync(path.join(codexDir, 'config.toml'), 'not valid = [');
+
+    const config = loadMcpConfig(projectDir, '.mastracode', { claudeCodeGlobal: true, codexGlobal: true });
+
+    expect(config.mcpServers).toBeUndefined();
+    expect(config.skippedServers).toBeUndefined();
   });
 });

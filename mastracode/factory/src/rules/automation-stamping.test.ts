@@ -1,16 +1,14 @@
 /**
  * Automation moves flow through the governed transition path: a system-actor
  * transition stamps the rules-engine actor id into stage history (`by` on
- * entered stages, `exitedBy` on closed ones), and metrics attribute the pass
- * to automation.
+ * entered stages, `exitedBy` on closed ones) — the record every actor-based
+ * read, metrics included, is built on.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { computeFactoryMetrics } from '../storage/domains/work-items/metrics.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -48,7 +46,7 @@ describe('governed automation moves', () => {
   it('stamps the rules-engine actor on entered and exited history entries', async () => {
     const created = await workItems.upsert({ orgId: 'org1', userId: 'user_1', factoryProjectId: PROJECT_ID, input });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage: workItems,
     });
 
@@ -63,20 +61,12 @@ describe('governed automation moves', () => {
     expect(closed.exitedBy).toBe(DISPATCHER);
     expect(opened.by).toBe(DISPATCHER);
     expect(opened.exitedAt).toBeUndefined();
-
-    // Metrics split human vs total accordingly: intake entered by a human,
-    // triage entered by the rules engine → 1 human of 2 total.
-    const metrics = computeFactoryMetrics([moved!], {
-      windowStart: Date.now() - 60_000,
-      windowEnd: Date.now() + 60_000,
-    });
-    expect(metrics.transitions).toEqual({ human: 1, total: 2 });
   });
 
   it('rejects items outside the org without moving them', async () => {
     const created = await workItems.upsert({ orgId: 'org1', userId: 'user_1', factoryProjectId: PROJECT_ID, input });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage: workItems,
     });
 

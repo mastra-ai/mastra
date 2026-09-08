@@ -2,7 +2,7 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -348,6 +348,8 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
 
   // Dynamic grid columns
   const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
+
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
   return (
     <>
@@ -740,7 +742,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               </div>
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0">
+            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
               <DataList.Top hasLeadingCell>
                 {!showCompleted ? (
                   <DataList.TopSelectCell
@@ -760,19 +762,19 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 </DataList.TopCells>
               </DataList.Top>
 
-              {displayItems.map(item => {
+              {displayItems.map((item, index) => {
                 const scoreEntries = item.scores ? Object.entries(item.scores) : [];
                 const isFeatured = featuredItemId === item.id;
 
                 const rowCells = (
                   <>
                     {/* Input preview */}
-                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
+                    <DataList.Cell className="text-neutral4 min-w-0">
                       <span className="block truncate">{truncateInput(item.input, 80)}</span>
                     </DataList.Cell>
 
                     {/* Comment preview */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.comment ? (
                         <Txt variant="ui-xs" className="text-neutral3 truncate">
                           {item.comment}
@@ -785,7 +787,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     </DataList.Cell>
 
                     {/* Tags */}
-                    <DataList.Cell height="compact" className="min-w-0">
+                    <DataList.Cell className="min-w-0">
                       {item.tags.length > 0 ? (
                         <Txt variant="ui-xs" className="text-neutral4 truncate">
                           {item.tags.join(', ')}
@@ -798,7 +800,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     </DataList.Cell>
 
                     {/* Rating */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {item.rating === 'positive' && (
                         <Icon size="sm" className="text-positive1">
                           <ThumbsUp />
@@ -817,7 +819,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     </DataList.Cell>
 
                     {/* Scores */}
-                    <DataList.Cell height="compact">
+                    <DataList.Cell>
                       {scoreEntries.length > 0 ? (
                         <span className="flex items-center gap-1">
                           <Icon size="sm" className="text-neutral3">
@@ -826,7 +828,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                           <Txt variant="ui-xs" className="text-neutral4 font-mono">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
-                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
                         </span>
                       ) : (
                         <Txt variant="ui-xs" className="text-neutral2">
@@ -846,7 +848,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                         aria-label={`Select item ${item.id}`}
                       />
                     ) : (
-                      <DataList.Cell height="compact" className="justify-items-center px-4">
+                      <DataList.Cell className="justify-items-center px-4">
                         <div
                           role="img"
                           aria-label={item.error ? 'Error' : 'Success'}
@@ -856,10 +858,10 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       </DataList.Cell>
                     )}
                     <DataList.RowButton
-                      flushLeft
                       colStart={2}
                       featured={isFeatured}
                       onClick={() => handleRowClick(item.id)}
+                      {...getRowProps(index)}
                     >
                       {rowCells}
                     </DataList.RowButton>

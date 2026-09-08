@@ -8,6 +8,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface ReviewItem {
   id: string;
@@ -32,6 +33,12 @@ function formatUnknown(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function getScoreBadgeVariant(score: number) {
+  if (score >= 0.7) return 'green';
+  if (score >= 0.4) return 'yellow';
+  return 'red';
 }
 
 export function ReviewItemCard({
@@ -144,9 +151,7 @@ export function ReviewItemCard({
             {isCompleted ? (
               <div className="flex flex-wrap gap-1">
                 {item.tags.map(tag => (
-                  <Badge key={tag} variant="default">
-                    {tag}
-                  </Badge>
+                  <ComputedTag key={tag} value={tag} size="sm" />
                 ))}
               </div>
             ) : (
@@ -164,13 +169,11 @@ export function ReviewItemCard({
                 {Object.entries(item.scores)
                   .slice(0, 2)
                   .map(([name, score]) => (
-                    <Badge key={name} variant={score >= 0.7 ? 'success' : score >= 0.4 ? 'warning' : 'error'}>
+                    <Badge key={name} variant={getScoreBadgeVariant(score)}>
                       {name}: {typeof score === 'number' ? score.toFixed(2) : score}
                     </Badge>
                   ))}
-                {Object.keys(item.scores).length > 2 && (
-                  <Badge variant="default">+{Object.keys(item.scores).length - 2}</Badge>
-                )}
+                {Object.keys(item.scores).length > 2 && <Badge>+{Object.keys(item.scores).length - 2}</Badge>}
               </div>
             </div>
           )}

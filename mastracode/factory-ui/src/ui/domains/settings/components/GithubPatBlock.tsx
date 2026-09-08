@@ -28,6 +28,7 @@ export function GithubPatBlock() {
 
   return (
     <SettingsSubsection
+      scope="org"
       title="GitHub CLI tokens"
       description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
     >
@@ -83,13 +84,13 @@ function TokenRow({
 
   return (
     <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
             <Txt variant="ui-md" className="text-icon5">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'success' : 'default'}>
+            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>

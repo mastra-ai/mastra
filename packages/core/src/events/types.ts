@@ -81,6 +81,11 @@ export interface SubscribeOptions {
    */
   group?: string;
   /**
+   * Where a newly created subscription should begin reading.
+   * Defaults to 'earliest'. Existing consumer groups keep their checkpoint.
+   */
+  startFrom?: 'earliest' | 'latest';
+  /**
    * Opt-in batching policy. When omitted, behavior is unchanged.
    */
   batch?: SubscribeBatchOptions;

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useNoise, useNoiseExamples } from './hooks';
 import { shareSentence } from './signal-formatting';
+import type { ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
 import { TraceInsightView } from './trace-insight-view';
 import type { TraceSignalName } from './types';
 import {
@@ -19,11 +20,24 @@ interface NoiseDetailPanelProps {
   entityType: string;
   snapshotId: string;
   signalName: TraceSignalName | undefined;
+  filters?: ThemeSelection[];
+  filteredStats?: ThemeSelectionStats;
   onClose: () => void;
 }
 
-export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName, onClose }: NoiseDetailPanelProps) {
-  const examplesContextKey = `${snapshotId}:${signalName ?? ''}`;
+export function NoiseDetailPanel({
+  entityId,
+  entityType,
+  snapshotId,
+  signalName,
+  filters = [],
+  filteredStats,
+  onClose,
+}: NoiseDetailPanelProps) {
+  const filterKey = filters
+    .map(filter => `${filter.signalName}:${filter.kind === 'theme' ? filter.themeId : 'noise'}`)
+    .join(',');
+  const examplesContextKey = `${snapshotId}:${signalName ?? ''}:${filterKey}`;
   const [examplesPage, setExamplesPage] = useState(() => ({ contextKey: examplesContextKey, offset: 0 }));
   const examplesOffset = examplesPage.contextKey === examplesContextKey ? examplesPage.offset : 0;
   const [insightTraceId, setInsightTraceId] = useState<string>();
@@ -35,6 +49,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
     snapshotId,
     EXAMPLES_PAGE_SIZE,
     examplesOffset,
+    filters,
   );
 
   return (
@@ -74,7 +89,10 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                 {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
                 {noiseQuery.data && (
                   <p className="text-neutral5 mt-4 font-mono text-sm tabular-nums">
-                    {shareSentence(noiseQuery.data.noise.traceCount, noiseQuery.data.noise.coverage)}
+                    {shareSentence(
+                      filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount,
+                      filteredStats?.stageShare ?? noiseQuery.data.noise.coverage,
+                    )}
                   </p>
                 )}
               </section>
@@ -107,7 +125,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
                     )}
                     {noiseQuery.data && (
                       <ExamplesPager
-                        traceCount={noiseQuery.data.noise.traceCount}
+                        traceCount={filteredStats?.traceCount ?? noiseQuery.data.noise.traceCount}
                         offset={examplesOffset}
                         onOffsetChange={offset => setExamplesPage({ contextKey: examplesContextKey, offset })}
                       />

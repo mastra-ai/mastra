@@ -1,26 +1,50 @@
 /* Sweeping highlight for text that is still being produced.
- * The gradient period is a fixed pixel width and the animation travels exactly
- * one period, so the loop never jumps and a short label sweeps at the same
- * speed as a long one. The sweep is relative to the inherited color, so muted
- * text stays muted and only brightens as the highlight passes through it. */
+ *
+ * One highlight, sized to whatever it wraps: three element-widths of gradient
+ * with the bright band in the middle third, travelled end to end. A tiled period
+ * kept the speed constant across labels of any length, but showed the same sweep
+ * three or four times over on a long row, which read as a broken pattern rather
+ * than a light. Scaling to the element trades exact speed for one clean pass.
+ *
+ * Both ends of the travel park the band outside the box, so the easing's slow
+ * quarters fall off-screen and only the fast middle crosses the text. The sweep
+ * is relative to the inherited color, so muted text stays muted and only
+ * brightens as the highlight passes through it.
+ *
+ * Landing is a fade, not a stop: the band freezes where it stands and the dim
+ * ends of the gradient rise to the text colour, so the highlight dissolves
+ * rather than snapping off mid-sweep. Registering the colour is what makes it
+ * transitionable at all. */
+@property --shimmer-dim {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
 .shimmer-text {
-  --shimmer-period: 120px;
+  --shimmer-travel: 300%;
   --shimmer-dim: color-mix(in oklab, currentcolor 55%, transparent);
 
-  background-image: linear-gradient(90deg, var(--shimmer-dim) 0%, currentcolor 50%, var(--shimmer-dim) 100%);
-  background-size: var(--shimmer-period) 100%;
-  background-repeat: repeat;
+  background-image: linear-gradient(90deg, var(--shimmer-dim) 42%, currentcolor 50%, var(--shimmer-dim) 58%);
+  background-size: var(--shimmer-travel) 100%;
+  background-repeat: no-repeat;
   /* Chrome < 120 and Safari < 14 only clip to text prefixed. */
   -webkit-background-clip: text;
   background-clip: text;
   /* Zeroing the fill rather than `color` keeps `currentcolor` resolvable above. */
   -webkit-text-fill-color: transparent;
-  animation: shimmer-text 1.25s linear infinite;
+  animation: shimmer-text 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  transition: --shimmer-dim 320ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.shimmer-settled {
+  --shimmer-dim: currentcolor;
+  animation-play-state: paused;
 }
 
 @keyframes shimmer-text {
   from {
-    background-position: calc(-1 * var(--shimmer-period)) 0;
+    background-position: 100% 0;
   }
 
   to {
@@ -33,5 +57,6 @@
     background-image: none;
     -webkit-text-fill-color: currentcolor;
     animation: none;
+    transition: none;
   }
 }

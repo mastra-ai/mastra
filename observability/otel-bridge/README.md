@@ -4,88 +4,13 @@ OpenTelemetry Bridge for Mastra Observability.
 
 Enables bidirectional integration between Mastra and OpenTelemetry infrastructure, creating real OTEL spans for Mastra operations and maintaining proper trace hierarchy.
 
-## Overview
-
-`@mastra/otel-bridge` connects Mastra's observability system with standard OpenTelemetry instrumentation through bidirectional integration:
-
-**From OTEL to Mastra:**
-
-- Reads from OTEL ambient context (AsyncLocalStorage) automatically
-- Inherits trace ID and parent span ID from active OTEL spans
-- Works with standard OTEL auto-instrumentation (no middleware needed)
-
-**From Mastra to OTEL:**
-
-- Creates real OTEL spans for Mastra operations (agents, LLM calls, tools, workflows)
-- Maintains proper parent-child relationships in distributed traces
-- Allows OTEL-instrumented code (DB calls, HTTP clients) within Mastra operations to nest correctly
-- Exports spans with OTEL semantic conventions for GenAI operations
-- Forwards Mastra log events to the globally-registered OTEL `LoggerProvider`. Logs that originate inside a Mastra span are emitted under that span's OTEL context, so backends correlate logs to traces using the standard OTLP fields. If no `LoggerProvider` is registered, log emission is a silent no-op.
-
 ## Installation
 
 ```bash
 npm install @mastra/otel-bridge
-# or
-pnpm add @mastra/otel-bridge
 ```
 
-For the standard OTEL setup (recommended), also install:
-
-```bash
-npm install @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
-# or
-pnpm add @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
-```
-
-## Quick Start
-
-### 1. Set up OpenTelemetry (Standard Pattern)
-
-Create an `instrumentation.js` file and import it **before** any other code:
-
-```javascript
-// instrumentation.js
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-
-const sdk = new NodeSDK({
-  serviceName: 'my-service',
-  traceExporter: new OTLPTraceExporter({
-    url: 'http://localhost:4318/v1/traces',
-  }),
-  instrumentations: [
-    getNodeAutoInstrumentations({
-      // Automatically instruments Express, Fastify, HTTP, and many others
-      '@opentelemetry/instrumentation-fs': {
-        enabled: false,
-      },
-    }),
-  ],
-});
-
-sdk.start();
-
-process.on('SIGTERM', async () => {
-  await sdk.shutdown();
-  process.exit(0);
-});
-```
-
-Then import this file first in your application:
-
-```typescript
-// IMPORTANT: Import instrumentation FIRST!
-import './instrumentation.js';
-
-// Now import your application code
-import express from 'express';
-import { Mastra } from '@mastra/core';
-// ... rest of your imports
-```
-
-### 2. Configure Mastra with OtelBridge
+## Usage
 
 ```typescript
 import { OtelBridge } from '@mastra/otel-bridge';
@@ -105,97 +30,14 @@ const mastra = new Mastra({
 });
 ```
 
-### 3. Use Your Agent
+## Documentation
 
-The OTEL SDK's auto-instrumentation handles context propagation automatically via AsyncLocalStorage. The bridge creates OTEL spans for all Mastra operations.
+- [@mastra/otel-bridge documentation](https://mastra.ai/integrations/observability/opentelemetry)
 
-```typescript
-// Example: Express endpoint using Mastra agent
-app.post('/chat', async (req, res) => {
-  // OTEL auto-instrumentation creates HTTP span
-  // Bridge inherits trace context and creates child spans for agent operations
-  const result = await myAgent.generate(req.body.message);
-  res.json(result);
-});
-```
+## Changelog
 
-## How It Works
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/observability/otel-bridge/CHANGELOG.md) for version history and release notes.
 
-### Span Creation
+## Support
 
-When Mastra creates a span (agent run, LLM call, tool execution, etc.):
-
-1. **Bridge creates OTEL span** at span creation time with:
-   - SpanKind (SERVER for agents/workflows, CLIENT for LLM/MCP tools, INTERNAL for others)
-   - Parent context (from active OTEL context or parent Mastra span)
-   - Initial span name
-
-2. **Mastra uses OTEL IDs**:
-   - `spanId` = OTEL span's 16-char hex ID
-   - `traceId` = OTEL span's 32-char hex trace ID
-   - `parentSpanId` = parent OTEL span's ID
-
-3. **Internal spans are skipped**:
-   - Only external spans (user-facing operations) create OTEL spans
-   - Internal spans (workflow internals) don't create OTEL spans to avoid orphaned references
-
-### Span Finalization
-
-When a Mastra span ends:
-
-1. **Bridge retrieves OTEL span** from map using span ID
-2. **Sets all final attributes** using SpanConverter (same formatting as otel-exporter):
-   - OTEL semantic conventions for GenAI (`gen_ai.*`)
-   - Model parameters, usage, finish reasons
-   - Tool names, inputs, outputs
-   - Error information
-3. **Updates span name** to OTEL-compliant format (e.g., `chat gpt-4`, `agent.my-agent`)
-4. **Ends OTEL span** and removes from map
-
-### Context Execution
-
-The bridge provides `executeInContext()` and `executeInContextSync()` to run code within a Mastra span's OTEL context. This allows OTEL-instrumented code (DB clients, HTTP clients) to nest correctly under Mastra spans.
-
-### Log Forwarding
-
-When a `LoggerProvider` is registered globally (e.g. via `@opentelemetry/sdk-logs`, or via `NodeSDK`'s `logRecordProcessor` option), the bridge forwards every Mastra log event to it as an OTEL `LogRecord`. Trace correlation is automatic:
-
-1. If the log carries a `spanId` the bridge created an OTEL span for, the log is emitted under that span's stored OTEL context — so it nests beneath the Mastra span in distributed traces.
-2. Otherwise, if the log carries `traceId` and `spanId`, those are attached to the emitted log record's `SpanContext` so backends can still correlate by ID.
-3. Otherwise, the log is emitted under whatever OTEL context is currently active.
-
-Log severity, message body, structured `data`, and `metadata` are mapped to the OTEL `LogRecord` shape. `mastra.traceId` / `mastra.spanId` attributes are also attached for backends that key off attributes only.
-
-To wire up logs alongside traces, pass `logRecordProcessor` to `NodeSDK`:
-
-```javascript
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-
-const sdk = new NodeSDK({
-  // ...trace config as usual
-  logRecordProcessor: new BatchLogRecordProcessor(new OTLPLogExporter()),
-});
-```
-
-## Requirements
-
-- **Dependencies**:
-  - `@mastra/core` >= 1.0.0
-  - `@opentelemetry/api` >= 1.9.0
-  - `@opentelemetry/api-logs` >= 0.215.0
-
-**For Standard OTEL Setup:**
-
-- `@opentelemetry/sdk-node` >= 0.205.0
-- `@opentelemetry/auto-instrumentations-node` >= 0.64.1
-
-**For Log Forwarding (optional):**
-
-- `@opentelemetry/sdk-logs` >= 0.215.0
-- An OTLP log exporter for your protocol (e.g. `@opentelemetry/exporter-logs-otlp-http`)
-
-## License
-
-Apache 2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

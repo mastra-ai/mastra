@@ -5,7 +5,7 @@ const OG_TEST_PAGES = [
   { path: '/models', name: 'Models – Index' },
   { path: '/models/providers/openai', name: 'Models – OpenAI' },
   { path: '/integrations', name: 'Integrations – Index' },
-  { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
+  { path: '/reference/voice/overview', name: 'Reference – Voice' },
   { path: '/reference/configuration', name: 'Reference – Configuration' },
 ]
 

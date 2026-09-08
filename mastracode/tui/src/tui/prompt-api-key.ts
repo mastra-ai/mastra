@@ -10,22 +10,19 @@ import { showModalOverlay } from './overlay.js';
 
 /**
  * If the selected model doesn't have an API key, show a dialog to enter one.
- * Returns the model ID on success or when cancelled (same behavior — cancelling
- * just means no key was stored, but the model is still selected).
- *
- * Resolves after the user submits or cancels the dialog.
+ * Returns `cancelled` when the user closes the dialog without saving a key.
  */
 export function promptForApiKeyIfNeeded(
   ui: TUI,
   model: ModelItem,
   authStorage: AuthStorage | undefined,
-): Promise<void> {
+): Promise<'ready' | 'cancelled'> {
   // Model already has a key (env var or stored) — nothing to do
   if (model.hasApiKey || !authStorage) {
-    return Promise.resolve();
+    return Promise.resolve('ready');
   }
 
-  return new Promise<void>(resolve => {
+  return new Promise<'ready' | 'cancelled'>(resolve => {
     const dialog = new ApiKeyDialogComponent({
       providerName: model.provider,
       apiKeyEnvVar: model.apiKeyEnvVar,
@@ -33,11 +30,11 @@ export function promptForApiKeyIfNeeded(
         ui.hideOverlay();
         // Store the key and set env var so model resolution picks it up
         authStorage.setStoredApiKey(model.provider, key, model.apiKeyEnvVar);
-        resolve();
+        resolve('ready');
       },
       onCancel: () => {
         ui.hideOverlay();
-        resolve();
+        resolve('cancelled');
       },
     });
 

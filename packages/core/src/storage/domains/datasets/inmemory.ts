@@ -9,6 +9,7 @@ import type {
   AddDatasetItemInput,
   UpdateDatasetItemInput,
   DeleteDatasetItemInput,
+  PurgeDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -286,6 +287,9 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (currentRow.datasetId !== args.datasetId) {
       throw new Error(`Item ${args.id} does not belong to dataset ${args.datasetId}`);
     }
+    if (currentRow.metadata?.__purged === true) {
+      throw new Error(`Purged dataset item cannot be updated: ${args.id}`);
+    }
 
     const dataset = this.db.datasets.get(args.datasetId);
     if (!dataset) {
@@ -394,6 +398,37 @@ export class DatasetsInMemory extends DatasetsStorage {
     await this.createDatasetVersion(datasetId, newVersion);
   }
 
+  protected async _doPurgeItem({ id, datasetId }: PurgeDatasetItemInput): Promise<void> {
+    const rows = this.db.datasetItems.get(id)?.filter(row => row.datasetId === datasetId);
+    if (!rows || rows.length === 0) return;
+
+    const purgedAt = new Date().toISOString();
+    for (const row of rows) {
+      row.input = null;
+      row.groundTruth = null;
+      row.expectedTrajectory = null;
+      row.toolMocks = null;
+      row.unmockedToolPolicy = null;
+      row.scorerIds = null;
+      row.requestContext = null;
+      row.metadata = { __purged: true, purgedAt };
+      row.source = null;
+    }
+
+    for (const result of this.db.experimentResults.values()) {
+      const experiment = this.db.experiments.get(result.experimentId);
+      if (result.itemId !== id || experiment?.datasetId !== datasetId) continue;
+      result.input = null;
+      result.output = null;
+      result.groundTruth = null;
+      result.error = null;
+      result.toolMockReport = null;
+      result.tags = null;
+      result.comment = null;
+      result.metadata = { __purged: true, purgedAt };
+    }
+  }
+
   // --- SCD-2 queries ---
 
   async getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null> {
@@ -401,8 +436,12 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (!rows || rows.length === 0) return null;
 
     if (args.datasetVersion !== undefined) {
-      // T3.13 — exact version match, exclude deleted
-      const row = rows.find(r => r.datasetVersion === args.datasetVersion && !r.isDeleted);
+      const datasetVersion = args.datasetVersion;
+      const row = rows
+        .filter(
+          r => r.datasetVersion <= datasetVersion && (r.validTo === null || r.validTo > datasetVersion) && !r.isDeleted,
+        )
+        .sort((a, b) => b.datasetVersion - a.datasetVersion)[0];
       return row ? toDatasetItem(row) : null;
     }
 

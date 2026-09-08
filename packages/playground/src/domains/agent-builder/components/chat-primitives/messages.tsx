@@ -268,10 +268,10 @@ export const Txtmessage = ({
       <div className="flex justify-end">
         <Txt
           variant="ui-md"
-          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 text-black [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
+          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
           as="div"
         >
-          <MarkdownRenderer>{txt}</MarkdownRenderer>
+          <MarkdownRenderer className="text-black">{txt}</MarkdownRenderer>
         </Txt>
       </div>
     );

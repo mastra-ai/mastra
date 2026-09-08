@@ -80,6 +80,27 @@ describe('flattenSchemaToVariables', () => {
     });
   });
 
+  it('counts array item properties against maxDepth', () => {
+    const schema: JsonSchema = {
+      type: 'object',
+      properties: {
+        rows: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+            },
+          },
+        },
+      },
+    };
+
+    // maxDepth 1 admits `rows` (depth 1) but not `rows[].name` (depth 2).
+    expect(flattenSchemaToVariables(schema, 1).map(v => v.path)).toEqual(['rows']);
+    expect(flattenSchemaToVariables(schema, 2).map(v => v.path)).toEqual(['rows', 'rows[].name']);
+  });
+
   it('should respect maxDepth parameter', () => {
     const schema: JsonSchema = {
       type: 'object',

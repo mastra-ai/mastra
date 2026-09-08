@@ -1075,6 +1075,68 @@ describe('TokenCounter', () => {
       expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(modelOutput)));
     });
 
+    it('reuses multimodal tool result counts while the part and result are unchanged', () => {
+      const counter = new TokenCounter();
+      const estimateImageTokensSpy = vi.spyOn(counter as any, 'estimateImageTokens');
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result: {
+                content: [
+                  { type: 'text', text: 'Calculator screenshot' },
+                  { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+                ],
+              },
+            },
+          },
+        ],
+      });
+
+      const firstCount = counter.countMessage(message);
+      const secondCount = counter.countMessage(message);
+
+      expect(secondCount).toBe(firstCount);
+      expect(estimateImageTokensSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('recounts multimodal tool results mutated in place', () => {
+      const counter = new TokenCounter();
+      const estimateImageTokensSpy = vi.spyOn(counter as any, 'estimateImageTokens');
+      const result = {
+        content: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+        ],
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result,
+            },
+          },
+        ],
+      });
+
+      const firstCount = counter.countMessage(message);
+      result.content[0]!.text += ' with additional details '.repeat(100);
+      const secondCount = counter.countMessage(message);
+
+      expect(secondCount).toBeGreaterThan(firstCount);
+      expect(estimateImageTokensSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
       const counter = new TokenCounter();
       const rawResultWithoutMalformed = {

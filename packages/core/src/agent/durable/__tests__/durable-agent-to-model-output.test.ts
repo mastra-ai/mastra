@@ -341,4 +341,86 @@ describe('DurableAgent toModelOutput parity', () => {
       expect(Object.hasOwn(mastraMetadata, 'modelOutput')).toBe(false);
     },
   );
+
+  it('applies toModelOutput to a client-executed tool result arriving on a follow-up request', async () => {
+    const toModelOutputSpy = vi.fn((output: any) => ({
+      type: 'content',
+      value: [{ type: 'text', text: `Screenshot uploaded as ${output.fileId}` }],
+    }));
+
+    // Execute-less: the tool runs on the client; the server only maps the result.
+    const clientTool = createTool({
+      id: 'client-tool',
+      description: 'A client-side tool',
+      inputSchema: z.object({ query: z.string().optional() }),
+      toModelOutput: toModelOutputSpy,
+    });
+
+    const prompts: any[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    }) as unknown as LanguageModelV2;
+
+    const baseAgent = new Agent({
+      name: 'client-map-agent',
+      instructions: 'You are a test agent.',
+      model,
+      tools: { 'client-tool': clientTool },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    new Mastra({
+      agents: { 'client-map-agent': durableAgent as any },
+      storage: new InMemoryStore(),
+    });
+
+    // Follow-up request shape from @mastra/client-js: previous assistant
+    // tool-call + the client-produced tool result.
+    const result = await durableAgent.stream([
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tc-client-1', toolName: 'client-tool', args: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'tc-client-1', toolName: 'client-tool', result: { fileId: 'file-9' } },
+        ],
+      },
+    ] satisfies Parameters<typeof durableAgent.stream>[0]);
+
+    for await (const _chunk of result.fullStream) {
+      // drain
+    }
+
+    expect(toModelOutputSpy).toHaveBeenCalledTimes(1);
+    expect(toModelOutputSpy).toHaveBeenCalledWith({ fileId: 'file-9' });
+
+    // The model must see the mapped output, not the raw JSON result.
+    const toolResultParts = prompts
+      .flat()
+      .filter((m: any) => m.role === 'tool')
+      .flatMap((m: any) => m.content)
+      .filter((p: any) => p.type === 'tool-result' && p.toolCallId === 'tc-client-1');
+    expect(toolResultParts.length).toBeGreaterThan(0);
+    expect(toolResultParts[0].output).toEqual({
+      type: 'content',
+      value: [{ type: 'text', text: 'Screenshot uploaded as file-9' }],
+    });
+  });
 });

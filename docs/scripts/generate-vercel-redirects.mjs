@@ -43,9 +43,7 @@ function isExternalUrl(value) {
 }
 
 export function toLlmsTxtPath(value) {
-  const fragmentIndex = value.indexOf('#')
-  const pathname = fragmentIndex === -1 ? value : value.slice(0, fragmentIndex)
-  const fragment = fragmentIndex === -1 ? '' : value.slice(fragmentIndex + 1)
+  const pathname = value.split('#', 1)[0]
   let llmsPath
 
   if (pathname.endsWith('/llms.txt')) {
@@ -56,7 +54,7 @@ export function toLlmsTxtPath(value) {
     llmsPath = `${pathname}/llms.txt`
   }
 
-  return fragment ? `${llmsPath}#${fragment}` : llmsPath
+  return llmsPath
 }
 
 export function shouldGenerateLlmsRedirect(redirect) {

@@ -1,9 +1,8 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { BookOpen } from 'lucide-react';
 import { useState } from 'react';
-
-import { Markdown } from '../../../ui/Markdown';
 
 import { ROW_RAIL, ROW_TRIGGER, TranscriptRow } from './TranscriptRow';
 
@@ -35,9 +34,7 @@ export function SkillMessage({ activation }: { activation: SkillActivation }) {
       <CollapsibleContent className="max-w-full min-w-0">
         <div className={ROW_RAIL}>
           <ScrollArea maxHeight="24rem" revealScrollbarOnHover={false}>
-            <div className="prose text-ui-sm">
-              <Markdown>{activation.instructions}</Markdown>
-            </div>
+            <MarkdownRenderer className="text-ui-sm">{activation.instructions}</MarkdownRenderer>
           </ScrollArea>
         </div>
       </CollapsibleContent>

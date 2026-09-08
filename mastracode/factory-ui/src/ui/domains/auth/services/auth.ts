@@ -19,7 +19,9 @@ export interface FactoryAuthState {
   /** Whether the server has web auth configured (any provider). */
   authEnabled: boolean;
   authenticated: boolean;
-  user?: { userId?: string; email?: string; name?: string; organizationId?: string };
+  /** Explicit server capability; absent on older servers. */
+  telemetryEnabled?: boolean;
+  user?: { userId?: string; email?: string; name?: string; avatarUrl?: string; organizationId?: string };
   /** Active identity provider: 'workos' | 'better-auth' | custom adapter kind. */
   provider?: string;
   /** True when the provider hosts credential forms and sign-up is disabled. */
@@ -128,6 +130,7 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
   }
   const data = (await res.json()) as {
     authenticated?: boolean;
+    telemetryEnabled?: boolean;
     user?: { userId?: string; email?: string; name?: string; organizationId?: string } | null;
     provider?: string;
     signUpDisabled?: boolean;
@@ -135,6 +138,7 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
   return {
     authEnabled: true,
     authenticated: Boolean(data.authenticated),
+    ...(typeof data.telemetryEnabled === 'boolean' ? { telemetryEnabled: data.telemetryEnabled } : {}),
     user: data.user ?? undefined,
     provider: data.provider,
     signUpDisabled: data.signUpDisabled,

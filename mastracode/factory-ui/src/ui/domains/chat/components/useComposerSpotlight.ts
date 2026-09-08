@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
 /** Tracks the pointer without re-rendering the composer on every move. */
-export function useComposerSpotlight(enabled = true) {
+export function useComposerSpotlight() {
   const elementRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const element = elementRef.current;
-    if (!element || !enabled) return;
+    if (!element) return;
 
     let animationFrame: number | undefined;
     let clientX = 0;
@@ -30,7 +30,7 @@ export function useComposerSpotlight(enabled = true) {
       element.removeEventListener('pointermove', trackPointer);
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
     };
-  }, [enabled]);
+  }, []);
 
   return elementRef;
 }

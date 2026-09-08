@@ -39,7 +39,7 @@ export function TimelineNameCol({
       ref={isSelected ? revealRow : undefined}
       aria-label={`View details for span ${span.name}`}
       className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
-        'opacity-30 [&:hover]:opacity-60': isFaded,
+        'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
         'bg-surface4': isSelected,
       })}
       style={{ paddingLeft: `${depth * 1}rem` }}
@@ -63,7 +63,17 @@ export function TimelineNameCol({
             style={{ backgroundColor: spanUI.color }}
           />
         )}
-        <span className="min-w-0 truncate">{span.name}</span>
+        {/* Searchable: the span name is what the timeline search matches on. When the match
+            is in the span's payload instead, the whole name is painted in the indirect color
+            so the row explains its own presence. */}
+        <span
+          data-highlight={span.matchedInPayloadOnly ? undefined : ''}
+          data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
+          title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+          className="min-w-0 truncate"
+        >
+          {span.name}
+        </span>
       </button>
     </div>
   );

@@ -22,6 +22,7 @@ function hoursAgo(hours: number): string {
   return new Date(NOW.getTime() - hours * HOUR).toISOString();
 }
 
+/** A card the Factory ran — the population every metric is computed over. */
 function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
   return {
     id: '00000000-0000-4000-8000-000000000001',
@@ -32,7 +33,7 @@ function makeItem(overrides: Partial<WorkItemRow>): WorkItemRow {
     title: 'Item',
     stages: ['intake'],
     stageHistory: [{ stage: 'intake', enteredAt: hoursAgo(1), by: 'user_1' }],
-    sessions: {},
+    sessions: { execute: { sessionId: 'session-1', branch: 'factory/1', threadId: 'thread-1', startedBy: 'user_1' } },
     metadata: {},
     createdAt: new Date(NOW.getTime() - HOUR),
     updatedAt: new Date(NOW.getTime() - HOUR),
@@ -137,8 +138,24 @@ describe('computeFactoryMetrics', () => {
     expect(metrics.leadTime).toEqual({ medianMs: null, p90Ms: null, samples: 0 });
     expect(metrics.wipTotal).toBe(0);
     expect(metrics.sourceMix).toEqual([]);
-    expect(metrics.transitions).toEqual({ human: 0, total: 0 });
-    expect(metrics.stageAutomation).toEqual([]);
+    expect(metrics.agentCoverage).toEqual([]);
+  });
+
+  it('given synced cards nobody ran, then they are not the Factory’s numbers', () => {
+    // The integrations mirror every upstream issue and PR onto the board. Only
+    // the ones a run was started on are Factory work.
+    const synced = {
+      ...doneItem('00000000-0000-4000-8000-000000000002', 48, 2),
+      sessions: {},
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:1' },
+    };
+
+    const ran = doneItem('00000000-0000-4000-8000-000000000001', 48, 2);
+    const metrics = computeFactoryMetrics([ran, synced], lastDays(7));
+
+    expect(metrics.leadTime.samples).toBe(1);
+    expect(metrics.throughput.find(point => point.date === '2026-07-15')?.count).toBe(1);
+    expect(metrics.sourceMix).toEqual([{ source: 'manual', count: 1 }]);
   });
 
   it('given completed items, then throughput buckets by UTC day and lead time spans creation → done', () => {
@@ -252,6 +269,17 @@ describe('computeFactoryMetrics', () => {
     expect(metrics.wipTotal).toBe(2); // multi-stage item counted once, done item excluded
   });
 
+  it('given a card still in intake, then it is queued, not in flight', () => {
+    // Intake is the inbox the pollers file into — counting it as in-flight work
+    // reports the connected repo's open issues as the Factory's workload.
+    const item = makeItem({
+      stages: ['intake'],
+      stageHistory: [{ stage: 'intake', enteredAt: hoursAgo(10), by: 'factory-rule-dispatcher' }],
+    });
+
+    expect(computeFactoryMetrics([item], lastDays(7)).wipTotal).toBe(0);
+  });
+
   it('given items created inside and outside the window, then source mix only counts the window', () => {
     const githubIssue = (externalId: string) => ({
       integrationId: 'github',
@@ -326,43 +354,20 @@ describe('computeFactoryMetrics', () => {
     expect(computeFactoryMetrics([item], lastDays(7)).wipTotal).toBe(1);
   });
 
-  it('given stage moves in the window, then transitions count entries and split out factory actors', () => {
-    const item = makeItem({
-      stages: ['execute'],
-      stageHistory: [
-        { stage: 'intake', enteredAt: hoursAgo(50 * 24), exitedAt: hoursAgo(3), by: 'user_1' }, // entered outside window
-        { stage: 'triage', enteredAt: hoursAgo(3), exitedAt: hoursAgo(2), by: 'user_1' },
-        { stage: 'execute', enteredAt: hoursAgo(2), by: 'factory' },
-      ],
-    });
-
-    const metrics = computeFactoryMetrics([item], lastDays(30));
-
-    expect(metrics.transitions).toEqual({ human: 1, total: 2 });
-  });
-
-  it('given a webhook-created card, then landing on the board is not an automated move', () => {
-    const item = makeItem({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
-      stages: ['triage'],
-      stageHistory: [
-        { stage: 'intake', enteredAt: hoursAgo(5), exitedAt: hoursAgo(4), by: 'github:app', exitedBy: 'user_1' },
-        { stage: 'triage', enteredAt: hoursAgo(4), by: 'user_1' },
-      ],
-    });
-
-    const metrics = computeFactoryMetrics([item], lastDays(7));
-
-    expect(metrics.transitions).toEqual({ human: 1, total: 1 });
-  });
-
-  it('given governed-transition actor ids, then rules-engine and agent moves count as automated', () => {
+  it('given the rules engine queueing a stage the agent finishes, then the pass is the agent’s', () => {
     // Actor ids exactly as the transition service stamps them: the dispatcher
-    // system id and an agent binding (see actorId in rules/transition-service.ts).
+    // queues the card, the bound run's transition tool moves it on. Intake gets
+    // no row — filing a card is not a pass through the pipeline.
     const item = makeItem({
       stages: ['execute'],
       stageHistory: [
-        { stage: 'intake', enteredAt: hoursAgo(10), exitedAt: hoursAgo(9), by: 'user_1', exitedBy: 'user_1' },
+        {
+          stage: 'intake',
+          enteredAt: hoursAgo(10),
+          exitedAt: hoursAgo(9),
+          by: 'factory-rule-dispatcher',
+          exitedBy: 'factory-rule-dispatcher',
+        },
         {
           stage: 'triage',
           enteredAt: hoursAgo(9),
@@ -376,42 +381,87 @@ describe('computeFactoryMetrics', () => {
 
     const metrics = computeFactoryMetrics([item], lastDays(7));
 
-    expect(metrics.transitions).toEqual({ human: 0, total: 2 });
-    expect(metrics.stageAutomation).toEqual([
-      { stage: 'intake', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
-      { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
+    expect(metrics.agentCoverage).toEqual([
+      { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
     ]);
   });
 
-  describe('stageAutomation', () => {
-    it('given automation on part of the board, then only the automated stage counts as automated', () => {
-      // Triage fully automated; planning entered by automation but approved
-      // (exited) by a human — the partial-board case.
+  it('given a stage the poller both opened and closed, then no agent handled it', () => {
+    // The upstream sync moves cards on its own (a PR merged on GitHub lands the
+    // card in done). Crediting the dispatcher would pin coverage near 100%.
+    const item = makeItem({
+      stages: ['review'],
+      stageHistory: [
+        {
+          stage: 'triage',
+          enteredAt: hoursAgo(9),
+          exitedAt: hoursAgo(8),
+          by: 'factory-rule-dispatcher',
+          exitedBy: 'factory-rule-dispatcher',
+        },
+        { stage: 'review', enteredAt: hoursAgo(8), by: 'factory-rule-dispatcher' },
+      ],
+    });
+
+    const metrics = computeFactoryMetrics([item], lastDays(7));
+
+    expect(metrics.agentCoverage).toEqual([
+      { stage: 'triage', passes: 1, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+    ]);
+  });
+
+  describe('agentCoverage', () => {
+    it('given an agent on part of the board, then only the stage it finished counts', () => {
+      // Triage finished by the agent; planning handed back to a human to approve.
       const item = makeItem({
         stages: ['execute'],
         stageHistory: [
-          { stage: 'triage', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'factory', exitedBy: 'factory' },
-          { stage: 'planning', enteredAt: hoursAgo(8), exitedAt: hoursAgo(2), by: 'factory', exitedBy: 'user_1' },
+          {
+            stage: 'triage',
+            enteredAt: hoursAgo(9),
+            exitedAt: hoursAgo(8),
+            by: 'factory-rule-dispatcher',
+            exitedBy: 'agent:binding-1',
+          },
+          {
+            stage: 'planning',
+            enteredAt: hoursAgo(8),
+            exitedAt: hoursAgo(2),
+            by: 'agent:binding-1',
+            exitedBy: 'user_1',
+          },
           { stage: 'execute', enteredAt: hoursAgo(2), by: 'user_1' },
         ],
       });
 
       const metrics = computeFactoryMetrics([item], lastDays(7));
 
-      expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
-        { stage: 'planning', exits: 1, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+      expect(metrics.agentCoverage).toEqual([
+        { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
+        { stage: 'planning', passes: 1, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
       ]);
     });
 
     it('given a reworked stage, then the redo is reported as an outcome, not as a second denominator', () => {
-      // First triage pass fully automated, then the item bounced back through
+      // First triage pass run by the agent, then the item bounced back through
       // triage, then went done. Reworked deliberately outranks done.
       const item = makeItem({
         stages: ['done'],
         stageHistory: [
-          { stage: 'triage', enteredAt: hoursAgo(10), exitedAt: hoursAgo(9), by: 'factory', exitedBy: 'factory' },
-          { stage: 'triage', enteredAt: hoursAgo(8), exitedAt: hoursAgo(7), by: 'factory', exitedBy: 'factory' },
+          {
+            stage: 'triage',
+            enteredAt: hoursAgo(10),
+            exitedAt: hoursAgo(9),
+            by: 'factory',
+            exitedBy: 'agent:binding-1',
+          },
+          {
+            stage: 'triage',
+            enteredAt: hoursAgo(8),
+            exitedAt: hoursAgo(7),
+            by: 'factory',
+            exitedBy: 'agent:binding-1',
+          },
           { stage: 'done', enteredAt: hoursAgo(6), by: 'user_1' },
         ],
       });
@@ -419,20 +469,20 @@ describe('computeFactoryMetrics', () => {
       const metrics = computeFactoryMetrics([item], lastDays(7));
 
       // One pass, one card: counting the redo as a second exit would report 50%
-      // automated for a stage no human ever touched.
-      expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 1, inFlight: 0 } },
+      // coverage for a stage no human ever touched.
+      expect(metrics.agentCoverage).toEqual([
+        { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 0, canceled: 0, reworked: 1, inFlight: 0 } },
       ]);
     });
 
-    it('given entries missing exitedBy or with a human on either end, then the visit is not automated', () => {
+    it('given a pass a human finished or one still open, then no agent gets credit', () => {
       const items = [
         makeItem({
           id: '00000000-0000-4000-8000-000000000001',
           stages: ['planning'],
           stageHistory: [
-            // Legacy entry: automation-entered but closed before exit stamping existed.
-            { stage: 'triage', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'factory' },
+            // Legacy entry: closed before exit stamping existed.
+            { stage: 'triage', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'agent:binding-1' },
             { stage: 'planning', enteredAt: hoursAgo(8), by: 'user_1' },
           ],
         }),
@@ -440,27 +490,39 @@ describe('computeFactoryMetrics', () => {
           id: '00000000-0000-4000-8000-000000000002',
           stages: ['planning'],
           stageHistory: [
-            // Human-entered, automation-exited: mixed visit is not automated.
-            { stage: 'triage', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'user_1', exitedBy: 'factory' },
-            { stage: 'planning', enteredAt: hoursAgo(8), by: 'factory' },
+            // The agent worked the stage but a human moved it on.
+            {
+              stage: 'triage',
+              enteredAt: hoursAgo(9),
+              exitedAt: hoursAgo(8),
+              by: 'agent:binding-1',
+              exitedBy: 'user_1',
+            },
+            { stage: 'planning', enteredAt: hoursAgo(8), by: 'user_1' },
           ],
         }),
       ];
 
       const metrics = computeFactoryMetrics(items, lastDays(7));
 
-      expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 2, automated: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
+      expect(metrics.agentCoverage).toEqual([
+        { stage: 'triage', passes: 2, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
       ]);
     });
 
-    it('given automated passes with different endings, then outcomes classify done, canceled, and in flight', () => {
+    it('given agent passes with different endings, then outcomes classify done, canceled, and in flight', () => {
       const autoTriage = (id: string, stages: string[], tail: WorkItemStageEntry[]): WorkItemRow =>
         makeItem({
           id,
           stages,
           stageHistory: [
-            { stage: 'triage', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'automation', exitedBy: 'system' },
+            {
+              stage: 'triage',
+              enteredAt: hoursAgo(9),
+              exitedAt: hoursAgo(8),
+              by: 'factory-rule-dispatcher',
+              exitedBy: 'factory-tool-result-rule',
+            },
             ...tail,
           ],
         });
@@ -484,18 +546,24 @@ describe('computeFactoryMetrics', () => {
 
       const metrics = computeFactoryMetrics(items, lastDays(7));
 
-      expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 3, automated: 3, outcomes: { done: 1, canceled: 1, reworked: 0, inFlight: 1 } },
+      expect(metrics.agentCoverage).toEqual([
+        { stage: 'triage', passes: 3, byAgent: 3, outcomes: { done: 1, canceled: 1, reworked: 0, inFlight: 1 } },
       ]);
     });
 
     it('given an item that landed after the window, then the outcome is the one the window saw', () => {
-      // Automated triage pass inside the window; the card only reached done
+      // Agent triage pass inside the window; the card only reached done
       // afterwards, so re-querying the same window must keep reporting in flight.
       const item = makeItem({
         stages: ['done'],
         stageHistory: [
-          { stage: 'triage', enteredAt: hoursAgo(30), exitedAt: hoursAgo(26), by: 'factory', exitedBy: 'factory' },
+          {
+            stage: 'triage',
+            enteredAt: hoursAgo(30),
+            exitedAt: hoursAgo(26),
+            by: 'factory',
+            exitedBy: 'agent:binding-1',
+          },
           { stage: 'done', enteredAt: hoursAgo(2), by: 'user_1' },
         ],
       });
@@ -505,8 +573,8 @@ describe('computeFactoryMetrics', () => {
         windowEnd: NOW.getTime() - 20 * HOUR,
       });
 
-      expect(metrics.stageAutomation).toEqual([
-        { stage: 'triage', exits: 1, automated: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
+      expect(metrics.agentCoverage).toEqual([
+        { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 1 } },
       ]);
     });
 
@@ -519,7 +587,7 @@ describe('computeFactoryMetrics', () => {
             enteredAt: hoursAgo(10 * 24),
             exitedAt: hoursAgo(8 * 24),
             by: 'factory',
-            exitedBy: 'factory',
+            exitedBy: 'agent:binding-1',
           },
           { stage: 'planning', enteredAt: hoursAgo(8 * 24), by: 'user_1' },
         ],
@@ -527,22 +595,35 @@ describe('computeFactoryMetrics', () => {
 
       const metrics = computeFactoryMetrics([item], lastDays(7));
 
-      expect(metrics.stageAutomation).toEqual([]);
+      expect(metrics.agentCoverage).toEqual([]);
     });
 
-    it('given visits to terminal stages, then they never produce rows', () => {
+    it('given visits to intake or terminal stages, then they never produce rows', () => {
       const item = makeItem({
         stages: ['triage'],
         stageHistory: [
-          { stage: 'done', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'factory', exitedBy: 'factory' },
-          { stage: 'canceled', enteredAt: hoursAgo(8), exitedAt: hoursAgo(2), by: 'factory', exitedBy: 'factory' },
+          {
+            stage: 'intake',
+            enteredAt: hoursAgo(10),
+            exitedAt: hoursAgo(9),
+            by: 'factory',
+            exitedBy: 'agent:binding-1',
+          },
+          { stage: 'done', enteredAt: hoursAgo(9), exitedAt: hoursAgo(8), by: 'factory', exitedBy: 'agent:binding-1' },
+          {
+            stage: 'canceled',
+            enteredAt: hoursAgo(8),
+            exitedAt: hoursAgo(2),
+            by: 'factory',
+            exitedBy: 'agent:binding-1',
+          },
           { stage: 'triage', enteredAt: hoursAgo(2), by: 'user_1' },
         ],
       });
 
       const metrics = computeFactoryMetrics([item], lastDays(7));
 
-      expect(metrics.stageAutomation).toEqual([]);
+      expect(metrics.agentCoverage).toEqual([]);
     });
   });
 });

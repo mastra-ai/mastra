@@ -525,6 +525,18 @@ describe('assembleAgentFromFsEntry', () => {
       expect(workspace).toBeUndefined();
     });
 
+    it('does not attach the default workspace when config sets workspace to undefined', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o', workspace: undefined },
+        instructionsMd: 'hi',
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+      });
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeUndefined();
+    });
+
     it('uses workspace.ts over the default workspace', async () => {
       const custom = new Workspace({
         name: 'custom-ws',

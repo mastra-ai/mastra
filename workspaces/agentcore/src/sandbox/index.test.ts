@@ -148,6 +148,46 @@ describe('AgentCoreRuntimeSandbox', () => {
     expect(onStderr).toHaveBeenCalledWith('warn');
   });
 
+  it('prefixes commands with cd into the configured workingDirectory', async () => {
+    mockSend.mockResolvedValueOnce({ stream: streamEvents([{ exitCode: 0, status: 'COMPLETED' }]) });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      workingDirectory: '/srv/app',
+    });
+
+    await sandbox.executeCommand('pwd');
+
+    expect((commandInputs[0] as any).input.body.command).toBe('cd /srv/app && pwd');
+    expect(sandbox.workingDirectory).toBe('/srv/app');
+  });
+
+  it('per-command cwd wins over the configured workingDirectory', async () => {
+    mockSend.mockResolvedValueOnce({ stream: streamEvents([{ exitCode: 0, status: 'COMPLETED' }]) });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      workingDirectory: '/srv/app',
+    });
+
+    await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
+
+    expect((commandInputs[0] as any).input.body.command).toBe('cd /tmp && pwd');
+  });
+
+  it('adds no cd prefix when neither cwd nor workingDirectory is set', async () => {
+    mockSend.mockResolvedValueOnce({ stream: streamEvents([{ exitCode: 0, status: 'COMPLETED' }]) });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+    });
+
+    await sandbox.executeCommand('pwd');
+
+    expect((commandInputs[0] as any).input.body.command).toBe('pwd');
+    expect(sandbox.workingDirectory).toBeUndefined();
+  });
+
   it('returns non-zero command exits without throwing', async () => {
     mockSend.mockResolvedValueOnce({
       stream: streamEvents([{ stderr: 'failed' }, { exitCode: 2, status: 'COMPLETED' }]),
@@ -236,6 +276,23 @@ describe('AgentCoreRuntimeSandbox', () => {
     await expect(sandbox.executeCommand('echo ok')).rejects.toThrow(
       '[AgentCoreRuntimeSandbox] ValidationException: Command payload is invalid',
     );
+  });
+
+  it('setEnv after construction reaches subsequent commands', async () => {
+    mockSend.mockResolvedValueOnce({
+      stream: streamEvents([{ stdout: 'ok' }, { exitCode: 0, status: 'COMPLETED' }]),
+    });
+
+    const sandbox = new AgentCoreRuntimeSandbox({
+      agentRuntimeArn: 'arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/my-agent',
+      runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+    });
+
+    sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+    await sandbox.executeCommand('echo ok');
+
+    const body = commandInputs[0]!.input.body as { command: string };
+    expect(body.command).toMatch(/GH_TOKEN='?tok_1'?/);
   });
 
   it('rejects invalid environment variable names', async () => {

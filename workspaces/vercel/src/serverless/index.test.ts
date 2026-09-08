@@ -284,6 +284,33 @@ describe('VercelServerlessSandbox', () => {
       expect(executeCall[1]?.headers?.['x-vercel-protection-bypass']).toBe('bypass-token-abc');
     });
 
+    it('setEnv after construction reaches subsequent commands', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
+        .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'READY'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }); // warm-up
+
+      await startWithTimers(sandbox);
+
+      mockFetch.mockResolvedValueOnce(
+        createExecuteResponse({
+          success: true,
+          exitCode: 0,
+          stdout: 'ok',
+          stderr: '',
+          executionTimeMs: 5,
+          timedOut: false,
+        }),
+      );
+
+      sandbox.setEnv(env => ({ ...env, GH_TOKEN: 'tok_1' }));
+      await sandbox.executeCommand('echo', ['ok']);
+
+      const executeCall = mockFetch.mock.calls[3]!;
+      const body = JSON.parse(executeCall[1]!.body as string) as { env: Record<string, string> };
+      expect(body.env).toEqual({ GH_TOKEN: 'tok_1' });
+    });
+
     it('should skip bypass fetch when projectId is absent', async () => {
       mockFetch
         .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
@@ -471,6 +498,81 @@ describe('VercelServerlessSandbox', () => {
       const body = JSON.parse(lastCall[1]?.body as string);
       expect(body.env).toEqual({ FOO: 'bar' });
       expect(body.cwd).toBe('/tmp/work');
+    });
+
+    it('defaults cwd to the configured workingDirectory', async () => {
+      const wdSandbox = new VercelServerlessSandbox({ token: 'test-token', workingDirectory: '/srv/app' });
+
+      mockFetch
+        .mockResolvedValueOnce(createDeploymentResponse('dep-wd', 'my-deploy.vercel.app', 'BUILDING'))
+        .mockResolvedValueOnce(createDeploymentResponse('dep-wd', 'my-deploy.vercel.app', 'READY'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // warm-up
+        .mockResolvedValueOnce(
+          createExecuteResponse({
+            success: true,
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            executionTimeMs: 5,
+            timedOut: false,
+          }),
+        );
+
+      const promise = wdSandbox.executeCommand('pwd');
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]!;
+      const body = JSON.parse(lastCall[1]?.body as string);
+      expect(body.cwd).toBe('/srv/app');
+      expect(wdSandbox.workingDirectory).toBe('/srv/app');
+    });
+
+    it('per-command cwd wins over the configured workingDirectory', async () => {
+      const wdSandbox = new VercelServerlessSandbox({ token: 'test-token', workingDirectory: '/srv/app' });
+
+      mockFetch
+        .mockResolvedValueOnce(createDeploymentResponse('dep-wd', 'my-deploy.vercel.app', 'BUILDING'))
+        .mockResolvedValueOnce(createDeploymentResponse('dep-wd', 'my-deploy.vercel.app', 'READY'))
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // warm-up
+        .mockResolvedValueOnce(
+          createExecuteResponse({
+            success: true,
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            executionTimeMs: 5,
+            timedOut: false,
+          }),
+        );
+
+      const promise = wdSandbox.executeCommand('pwd', [], { cwd: '/tmp/work' });
+      await vi.runAllTimersAsync();
+      await promise;
+
+      const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]!;
+      const body = JSON.parse(lastCall[1]?.body as string);
+      expect(body.cwd).toBe('/tmp/work');
+    });
+
+    it('falls back to /tmp when neither cwd nor workingDirectory is set', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createExecuteResponse({
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 5,
+          timedOut: false,
+        }),
+      );
+
+      await sandbox.executeCommand('pwd');
+
+      const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1]!;
+      const body = JSON.parse(lastCall[1]?.body as string);
+      expect(body.cwd).toBe('/tmp');
+      expect(sandbox.workingDirectory).toBeUndefined();
     });
 
     it('should shell-quote args with special characters in command string', async () => {

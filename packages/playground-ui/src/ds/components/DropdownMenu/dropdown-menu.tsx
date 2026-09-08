@@ -2,6 +2,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
+import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
@@ -89,7 +90,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       side = 'right',
       sideOffset = 0,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,
@@ -149,7 +150,7 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       side = 'bottom',
       sideOffset = 8,
       anchor,
-      positionMethod,
+      positionMethod = FLOATING_POSITION_METHOD,
       collisionBoundary,
       collisionPadding,
       sticky,

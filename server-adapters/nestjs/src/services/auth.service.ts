@@ -12,6 +12,7 @@ import type { Request } from 'express';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
+import { toWebRequest } from '../utils/to-web-request';
 
 type AuthConfigBridge = {
   authenticateToken?: (token: string, request: unknown) => Promise<unknown> | unknown;
@@ -90,9 +91,9 @@ export class AuthService {
       let user: unknown;
 
       if (typeof authConfig?.authenticateToken === 'function') {
-        // Mastra auth hooks are adapter-agnostic at runtime; Nest passes the
-        // underlying Express request object for parity with the Express adapter.
-        user = await authConfig.authenticateToken(token, request);
+        // Match other adapters: pass a Web Request so providers can read
+        // headers/cookies via the fetch Headers API (not Express IncomingMessage).
+        user = await authConfig.authenticateToken(token, toWebRequest(request));
       } else {
         throw new Error('No token verification method configured');
       }
@@ -131,7 +132,7 @@ export class AuthService {
   ): Promise<void> {
     // Client-provided authorizeUser function
     if (typeof authConfig.authorizeUser === 'function') {
-      const isAuthorized = await authConfig.authorizeUser(user, request);
+      const isAuthorized = await authConfig.authorizeUser(user, toWebRequest(request));
       if (!isAuthorized) {
         throw new ForbiddenException('Access denied');
       }
@@ -147,7 +148,7 @@ export class AuthService {
           if (key === 'customRouteAuthConfig') return this.options.customRouteAuthConfig;
           return undefined;
         },
-        req: request,
+        req: toWebRequest(request),
       };
 
       const isAuthorized = await authConfig.authorize(path, method, user, context);

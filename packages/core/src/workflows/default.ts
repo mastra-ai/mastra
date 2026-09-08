@@ -6,7 +6,8 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
-import { createObservabilityContext } from '../observability';
+import { createObservabilityContext, resolveExportedSpanId } from '../observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -50,7 +51,7 @@ import type {
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
-import { getSingleStepEntryId } from './utils';
+import { abortableSleep, getSingleStepEntryId, omitPriorCompletionFields } from './utils';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -154,8 +155,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param _sleepId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
    */
-  async executeSleepDuration(duration: number, _sleepId: string, _workflowId: string): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, duration < 0 ? 0 : duration));
+  async executeSleepDuration(
+    duration: number,
+    _sleepId: string,
+    _workflowId: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    await abortableSleep(duration, abortSignal);
   }
 
   /**
@@ -165,9 +171,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param _sleepUntilId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
    */
-  async executeSleepUntilDate(date: Date, _sleepUntilId: string, _workflowId: string): Promise<void> {
-    const time = date.getTime() - Date.now();
-    await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
+  async executeSleepUntilDate(
+    date: Date,
+    _sleepUntilId: string,
+    _workflowId: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    await abortableSleep(date.getTime() - Date.now(), abortSignal);
   }
 
   /**
@@ -242,7 +252,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             payload: {
               id: params.step.id,
               stepCallId: params.stepCallId,
-              ...params.stepInfo,
+              ...omitPriorCompletionFields(params.stepInfo),
             },
           },
         });
@@ -667,13 +677,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Used by durable execution engines to persist context across step replays.
    */
   serializeRequestContext(requestContext: RequestContext): Record<string, any> {
+    let obj: Record<string, any>;
     if (typeof requestContext.toJSON === 'function') {
-      return requestContext.toJSON();
+      obj = requestContext.toJSON();
+    } else {
+      obj = {};
+      requestContext.forEach((value, key) => {
+        obj[key] = value;
+      });
     }
-    const obj: Record<string, any> = {};
-    requestContext.forEach((value, key) => {
-      obj[key] = value;
-    });
+    // Never persist the framework-managed bearer token in durable snapshots.
+    // A resumed authenticated request supplies its own fresh live token.
+    delete obj[MASTRA_AUTH_TOKEN_KEY];
     return obj;
   }
 
@@ -844,6 +859,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           workflowStatus: 'canceled',
           requestContext: currentRequestContext,
+          phase: 'canceled',
         });
 
         workflowSpan?.end({
@@ -945,12 +961,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepExecutionPath,
         )) as any;
 
-        // Capture tracing context for suspend to enable span linking on resume
+        // Capture tracing context for suspend to enable span linking on resume.
+        // On resume this spanId becomes the resumed span's parentSpanId, so it has to
+        // name a span that reached exporters — an internal/excluded workflow span is
+        // never stored, and the resumed span's exported children would inherit it and
+        // land as orphans. Undefined when nothing in the chain is exportable, which
+        // correctly makes those children trace roots instead.
         const persistTracingContext =
           result.status === 'suspended' && workflowSpan
             ? {
                 traceId: workflowSpan.traceId,
-                spanId: workflowSpan.id,
+                spanId: resolveExportedSpanId(workflowSpan),
                 parentSpanId: workflowSpan.getParentSpanId(),
               }
             : {};
@@ -967,6 +988,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           error: result.error,
           requestContext: currentRequestContext,
           tracingContext: persistTracingContext,
+          phase: 'terminal',
         });
 
         if (result.error) {
@@ -1047,6 +1069,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastExecutionContext,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
+          phase: 'per-step',
         });
 
         await params.pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -1091,6 +1114,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       result: result.result,
       error: result.error,
       requestContext: currentRequestContext,
+      phase: 'workflow-end',
     });
 
     workflowSpan?.end({
