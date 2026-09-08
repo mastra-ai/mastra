@@ -18860,7 +18860,12 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_PathParams =
   PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
-export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = GetScoresRunRunId_QueryParams;
+export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
+  page: number | undefined;
+  perPage: number | undefined;
+  /** Only return results that have all of these tags */
+  tags?: string[] | undefined;
+};
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
   results: Shared_Type_149[];

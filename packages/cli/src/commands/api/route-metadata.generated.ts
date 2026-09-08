@@ -5388,7 +5388,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "tags"
     ],
     "bodyParams": [],
     "hasQuery": true,
