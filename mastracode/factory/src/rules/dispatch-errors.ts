@@ -1,6 +1,6 @@
 import type {
   FactoryDispatchFailureCode,
-  RetiredFactoryDispatchFailureCode,
+  StoredFactoryDispatchFailureCode,
 } from '../storage/domains/work-items/base.js';
 
 interface FactoryDispatchFailureMetadata {
@@ -24,13 +24,10 @@ const FAILURE_METADATA = {
   repository_cli_missing: { canRetry: false, label: 'GitHub CLI is unavailable in the workspace' },
   repository_pr_failed: { canRetry: true, label: 'Pull request creation failed' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
-} satisfies Record<FactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
-
-/** Codes no path writes any more, kept because stored rows still read through here. */
-const RETIRED_FAILURE_METADATA: Record<RetiredFactoryDispatchFailureCode, FactoryDispatchFailureMetadata> = {
+  // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },
   run_awaiting_input: { canRetry: false, label: 'Agent is waiting for an answer' },
-};
+} satisfies Record<StoredFactoryDispatchFailureCode, FactoryDispatchFailureMetadata>;
 
 export class FactoryDispatchError extends Error {
   constructor(
@@ -48,10 +45,7 @@ export function factoryDispatchFailureCode(error: unknown): FactoryDispatchFailu
 }
 
 export function factoryDispatchFailureMetadata(
-  code: FactoryDispatchFailureCode | RetiredFactoryDispatchFailureCode | null,
+  code: StoredFactoryDispatchFailureCode | null,
 ): FactoryDispatchFailureMetadata {
-  if (code === null) return FAILURE_METADATA.unknown;
-  return code in RETIRED_FAILURE_METADATA
-    ? RETIRED_FAILURE_METADATA[code as RetiredFactoryDispatchFailureCode]
-    : FAILURE_METADATA[code as FactoryDispatchFailureCode];
+  return code === null ? FAILURE_METADATA.unknown : FAILURE_METADATA[code];
 }

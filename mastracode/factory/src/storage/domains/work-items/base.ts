@@ -172,16 +172,16 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
 /** Written until a pause stopped counting as a failure; stored rows still read through them. */
 const RETIRED_FACTORY_DISPATCH_FAILURE_CODES = ['plan_awaiting_approval', 'run_awaiting_input'] as const;
 
-export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
-export type RetiredFactoryDispatchFailureCode = (typeof RETIRED_FACTORY_DISPATCH_FAILURE_CODES)[number];
+const STORED_FACTORY_DISPATCH_FAILURE_CODES = [
+  ...FACTORY_DISPATCH_FAILURE_CODES,
+  ...RETIRED_FACTORY_DISPATCH_FAILURE_CODES,
+] as const;
 
-function isFactoryDispatchFailureCode(
-  value: unknown,
-): value is FactoryDispatchFailureCode | RetiredFactoryDispatchFailureCode {
-  return (
-    FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value) ||
-    RETIRED_FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value)
-  );
+export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
+export type StoredFactoryDispatchFailureCode = (typeof STORED_FACTORY_DISPATCH_FAILURE_CODES)[number];
+
+function isStoredFactoryDispatchFailureCode(value: unknown): value is StoredFactoryDispatchFailureCode {
+  return STORED_FACTORY_DISPATCH_FAILURE_CODES.some(code => code === value);
 }
 
 export interface FactoryDeferredDecisionPageInput {
@@ -225,7 +225,7 @@ export interface FactoryDeferredDecisionRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
-  failureCode: FactoryDispatchFailureCode | RetiredFactoryDispatchFailureCode | null;
+  failureCode: StoredFactoryDispatchFailureCode | null;
   /** When a human released this run; set once, so the gate never parks it again. */
   approvedAt: Date | null;
   /** Who released this run — the run is attributed to them, not the repo connector. */
@@ -391,7 +391,7 @@ export interface FactoryPendingStartRecord {
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   lastError: string | null;
-  failureCode: FactoryDispatchFailureCode | RetiredFactoryDispatchFailureCode | null;
+  failureCode: StoredFactoryDispatchFailureCode | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -1079,7 +1079,7 @@ function toDeferredDecision(row: GovernanceDbRow): FactoryDeferredDecisionRecord
     leaseOwner: (row.lease_owner as string | null) ?? null,
     leaseExpiresAt: (row.lease_expires_at as Date | null) ?? null,
     lastError: (row.last_error as string | null) ?? null,
-    failureCode: isFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
+    failureCode: isStoredFactoryDispatchFailureCode(row.failure_code) ? row.failure_code : null,
     approvedAt: (row.approved_at as Date | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     completedAt: (row.completed_at as Date | null) ?? null,
