@@ -2547,12 +2547,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 
       // When the stream terminated with an error and the loop is not continuing or
-      // retrying, any provider-executed tool call still in `state: 'call'` can never
-      // receive a result. Reconcile those abandoned calls to a terminal `output-error`
-      // state so the persisted assistant message does not carry an unresolved tool
-      // invocation that is indistinguishable from a live pending tool. See issue #23315.
+      // retrying, any provider-executed tool call from this step can never receive a
+      // result. Mark those specific calls (still in `state: 'call'`) as failed so the
+      // persisted assistant message does not carry an unresolved tool invocation that
+      // is indistinguishable from a live pending tool. We pass the exact tool call ids
+      // seen this step rather than scanning, so an unrelated dropped-result bug can't
+      // be masked as a "did not complete" error here. See issue #23315.
       if (runState.state.hasErrored && !shouldContinue && !shouldRetry) {
-        messageList.reconcileAbandonedProviderToolCalls(outputStream.messageId);
+        const providerToolCallIds = toolCalls.filter(tc => tc.providerExecuted === true).map(tc => tc.toolCallId);
+        if (providerToolCallIds.length > 0) {
+          messageList.addOutputErrorsToProviderToolCalls(outputStream.messageId, providerToolCallIds);
+        }
       }
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.

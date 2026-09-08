@@ -1268,13 +1268,7 @@ export class MessageList {
         ...(backgroundTasks ? { backgroundTasks } : {}),
       };
 
-      this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-      this.updateLastCreatedAt(msg);
-
-      if (!this.stateManager.isResponseMessage(msg)) {
-        this.stateManager.removeMessage(msg);
-        this.stateManager.addToSource(msg, 'response');
-      }
+      this.markMessageUpdatedAsResponse(msg);
 
       return true;
     }
@@ -1284,25 +1278,32 @@ export class MessageList {
   }
 
   /**
-   * Reconcile provider-executed tool calls that can no longer produce a result
-   * because the model stream terminated with an error. Rewrites matching
-   * `state: 'call' | 'partial-call'` parts on the given assistant message to a
-   * terminal `state: 'output-error'` (preserving args, providerExecuted, and
-   * providerMetadata) so they are no longer indistinguishable from a live
-   * pending tool — see issue #23315.
+   * Mark the given provider-executed tool calls on an assistant message as
+   * failed because they can no longer produce a result — e.g. the model stream
+   * terminated with an error before the provider returned. Only the explicitly
+   * listed `toolCallIds` that are still `state: 'call' | 'partial-call'` are
+   * rewritten to a terminal `state: 'output-error'` (preserving args,
+   * providerExecuted, and providerMetadata) so they are no longer
+   * indistinguishable from a live pending tool — see issue #23315.
+   *
+   * The caller passes the specific tool call ids that were abandoned rather
+   * than having this scan for every unresolved provider call: an unrelated bug
+   * that drops a provider result elsewhere should surface as that bug, not get
+   * masked here by a "did not complete" error.
    *
    * Leaves client-executed tools (`providerExecuted !== true`), suspended /
-   * approval parts, and already-resolved (`result` / `output-error`) parts
-   * untouched, as well as any preceding text or successful results. Keeps the
-   * legacy AIV4 `content.toolInvocations` array in sync and moves the message
-   * to the `response` source so it is re-saved. Returns `true` if any part
-   * was reconciled.
+   * approval parts, unlisted ids, and already-resolved (`result` /
+   * `output-error`) parts untouched, as well as any preceding text or
+   * successful results. Keeps the legacy AIV4 `content.toolInvocations` array
+   * in sync and moves the message to the `response` source so it is re-saved.
+   * Returns `true` if any part was updated.
    */
-  public reconcileAbandonedProviderToolCalls(messageId: string, errorText?: string): boolean {
-    if (!messageId) {
+  public addOutputErrorsToProviderToolCalls(messageId: string, toolCallIds: string[], errorText?: string): boolean {
+    if (!messageId || !toolCallIds?.length) {
       return false;
     }
 
+    const targetIds = new Set(toolCallIds);
     const resolvedErrorText =
       errorText ?? 'Provider tool call did not complete: the model stream terminated with an error.';
 
@@ -1312,7 +1313,7 @@ export class MessageList {
     }
 
     let changed = false;
-    const reconciledToolCallIds: string[] = [];
+    const erroredToolCallIds: string[] = [];
 
     for (let i = 0; i < msg.content.parts.length; i++) {
       const part = msg.content.parts[i];
@@ -1320,7 +1321,11 @@ export class MessageList {
       // Cast to access providerExecuted which exists at runtime but isn't in the base type
       const candidate = part as typeof part & { providerExecuted?: boolean };
       const state = candidate.toolInvocation?.state;
-      if (candidate.providerExecuted !== true || (state !== 'call' && state !== 'partial-call')) {
+      if (
+        candidate.providerExecuted !== true ||
+        !targetIds.has(candidate.toolInvocation?.toolCallId) ||
+        (state !== 'call' && state !== 'partial-call')
+      ) {
         continue;
       }
 
@@ -1329,7 +1334,7 @@ export class MessageList {
         state: 'output-error',
         errorText: resolvedErrorText,
       };
-      reconciledToolCallIds.push(candidate.toolInvocation.toolCallId);
+      erroredToolCallIds.push(candidate.toolInvocation.toolCallId);
       changed = true;
     }
 
@@ -1342,10 +1347,21 @@ export class MessageList {
     // entries instead of leaving them as a dangling `call` in AIV4 transcripts.
     if (Array.isArray(msg.content.toolInvocations)) {
       msg.content.toolInvocations = msg.content.toolInvocations.filter(
-        invocation => !reconciledToolCallIds.includes(invocation.toolCallId),
+        invocation => !erroredToolCallIds.includes(invocation.toolCallId),
       );
     }
 
+    this.markMessageUpdatedAsResponse(msg);
+
+    return true;
+  }
+
+  /**
+   * Bump the message ordering timestamp and move it into the `response` source
+   * so an in-place content edit gets re-saved by `drainUnsavedMessages`. Shared
+   * by the tool-invocation mutators.
+   */
+  private markMessageUpdatedAsResponse(msg: MastraDBMessage): void {
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
     this.updateLastCreatedAt(msg);
 
@@ -1353,8 +1369,6 @@ export class MessageList {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
     }
-
-    return true;
   }
 
   /**
@@ -1434,8 +1448,6 @@ export class MessageList {
         : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-    this.updateLastCreatedAt(msg);
 
     // `backgroundTasks` is a per-toolCallId record — merge instead of
     // overwrite so multiple concurrent background dispatches on the
@@ -1472,12 +1484,9 @@ export class MessageList {
       );
     }
 
-    // Move the message to the response source so it gets
+    // Bump ordering and move the message to the response source so it gets
     // picked up by drainUnsavedMessages for re-saving.
-    if (!this.stateManager.isResponseMessage(msg)) {
-      this.stateManager.removeMessage(msg);
-      this.stateManager.addToSource(msg, 'response');
-    }
+    this.markMessageUpdatedAsResponse(msg);
   }
 
   /**
