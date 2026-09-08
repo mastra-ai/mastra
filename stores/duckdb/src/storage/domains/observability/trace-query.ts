@@ -159,7 +159,7 @@ function compileScalarPredicate<TField extends string>(
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
   return {
     sql: `${field.sql} IS NOT NULL AND ${field.sql} ${operator} ${parameter}`,
-    values: [...fieldValues, predicate.value],
+    values: [...fieldValues, ...fieldValues, predicate.value],
   };
 }
 

@@ -5,5 +5,11 @@
 Added DuckDB support for top-level metadata predicates in advanced trace queries.
 
 ```ts
-where: { op: "notExists", path: "metadata.parentMessageId" }
+await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: { op: 'notExists', path: 'metadata.parentMessageId' },
+});
 ```

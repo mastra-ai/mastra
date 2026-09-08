@@ -130,6 +130,24 @@ describe('DuckDB advanced trace query', () => {
     ]);
   });
 
+  it('keeps generic ordered metadata compiler bindings aligned without changing planner support', () => {
+    const key = ` latency'ms `;
+    const path = `$.${JSON.stringify(key)}`;
+    const trusted = plan({
+      where: { op: 'eq', left: { path: `metadata.${key}` }, right: { literal: '10' } },
+    });
+    const ordered = {
+      ...trusted,
+      where: { type: 'comparison', field: `metadata.${key}`, operator: 'gt', value: '10' },
+    } as TrustedTraceQueryPlan;
+
+    const compiled = compileDuckDBTraceQuery(ordered);
+
+    expect(compiled.sql).not.toContain(key);
+    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
+  });
+
   it('selects the latest logical root before applying completion and time filters', () => {
     const compiled = compileDuckDBTraceQuery(plan());
 
