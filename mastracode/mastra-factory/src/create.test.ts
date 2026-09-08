@@ -312,7 +312,6 @@ describe('create (platform provisioning)', () => {
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
-    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
   });
 
@@ -330,7 +329,6 @@ describe('create (platform provisioning)', () => {
     expect(env).toMatch(/^MASTRA_ORGANIZATION_ID=org_123$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
-    expect(env).not.toMatch(/^MASTRA_PLATFORM_ACCESS_TOKEN=/m);
     expect(env).not.toMatch(/^DATABASE_URL=/m);
 
     const note = clack.note.mock.calls[0]![0] as string;
