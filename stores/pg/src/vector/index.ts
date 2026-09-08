@@ -537,8 +537,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         const client = await this.pool.connect();
         try {
-          const { tableName, parsedIndexName } = this.getTableName(indexName);
-          const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
+          const { tableName } = this.getTableName(indexName);
 
           // Reconcile inside a single transaction under a database-scoped advisory lock so the
           // migration is atomic across PgVector instances/processes. Without this, a second process
@@ -560,23 +559,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             );
             const names = new Set(columns.rows.map(row => row.attname));
             if (!names.has('vector_id')) {
-              // Not a vector table (or missing) - let the caller's own query surface the error.
+              // Not a vector table (or missing). Don't cache this: an external initializer may
+              // create the legacy table later, and this instance must re-check and migrate then.
               await client.query('ROLLBACK');
+              this.namespaceReadyCache.delete(indexName);
               return;
             }
 
-            const compositeIndex = await client.query(
-              `SELECT 1
-               FROM pg_index i
-               JOIN pg_class c ON c.oid = i.indexrelid
-               WHERE i.indrelid = to_regclass($1)
-                 AND c.relname = $2`,
-              [tableName, namespaceIndexName],
-            );
-
-            // Only mark ready once both the column and its composite unique index exist. This also
-            // heals partial migrations left by older versions that committed each DDL separately.
-            const ready = names.has('namespace') && (compositeIndex.rowCount ?? 0) > 0;
+            // Readiness requires a unique index that `upsert`'s `ON CONFLICT (namespace, vector_id)`
+            // can actually infer: unique, valid, non-partial, no expression columns, and indexed on
+            // exactly {namespace, vector_id}. A same-named non-unique/partial/invalid index does not
+            // satisfy the conflict target, so name matching alone is insufficient.
+            const ready = names.has('namespace') && (await this.hasNamespaceConflictIndex(client, tableName));
             if (!ready) {
               if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
                 throw new MastraError({
@@ -591,6 +585,22 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 });
               }
               await this.ensureNamespaceSchema(indexName, client);
+
+              // `ensureNamespaceSchema` uses `CREATE UNIQUE INDEX IF NOT EXISTS`, which leaves a
+              // pre-existing same-named but incompatible index untouched. Surface that instead of
+              // caching a false "ready" that would make every upsert fail on conflict inference.
+              if (!(await this.hasNamespaceConflictIndex(client, tableName))) {
+                throw new MastraError({
+                  id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'INCOMPATIBLE_INDEX'),
+                  domain: ErrorDomain.MASTRA_VECTOR,
+                  category: ErrorCategory.USER,
+                  text:
+                    `Vector index "${indexName}" has an existing index that conflicts with the required ` +
+                    `unique index on (namespace, vector_id). Drop the incompatible index and retry, ` +
+                    `or apply the namespace migration SQL from the @mastra/pg changelog.`,
+                  details: { indexName },
+                });
+              }
             }
 
             await client.query('COMMIT');
@@ -605,6 +615,30 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         }
       }),
     );
+  }
+
+  /**
+   * True when `tableName` has a unique index that `ON CONFLICT (namespace, vector_id)` can infer:
+   * unique, valid, non-partial, no expression columns, and covering exactly those two columns
+   * (order does not matter for conflict inference).
+   */
+  private async hasNamespaceConflictIndex(client: pg.PoolClient, tableName: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1
+       FROM pg_index i
+       WHERE i.indrelid = to_regclass($1)
+         AND i.indisunique
+         AND i.indisvalid
+         AND i.indpred IS NULL
+         AND i.indexprs IS NULL
+         AND (
+           SELECT array_agg(a.attname::text ORDER BY a.attname)
+           FROM unnest(i.indkey) AS k(attnum)
+           JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+         ) = ARRAY['namespace', 'vector_id']`,
+      [tableName],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   transformFilter(filter?: PGVectorFilter) {
