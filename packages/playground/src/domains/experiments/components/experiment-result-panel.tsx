@@ -15,6 +15,7 @@ import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -141,7 +142,7 @@ export function ExperimentResultPanel({
                     <DataKeysAndValues.Value>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {tags.map(tag => (
-                          <Badge key={tag} size="xs" className={onTagsChange ? 'gap-1 pr-1' : undefined}>
+                          <ComputedTag key={tag} value={tag} className={onTagsChange ? 'gap-1 pr-1' : undefined}>
                             {tag}
                             {onTagsChange && (
                               <button
@@ -154,7 +155,7 @@ export function ExperimentResultPanel({
                                 <X className="size-3" />
                               </button>
                             )}
-                          </Badge>
+                          </ComputedTag>
                         ))}
                         {onTagsChange && (
                           <ExperimentResultsTagPicker

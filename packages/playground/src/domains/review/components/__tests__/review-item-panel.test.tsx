@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewItem } from '../review-item-card';
 import type { ReviewItemPanelProps } from '../review-item-panel';
 import { ReviewItemPanel } from '../review-item-panel';
+import { expectComputedTag } from '@/test/computed-tag';
 
 const baseItem: ReviewItem = {
   id: 'item-1',
@@ -53,5 +54,19 @@ describe('ReviewItemPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Rate positive' }));
     expect(props.onRate).toHaveBeenCalledWith(undefined);
+  });
+
+  describe('given an item with tags', () => {
+    it('renders read-only tags with colors computed from their value when completed', () => {
+      renderPanel({ item: { ...baseItem, tags: ['alpha'] }, isCompleted: true });
+
+      expectComputedTag(screen.getByText('alpha'), 'alpha');
+    });
+
+    it('renders editable tag chips with colors computed from their value', () => {
+      renderPanel({ item: { ...baseItem, tags: ['alpha'] } });
+
+      expectComputedTag(screen.getByRole('button', { name: 'Remove tag alpha' }).parentElement, 'alpha');
+    });
   });
 });

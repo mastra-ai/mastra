@@ -3,6 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExperimentResultsList } from '../experiment-results-list';
+import { expectComputedTag } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';
 
@@ -75,6 +76,21 @@ describe('ExperimentResultsList', () => {
 
       expect(screen.getByText('alpha')).toBeDefined();
       expect(screen.getByText('beta')).toBeDefined();
+    });
+
+    it('renders each tag with colors computed from its value', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[{ ...makeResult('r-1'), tags: ['alpha', 'beta'] }]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expectComputedTag(screen.getByText('alpha'), 'alpha');
+      expectComputedTag(screen.getByText('beta'), 'beta');
     });
 
     it('renders an empty tags cell when the result has no tags', () => {

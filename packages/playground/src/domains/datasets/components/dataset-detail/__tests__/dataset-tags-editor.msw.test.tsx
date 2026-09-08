@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DatasetTagsEditor } from '../dataset-tags-editor';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { expectComputedTag } from '@/test/computed-tag';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -68,6 +69,13 @@ describe('DatasetTagsEditor', () => {
       const editor = screen.getByTestId('dataset-tags-editor');
       expect(editor.contains(remove)).toBe(true);
       expect(editor.textContent).toContain('alpha');
+    });
+
+    it('renders each current tag with colors computed from its value', async () => {
+      renderEditor();
+
+      const remove = await screen.findByRole('button', { name: 'Remove tag alpha' });
+      expectComputedTag(remove.parentElement, 'alpha');
     });
 
     it('lists every known tag and marks the ones already on the dataset', async () => {

@@ -1,9 +1,9 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { AlertCircleIcon } from 'lucide-react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
@@ -111,9 +111,7 @@ export function ExperimentResultsList({
                     data-testid={`result-tags-${result.id}`}
                   >
                     {result.tags?.map(tag => (
-                      <Badge key={tag} size="xs" className="shrink-0">
-                        {tag}
-                      </Badge>
+                      <ComputedTag key={tag} value={tag} className="shrink-0" />
                     ))}
                   </DataList.Cell>
                 )}

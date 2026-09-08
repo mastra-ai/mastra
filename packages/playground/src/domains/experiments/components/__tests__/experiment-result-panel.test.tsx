@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import { expectComputedTag } from '@/test/computed-tag';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
   id: 'res-1',
@@ -113,6 +114,12 @@ describe('ExperimentResultPanel metadata', () => {
       expect(screen.getByText('alpha')).toBeDefined();
       expect(screen.queryByRole('combobox')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Remove tag alpha' })).toBeNull();
+    });
+
+    it('renders each tag with colors computed from its value', () => {
+      render(<ExperimentResultPanel result={makeResult({ tags: ['alpha'] })} onClose={() => {}} />);
+
+      expectComputedTag(screen.getByText('alpha'), 'alpha');
     });
   });
 });

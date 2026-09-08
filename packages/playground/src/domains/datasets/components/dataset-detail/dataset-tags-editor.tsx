@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -8,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { getAllDatasetTags } from '../datasets-list/helpers';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset, useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 const CREATE_TAG_VALUE = '__create_tag__';
 
@@ -58,7 +58,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
   return (
     <div data-testid="dataset-tags-editor" className="flex flex-wrap items-center gap-2 px-4 py-2">
       {currentTags.map(tag => (
-        <Badge key={tag} size="md" className="gap-1 pr-1">
+        <ComputedTag key={tag} value={tag} size="md" className="gap-1 pr-1">
           {tag}
           <button
             type="button"
@@ -69,7 +69,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
           >
             <X className="size-3" />
           </button>
-        </Badge>
+        </ComputedTag>
       ))}
       <Combobox
         options={options}
