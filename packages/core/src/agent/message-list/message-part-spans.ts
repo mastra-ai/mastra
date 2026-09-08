@@ -1,20 +1,7 @@
+import type { ChunkType } from '../../stream/types';
 import type { MastraMessagePart, MastraProviderMetadata } from './state/types';
 
-type SpanChunkPayload = {
-  id?: unknown;
-  text?: unknown;
-  data?: unknown;
-  providerMetadata?: unknown;
-};
-
-export type SpanChunk = { type: string; payload?: unknown };
-
-export type FoldedSpan = { part: MastraMessagePart; created: boolean };
-
-type TextPart = Extract<MastraMessagePart, { type: 'text' }>;
-type ReasoningPart = Extract<MastraMessagePart, { type: 'reasoning' }>;
-
-const SPAN_CHUNK_TYPES = new Set([
+const SPAN_CHUNK_TYPES = [
   'text-start',
   'text-delta',
   'text-end',
@@ -22,34 +9,27 @@ const SPAN_CHUNK_TYPES = new Set([
   'reasoning-delta',
   'reasoning-end',
   'redacted-reasoning',
-]);
+] as const;
 
-export function isSpanChunk(type: string): boolean {
-  return SPAN_CHUNK_TYPES.has(type);
-}
+type SpanChunkType = (typeof SPAN_CHUNK_TYPES)[number];
 
-function readPayload(chunk: SpanChunk): SpanChunkPayload {
-  return typeof chunk.payload === 'object' && chunk.payload !== null ? (chunk.payload as SpanChunkPayload) : {};
-}
+export type SpanChunk = {
+  [T in SpanChunkType]: { type: T; payload: Extract<ChunkType, { type: T }>['payload'] };
+}[SpanChunkType];
 
-function readSpanId(payload: SpanChunkPayload): string {
-  return typeof payload.id === 'string' ? payload.id : '';
-}
+export type FoldedSpan = { part: MastraMessagePart; created: boolean };
 
-function readSpanText(payload: SpanChunkPayload): string {
-  return typeof payload.text === 'string' ? payload.text : '';
-}
+type TextPart = Extract<MastraMessagePart, { type: 'text' }>;
+type ReasoningPart = Extract<MastraMessagePart, { type: 'reasoning' }>;
 
-function readProviderMetadata(payload: SpanChunkPayload): MastraProviderMetadata | undefined {
-  return typeof payload.providerMetadata === 'object' && payload.providerMetadata !== null
-    ? (payload.providerMetadata as MastraProviderMetadata)
-    : undefined;
+const SPAN_CHUNK_TYPE_SET: ReadonlySet<string> = new Set(SPAN_CHUNK_TYPES);
+
+export function isSpanChunk(chunk: { type: string }): chunk is SpanChunk {
+  return SPAN_CHUNK_TYPE_SET.has(chunk.type);
 }
 
 function isRedactedMetadata(providerMetadata: MastraProviderMetadata | undefined): boolean {
-  return Object.values(providerMetadata ?? {}).some(value =>
-    Boolean((value as { redactedData?: unknown })?.redactedData),
-  );
+  return Object.values(providerMetadata ?? {}).some(entry => Boolean(entry?.redactedData));
 }
 
 function redactedReasoningPart(providerMetadata: MastraProviderMetadata | undefined): ReasoningPart {
@@ -94,24 +74,22 @@ export class MessagePartSpans {
   }
 
   fold(parts: MastraMessagePart[], chunk: SpanChunk): FoldedSpan | undefined {
-    const payload = readPayload(chunk);
-    const id = readSpanId(payload);
-    const providerMetadata = readProviderMetadata(payload);
-
     switch (chunk.type) {
       case 'text-start':
-        this.#textMetadata.set(id, providerMetadata);
+        this.#textMetadata.set(chunk.payload.id, chunk.payload.providerMetadata);
         return undefined;
 
       case 'text-delta': {
+        const { id, text, providerMetadata } = chunk.payload;
         const open = this.#textParts.get(id);
         const part = open ?? this.#openTextPart(parts, id, providerMetadata);
-        part.text += readSpanText(payload);
+        part.text += text;
         if (providerMetadata) part.providerMetadata = providerMetadata;
         return { part, created: !open };
       }
 
       case 'text-end': {
+        const { id, providerMetadata } = chunk.payload;
         const part = this.#textParts.get(id);
         this.#textParts.delete(id);
         this.#textMetadata.delete(id);
@@ -122,6 +100,7 @@ export class MessagePartSpans {
       }
 
       case 'reasoning-start': {
+        const { id, providerMetadata } = chunk.payload;
         if (!isRedactedMetadata(providerMetadata)) {
           this.#reasoningMetadata.set(id, providerMetadata);
           return undefined;
@@ -130,9 +109,9 @@ export class MessagePartSpans {
       }
 
       case 'reasoning-delta': {
+        const { id, text, providerMetadata } = chunk.payload;
         const open = this.#reasoningParts.get(id);
         const part = open ?? this.#openReasoningPart(parts, id, providerMetadata);
-        const text = readSpanText(payload);
         part.reasoning = (part.reasoning ?? '') + text;
         const detail = part.details[0];
         if (detail?.type === 'text') detail.text = part.reasoning;
@@ -141,6 +120,7 @@ export class MessagePartSpans {
       }
 
       case 'reasoning-end': {
+        const { id, providerMetadata } = chunk.payload;
         const open = this.#reasoningParts.get(id);
         const metadata = providerMetadata ?? this.#reasoningMetadata.get(id);
         this.#reasoningParts.delete(id);
@@ -150,16 +130,16 @@ export class MessagePartSpans {
           return { part: open, created: false };
         }
         // OpenAI needs an item_reference for the tool calls that follow a reasoning span.
-        parts.push(emptyReasoningPart(metadata));
-        return { part: parts[parts.length - 1]!, created: true };
+        const part = emptyReasoningPart(metadata);
+        parts.push(part);
+        return { part, created: true };
       }
 
-      case 'redacted-reasoning':
-        parts.push(redactedReasoningPart(providerMetadata));
-        return { part: parts[parts.length - 1]!, created: true };
-
-      default:
-        return undefined;
+      case 'redacted-reasoning': {
+        const part = redactedReasoningPart(chunk.payload.providerMetadata);
+        parts.push(part);
+        return { part, created: true };
+      }
     }
   }
 

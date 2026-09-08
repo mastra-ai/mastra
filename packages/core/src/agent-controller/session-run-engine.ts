@@ -1,11 +1,12 @@
 import type { Agent } from '../agent';
+import type { SpanChunk } from '../agent/message-list/message-part-spans';
+import { isSpanChunk, MessagePartSpans } from '../agent/message-list/message-part-spans';
 import type {
   MastraDBMessage,
   MastraMessagePart,
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
-import { MessagePartSpans } from '../agent/message-list/message-part-spans';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -41,10 +42,7 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'start'>
   | StreamPayloadChunk<'abort'>
   | StreamPayloadChunk<'response-metadata'>
-  | StreamPayloadChunk<'text-end'>
-  | StreamPayloadChunk<'reasoning-end'>
   | StreamPayloadChunk<'reasoning-signature'>
-  | StreamPayloadChunk<'redacted-reasoning'>
   | StreamPayloadChunk<'source'>
   | StreamPayloadChunk<'file'>
   | StreamPayloadChunk<'reasoning-file'>
@@ -69,10 +67,7 @@ type StreamIgnoredChunk =
   | StreamObjectChunk<'object-result'>;
 type StreamChunk =
   | StreamIgnoredChunk
-  | StreamPayloadChunk<'text-start'>
-  | StreamPayloadChunk<'text-delta'>
-  | StreamPayloadChunk<'reasoning-start'>
-  | StreamPayloadChunk<'reasoning-delta'>
+  | SpanChunk
   | StreamPayloadChunk<'tool-call-input-streaming-start'>
   | StreamPayloadChunk<'tool-call-delta'>
   | StreamPayloadChunk<'tool-call-input-streaming-end'>
@@ -497,6 +492,17 @@ export class SessionRunEngine {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
 
+    if (isSpanChunk(chunk)) {
+      const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
+      const opensTheAnswer = chunk.type === 'text-start' || (folded?.created && folded.part.type === 'text');
+      if (opensTheAnswer && !state.messageIdObserved) {
+        state.messageIdObserved = true;
+        this.#session.emit({ type: 'message_start', message: state.currentMessage });
+      }
+      if (folded) this.#session.emit({ type: 'message_update', message: state.currentMessage });
+      return undefined;
+    }
+
     switch (chunk.type) {
       case 'step-start': {
         // Adopt the loop's response message id so the streamed turn and its
@@ -523,23 +529,6 @@ export class SessionRunEngine {
         if (!this.hasCurrentMessageContent(state) && !state.messageIdObserved) {
           state.currentMessage.id = messageId;
         }
-        break;
-      }
-
-      case 'text-start':
-      case 'text-delta':
-      case 'text-end':
-      case 'reasoning-start':
-      case 'reasoning-delta':
-      case 'reasoning-end':
-      case 'redacted-reasoning': {
-        const folded = state.spans.fold(state.currentMessage.content.parts, chunk);
-        const opensTheAnswer = chunk.type === 'text-start' || (folded?.created && folded.part.type === 'text');
-        if (opensTheAnswer && !state.messageIdObserved) {
-          state.messageIdObserved = true;
-          this.#session.emit({ type: 'message_start', message: state.currentMessage });
-        }
-        if (folded) this.#session.emit({ type: 'message_update', message: state.currentMessage });
         break;
       }
 

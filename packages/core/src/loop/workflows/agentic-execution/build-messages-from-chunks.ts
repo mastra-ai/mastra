@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart } from '../../../agent/message-list';
-import { MessagePartSpans } from '../../../agent/message-list/message-part-spans';
+import { isSpanChunk, MessagePartSpans } from '../../../agent/message-list/message-part-spans';
 import { getErrorFromUnknown } from '../../../error';
 import type {
   FilePayload,
@@ -70,18 +70,11 @@ export function buildMessagesFromChunks({
   const spans = new MessagePartSpans();
 
   for (const chunk of chunks) {
+    if (isSpanChunk(chunk)) {
+      spans.fold(parts, chunk);
+      continue;
+    }
     switch (chunk.type) {
-      case 'text-start':
-      case 'text-delta':
-      case 'text-end':
-      case 'reasoning-start':
-      case 'reasoning-delta':
-      case 'reasoning-end':
-      case 'redacted-reasoning': {
-        spans.fold(parts, chunk);
-        break;
-      }
-
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;

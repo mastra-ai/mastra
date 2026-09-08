@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { Agent } from '../agent';
 import type { MastraMessagePart } from '../agent/message-list/state/types';
 import { buildMessagesFromChunks } from '../loop/workflows/agentic-execution/build-messages-from-chunks';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
-import { Agent } from '../agent';
 
 type Chunk = { type: string; payload: Record<string, unknown> };
 
