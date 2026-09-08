@@ -308,11 +308,19 @@ export function createDurableToolCallStep() {
         }
       };
 
-      // If the tool was already executed by the provider, return the output
-      if (providerExecuted && output !== undefined) {
+      // Provider-executed tools are handled entirely by the stream path
+      // (tool-call and tool-result chunks in llm-execution.ts), so skip client
+      // execution — mirrors the non-durable tool-call step. When the provider
+      // already delivered the output in the same stream, thread it through as
+      // the result; a deferred result (e.g. Anthropic web_search resolving in
+      // a later stream) must not fall through to client execution, which would
+      // try to run the provider tool client-side and fail with
+      // ToolNotFoundError. (The next-stream result patch from #14282 is not
+      // yet ported to durable llm-execution — tracked as a parity item.)
+      if (providerExecuted) {
         return {
           ...typedInput,
-          result: output,
+          ...(output !== undefined ? { result: output } : {}),
         };
       }
 

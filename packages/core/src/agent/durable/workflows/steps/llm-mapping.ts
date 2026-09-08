@@ -139,6 +139,16 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
+          // Provider-executed results are already committed by llm-execution's
+          // buildMessagesFromChunks when the result arrives in-stream; committing
+          // here again would overwrite that entry with the serialized copy (and
+          // clobber the providerMetadata captured from the live stream chunk).
+          // A deferred provider result (no output yet) has nothing to commit.
+          // Mirrors the non-durable llm-mapping-step's providerExecuted gate.
+          if (toolResult.providerExecuted) {
+            continue;
+          }
+
           if (isDeniedApproval(toolResult)) {
             commitToolResult({
               messageList,
