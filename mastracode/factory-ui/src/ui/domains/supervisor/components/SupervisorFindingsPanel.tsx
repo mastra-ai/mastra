@@ -22,12 +22,10 @@ interface SupervisorFindingsPanelProps {
 const MAX_VISIBLE_FINDINGS_PER_GROUP = 5;
 
 const FINDING_LABELS: Record<FactoryHealthFinding['kind'], string> = {
-  'decision-failed': 'Failed decisions',
   'decision-stuck': 'Stuck decisions',
   'start-stalled': 'Stalled starts',
   'seat-orphaned': 'Orphaned seats',
   'seat-missing': 'Missing seats',
-  'proposal-waiting': 'Proposals waiting',
   'held-waiting': 'Held cards waiting',
   'label-drift': 'Label drift',
 };

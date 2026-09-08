@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../boards/index.js';
+import { createTestBoard } from '../../boards/test-utils.js';
 import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
@@ -246,6 +248,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: defaultFactoryRules({ version: 'custom-github-v2' }),
     });
     await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'committed' });
@@ -268,6 +271,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -291,6 +295,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -311,6 +316,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -335,6 +341,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -373,6 +380,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -408,6 +416,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -424,6 +433,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -454,6 +464,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -487,6 +498,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -518,6 +530,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -540,6 +553,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -561,6 +575,7 @@ describe('GithubRules', () => {
       controller: {} as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-guard',
     });
@@ -588,6 +603,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
@@ -664,6 +680,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
       primeCredentials,
@@ -809,6 +826,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -839,12 +857,14 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -912,12 +932,14 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -962,6 +984,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1007,6 +1030,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1041,6 +1065,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1145,6 +1170,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1207,12 +1233,14 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1292,12 +1320,14 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, rules }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1372,6 +1402,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1393,6 +1424,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
 
@@ -1436,6 +1468,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1523,6 +1556,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1589,6 +1623,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1638,6 +1673,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules,
     });
 
@@ -1728,6 +1764,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1808,6 +1845,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1877,6 +1915,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1932,6 +1971,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -1977,6 +2017,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -2019,6 +2060,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -2061,6 +2103,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -2124,6 +2167,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -2180,6 +2224,7 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
+      boards: createBoardRegistry(),
       rules: builtInFactoryRules(),
     });
 
@@ -2237,6 +2282,7 @@ describe('createGithubPullRequestReconciler', () => {
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
     fetchIssue?: ReturnType<typeof vi.fn>,
+    boards = createBoardRegistry(),
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -2246,6 +2292,7 @@ describe('createGithubPullRequestReconciler', () => {
         projects: context.projects,
         storage: context.workItems,
         rules: builtInFactoryRules(),
+        boards,
       },
       fetchPullRequest as never,
       fetchIssue as never,
@@ -2496,6 +2543,64 @@ describe('createGithubPullRequestReconciler', () => {
     await expect(context.workItems.get({ orgId: 'org-1', id: card.item.id })).resolves.toMatchObject({
       metadata: { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: 'merged' },
     });
+  });
+
+  it('leaves failed decisions alone when no installed board declares the closed card terminal', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'failed-on-unknown-board', triggerType: 'test' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        { type: 'sendMessage', role: 'review', message: 'Notify.', idempotencyKey: 'failed-on-unknown-board' },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active review session.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    // Review is not installed: `done` on this card has no declared meaning, so the sweep never guesses.
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+    );
+
+    await reconcile([repositoryTarget]);
+
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('failed');
   });
 
   it('keeps a failed close transition actionable until the card reaches a terminal stage', async () => {
