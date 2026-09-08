@@ -9,6 +9,7 @@ export interface ToolPartFields {
   input: unknown;
   output: unknown;
   state?: string;
+  errorText?: string;
 }
 
 export function isToolPart(part: MessageFactoryPart): part is ToolPart {
@@ -24,6 +25,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
       input: 'args' in invocation ? invocation.args : undefined,
       output: 'result' in invocation ? invocation.result : undefined,
       state: invocation.state,
+      errorText: 'errorText' in invocation ? invocation.errorText : undefined,
     };
   }
   return {
@@ -32,5 +34,6 @@ export function readToolPart(part: ToolPart): ToolPartFields {
     input: part.input,
     output: part.output,
     state: part.state,
+    errorText: part.errorText,
   };
 }

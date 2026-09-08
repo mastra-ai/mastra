@@ -157,7 +157,7 @@ const toolResultChunk = (toolCallId: string, result: unknown): ChunkType =>
     payload: { toolCallId, result },
   }) as unknown as ChunkType;
 
-const toolErrorChunk = (toolCallId: string, error: string): ChunkType =>
+const toolErrorChunk = (toolCallId: string, error: unknown): ChunkType =>
   ({
     type: 'tool-error',
     runId: RUN_ID,
@@ -838,6 +838,58 @@ describe('accumulateChunk - tool calls', () => {
       toolCallId: 'tc-1',
       errorText: 'boom',
     });
+  });
+
+  it('retains partial child output when a delegation fails', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'agent-head', {}),
+      toolOutputChunk('tc-1', { type: 'text-delta', from: 'AGENT', payload: { text: 'Partial enrichment' } }),
+      toolErrorChunk('tc-1', 'Provider failed'),
+    ]);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({
+          state: 'output-error',
+          errorText: 'Provider failed',
+          result: { childMessages: [{ type: 'text', content: 'Partial enrichment' }] },
+        }),
+      }),
+    );
+  });
+
+  it('reads a serialized delegation failure message from its cause', () => {
+    const message = 'Failed agent tool execution for head: Incorrect API key provided';
+    // Native Error.message is non-enumerable; the delegation wrapper's cause
+    // survives JSON transport with the readable MastraError message inside it.
+    const error = JSON.parse(
+      JSON.stringify(
+        Object.assign(new Error(message), {
+          cause: { message, code: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', details: { internal: 'not display text' } },
+        }),
+      ),
+    );
+    const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'output-error', errorText: message }),
+      }),
+    );
+  });
+
+  it.each([
+    { error: new Error('outer'), expected: 'outer' },
+    { error: { message: 'outer', cause: { message: 'inner' } }, expected: 'outer' },
+    { error: { message: '', cause: { message: 'inner' } }, expected: '' },
+    { error: { cause: { message: '', cause: { message: 'inner' } } }, expected: '' },
+    { error: { cause: null }, expected: '[object Object]' },
+  ])('keeps existing error text behavior for $error', ({ error, expected }) => {
+    const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'output-error', errorText: expected }),
+      }),
+    );
   });
 
   it('tool-output-denied transitions to output-denied with approval details', () => {

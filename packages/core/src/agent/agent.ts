@@ -5026,6 +5026,7 @@ export class Agent<
             // A hook that just threw is not in a state to handle its own
             // failure, so the failure path never re-invokes it.
             let completeHookInvoked = false;
+            let result: any;
 
             // Call onDelegationStart before resolving the sub-agent's runtime
             // config so mutations of the delegated run's context in the hook
@@ -5282,7 +5283,6 @@ export class Agent<
                 resourceId,
               });
 
-              let result: any;
               const suspendedToolRunId = (inputData as any).suspendedToolRunId;
 
               const { resumeData, suspend } = context?.agent ?? {};
@@ -5606,15 +5606,6 @@ export class Agent<
                   }
                 }
 
-                if (requireToolApproval || suspendedPayload || resumeSchema) {
-                  return suspend?.(suspendedPayload, {
-                    resumeSchema,
-                    requireToolApproval,
-                    runId: streamResult.runId,
-                    isAgentSuspend: true,
-                  });
-                }
-
                 // Use streamResult.text (a delayed promise) which resolves to the
                 // output-processor-modified text, rather than the raw accumulated text-deltas.
                 const processedText = await streamResult.text;
@@ -5628,6 +5619,20 @@ export class Agent<
                   subAgentToolResults,
                   usage: subAgentUsage,
                 };
+
+                // Keep partial results available to the failure hook and saved transcript.
+                if (streamResult.error) {
+                  throw streamResult.error;
+                }
+
+                if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  return suspend?.(suspendedPayload, {
+                    resumeSchema,
+                    requireToolApproval,
+                    runId: streamResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
               } else {
                 if (typeof resolvedAgent.streamLegacy !== 'function') {
                   throw new Error(`Sub-agent ${agent.id} returned a v1 model but does not implement streamLegacy`);
@@ -5756,7 +5761,7 @@ export class Agent<
                     primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
-                    result: { text: '' },
+                    result: result ?? { text: '' },
                     duration: Date.now() - startTime,
                     success: false,
                     error: err instanceof Error ? err : new Error(String(err)),
@@ -5834,6 +5839,9 @@ export class Agent<
                   details: {
                     agentName: this.name,
                     subAgentName: agent.name ?? agent.id,
+                    ...(result?.subAgentThreadId
+                      ? { subAgentThreadId: result.subAgentThreadId, subAgentResourceId: result.subAgentResourceId }
+                      : {}),
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',

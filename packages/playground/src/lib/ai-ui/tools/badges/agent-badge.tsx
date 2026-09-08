@@ -1,4 +1,5 @@
 import { ToolCallMono } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import React from 'react';
@@ -36,6 +37,9 @@ export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   toolCalled?: boolean;
   isComplete?: boolean;
   keepOpenForStreamingChildMessages?: boolean;
+  status?: ToolCallStatus;
+  /** Error message when the delegation failed (tool part state `output-error`). */
+  errorText?: string;
 }
 
 export const AgentBadge = ({
@@ -50,6 +54,8 @@ export const AgentBadge = ({
   toolCalled: toolCalledProp,
   isComplete = false,
   keepOpenForStreamingChildMessages = false,
+  status = 'idle',
+  errorText,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -85,7 +91,8 @@ export const AgentBadge = ({
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
-  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+  const isError = status === 'error';
+  const shouldCollapseContent = isComplete && !isError && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
@@ -102,6 +109,7 @@ export const AgentBadge = ({
       toolCallId={toolCallId}
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
+      status={status}
       initialCollapsed={shouldCollapseContent}
       extraInfo={
         metadata?.mode === 'network' ? (
@@ -144,6 +152,12 @@ export const AgentBadge = ({
           </React.Fragment>
         );
       })}
+
+      {isError && errorText && (
+        <ToolCallMono copyText={errorText} data-testid="agent-error" className="text-error/90">
+          {errorText}
+        </ToolCallMono>
+      )}
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
