@@ -126,7 +126,7 @@ await observability!.listFeedback({
 
 ## Delete feedback
 
-Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span Feedback tab has a delete action.
+Use `deleteFeedback()` to hide feedback records from reads by id. This is useful when a comment contains sensitive data. Each request accepts at most 1,000 `feedbackIds`, and deletion is idempotent. The optional `organizationId` field filters by organization, and the optional `resourceId` field filters by resource. You can supply either filter independently or use both together. In Studio, each comment on a trace or span Feedback tab has a delete action.
 
 ```typescript
 await observability!.deleteFeedback({
