@@ -8,3 +8,6 @@ export type { ProviderToolsOptions, ProxyToolConfig, ProxyToolContext } from './
 export { defineProxyTool, resolveConnectionId, applyAllowTools } from './toolset.js';
 export { PROVIDERS, findRegistration } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
+
+// Side-effect import: each generated provider module pushes into PROVIDERS.
+import './providers/index.js';
