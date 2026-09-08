@@ -218,7 +218,7 @@ export function createFactorySupervisorSessionTools(deps: Dependencies): Integra
                   : (await session.thread.getById({ threadId }))?.metadata?.currentModeId;
                 const effectiveMode = result.applied.mode
                   ? changes.mode!
-                  : typeof storedMode === 'string'
+                  : typeof storedMode === 'string' && deps.controller.listModes().some(mode => mode.id === storedMode)
                     ? storedMode
                     : session.mode.get();
                 await session.thread.setSettingOn({

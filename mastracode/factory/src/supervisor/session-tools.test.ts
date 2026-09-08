@@ -102,6 +102,23 @@ async function setup({ current = true, busy = false } = {}) {
 }
 
 describe('factory_update_session', () => {
+  it('persists the model for the current configured mode when a non-current thread has a retired mode', async () => {
+    const c = await setup({ current: false });
+    c.metadata.currentModeId = 'retired-mode';
+    const output = await c.call({ target: { sessionId: 'session' }, changes: { model: 'custom/model' } });
+    expect(c.metadata.modeModelId_work).toBe('custom/model');
+    expect(c.metadata['modeModelId_retired-mode']).toBeUndefined();
+    expect(c.session.thread.setSettingOn).toHaveBeenCalledExactlyOnceWith({
+      threadId: 'bound',
+      key: 'modeModelId_work',
+      value: 'custom/model',
+    });
+    expect(c.session.model.switch).not.toHaveBeenCalled();
+    expect(c.session.mode.switch).not.toHaveBeenCalled();
+    expect(output.results[0].applied.model).toBe('next-thread-switch');
+    expect((await c.audits())[0].metadata.applied).toEqual({ model: 'next-thread-switch' });
+  });
+
   it.each([
     { current: true, busy: false, timing: 'now' },
     { current: true, busy: true, timing: 'next-run-start' },
