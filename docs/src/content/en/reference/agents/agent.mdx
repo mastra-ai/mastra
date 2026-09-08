@@ -331,9 +331,9 @@ agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it is neither serialized with the message nor an authorization mechanism.
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`. Pass an optional `queueOwnerId` to group local queued messages for observation and cancellation. The owner ID is local metadata: it's neither serialized with the message nor an authorization mechanism.
 
-Use `subscribeThreadEvents({ resourceId, threadId }, listener)` to observe local thread events. Currently, Mastra emits only `queue-count-changed`, which reports all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives this event synchronously to establish the current baseline, then receives it again only when its count changes. The baseline does not mean that a queue mutation just occurred. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict queue-count notifications to that owner's messages submitted by the calling Agent.
+Use `subscribeThreadEvents({ resourceId, threadId }, listener)` to observe local thread events. Currently, Mastra emits only `queue-count-changed`, which reports all locally pending messages on the shared thread, including messages submitted by other Sessions or Agents using the same runtime and PubSub instance. The listener receives a synchronous baseline with the current local count, then updates only when its count changes. Its unsubscribe function is idempotent and doesn't cancel queued messages. Pass an optional `queueOwnerId` to restrict queue-count notifications to that owner's messages submitted by the calling Agent.
 
 ```typescript
 const scope = {
@@ -355,13 +355,13 @@ agent.queueMessage('Review the failing test.', {
 unsubscribe()
 ```
 
-`subscribeThreadEvents()` is distinct from `subscribeToThread()`, which streams agent output. It does not currently emit composite thread state, individual message lifecycle events, run events, or approval events; those may be added as separate event types in the future.
+`subscribeThreadEvents()` is distinct from `subscribeToThread()`, which streams agent output. It doesn't currently emit composite thread state, individual message lifecycle events, run events, or approval events. Mastra may add those as separate event types in the future.
 
 AgentController Sessions observe the shared thread count when they subscribe, even before submitting a follow-up. `session.steer()` aborts the current run before sending the new input, without clearing queued follow-ups. Session cleanup stops observation and cancels unfinished local preparation, but leaves submitted messages in the Agent queue.
 
-The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure—not when model generation completes. An idle `queueMessage()` handoff is immediate and is not represented as a cancellable pending slot.
+The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure, not when model generation completes. An idle `queueMessage()` handoff is immediate and isn't represented as a cancellable pending slot.
 
-Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages, or pass `{ resourceId, threadId, queueOwnerId }` to remove an owner group. Supply exactly one selector. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID. They do not cancel already-running, remote-owner, or crash-persisted work, and do not provide durable queue delivery.
+Use `cancelQueuedMessages({ resourceId, threadId, signalIds })` to remove specific queued messages, or pass `{ resourceId, threadId, queueOwnerId }` to remove an owner group. Supply exactly one selector. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID. They don't cancel already-running, remote-owner, or crash-persisted work, and don't provide durable queue delivery.
 
 ### `sendSignal(signal, options)`
 
