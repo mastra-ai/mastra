@@ -1,20 +1,27 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import { TraceHighlightProvider } from './trace-highlight-context';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 
 export interface TraceThreadItemViewProps {
   traceId: string;
+  /** Called with the ids of the spans used to build a message when its "Highlight spans" action is clicked. */
+  onHighlightSpans?: (spanIds: string[]) => void;
+  className?: string;
 }
 
 const noop = () => {};
 
-export function TraceThreadItemView({ traceId }: TraceThreadItemViewProps) {
-  const { data, isLoading, error } = useTraceSpans(traceId);
+export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
+  const { data, isLoading, error } = useTraceSpans(traceId, { passive: true });
 
   if (isLoading) {
     return (
@@ -33,6 +40,17 @@ export function TraceThreadItemView({ traceId }: TraceThreadItemViewProps) {
   }
 
   const messages = data ? formatTraceThreadMessages(data.spans) : [];
+  const onToolOpen = onHighlightSpans
+    ? (toolCallId: string) => {
+        const message = messages.find(candidate =>
+          candidate.content.parts.some(
+            part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+          ),
+        );
+        if (message) onHighlightSpans(message.traceSpanIds);
+      }
+    : undefined;
+
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
@@ -44,7 +62,7 @@ export function TraceThreadItemView({ traceId }: TraceThreadItemViewProps) {
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-4">
+    <div className={cn('p-4', className)}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         <ToolCallProvider
           approveToolcall={noop}
@@ -57,9 +75,23 @@ export function TraceThreadItemView({ traceId }: TraceThreadItemViewProps) {
           toolCallApprovals={{}}
           networkToolCallApprovals={{}}
         >
-          {messages.map(message => (
-            <MessageRow key={message.id} message={message} readOnly />
-          ))}
+          <TraceHighlightProvider onToolOpen={onToolOpen}>
+            {messages.map(message => (
+              <MessageRow
+                key={message.id}
+                message={message}
+                readOnly
+                footer={
+                  onHighlightSpans && message.isTextOnly && message.traceSpanIds.length > 0 ? (
+                    <Button variant="ghost" size="xs" onClick={() => onHighlightSpans(message.traceSpanIds)}>
+                      <ListTreeIcon />
+                      Highlight spans
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </TraceHighlightProvider>
         </ToolCallProvider>
       </div>
     </div>

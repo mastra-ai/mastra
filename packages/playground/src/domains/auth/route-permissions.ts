@@ -60,6 +60,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
   { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
   { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
+  { route: '/experiments/review-queue', permission: ['datasets:read'], name: 'Review Queue' },
 
   // Primitives - note: 'mcp' not 'mcps', 'stored' for prompts (stored/prompt-blocks routes)
   { route: '/tools', permission: 'tools:read', name: 'Tools' },

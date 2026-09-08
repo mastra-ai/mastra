@@ -233,15 +233,14 @@ async function executeAgent(
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
 ): Promise<ExecutionResult> {
-  const model = await agent.getModel();
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext))
+    : undefined;
+  const model = await agent.getModel({ requestContext: reqCtx });
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
-
-  const reqCtx: RequestContext | undefined = requestContext
-    ? new RequestContext(Object.entries(requestContext))
-    : undefined;
 
   // Memory-enabled experiment runs need a thread even when the caller provides no
   // memory identifiers. Use the caller's resource when present; otherwise isolate

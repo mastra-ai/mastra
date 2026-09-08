@@ -177,6 +177,100 @@ describe('Span.endTree', () => {
     expect(endedIds()).toEqual([...completed, trailing.id, root.id]);
   });
 
+  it('reaches grandchildren whose parent ended before the tree', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const middle = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'middle' });
+    const leaf = middle.createChildSpan({ type: SpanType.MODEL_STEP, name: 'leaf' });
+
+    middle.end();
+    root.endTree();
+
+    expect(leaf.endTime).toBeInstanceOf(Date);
+    expect(endedIds().sort()).toEqual([root.id, middle.id, leaf.id].sort());
+  });
+
+  it('promotes open children across several ended ancestors', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const outer = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'outer' });
+    const inner = outer.createChildSpan({ type: SpanType.MODEL_STEP, name: 'inner' });
+    const leaf = inner.createChildSpan({ type: SpanType.MODEL_INFERENCE, name: 'leaf' });
+
+    inner.end();
+    outer.end();
+    root.endTree();
+
+    expect(leaf.endTime).toBeInstanceOf(Date);
+    expect(endedIds().filter(id => id === leaf.id)).toHaveLength(1);
+  });
+
+  it('does not re-end a promoted child that later ends normally', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const middle = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'middle' });
+    const leaf = middle.createChildSpan({ type: SpanType.MODEL_STEP, name: 'leaf' });
+
+    middle.end();
+    leaf.end({ attributes: { status: 'success' } });
+    root.endTree({ attributes: { status: 'aborted' } });
+
+    expect(leaf.attributes?.status).toBe('success');
+    expect(endedIds().filter(id => id === leaf.id)).toHaveLength(1);
+  });
+
+  it('end({endTree: true}) closes open descendants without applying options to them', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const child = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'child' });
+    const leaf = child.createChildSpan({ type: SpanType.MODEL_STEP, name: 'leaf' });
+
+    root.end({ endTree: true, output: { status: 'aborted' } });
+
+    expect(root.output).toMatchObject({ status: 'aborted' });
+    expect(child.endTime).toBeInstanceOf(Date);
+    expect(leaf.endTime).toBeInstanceOf(Date);
+    expect(child.output).toBeUndefined();
+    expect(leaf.output).toBeUndefined();
+    expect(endedIds()).toEqual([leaf.id, child.id, root.id]);
+  });
+
+  it('error({endTree: true}) records the error on this span only and closes the tree', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const child = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'child' });
+    const leaf = child.createChildSpan({ type: SpanType.MODEL_STEP, name: 'leaf' });
+
+    root.error({ error: new Error('terminal failure'), endTree: true });
+
+    expect(root.errorInfo?.message).toBe('terminal failure');
+    expect(root.endTime).toBeInstanceOf(Date);
+    expect(child.endTime).toBeInstanceOf(Date);
+    expect(leaf.endTime).toBeInstanceOf(Date);
+    expect(child.errorInfo).toBeUndefined();
+    expect(leaf.errorInfo).toBeUndefined();
+    expect(endedIds()).toEqual([leaf.id, child.id, root.id]);
+  });
+
+  it('end({endTree: true}) reaches grandchildren whose parent ended early', () => {
+    const tracing = createInstance();
+
+    const root = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'root' });
+    const middle = root.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'middle' });
+    const leaf = middle.createChildSpan({ type: SpanType.MODEL_STEP, name: 'leaf' });
+
+    middle.end();
+    root.end({ endTree: true });
+
+    expect(leaf.endTime).toBeInstanceOf(Date);
+    expect(endedIds().sort()).toEqual([root.id, middle.id, leaf.id].sort());
+  });
+
   it('ignores event spans, which are already emitted at creation', () => {
     const tracing = createInstance();
 

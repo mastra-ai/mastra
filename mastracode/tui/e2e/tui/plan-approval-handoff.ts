@@ -23,7 +23,7 @@ export const planApprovalHandoffScenario: McE2eScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
     await runtime.waitForScreenText(/▐build▌/i, terminal, 10_000);
-    await runtime.sleep(1_000);
+    await runtime.waitForScreenText(/Build handoff e2e acknowledged\./i, terminal, 10_000);
 
     terminal.keyCtrlC();
   },

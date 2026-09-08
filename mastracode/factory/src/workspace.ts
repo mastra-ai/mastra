@@ -15,7 +15,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
@@ -41,8 +41,11 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { SessionSetupGate } from './sandbox/session-sandbox.js';
+import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { parseSupervisorResourceId } from './supervisor/session.js';
 import { timedPhase } from './timing.js';
+import { pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -236,6 +239,8 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
 }
@@ -279,7 +284,7 @@ export class FactoryWorkspaceRegistry {
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems } = options;
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
@@ -304,6 +309,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
+    if (supervisorProjectId) {
+      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
+      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
+      return undefined;
+    }
     const session =
       ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
 
@@ -455,9 +467,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const fireEagerStart = () => {
       if (!startEagerly) return;
       startEagerly = false;
-      sessionEntry.sandbox.start?.().catch(error => {
-        console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
-      });
+      Promise.resolve()
+        .then(() => sessionEntry.sandbox.start?.())
+        .catch(error => {
+          console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
+        });
     };
     const sessionEntry = constructSessionEntry();
     const workdir = sessionEntry.workdir;
@@ -638,6 +652,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
         repoFullName: repoFullName,
+        pullRequestNumber: pullRequestNumberFromBranch(session.branch),
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather

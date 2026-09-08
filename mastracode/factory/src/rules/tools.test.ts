@@ -1,9 +1,9 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { createFactoryTransitionTools } from './tools.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -85,7 +85,7 @@ async function execute(tool: ExecutableTool, context: RequestContext, input: unk
 describe('factory_transition_work_item', () => {
   it('is exposed only for the exact active tenant/thread/resource/session binding', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const prepared = await prepareBoundItem(storage);
     await storage.upsert({
       orgId: 'org-1',
@@ -129,7 +129,7 @@ describe('factory_transition_work_item', () => {
 
   it('requires approval before executing a bound transition', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     await prepareBoundItem(storage);
 
     const tools = await createFactoryTransitionTools({
@@ -147,7 +147,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) }),
+      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
     });
     const triageTool = tools.factory_transition_work_item as ExecutableTool;
     expect(
@@ -264,7 +264,7 @@ describe('factory_transition_work_item', () => {
   it('rechecks authority at execution and rejects revoked or replaced bindings', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBoundItem(storage);
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
     await expect(
@@ -350,7 +350,7 @@ describe('factory_transition_work_item', () => {
   it('rejects a session that has been re-pointed at a different work item', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
 
@@ -388,14 +388,10 @@ describe('factory_transition_work_item', () => {
     await prepareBoundItem(storage);
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: {
-            planning: {
-              issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
-            },
-          },
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        planning: {
+          issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Submit a plan first.' }) },
         },
       }),
     });
@@ -417,10 +413,8 @@ describe('factory_transition_work_item', () => {
     const onEnter = vi.fn(() => undefined);
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: { work: { planning: { issue: { onEnter } } } },
-      }),
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({ planning: { issue: { onEnter } } }),
     });
     const context = requestContext();
     const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
@@ -535,7 +529,7 @@ describe('factory_transition_work_item', () => {
 
   it('recovers a work binding without marking the checkout untrusted', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     await prepareBoundItem(storage);
     const setState = vi.fn(async () => {});
 
@@ -551,7 +545,7 @@ describe('factory_transition_work_item', () => {
 
   it('exposes nothing on crash-resume when no active binding matches the thread', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     await prepareBoundItem(storage);
     const setState = vi.fn(async () => {});
 
@@ -567,7 +561,7 @@ describe('factory_transition_work_item', () => {
 
   it('never authorizes on crash-resume when bindings are ambiguous across factory projects', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     await prepareBoundItem(storage);
     await storage.prepareRunStart({
       orgId: 'org-1',
@@ -601,7 +595,7 @@ describe('factory_transition_work_item', () => {
   it('bounds stage, revision, and rationale at the schema boundary', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
@@ -621,7 +615,7 @@ describe('factory_transition_work_item', () => {
   it('accepts and clamps an overlong rationale instead of rejecting it', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepareBoundItem(storage);
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,

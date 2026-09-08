@@ -83,19 +83,22 @@ describe('DataListCell', () => {
   });
 });
 
-describe('controls revealed on hover', () => {
-  it('stay reachable on a device that cannot hover', () => {
-    const revealedWithoutHover = (ui: ReactElement) => {
-      const { container } = render(ui);
-      const hidden = container.querySelector('.opacity-0');
-      const reveals = hidden?.classList.contains('pointer-coarse:opacity-100') ?? false;
-      cleanup();
-      return reveals;
-    };
+describe('control visibility', () => {
+  it('keeps row and header selection checkboxes visible without hover', () => {
+    const row = render(<DataListSelectCell checked={false} onToggle={() => {}} />);
+    expect(row.container.firstElementChild?.classList.contains('opacity-0')).toBe(false);
+    cleanup();
 
-    expect(revealedWithoutHover(<DataListActionsCell>action</DataListActionsCell>)).toBe(true);
-    expect(revealedWithoutHover(<DataListSelectCell checked={false} onToggle={() => {}} />)).toBe(true);
-    expect(revealedWithoutHover(<DataListTopSelectCell checked={false} onToggle={() => {}} />)).toBe(true);
+    const header = render(<DataListTopSelectCell checked={false} onToggle={() => {}} />);
+    expect(header.container.firstElementChild?.classList.contains('opacity-0')).toBe(false);
+  });
+
+  it('keeps row actions discreet but reachable on devices that cannot hover', () => {
+    const { container } = render(<DataListActionsCell>action</DataListActionsCell>);
+    const hidden = container.querySelector('.opacity-0');
+
+    expect(hidden).not.toBeNull();
+    expect(hidden?.classList.contains('pointer-coarse:opacity-100')).toBe(true);
   });
 });
 
@@ -299,6 +302,14 @@ describe('DataListSelectCell', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select row' }), { shiftKey: true });
 
     expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('marks the cell as selected so the host row can highlight itself', () => {
+    const { container, rerender } = render(<DataListSelectCell checked={false} onToggle={() => {}} />);
+    expect(container.querySelector('label')?.dataset.selected).toBeUndefined();
+
+    rerender(<DataListSelectCell checked onToggle={() => {}} />);
+    expect(container.querySelector('label')?.dataset.selected).toBe('true');
   });
 
   it('keeps the click off the row behind it', () => {

@@ -1,16 +1,8 @@
-import {
-  FACTORY_GITHUB_EVENTS,
-  FACTORY_LINEAR_EVENTS,
-  FACTORY_RULE_BOARDS,
-  FACTORY_RULE_SOURCES,
-  FACTORY_RULE_STAGES,
-} from './types.js';
+import { FACTORY_RULE_BOARDS, FACTORY_RULE_STAGES } from './types.js';
 import type {
-  FactoryBoardRules,
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
-  FactoryRules,
   FactoryRuleRejectionCode,
   WorkItemSource,
 } from './types.js';
@@ -23,7 +15,8 @@ const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
-const MAX_ROLE_LENGTH = 32;
+export const MAX_ROLE_LENGTH = 32;
+export const MAX_TOOL_NAME_LENGTH = 128;
 const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
@@ -31,7 +24,7 @@ const MAX_METADATA_JSON_LENGTH = 16_384;
 const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
-const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
@@ -139,61 +132,11 @@ function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> 
   return sanitized;
 }
 
-function validateBoardRules(rules: unknown, label: string): asserts rules is FactoryBoardRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError(`${label} must be an object.`);
-  for (const [stage, sources] of Object.entries(rules)) {
-    enumValue(stage, FACTORY_RULE_STAGES, `${label} stage`);
-    if (!isPlainObject(sources)) throw new FactoryRuleValidationError(`${label}.${stage} must be an object.`);
-    for (const [source, leaf] of Object.entries(sources)) {
-      enumValue(source, FACTORY_RULE_SOURCES, `${label}.${stage} source`);
-      if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`${label}.${stage}.${source} must be an object.`);
-      assertExactKeys(leaf, ['onEnter', 'onExit'], `${label}.${stage}.${source}`);
-      for (const handler of Object.values(leaf)) {
-        if (handler !== undefined && typeof handler !== 'function') {
-          throw new FactoryRuleValidationError(`${label}.${stage}.${source} handlers must be functions.`);
-        }
-      }
-    }
-  }
-}
+export const DEFAULT_FACTORY_CONFIG_VERSION = 'factory-config-v1';
 
-export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
-  boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
-  validateBoardRules(rules.work, 'Factory rules.work');
-  validateBoardRules(rules.review, 'Factory rules.review');
-
-  if (!isPlainObject(rules.tools)) throw new FactoryRuleValidationError('Factory rules.tools must be an object.');
-  for (const [toolName, leaf] of Object.entries(rules.tools)) {
-    boundedString(toolName, 'Factory tool name', 128, IDENTIFIER_RE);
-    if (!isPlainObject(leaf))
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName} must be an object.`);
-    assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
-    if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.github)) throw new FactoryRuleValidationError('Factory rules.github must be an object.');
-  for (const [event, leaf] of Object.entries(rules.github)) {
-    enumValue(event, FACTORY_GITHUB_EVENTS, 'Factory GitHub event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.github.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.github.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.github.${event}.onEvent must be a function.`);
-    }
-  }
-
-  if (!isPlainObject(rules.linear)) throw new FactoryRuleValidationError('Factory rules.linear must be an object.');
-  for (const [event, leaf] of Object.entries(rules.linear)) {
-    enumValue(event, FACTORY_LINEAR_EVENTS, 'Factory Linear event');
-    if (!isPlainObject(leaf)) throw new FactoryRuleValidationError(`Factory rules.linear.${event} must be an object.`);
-    assertExactKeys(leaf, ['onEvent'], `Factory rules.linear.${event}`);
-    if (leaf.onEvent !== undefined && typeof leaf.onEvent !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
-    }
-  }
+/** Operator-maintained provenance label stamped on transition audit and deferred-decision rows. */
+export function assertFactoryConfigVersion(value: unknown): string {
+  return boundedString(value, 'Factory configVersion', MAX_VERSION_LENGTH);
 }
 
 function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: string } {

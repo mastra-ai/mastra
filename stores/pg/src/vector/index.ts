@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -496,6 +497,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'`,
     );
 
+    // Create the namespaced unique index before dropping the legacy one so that a failure
+    // at any step never leaves the table without a uniqueness guarantee on vector_id.
+    const namespaceIndexName = this.getNamespaceIndexName(parsedIndexName);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
+    );
+
     const legacyConstraints = await client.query<{ conname: string }>(
       `SELECT c.conname
        FROM pg_constraint c
@@ -509,11 +517,25 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const parsedConstraintName = parseSqlIdentifier(conname, 'constraint name');
       await client.query(`ALTER TABLE ${tableName} DROP CONSTRAINT "${parsedConstraintName}"`);
     }
+  }
 
-    const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
-    await client.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
-    );
+  /**
+   * Name of the unique (namespace, vector_id) index for a table.
+   *
+   * The full `<index>_namespace_vector_id_idx` name is kept whenever it fits so tables that
+   * were already migrated keep matching `IF NOT EXISTS`. Longer index names would exceed
+   * Postgres' 63-char identifier limit, so those fall back to a truncated prefix plus a hash
+   * of the index name to distinguish tables that
+   * share a long prefix.
+   */
+  private getNamespaceIndexName(parsedIndexName: string): string {
+    const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
+    if (fullName.length <= 63) {
+      return fullName;
+    }
+    const hash = createHash('sha256').update(parsedIndexName).digest('hex').slice(0, 32);
+    const suffix = `_ns_${hash}_idx`;
+    return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
   }
 
   transformFilter(filter?: PGVectorFilter) {
@@ -650,6 +672,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
     }
 
+    // Load metadata before holding a connection so a cold cache cannot exhaust the pool.
+    const indexInfo = await this.getIndexMetadata({ indexName });
     // Vector similarity query
     const client = await this.pool.connect();
     try {
@@ -658,9 +682,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
-
-      // Get index type and configuration
-      const indexInfo = await this.getIndexMetadata({ indexName });
 
       const metric = indexInfo.metric ?? 'cosine';
       const ops = this.getVectorOps(indexInfo.vectorType, metric);
@@ -775,6 +796,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
     const { tableName } = this.getTableName(indexName);
 
+    const indexInfo = await this.getIndexMetadata({ indexName });
+
     // Start a transaction
     const client = await this.pool.connect();
     try {
@@ -806,7 +829,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
@@ -1253,7 +1275,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let existingIndexInfo: PGIndexMetadata | null = null;
       let dimension = 0;
       try {
-        existingIndexInfo = await this.getIndexMetadata({ indexName });
+        existingIndexInfo = await this.describeIndexMetadata({ indexName }, client);
         dimension = existingIndexInfo.dimension;
 
         if (isConfigEmpty && existingIndexInfo.metric === metric) {
@@ -1542,8 +1564,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
    * {@link describeIndex} it issues no `COUNT(*)`, so its cost does not grow with the
    * number of rows in the table.
    */
-  private async describeIndexMetadata({ indexName }: DescribeIndexParams): Promise<PGIndexMetadata> {
-    const client = await this.pool.connect();
+  private async describeIndexMetadata(
+    { indexName }: DescribeIndexParams,
+    existingClient?: pg.PoolClient,
+  ): Promise<PGIndexMetadata> {
+    const client = existingClient ?? (await this.pool.connect());
     try {
       const { tableName, parsedIndexName } = this.getTableName(indexName);
 
@@ -1641,7 +1666,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         config,
       };
     } catch (e: any) {
-      await client.query('ROLLBACK');
       const mastraError = new MastraError(
         {
           id: createVectorErrorId('PG', 'DESCRIBE_INDEX', 'FAILED'),
@@ -1656,7 +1680,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
-      client.release();
+      if (!existingClient) client.release();
     }
   }
 
@@ -1805,6 +1829,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         });
       }
 
+      const indexInfo = await this.getIndexMetadata({ indexName });
       client = await this.pool.connect();
       // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
       await this.ensureSearchPath(client);
@@ -1812,7 +1837,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index
-      const indexInfo = await this.getIndexMetadata({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
       const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 

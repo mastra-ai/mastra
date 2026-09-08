@@ -206,6 +206,7 @@ function writeTsconfig() {
       declaration: true,
       declarationMap: true,
       module: 'Preserve',
+      moduleResolution: 'bundler',
       noEmit: true,
       lib: ['ES2023'],
       types: ['node'],

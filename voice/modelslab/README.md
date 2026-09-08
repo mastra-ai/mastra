@@ -31,6 +31,8 @@ const speakers = await voice.getSpeakers();
 
 ## Documentation
 
+See the [ModelsLab voice integration guide](https://mastra.ai/integrations/voice/modelslab) and the [Mastra Voice overview](https://mastra.ai/reference/voice/overview).
+
 Pass the API key through `speechModel.apiKey` or set `MODELSLAB_API_KEY`. The constructor's `speaker` option sets the default voice and defaults to voice ID `1`. Individual `speak()` calls can override the speaker, language, and speed.
 
 The built-in voices are:

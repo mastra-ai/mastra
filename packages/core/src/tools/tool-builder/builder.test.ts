@@ -249,6 +249,7 @@ describe('MCP Tool Tracing', () => {
         attributes: {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
+          toolType: 'tool',
           toolDescription: 'List files in a directory',
           toolCallId: 'test-call-id',
         },
@@ -352,6 +353,7 @@ describe('MCP Tool Tracing', () => {
     expect(spanArgs.attributes).toEqual({
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
+      toolType: 'tool',
       toolDescription: 'Read a resource',
       toolCallId: 'test-call-id',
     });
@@ -899,5 +901,57 @@ describe('CoreToolBuilder requestContext merge', () => {
     await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: execRC });
 
     expect(receivedCtx.requestContext).toBe(execRC);
+  });
+});
+
+describe('CoreToolBuilder execution failures', () => {
+  it('does not copy raw tool args into logs, error details, or exception metadata', async () => {
+    const marker = 'SENSITIVE_REPORT_CONTENT';
+    const testTool = createTool({
+      id: 'failing_tool',
+      description: 'Always throws',
+      inputSchema: z.object({ content: z.string() }),
+      execute: async () => {
+        throw new Error('boom');
+      },
+    });
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'failing_tool',
+        logger: logger as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    let thrown: any;
+    try {
+      await builtTool.execute!({ content: marker }, { toolCallId: 'call-1', messages: [] });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown?.id).toBe('TOOL_EXECUTION_FAILED');
+    expect(thrown.details.argsJson).toBeUndefined();
+    expect(JSON.stringify(thrown.details)).not.toContain(marker);
+
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+    const metadata = logger.trackException.mock.calls[0]?.[1];
+    expect(metadata).not.toHaveProperty('args');
+    expect(JSON.stringify(metadata)).not.toContain(marker);
+
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      for (const call of logger[level].mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(marker);
+      }
+    }
   });
 });

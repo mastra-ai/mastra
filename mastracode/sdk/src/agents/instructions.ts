@@ -1,5 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { MastraCodeComposedState } from '../schema.js';
+import type { MastraCodeComposedState, MastraCodeState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import type { PromptContext, PromptSection } from './prompts/index.js';
@@ -7,10 +7,18 @@ import { buildFullPromptSections, joinPromptSections } from './prompts/index.js'
 
 export async function getDynamicInstructions({
   requestContext,
+  hostInstructions,
+  hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
+  hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<string> {
-  return joinPromptSections(await getDynamicInstructionSections({ requestContext }));
+  return joinPromptSections(
+    await getDynamicInstructionSections({ requestContext, hostInstructions, hasSubconscious, hasSubagents }),
+  );
 }
 
 /**
@@ -20,8 +28,19 @@ export async function getDynamicInstructions({
  */
 export async function getDynamicInstructionSections({
   requestContext,
+  hostInstructions,
+  hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
+  /**
+   * The subconscious knowledge tools are registered on the agent. A function
+   * is resolved against the session state, since Factory sessions can refuse
+   * the subconscious per request.
+   */
+  hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -47,6 +66,9 @@ export async function getDynamicInstructionSections({
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: projectPath,
     state,
+    hostInstructions,
+    hasSubagents,
+    hasSubconscious: typeof hasSubconscious === 'function' ? hasSubconscious(state) : hasSubconscious,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

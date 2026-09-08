@@ -141,8 +141,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
           messageList,
         });
 
-        // End agent span with tripwire information after fallback completes
+        // End the whole tree with tripwire information; descendants close
+        // without inheriting the terminal output
         agentSpan?.end({
+          endTree: true,
           output: { tripwire: memoryData.tripwire },
           attributes: {
             tripwireAbort: {
@@ -156,10 +158,25 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
         return bail(modelOutput);
       } catch (error) {
-        // End agent span with error and tripwire context so failures aren't masked
+        // Record the error with tripwire context so failures aren't masked,
+        // then end the whole span tree. Rejections are not guaranteed to be
+        // Error instances; MastraError extracts a usable message from any
+        // cause shape.
+        const spanError =
+          error instanceof Error
+            ? error
+            : new MastraError(
+                {
+                  id: 'AGENT_TRIPWIRE_FALLBACK_FAILED',
+                  domain: ErrorDomain.AGENT,
+                  category: ErrorCategory.SYSTEM,
+                  details: { runId },
+                },
+                error,
+              );
         agentSpan?.error({
-          error: error as Error,
-          endSpan: true,
+          error: spanError,
+          endTree: true,
           attributes: {
             tripwireAbort: {
               reason: memoryData.tripwire?.reason,
@@ -316,15 +333,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
               });
             }
 
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
+            // Record the error, then end the whole span tree. Ending only the
+            // root would orphan still-open descendants, and exporters that wait
+            // for every span to finish (e.g. Datadog) retain the trace forever.
+            agentSpan?.error({ error, endTree: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
             agentSpan?.end({
+              endTree: true,
               output: {
                 status: 'suspended',
                 reason: payload.suspendReason,
@@ -339,12 +357,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.end({ endTree: true, output: { status: 'aborted', reason: 'abort' } });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end();
+            agentSpan?.end({ endTree: true });
           } else {
             try {
               const outputText =
@@ -389,7 +407,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endSpan: true });
+              agentSpan?.error({ error: spanError, endTree: true });
             }
           }
 

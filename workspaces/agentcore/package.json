@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentcore",
-  "version": "0.5.0-alpha.1",
+  "version": "0.5.0",
   "description": "AWS Bedrock AgentCore Runtime sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

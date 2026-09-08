@@ -123,6 +123,15 @@ const sidebars = {
           label: 'SvelteKit',
           customProps: { icon: 'https://cdn.simpleicons.org/svelte?viewbox=auto&size=28' },
         },
+        {
+          type: 'doc',
+          id: 'frameworks/tanstack-start',
+          label: 'TanStack Start',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/tanstack/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/tanstack?viewbox=auto&size=28',
+          },
+        },
       ],
     },
     {
@@ -425,6 +434,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/mysql',
+          label: 'MySQL',
+          customProps: { icon: 'https://cdn.simpleicons.org/mysql?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/mssql',
           label: 'MSSQL',
           customProps: { icon: 'https://svgl.app/library/microsoft.svg' },
@@ -660,6 +675,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'voice/gladia',
+          label: 'Gladia',
+          customProps: { icon: '/img/integrations/gladia.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
           id: 'voice/google',
           label: 'Google',
           customProps: { icon: 'https://svgl.app/library/google.svg' },
@@ -684,6 +705,12 @@ const sidebars = {
           id: 'voice/mistral',
           label: 'Mistral',
           customProps: { icon: 'https://cdn.simpleicons.org/mistralai?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'voice/modelslab',
+          label: 'ModelsLab',
+          customProps: { icon: '/img/integrations/modelslab.svg' },
         },
         { type: 'doc', id: 'voice/murf', label: 'Murf', customProps: { icon: '/img/integrations/murf.svg' } },
         {

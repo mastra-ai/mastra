@@ -28,13 +28,13 @@ const baseSpan = {
 
 export const experimentTraceRootSpan = {
   ...baseSpan,
-  spanId: 'experiment-span-root',
+  spanId: 'span-root',
   name: 'Experiment agent run',
   parentSpanId: null,
 };
 export const experimentTraceChildSpan = {
   ...baseSpan,
-  spanId: 'experiment-span-child',
+  spanId: 'span-child',
   name: 'Experiment tool call',
   spanType: SpanType.TOOL_CALL,
   parentSpanId: experimentTraceRootSpan.spanId,
@@ -119,7 +119,14 @@ const baseResult: DatasetExperimentResult = {
 /** Three results, itemIds item-1..item-3, result ids res-1..res-3. */
 export const results: DatasetExperimentResult[] = [
   baseResult,
-  { ...baseResult, id: 'res-2', itemId: 'item-2', input: { q: 'second question' }, output: { a: 'second answer' } },
+  {
+    ...baseResult,
+    id: 'res-2',
+    itemId: 'item-2',
+    input: { q: 'second question' },
+    output: { a: 'second answer' },
+    tags: ['alpha'],
+  },
   {
     ...baseResult,
     id: 'res-3',
@@ -146,6 +153,7 @@ export const experimentTraceFeedback: RouteResponse<'GET /observability/feedback
       feedbackId: 'experiment-trace-feedback',
       traceId: TRACE_ID,
       feedbackType: 'comment',
+      reviewStatus: 'needs-review',
       value: 'Trace feedback for the experiment run',
       timestamp: new Date('2026-07-21T00:00:21.000Z'),
     },
@@ -160,6 +168,7 @@ export const experimentSpanFeedback: RouteResponse<'GET /observability/feedback'
       traceId: TRACE_ID,
       spanId: experimentTraceChildSpan.spanId,
       feedbackType: 'comment',
+      reviewStatus: 'needs-review',
       value: 'Child span feedback for the tool call',
       timestamp: new Date('2026-07-21T00:00:22.000Z'),
     },
@@ -181,8 +190,8 @@ export const experimentTraceScores: ListScoresResponse = {
       entity: { id: 'agent-1' },
       traceId: TRACE_ID,
       spanId: experimentTraceRootSpan.spanId,
-      createdAt: new Date('2026-07-21T00:00:23.000Z'),
-      updatedAt: null,
+      createdAt: '2026-07-21T00:00:23.000Z',
+      updatedAt: '2026-07-21T00:00:23.000Z',
     },
   ],
   pagination: { total: 1, page: 0, perPage: 10, hasMore: false },

@@ -326,10 +326,11 @@ export function buildTurnHandling(
   return {
     ...(turnDetection ? { turnDetection } : {}),
     // Preemptive generation re-runs the Mastra agent on interim transcripts (up to 3
-    // times per turn), and every run persists the user message to the memory thread —
-    // duplicating and even saving partial transcripts. Off by default; opt back in via
-    // `turnHandling.preemptiveGeneration` if the latency win matters more than exact
-    // thread history.
+    // times per turn), and every run persists to the memory thread — a discarded run
+    // leaves a partial user transcript and a partial, never-spoken reply behind. Off by
+    // default; opt back in via `turnHandling.preemptiveGeneration` if the latency win
+    // matters more than exact thread history, or pair it with `memory.options.readOnly`
+    // and persist committed turns yourself.
     preemptiveGeneration: { enabled: false },
     ...options.turnHandling,
   };

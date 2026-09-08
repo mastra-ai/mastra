@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
@@ -48,21 +51,24 @@ async function seedFactoryWithRepository(options?: { defaultModelId?: string }) 
 function bindingInput(
   factoryProjectId: string,
   stages = ['triage'],
-  { role = 'triage' }: { role?: string } = {},
+  { role = 'triage', board }: { role?: string; board?: string } = {},
 ): FactoryBindingPreparationInput {
   return {
     record: { id: 'decision-1', orgId: 'org-1', factoryProjectId },
     item: {
       id: 'item-1',
       title: 'Broken login',
+      board: board ?? null,
       stages,
       sessions: [],
-      externalSource: { integrationId: 'github', type: 'issue' },
+      externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
       metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
     },
     role,
   } as unknown as FactoryBindingPreparationInput;
 }
+
+const boards = createBoardRegistry();
 
 describe('prepareFactoryRuleBinding', () => {
   it("starts the run on the factory's default model", async () => {
@@ -75,6 +81,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
+      boards,
       bindingInput(project.id),
     );
 
@@ -91,6 +98,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
+      boards,
       bindingInput(project.id),
     );
 
@@ -105,6 +113,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
+      boards,
       bindingInput(project.id),
     );
 
@@ -121,7 +130,13 @@ describe('prepareFactoryRuleBinding', () => {
     const input = bindingInput(project.id);
     (input.record as { approvedBy?: string | null }).approvedBy = 'agent:binding-1';
 
-    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(userId).toBe('user-1');
@@ -153,7 +168,13 @@ describe('prepareFactoryRuleBinding', () => {
     };
     (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
 
-    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(sessionId).toBe(existing.sessionId);
@@ -204,7 +225,13 @@ describe('prepareFactoryRuleBinding', () => {
     };
     (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
 
-    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(sessionId).not.toBe(orphaned.sessionId);
@@ -261,7 +288,13 @@ describe('prepareFactoryRuleBinding', () => {
     };
     (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
 
-    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(sessionId).not.toBe(foreign.sessionId);
@@ -277,12 +310,68 @@ describe('prepareFactoryRuleBinding', () => {
 
     const input = bindingInput(project.id);
     (input.record as { approvedBy?: string | null }).approvedBy = 'approver-1';
-    await prepareFactoryRuleBinding(github, { prepare } as unknown as FactoryStartCoordinator, seeded.projects, input);
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
 
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(userId).toBe('approver-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
       expect.objectContaining({ userId: 'approver-1' }),
+    );
+  });
+
+  it("opens a card_action run under the clicker's id", async () => {
+    const { seeded, sourceControl, project, github } = await seedFactoryWithRepository();
+    const { item } = await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'github', type: 'issue', externalId: '49', url: 'https://github.test/i/49' },
+        title: 'Broken login',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra', authorTrusted: true },
+      },
+    });
+    const transitions = new FactoryTransitionService({
+      storage: seeded.workItems,
+      configVersion: 'factory-config-v1',
+    });
+    await transitions.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: item.id,
+      actor: { type: 'human', id: 'clicker-1' },
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: item.revision,
+      ingress: { type: 'human', identity: 'click-1' },
+      cause: 'card_action',
+    });
+    const [decision] = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision).toMatchObject({ decision: { type: 'invokeSkill' }, approvedBy: 'clicker-1' });
+
+    const prepare = vi.fn(async () => ({}) as never);
+    const input = bindingInput(project.id);
+    (input.record as { approvedBy?: string | null }).approvedBy = decision!.approvedBy;
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      input,
+    );
+
+    const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
+    expect(userId).toBe('clicker-1');
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
+      expect.objectContaining({ userId: 'clicker-1' }),
     );
   });
 
@@ -299,6 +388,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare },
       seeded.projects,
+      boards,
       bindingInput(disconnected.id),
     ).catch(failure => failure);
 
@@ -311,15 +401,32 @@ describe('prepareFactoryRuleBinding', () => {
     const { seeded, project, github } = await seedFactoryWithRepository();
     const prepare = vi.fn(async () => ({}) as never);
 
-    // A rule-started review on a card still sitting in Intake enters Reviewing,
-    // exactly like a manual click on the same action would.
+    // A rule-started review on a Review-board card still sitting in Intake enters
+    // Reviewing, exactly like a manual click on the same action would.
     await prepareFactoryRuleBinding(
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
-      bindingInput(project.id, ['intake'], { role: 'review' }),
+      boards,
+      bindingInput(project.id, ['intake'], { role: 'review', board: 'review' }),
     );
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ destinationStage: 'review' }));
+
+    // Each Work seat leaves Intake for the lane the board assigns it.
+    for (const [role, lane] of [
+      ['triage', 'triage'],
+      ['plan', 'planning'],
+      ['work', 'execute'],
+    ] as const) {
+      await prepareFactoryRuleBinding(
+        github,
+        { prepare } as unknown as FactoryStartCoordinator,
+        seeded.projects,
+        boards,
+        bindingInput(project.id, ['intake'], { role }),
+      );
+      expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: lane }));
+    }
 
     // Roles don't own lanes: the Done close-out runs in the triage seat, and
     // starting it must not drag the finished card back to Triage.
@@ -327,9 +434,45 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare } as unknown as FactoryStartCoordinator,
       seeded.projects,
+      boards,
       bindingInput(project.id, ['done'], { role: 'triage' }),
     );
     expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'done' }));
+  });
+
+  it('leaves a custom resting phase for the lane its board assigns the role', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository();
+    const prepare = vi.fn(async () => ({}) as never);
+    const custom = createBoardRegistry({ boards: [createTestBoard()] });
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      custom,
+      bindingInput(project.id, ['queued'], { role: 'release', board: 'release' }),
+    );
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'shipping' }));
+
+    // Work's roles mean nothing on this board: from rest they have no lane.
+    const error = await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      custom,
+      bindingInput(project.id, ['queued'], { role: 'work', board: 'release' }),
+    ).catch(failure => failure);
+    expect(error).toMatchObject({ code: 'unsupported_provider_item' });
+
+    // Already working: the run stays where the card is.
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      custom,
+      bindingInput(project.id, ['shipping'], { role: 'release', board: 'release' }),
+    );
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ destinationStage: 'shipping' }));
   });
 
   it('rejects runs with no lane before creating a source-control session', async () => {
@@ -341,6 +484,7 @@ describe('prepareFactoryRuleBinding', () => {
       github,
       { prepare },
       seeded.projects,
+      boards,
       // From Intake the lane comes from the role; an unmapped role fails loud.
       bindingInput(project.id, ['intake'], { role: 'spectator' }),
     ).catch(failure => failure);
@@ -357,7 +501,7 @@ describe('prepareFactoryRuleBinding', () => {
     const input = bindingInput(project.id);
     input.item.externalSource = null;
 
-    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, input);
+    await prepareFactoryRuleBinding(github, { prepare }, seeded.projects, boards, input);
 
     const { sessionId } = prepare.mock.calls[0]![0];
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(

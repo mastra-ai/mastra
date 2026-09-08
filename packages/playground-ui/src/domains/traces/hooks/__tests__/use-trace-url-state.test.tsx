@@ -86,6 +86,56 @@ describe('useTraceUrlState.handleSpanChangeWithTab', () => {
 
 const paramsNow = () => new URLSearchParams(currentSearch);
 
+describe('useTraceUrlState.handleHighlightSpans', () => {
+  it('writes the highlighted span ids, selects the first one and resets span-scoped params', () => {
+    render(<Harness initial="traceId=t1&spanId=old&tab=feedback&scoreId=sc1" />);
+
+    act(() => api.handleHighlightSpans(['root', 'tool-1', 'tool-2']));
+
+    const p = paramsNow();
+    expect(p.get('highlightSpanIds')).toBe('root,tool-1,tool-2');
+    expect(p.get('spanId')).toBe('root');
+    expect(p.get('tab')).toBeNull();
+    expect(p.get('scoreId')).toBeNull();
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    expect(lastNavigation()?.replace).toBe(true);
+    expect(api.highlightSpanIdsParam).toEqual(['root', 'tool-1', 'tool-2']);
+  });
+
+  it('clears the highlight for an empty array without touching the selected span', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleHighlightSpans([]));
+
+    const p = paramsNow();
+    expect(p.get('highlightSpanIds')).toBeNull();
+    expect(p.get('spanId')).toBe('root');
+    expect(api.highlightSpanIdsParam).toEqual([]);
+  });
+
+  it('keeps the highlight while navigating between spans inside the panel', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleSpanChange('tool-1'));
+
+    expect(paramsNow().get('highlightSpanIds')).toBe('root,tool-1');
+    expect(api.highlightSpanIdsParam).toEqual(['root', 'tool-1']);
+  });
+
+  it('drops the highlight when another trace is opened or the filters change', () => {
+    render(<Harness initial="traceId=t1&spanId=root&highlightSpanIds=root,tool-1" />);
+
+    act(() => api.handleTraceClick('t2'));
+    expect(paramsNow().get('highlightSpanIds')).toBeNull();
+
+    act(() => api.handleHighlightSpans(['root']));
+    expect(paramsNow().get('highlightSpanIds')).toBe('root');
+
+    act(() => api.handleListModeChange('branches'));
+    expect(paramsNow().get('highlightSpanIds')).toBeNull();
+  });
+});
+
 describe('useTraceUrlState date state', () => {
   // Restored here rather than at the end of each test, so a failing assertion
   // cannot leave fake timers running for every test after it.

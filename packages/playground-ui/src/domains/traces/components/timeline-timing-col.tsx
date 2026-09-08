@@ -39,7 +39,7 @@ export function TimelineTimingCol({
           chartWidth === 'wide' ? 'min-w-72' : 'min-w-32',
           '[&:hover>div]:bg-surface5',
           {
-            'opacity-30 [&:hover]:opacity-60': isFaded,
+            'opacity-40 [&:hover]:opacity-70 dark:opacity-30 dark:[&:hover]:opacity-60': isFaded,
             'bg-surface4': selectedSpanId === span.id,
           },
         )}

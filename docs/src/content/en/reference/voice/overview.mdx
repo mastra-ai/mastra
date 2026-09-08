@@ -9,9 +9,11 @@ packages:
   - "@mastra/voice-cloudflare"
   - "@mastra/voice-deepgram"
   - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-gladia"
   - "@mastra/voice-google"
   - "@mastra/voice-google-gemini-live"
   - "@mastra/voice-murf"
+  - "@mastra/voice-modelslab"
   - "@mastra/voice-openai"
   - "@mastra/voice-openai-realtime"
   - "@mastra/voice-sarvam"
@@ -916,6 +918,18 @@ Each voice provider can be configured with different models and options. Below a
     Visit the [Deepgram Voice Reference](/integrations/voice/deepgram) for more information on the Deepgram voice provider.
   </TabItem>
 
+  <TabItem value="gladia" label="Gladia">
+    ```typescript
+    const voice = new GladiaVoice({
+      listeningModel: {
+        apiKey: process.env.GLADIA_API_KEY,
+      },
+    })
+    ```
+
+    Visit the [Gladia Voice integration](/integrations/voice/gladia) for configuration and transcription options.
+  </TabItem>
+
   <TabItem value="inworld" label="Inworld">
     ```typescript
     // Inworld Voice Configuration
@@ -997,6 +1011,19 @@ Each voice provider can be configured with different models and options. Below a
     ```
 
     Visit the [Murf Voice Reference](/integrations/voice/murf) for more information on the Murf voice provider.
+  </TabItem>
+
+  <TabItem value="modelslab" label="ModelsLab">
+    ```typescript
+    const voice = new ModelsLabVoice({
+      speechModel: {
+        apiKey: process.env.MODELSLAB_API_KEY,
+      },
+      speaker: '5',
+    })
+    ```
+
+    Visit the [ModelsLab Voice integration](/integrations/voice/modelslab) for configuration and synthesis options.
   </TabItem>
 
   <TabItem value="openai-realtime" label="OpenAI Realtime">

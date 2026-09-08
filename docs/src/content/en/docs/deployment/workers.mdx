@@ -302,6 +302,10 @@ curl http://localhost:4111/api/agents
 
 ### Kubernetes
 
+:::tip Helm
+On Kubernetes, the [`mastra-projects` Helm chart](/integrations/deploy/kubernetes-helm#background-workers) renders these deployments for you, with the workers on the same image and environment as the server. It also refuses to install combinations that would run every worker twice. The manifests below are for writing them by hand.
+:::
+
 Create separate Deployments for the API, orchestration worker, scheduler worker, and background task worker. Use the same image and Secret for each Deployment. Set only the role-specific environment variables directly on each container.
 
 The orchestration worker Deployment has the following shape:
@@ -408,4 +412,5 @@ If the API crashes while a step is executing, that work can be lost and the work
 - [Workers reference](/reference/workers/overview): Details about worker environment variables and types, with a list of supported storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends
+- [Kubernetes (Helm)](/integrations/deploy/kubernetes-helm#background-workers): Deploy worker roles with the official chart
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): Declare cron schedules on workflows

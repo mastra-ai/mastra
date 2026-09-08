@@ -171,34 +171,29 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
-    let index: number | undefined;
-    let indexFailed = false;
-    try {
-      // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
-      index = (await this.cache.increment(counterKey)) - 1;
-    } catch (error) {
-      this.logError(`[CachingPubSub] Failed to increment counter for ${topic}`, error);
-      indexFailed = true;
-    }
-
-    // On counter failure leave `index` undefined rather than defaulting to 0:
-    // downstream consumers that key off `index` (e.g. replay-from-offset)
-    // would otherwise see colliding indices across failed publishes.
-    const fullEvent: Event = {
+    const baseEvent: Omit<Event, 'index'> = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
-      ...(index !== undefined ? { index } : {}),
     };
 
-    if (!indexFailed) {
-      try {
-        // Cache BEFORE live publish so late-joining observers never miss events
-        await this.cache.listPush(cacheKey, fullEvent);
-      } catch (error) {
-        this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
-      }
+    // Cache BEFORE live publish so late-joining observers never miss events.
+    // Index allocation and the list append happen in one cache operation so
+    // network-backed caches can do it in a single round-trip (issue #22477).
+    let index: number | undefined;
+    try {
+      index = await this.cache.listPushIndexed(cacheKey, counterKey, baseEvent);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
     }
+
+    // On cache failure leave `index` undefined rather than defaulting to 0:
+    // downstream consumers that key off `index` (e.g. replay-from-offset)
+    // would otherwise see colliding indices across failed publishes.
+    const fullEvent: Event = {
+      ...baseEvent,
+      ...(index !== undefined ? { index } : {}),
+    };
 
     // Always publish to inner PubSub — cache failure must not block live delivery
     await this.inner.publish(topic, fullEvent, options);

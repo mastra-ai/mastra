@@ -951,11 +951,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/harness/overview",
-      "destination": "/docs/harness/agent-controller",
-      "permanent": true
-    },
-    {
       "source": "/docs/harness/session",
       "destination": "/docs/harness/agent-controller",
       "permanent": true
@@ -2902,11 +2897,6 @@
     },
     {
       "source": "/docs/harness/modes/llms.txt",
-      "destination": "/docs/harness/agent-controller/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/harness/overview/llms.txt",
       "destination": "/docs/harness/agent-controller/llms.txt",
       "permanent": true
     },

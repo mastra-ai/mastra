@@ -46,6 +46,10 @@ const makeFeedback = (index: number, reviewStatus: 'needs-review' | 'reviewed' =
   feedbackType: 'comment',
   value: `Feedback ${index}`,
   reviewStatus,
+  // Only the first item is "authored" so tests can cover both the author and anonymous rows.
+  ...(index === 0
+    ? { author: { id: 'user-0', name: 'Marvin Frachet', avatarUrl: 'https://example.com/marvin.png' } }
+    : {}),
 });
 
 const seedHandlers = () => {
@@ -210,6 +214,35 @@ describe('InboxPage', () => {
     await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('feedbackId='));
   });
 
+  it('shows the resolved author in the list row and in the review panel', async () => {
+    seedHandlers();
+    renderInbox();
+
+    const row = (await screen.findByText('Feedback 0')).closest('.data-list-row')!;
+    expect(within(row).getByText('Marvin Frachet')).toBeTruthy();
+    expect((within(row).getByAltText('Marvin Frachet') as HTMLImageElement).src).toBe('https://example.com/marvin.png');
+
+    const anonymousRow = screen.getByText('Feedback 1').closest('.data-list-row')!;
+    expect(within(anonymousRow).queryByRole('img')).toBeNull();
+
+    fireEvent.click(within(row).getByRole('button', { name: /Feedback 0/ }));
+
+    const panel = await screen.findByRole('dialog', { name: /Review feedback for trace trace-0/ });
+    expect(within(panel).getByText('Marvin Frachet')).toBeTruthy();
+    expect(within(panel).getByAltText('Marvin Frachet')).toBeTruthy();
+  });
+
+  it('filters feedback rows by author name', async () => {
+    seedHandlers();
+    renderInbox();
+
+    await screen.findByText('Feedback 3');
+    fireEvent.change(screen.getByLabelText('Filter feedback'), { target: { value: 'marvin' } });
+
+    await waitFor(() => expect(screen.queryByText('Feedback 3')).toBeNull());
+    expect(screen.getByText('Feedback 0')).toBeTruthy();
+  });
+
   it('filters feedback rows through the list search', async () => {
     seedHandlers();
     renderInbox();
@@ -261,14 +294,16 @@ describe('InboxPage', () => {
     expect(screen.queryByText('Your inbox is empty')).toBeNull();
   });
 
-  it('opens the experiment Reviews tab featuring the result when a dataset row is clicked', async () => {
+  it('opens the Review Queue page featuring the result when a dataset row is clicked', async () => {
     seedHandlers();
     renderInbox('/inbox?tab=dataset');
 
     fireEvent.click(await screen.findByRole('button', { name: /item-1/ }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('location').textContent).toBe('/experiments/experiment-1?review=result-1'),
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/experiments/review-queue?experiment=experiment-1&review=result-1',
+      ),
     );
   });
 });

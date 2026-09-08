@@ -22,6 +22,7 @@ import {
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
+import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
@@ -47,6 +48,15 @@ export {
 export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
+export { HTTPException };
+
+export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof HTTPException) || !error.res) {
+    return undefined;
+  }
+
+  return error.getResponse();
+}
 
 /**
  * Hono/adapter context key set by the framework-public middleware.

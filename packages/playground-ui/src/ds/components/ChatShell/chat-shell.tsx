@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
 
 import {
   MessageScroller,
@@ -76,7 +76,7 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
     >
       {/* Sticky against the scroller itself is clamped to its box, not the
           scrolled height, and strands the dock mid-transcript. */}
-      <div data-slot="chat-shell-track" className="flex min-h-full min-w-0 flex-col">
+      <div data-slot="chat-shell-track" className="relative flex min-h-full min-w-0 flex-col">
         {children}
       </div>
     </MessageScrollerViewport>
@@ -89,11 +89,47 @@ export function ChatShellContent({ className, ...props }: MessageScrollerContent
 }
 
 /** The shared reading column. Every chat region must go through it. */
-export function ChatShellColumn({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+export function ChatShellColumn({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-slot="chat-shell-column"
       className={cn('mx-auto flex w-full max-w-(--chat-column) min-w-0 flex-col px-3 md:px-5', className)}
+      {...props}
+    />
+  );
+}
+
+export interface ChatShellTurnProps extends ComponentPropsWithoutRef<'div'> {
+  /** Opened by a user message: the turn reserves room and releases it through a slow drift. */
+  opensTurn?: boolean;
+  /** Holds the reply's share of the screen open under the live turn while the run answers. */
+  holdsRoom?: boolean;
+  /** Restored mid-run: the room is already due, so it opens with no transition. */
+  restored?: boolean;
+}
+
+/**
+ * One user turn and the reply under it. The room is the answer's share of the
+ * screen: the scroller parks the sent message exactly one room above the end of
+ * the box, so wherever the composer ends the message rests with this much space
+ * under it, and the scroller has nothing to follow until the answer outgrows it.
+ * A full screen parked the message against the very top; 70 leaves it breathing.
+ * Opening must outrun the scroller's trip; closing is the conversation settling.
+ */
+export function ChatShellTurn({ opensTurn, holdsRoom, restored, className, ...props }: ChatShellTurnProps) {
+  return (
+    <div
+      data-slot="chat-shell-turn"
+      data-opens-turn={opensTurn ? 'true' : undefined}
+      data-holds-room={holdsRoom ? 'true' : undefined}
+      className={cn(
+        'flex flex-col',
+        opensTurn &&
+          'min-h-0 transition-[min-height] duration-[1500ms] ease-[cubic-bezier(0.3,0,0.2,1)] motion-reduce:transition-none',
+        holdsRoom && 'min-h-[70cqh] duration-[440ms] ease-[cubic-bezier(0.2,0,0.2,1)] starting:min-h-0',
+        holdsRoom && restored && 'transition-none',
+        className,
+      )}
       {...props}
     />
   );
