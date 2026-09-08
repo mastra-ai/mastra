@@ -19,7 +19,8 @@ export interface TraceMessagesPanelProps {
 export function TraceMessagesPanel({ traceId, className, fullThreadHref, onHighlightSpans }: TraceMessagesPanelProps) {
   return (
     <DataPanel data-testid="messages-panel" className={cn('h-full rounded-none border-0 bg-transparent', className)}>
-      <DataPanel.Header>
+      {/* min-h-16 keeps this header level with the two-line span panel header. */}
+      <DataPanel.Header className="min-h-16">
         <DataPanel.Heading>Messages</DataPanel.Heading>
       </DataPanel.Header>
       <DataPanel.Content>

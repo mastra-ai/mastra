@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
@@ -83,12 +84,21 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
 }
 
 /**
- * Detects the package manager being used in the project.
+ * Detects the package manager from the nearest lockfile, including ancestor directories.
  */
-export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
-  if (existsSync('pnpm-lock.yaml')) return 'pnpm';
-  if (existsSync('yarn.lock')) return 'yarn';
-  return 'npm';
+export function detectPackageManager(startDirectory = process.cwd()): 'pnpm' | 'npm' | 'yarn' {
+  let directory = resolve(startDirectory);
+
+  while (true) {
+    if (existsSync(join(directory, 'pnpm-lock.yaml'))) return 'pnpm';
+    if (existsSync(join(directory, 'yarn.lock'))) return 'yarn';
+    if (existsSync(join(directory, 'package-lock.json')) || existsSync(join(directory, 'npm-shrinkwrap.json')))
+      return 'npm';
+
+    const parent = dirname(directory);
+    if (parent === directory) return 'npm';
+    directory = parent;
+  }
 }
 
 /**

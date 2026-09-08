@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createLifecycleTestRegistry } from '../boards/test-utils.js';
+import { createBoardRegistry } from '../boards/index.js';
+import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -2265,6 +2266,103 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['canceled']);
+  });
+
+  it('asks for consent on an external transition when the installed boards do not declare the phase', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    // Work is not installed here, so `work/canceled` has no declared semantics: fail closed and ask.
+    const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      boards,
+      storage,
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'closed-1', triggerType: 'github' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'work', stage: 'canceled', idempotencyKey: 'closed-1' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      boards,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).not.toEqual(['canceled']);
+  });
+
+  it('settles an automation that fails on a done card as superseded instead of paging a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = (
+      await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+          title: 'Reviewed pull request',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    const transitionService = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+    });
+    // The PR closes after its review card already settled: the mirrored move has nowhere to go.
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'closed-after-done', triggerType: 'github' },
+      ruleSetVersion: 'rules-v1',
+      expectedRevision: item.revision,
+      actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'review', stage: 'canceled', idempotencyKey: 'closed-after-done' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => false,
+    });
+    const start = new Date('2030-01-01T00:01:00Z');
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await dispatcher.runOnce(new Date(start.getTime() + attempt * 120_000));
+    }
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({
+      status: 'superseded',
+      lastError: expect.stringContaining('invalid_transition'),
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
   it('keeps an externally authored card from self-starting, even armed with auto-run on', async () => {

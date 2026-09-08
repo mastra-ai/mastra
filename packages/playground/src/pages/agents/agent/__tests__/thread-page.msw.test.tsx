@@ -264,36 +264,23 @@ describe('Standalone thread page', () => {
     );
   });
 
-  it('opens the traces aside from the Traces button, scoped to the current thread', async () => {
+  it('does not fetch traces nor render a traces aside in the chat view', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    // Closed by default: no aside, no traces request.
+    expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
     expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: /traces/i }));
-    expect(await screen.findByRole('complementary')).not.toBeNull();
-    await waitFor(() => expect(onTracesRequest).toHaveBeenCalled());
-    expect(onTracesRequest.mock.calls[0][0]).toBe(THREAD_ID);
-
-    // The aside header exposes the same close icon button as the trace panel.
-    // Closing plays an exit animation and only unmounts once it finishes
-    // (jsdom does not run keyframes, so we fire animationend manually).
-    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
-    const asideContainer = screen.getByRole('complementary').parentElement!;
-    fireEvent.animationEnd(asideContainer);
-    expect(screen.queryByRole('complementary')).toBeNull();
   });
 
-  it('does not render the Traces button nor fetch traces on /new', async () => {
+  it('does not render the "Show traces" switch nor fetch traces on /new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByTestId('thread-sidebar-back');
+    expect(screen.queryByRole('switch', { name: 'Show traces' })).toBeNull();
     expect(screen.queryByRole('button', { name: /traces/i })).toBeNull();
-    expect(screen.queryByRole('complementary')).toBeNull();
     expect(onTracesRequest).not.toHaveBeenCalled();
   });
 
@@ -426,16 +413,16 @@ describe('Standalone thread page', () => {
 
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
       expect(screen.queryByTestId('thread-view-by-trace')).toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Advanced view' })).toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Show traces' })).toBeNull();
     });
 
-    it('is toggled from the "Advanced view" switch in the Thread header', async () => {
+    it('is toggled from the "Show traces" switch in the Thread header', async () => {
       installHandlers();
       installTraceHandlers();
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
       expect(await screen.findByRole('heading', { name: 'Thread' })).not.toBeNull();
-      const toggle = screen.getByRole('switch', { name: 'Advanced view' });
+      const toggle = screen.getByRole('switch', { name: 'Show traces' });
       expect(toggle.getAttribute('aria-checked')).toBe('false');
 
       fireEvent.click(toggle);
@@ -446,7 +433,7 @@ describe('Standalone thread page', () => {
       );
       expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
 
-      fireEvent.click(screen.getByRole('switch', { name: 'Advanced view' }));
+      fireEvent.click(screen.getByRole('switch', { name: 'Show traces' }));
       await waitFor(() =>
         expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/${THREAD_ID}`),
       );

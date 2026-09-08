@@ -1,5 +1,13 @@
 # @mastra/temporal
 
+## 0.4.3-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/deployer@1.65.0-alpha.8
+
 ## 0.4.3-alpha.7
 
 ### Patch Changes

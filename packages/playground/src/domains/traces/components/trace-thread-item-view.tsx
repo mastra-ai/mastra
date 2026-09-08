@@ -7,6 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ListTreeIcon } from 'lucide-react';
 
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
+import { TraceHighlightProvider } from './trace-highlight-context';
 import { MessageRow } from '@/lib/ai-ui/messages/message-row';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 
@@ -39,6 +40,17 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
   }
 
   const messages = data ? formatTraceThreadMessages(data.spans) : [];
+  const onToolOpen = onHighlightSpans
+    ? (toolCallId: string) => {
+        const message = messages.find(candidate =>
+          candidate.content.parts.some(
+            part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+          ),
+        );
+        if (message) onHighlightSpans(message.traceSpanIds);
+      }
+    : undefined;
+
   if (messages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-4">
@@ -63,21 +75,23 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
           toolCallApprovals={{}}
           networkToolCallApprovals={{}}
         >
-          {messages.map(message => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              readOnly
-              footer={
-                onHighlightSpans && message.traceSpanIds.length > 0 ? (
-                  <Button variant="ghost" size="xs" onClick={() => onHighlightSpans(message.traceSpanIds)}>
-                    <ListTreeIcon />
-                    Highlight spans
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
+          <TraceHighlightProvider onToolOpen={onToolOpen}>
+            {messages.map(message => (
+              <MessageRow
+                key={message.id}
+                message={message}
+                readOnly
+                footer={
+                  onHighlightSpans && message.isTextOnly && message.traceSpanIds.length > 0 ? (
+                    <Button variant="ghost" size="xs" onClick={() => onHighlightSpans(message.traceSpanIds)}>
+                      <ListTreeIcon />
+                      Highlight spans
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </TraceHighlightProvider>
         </ToolCallProvider>
       </div>
     </div>
