@@ -134,6 +134,103 @@ describe('MongoDB canonical Knowledge support', () => {
     },
   );
 
+  it.each([false, true])(
+    'converges when activation starts after the first collection with skipDefaultIndexes=%s',
+    async skipDefaultIndexes => {
+      const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+      const dbName = `knowledge-staggered-init-${randomUUID()}`;
+      const first = resolveMongoDBConfig({ uri, dbName });
+      const second = resolveMongoDBConfig({ uri, dbName });
+      const client = new MongoClient(uri);
+      let created!: () => void;
+      const firstCollection = new Promise<void>(resolve => {
+        created = resolve;
+      });
+      let release!: () => void;
+      const resume = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const create = first.createCollection.bind(first);
+      vi.spyOn(first, 'createCollection').mockImplementationOnce(async (...args) => {
+        const result = await create(...args);
+        created();
+        await resume;
+        return result;
+      });
+      let observed!: () => void;
+      const missingMarker = new Promise<void>(resolve => {
+        observed = resolve;
+      });
+      const schema = await second.getCollection(TABLE_KNOWLEDGE_SCHEMA);
+      const getCollection = second.getCollection.bind(second);
+      vi.spyOn(second, 'getCollection').mockImplementation(name =>
+        name === TABLE_KNOWLEDGE_SCHEMA ? Promise.resolve(schema) : getCollection(name),
+      );
+      const find = schema.findOne.bind(schema);
+      vi.spyOn(schema, 'findOne').mockImplementationOnce(async (...args) => {
+        const result = await find(...args);
+        expect(result).toBeNull();
+        observed();
+        return result;
+      });
+      const firstRun = new KnowledgeMongoDB({ connector: first, skipDefaultIndexes }).init();
+      await firstCollection;
+      const secondRun = new KnowledgeMongoDB({ connector: second, skipDefaultIndexes }).init();
+      const results = Promise.allSettled([firstRun, secondRun]);
+      try {
+        await missingMarker;
+        release();
+        expect(await results).toEqual([
+          { status: 'fulfilled', value: undefined },
+          { status: 'fulfilled', value: undefined },
+        ]);
+        expect((await second.listCollectionNames()).sort()).toEqual([...KnowledgeMongoDB.MANAGED_COLLECTIONS].sort());
+        expect(await schema.countDocuments({ id: 'canonical' })).toBe(1);
+      } finally {
+        release();
+        await results;
+        await client.connect();
+        await client.db(dbName).dropDatabase();
+        await Promise.all([first.close(), second.close(), client.close()]);
+      }
+    },
+  );
+
+  it('rejects interrupted activation without modifying partial collections or unrelated data', async () => {
+    const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
+    const dbName = `knowledge-interrupted-init-${randomUUID()}`;
+    const first = resolveMongoDBConfig({ uri, dbName });
+    const restarted = resolveMongoDBConfig({ uri, dbName });
+    const client = new MongoClient(uri);
+    const create = first.createCollection.bind(first);
+    vi.spyOn(first, 'createCollection').mockImplementationOnce(async (...args) => {
+      await create(...args);
+      throw new Error('activation interrupted');
+    });
+    try {
+      await client.connect();
+      const db = client.db(dbName);
+      await db.collection('unrelated_sentinel').insertOne({ value: 'preserved' });
+      await expect(new KnowledgeMongoDB({ connector: first }).init()).rejects.toThrow('activation interrupted');
+      const names = (await restarted.listCollectionNames()).sort();
+      const nodes = db.collection('mastra_knowledge_nodes');
+      const indexes = await nodes.listIndexes().toArray();
+      const restart = new KnowledgeMongoDB({ connector: restarted }).init();
+      await expect(restart).rejects.toThrow(KnowledgeSchemaError);
+      await expect(restart).rejects.toThrow(
+        'If activation is still running, wait for it to finish before retrying. Reset the Knowledge domain explicitly before retrying.',
+      );
+      expect((await restarted.listCollectionNames()).sort()).toEqual(names);
+      expect(await nodes.listIndexes().toArray()).toEqual(indexes);
+      expect(await nodes.countDocuments()).toBe(0);
+      expect(await db.collection('unrelated_sentinel').findOne({ value: 'preserved' })).not.toBeNull();
+      expect(await db.collection(TABLE_KNOWLEDGE_SCHEMA).findOne({ id: 'canonical' })).toBeNull();
+    } finally {
+      await client.db(dbName).dropDatabase();
+      await Promise.all([first.close(), restarted.close(), client.close()]);
+    }
+  });
+
   it('persists the schema completion marker', async () => {
     const store = createStore();
     await store.init();

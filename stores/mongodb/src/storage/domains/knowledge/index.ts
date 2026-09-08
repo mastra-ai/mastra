@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   canonicalizeKnowledgeImporterBindingKey,
@@ -249,16 +250,32 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       );
     }
     const schema = await this.#collection(TABLE_KNOWLEDGE_SCHEMA);
-    const existingCollections = (await this.#connector.listCollectionNames()).filter(name =>
+    let existingCollections = (await this.#connector.listCollectionNames()).filter(name =>
       name.startsWith('mastra_knowledge_'),
     );
-    const marker = await schema.findOne({ id: 'canonical' });
-    // Empty collections can still carry incompatible unique indexes. Without a
-    // marker they are not a fresh schema, and must not be adopted or modified.
-    if (existingCollections.length > 0 && !marker) {
-      throw new KnowledgeSchemaError('MongoDB Knowledge schema is incomplete or incompatible.');
-    }
+    let marker = await schema.findOne({ id: 'canonical' });
     const managedCollections = new Set<string>(KnowledgeMongoDB.MANAGED_COLLECTIONS);
+    if (existingCollections.length > 0 && !marker) {
+      // Another process may be between its first collection and completion marker.
+      // Join read-only; interrupted or incompatible schemas must never be adopted.
+      if (existingCollections.every(name => managedCollections.has(name))) {
+        const deadline = Date.now() + 5_000;
+        while (!marker && Date.now() < deadline) {
+          await delay(50);
+          marker = await schema.findOne({ id: 'canonical' });
+        }
+      }
+      if (!marker) {
+        throw new KnowledgeSchemaError(
+          'MongoDB Knowledge schema is incomplete or incompatible. If activation is still running, wait for it to finish before retrying.',
+        );
+      }
+    }
+    if (marker) {
+      existingCollections = (await this.#connector.listCollectionNames()).filter(name =>
+        name.startsWith('mastra_knowledge_'),
+      );
+    }
     if (
       marker &&
       (existingCollections.length !== managedCollections.size ||
