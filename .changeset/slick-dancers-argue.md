@@ -37,7 +37,7 @@ import {
 
 The caller closes the dialog after the action succeeds.
 
-Also added `IntegrationDialog`, a searchable integration picker built on the new dialog variant with a fixed search field and a fading scroll list. Items carry an id, name, optional logo, and optional `authType`; a `(MCP)` name suffix or an `MCP_OAUTH2` auth type becomes a badge next to the name, and the auth method shows on the right.
+Also added `IntegrationDialog`, a searchable integration picker built on the new dialog variant with a fixed search field and a fading scroll list. Items carry an id, name, optional logo, an optional `badge` shown next to the name, and optional `meta` text shown muted on the right. Consumers own any vendor mapping, such as turning an auth type into a label.
 
 ```tsx
 import { IntegrationDialog } from '@mastra/playground-ui/components/IntegrationDialog';
@@ -48,8 +48,8 @@ import { IntegrationDialog } from '@mastra/playground-ui/components/IntegrationD
   title="Add connection"
   description="Choose an integration to authorize."
   items={[
-    { id: 'notion', name: 'Notion', logo: <img src={notionLogo} alt="" />, authType: 'OAUTH2' },
-    { id: 'render-mcp', name: 'Render (MCP)', authType: 'MCP_OAUTH2' },
+    { id: 'notion', name: 'Notion', logo: <img src={notionLogo} alt="" />, meta: 'OAuth' },
+    { id: 'render-mcp', name: 'Render', badge: 'MCP', meta: 'OAuth' },
   ]}
   onSelect={item => startConnect(item.id)}
 >

@@ -2,17 +2,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationDialog } from './integration-dialog';
-import { parseIntegrationName } from './parse-integration-name';
 
 const items = [
   { id: 'anthropic', name: 'Anthropic' },
   { id: 'slack', name: 'Slack' },
   { id: 'stripe', name: 'Stripe', disabled: true },
-  { id: 'render-mcp', name: 'Render (MCP)' },
-  { id: 'sanity-mcp', name: 'Sanity', badge: 'MCP' },
-  { id: 'notion', name: 'Notion', authType: 'OAUTH2' },
-  { id: 'resend', name: 'Resend', authType: 'API_KEY' },
-  { id: 'replicate-mcp', name: 'Replicate (MCP)', authType: 'MCP_OAUTH2' },
+  { id: 'sanity-mcp', name: 'Sanity', badge: 'MCP', meta: 'OAuth' },
+  { id: 'notion', name: 'Notion', meta: 'OAuth' },
 ];
 
 afterEach(() => cleanup());
@@ -78,52 +74,27 @@ describe('IntegrationDialog', () => {
   });
 });
 
-describe('parseIntegrationName', () => {
-  it('splits a parenthesized suffix into a badge', () => {
-    expect(parseIntegrationName('Render (MCP)')).toEqual({ name: 'Render', badge: 'MCP' });
-  });
-
-  it('leaves plain names alone', () => {
-    expect(parseIntegrationName('Replicate')).toEqual({ name: 'Replicate' });
-  });
-
-  it('ignores parentheses that are not a suffix', () => {
-    expect(parseIntegrationName('(Legacy) Mail')).toEqual({ name: '(Legacy) Mail' });
-  });
-});
-
-describe('IntegrationDialog badges', () => {
-  describe('when a name carries a parenthesized suffix', () => {
-    it('renders the suffix as a badge next to the name', () => {
+describe('IntegrationDialog badge and meta', () => {
+  describe('when an item has a badge', () => {
+    it('renders it next to the name', () => {
       renderDialog();
-      const button = screen.getByRole('button', { name: 'Render MCP' });
-      expect(button.querySelector('span:last-child')?.textContent).toBe('MCP');
+      const button = screen.getByRole('button', { name: 'Sanity MCP OAuth' });
+      expect(button.children[2]?.textContent).toBe('MCP');
+    });
+
+    it('matches the badge in search', () => {
+      renderDialog();
+      fireEvent.change(screen.getByRole('textbox', { name: 'Search integrations' }), { target: { value: 'mcp' } });
+      expect(screen.getAllByRole('button', { name: /OAuth$/ })).toHaveLength(1);
     });
   });
 
-  describe('when an item sets badge explicitly', () => {
-    it('renders it without parsing the name', () => {
-      renderDialog();
-      expect(screen.getByRole('button', { name: 'Sanity MCP' })).toBeDefined();
-    });
-  });
-});
-
-describe('IntegrationDialog auth type', () => {
-  describe('when an item has an auth type', () => {
-    it('shows a readable label as muted text on the right of the row', () => {
+  describe('when an item has meta text', () => {
+    it('renders it muted on the right of the row', () => {
       renderDialog();
       const button = screen.getByRole('button', { name: 'Notion OAuth' });
       expect(button.lastElementChild?.textContent).toBe('OAuth');
       expect(button.lastElementChild?.className).toContain('ml-auto');
-      expect(screen.getByRole('button', { name: 'Resend API Key' })).toBeDefined();
-    });
-
-    it('shows MCP as a badge next to the name and its OAuth method on the right', () => {
-      renderDialog();
-      const button = screen.getByRole('button', { name: 'Replicate MCP OAuth' });
-      expect(button.children[2]?.textContent).toBe('MCP');
-      expect(button.lastElementChild?.textContent).toBe('OAuth');
     });
   });
 });

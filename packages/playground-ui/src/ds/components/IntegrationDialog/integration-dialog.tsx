@@ -1,7 +1,6 @@
 import { BlocksIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import { parseIntegrationName } from './parse-integration-name';
 import { Badge } from '@/ds/components/Badge';
 import {
   Dialog,
@@ -22,36 +21,9 @@ export type IntegrationDialogItem = {
   name: string;
   logo?: ReactNode;
   badge?: string;
-  authType?: string;
+  meta?: string;
   disabled?: boolean;
 };
-
-const AUTH_TYPE_LABELS: Record<string, string> = {
-  OAUTH1: 'OAuth',
-  OAUTH2: 'OAuth',
-  OAUTH2_CC: 'OAuth',
-  MCP_OAUTH2: 'OAuth',
-  MCP_OAUTH2_GENERIC: 'OAuth',
-  API_KEY: 'API Key',
-  BASIC: 'Basic Auth',
-  APP: 'App',
-  TBA: 'Token',
-  JWT: 'JWT',
-  TWO_STEP: 'Two-Step',
-  SIGNATURE: 'Signature',
-  AWS_SIGV4: 'AWS SigV4',
-  CUSTOM: 'Custom',
-  INSTALL_PLUGIN: 'Plugin',
-  NONE: 'No Auth',
-};
-
-function authTypeLabel(authType: string) {
-  return AUTH_TYPE_LABELS[authType.toUpperCase()] ?? authType;
-}
-
-function isMcpAuthType(authType: string | undefined) {
-  return authType?.toUpperCase().startsWith('MCP') ?? false;
-}
 
 export type IntegrationDialogProps = Omit<DialogProps, 'variant' | 'intent' | 'children'> & {
   title: ReactNode;
@@ -66,7 +38,7 @@ export type IntegrationDialogProps = Omit<DialogProps, 'variant' | 'intent' | 'c
 };
 
 function matches(item: IntegrationDialogItem, query: string) {
-  return `${item.name} ${item.id}`.toLowerCase().includes(query);
+  return `${item.name} ${item.id} ${item.badge ?? ''}`.toLowerCase().includes(query);
 }
 
 function IntegrationDialog({
@@ -147,12 +119,6 @@ function IntegrationDialogContent({
         {visibleItems.length > 0 ? (
           <ul className="flex flex-col gap-2">
             {visibleItems.map(item => {
-              const parsedName = parseIntegrationName(item.name);
-              const isMcp = isMcpAuthType(item.authType);
-              const parsed = {
-                name: parsedName.name,
-                badge: item.badge ?? (isMcp ? 'MCP' : parsedName.badge),
-              };
               return (
                 <li key={item.id}>
                   <button
@@ -168,13 +134,11 @@ function IntegrationDialogContent({
                       {item.logo ?? <BlocksIcon />}
                     </span>
                     <span className="text-ui-md leading-ui-md text-neutral6 min-w-0 truncate font-medium">
-                      {parsed.name}
+                      {item.name}
                     </span>
-                    {parsed.badge ? <Badge size="sm">{parsed.badge}</Badge> : null}
-                    {item.authType ? (
-                      <span className="text-ui-sm leading-ui-sm text-neutral3 ml-auto shrink-0">
-                        {authTypeLabel(item.authType)}
-                      </span>
+                    {item.badge ? <Badge size="sm">{item.badge}</Badge> : null}
+                    {item.meta ? (
+                      <span className="text-ui-sm leading-ui-sm text-neutral3 ml-auto shrink-0">{item.meta}</span>
                     ) : null}
                   </button>
                 </li>

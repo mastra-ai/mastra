@@ -5,12 +5,7 @@ import { IntegrationDialog } from './integration-dialog';
 import type { IntegrationDialogItem } from './integration-dialog';
 import { Button } from '@/ds/components/Button';
 
-const integrations: IntegrationDialogItem[] = integrationsCatalog.integrations.map(entry => ({
-  id: entry.id,
-  name: entry.displayName,
-  authType: entry.authType ?? undefined,
-  logo: entry.logoUrl ? <img src={entry.logoUrl} alt="" /> : undefined,
-}));
+const integrations = integrationsCatalog;
 
 function Example({ items = integrations }: { items?: IntegrationDialogItem[] }) {
   const [open, setOpen] = useState(false);
@@ -45,7 +40,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Searchable integration picker built on the Dialog "new" variant, mirroring the Platform "Add connection" dialog. Search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional logo, badge and disabled flag; a parenthesized suffix in the name such as "Render (MCP)" becomes a badge. The Default story uses a snapshot of the integrations.mastra.ai catalog with its Nango logos. Selection is left to the caller.',
+          'Searchable integration picker built on the Dialog "new" variant, mirroring the Platform "Add connection" dialog. Search stays fixed under the header and the list scrolls inside the fading Body. Items carry an id, name, optional logo, a badge shown next to the name, muted meta text on the right, and a disabled flag. Consumers own any vendor mapping (for example Nango auth types to labels). The Default story uses a snapshot of the integrations.mastra.ai catalog with its Nango logos. Selection is left to the caller.',
       },
     },
   },
