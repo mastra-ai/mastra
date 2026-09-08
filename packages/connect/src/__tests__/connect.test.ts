@@ -1,24 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { connect } from '../connect.js';
-import { PROVIDERS } from '../registry.js';
-import type { ProviderRegistration } from '../registry.js';
+import { PROVIDERS, type ProviderRegistration } from '../registry.js';
 
 const TOKEN = 'fake-test-token';
 
 const fakeTools = { linear_fake_tool: { id: 'linear_fake_tool' } } as never;
 
-const originalLinear = PROVIDERS.linear;
-
-function stubProvider(overrides?: Partial<ProviderRegistration>): { createTools: ReturnType<typeof vi.fn> } {
+function installProvider(overrides?: Partial<ProviderRegistration>): {
+  registration: ProviderRegistration;
+  createTools: ReturnType<typeof vi.fn>;
+} {
   const createTools = vi.fn().mockReturnValue(fakeTools);
-  PROVIDERS.linear = {
+  const registration: ProviderRegistration = {
     integrationId: 'linear',
     envVar: 'MASTRA_LINEAR_CONNECTION_ID',
     createTools,
     ...overrides,
   };
-  return { createTools };
+  PROVIDERS.push(registration);
+  return { registration, createTools };
 }
 
 function makeConnection(overrides?: Record<string, unknown>) {
@@ -34,181 +35,187 @@ function makeConnection(overrides?: Record<string, unknown>) {
   };
 }
 
-function clientFor(connections: unknown[]) {
-  const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections }));
-  return {
-    projectId: 'proj_1',
-    client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as unknown as typeof fetch },
-  };
-}
-
 let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  PROVIDERS.length = 0;
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  PROVIDERS.linear = originalLinear;
+  PROVIDERS.length = 0;
   vi.unstubAllEnvs();
   warnSpy.mockRestore();
 });
 
 describe('connect', () => {
   it('throws missing_project_id synchronously without a project id', () => {
+    installProvider();
     vi.stubEnv('MASTRA_PROJECT_ID', '');
     expect(() => connect({ client: { accessToken: TOKEN } })).toThrow(
       expect.objectContaining({ code: 'missing_project_id' }),
     );
   });
 
+  it('throws invalid_options for unknown provider in integrations override', () => {
+    installProvider();
+    expect(() =>
+      connect({
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN },
+        integrations: { does_not_exist: { disabled: true } },
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid_options' }));
+  });
+
   it('falls back to MASTRA_PROJECT_ID', async () => {
-    stubProvider();
+    installProvider();
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
-    await connect({ client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never } })();
-    expect(String(fetchMock.mock.calls[0]![0])).toContain('/v2/projects/proj_env/connections');
-  });
-
-  it('resolves a toolset per supported connected provider (undirected)', async () => {
-    const { createTools } = stubProvider();
-    const result = await connect(clientFor([makeConnection()]))();
-    expect(Object.keys(result)).toEqual(['linear']);
-    expect(result.linear).toBe(fakeTools);
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin1' }));
-  });
-
-  it('warns and skips unsupported platform integrations', async () => {
-    stubProvider();
-    const result = await connect(
-      clientFor([makeConnection(), makeConnection({ id: 'c_unk1', integrationId: 'salesforce' })]),
-    )();
-    expect(Object.keys(result)).toEqual(['linear']);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('salesforce'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c_unk1'));
-  });
-
-  it('treats the integrations option as an allowlist', async () => {
-    stubProvider();
-    const result = await connect({ ...clientFor([makeConnection()]), integrations: { linear: true } })();
-    expect(Object.keys(result)).toEqual(['linear']);
-  });
-
-  it('excludes providers marked false without throwing', async () => {
-    stubProvider();
-    const result = await connect({ ...clientFor([makeConnection()]), integrations: { linear: false } })();
-    expect(result).toEqual({});
-  });
-
-  it('warns and skips listed providers with no project connection yet', async () => {
-    stubProvider();
-    const result = await connect({ ...clientFor([]), integrations: { linear: true } })();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('No linear connection'));
-  });
-
-  it('never warns for false entries even when the provider is absent', async () => {
-    stubProvider();
-    await expect(connect({ ...clientFor([]), integrations: { linear: false } })()).resolves.toEqual({});
-    expect(warnSpy).not.toHaveBeenCalled();
-  });
-
-  it('passes allowTools from the integration options through to the builder', async () => {
-    const { createTools } = stubProvider();
     await connect({
-      ...clientFor([makeConnection()]),
-      integrations: { linear: { allowTools: ['linear_fake_tool'] } },
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ allowTools: ['linear_fake_tool'] }));
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/v2/projects/proj_env/connections');
   });
 
-  it('lets the env var pick among multiple connections', async () => {
-    const { createTools } = stubProvider();
-    vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_lin2');
-    await connect(clientFor([makeConnection(), makeConnection({ id: 'c_lin2' })]))();
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin2' }));
-  });
-
-  it('lets an explicit connectionId option win over ambiguity', async () => {
-    const { createTools } = stubProvider();
-    await connect({
-      ...clientFor([makeConnection(), makeConnection({ id: 'c_lin2' })]),
-      integrations: { linear: { connectionId: 'c_lin1' } },
+  it('resolves the toolset for the sole active connection', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin1' }));
-  });
-
-  it('warns and skips an ambiguous explicitly requested provider', async () => {
-    stubProvider();
-    const result = await connect({
-      ...clientFor([makeConnection(), makeConnection({ id: 'c_lin2' })]),
-      integrations: { linear: true },
-    })();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('multiple connections'));
-  });
-
-  it('warns and skips ambiguous providers in undirected mode, listing candidates', async () => {
-    stubProvider();
-    const result = await connect(clientFor([makeConnection(), makeConnection({ id: 'c_lin2' })]))();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c_lin1'));
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c_lin2'));
-  });
-
-  it('warns and skips an explicitly requested provider that only has needs_reauth connections', async () => {
-    stubProvider();
-    const result = await connect({
-      ...clientFor([makeConnection({ status: 'needs_reauth' })]),
-      integrations: { linear: true },
-    })();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('re-authentication'));
-  });
-
-  it('warns and skips needs_reauth providers in undirected mode', async () => {
-    stubProvider();
-    const result = await connect(clientFor([makeConnection({ status: 'needs_reauth' })]))();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('re-authentication'));
-  });
-
-  it('warns and skips when the env var names a needs_reauth connection', async () => {
-    stubProvider();
-    vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_lin1');
-    const result = await connect(clientFor([makeConnection({ status: 'needs_reauth' })]))();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-authentication'));
-  });
-
-  it('tolerates connections with unknown statuses: skips them in undirected mode', async () => {
-    stubProvider();
-    const result = await connect(clientFor([makeConnection({ status: 'pending' })]))();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c_lin1: pending'));
-  });
-
-  it('warns and skips an explicitly requested provider that only has unknown-status connections', async () => {
-    stubProvider();
-    const result = await connect({
-      ...clientFor([makeConnection({ status: 'pending' })]),
-      integrations: { linear: true },
-    })();
-    expect(result).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('no usable connection'));
-  });
-
-  it('an unknown status on one connection does not break resolution of an active one', async () => {
-    const { createTools } = stubProvider();
-    const result = await connect(clientFor([makeConnection({ id: 'c_lin2', status: 'pending' }), makeConnection()]))();
-    expect(Object.keys(result)).toEqual(['linear']);
-    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_lin1' }));
-  });
-
-  it('throws synchronously for unknown integration keys in options', () => {
-    stubProvider();
-    expect(() => connect({ ...clientFor([makeConnection()]), integrations: { salesforce: true } as never })).toThrow(
-      expect.objectContaining({ code: 'connection_not_found' }),
+    expect(tools).toEqual({ linear: fakeTools });
+    expect(createTools).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: 'c_lin1', allowTools: undefined }),
     );
+  });
+
+  it('warns and skips when there are no connections for a provider', async () => {
+    installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(tools).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('No linear connection in this project'));
+  });
+
+  it('only warns about missing providers once across multiple resolutions', async () => {
+    installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [] }));
+    const tools = connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      ttlMs: 0,
+    });
+    await tools();
+    await tools();
+    await tools();
+    const missingWarns = warnSpy.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('will appear automatically'),
+    );
+    expect(missingWarns).toHaveLength(1);
+  });
+
+  it('skips a directed connection that needs re-auth', async () => {
+    installProvider();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ connections: [makeConnection({ id: 'c_stale', status: 'needs_reauth' })] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { connectionId: 'c_stale' } },
+    })();
+    expect(tools).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('needs re-auth'));
+  });
+
+  it('skips when multiple active connections exist without a pin', async () => {
+    installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connections: [makeConnection({ id: 'c1' }), makeConnection({ id: 'c2' })],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(tools).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2 active connections'));
+  });
+
+  it('uses the pinned connection id from integrations override', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connections: [makeConnection({ id: 'c1' }), makeConnection({ id: 'c2' })],
+      }),
+    );
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { connectionId: 'c2' } },
+    })();
+    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c2' }));
+  });
+
+  it('uses the env-var fallback when no pin is given', async () => {
+    const { createTools } = installProvider();
+    vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', 'c_env');
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connections: [makeConnection({ id: 'c_env' }), makeConnection({ id: 'c_other' })],
+      }),
+    );
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(createTools).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'c_env' }));
+  });
+
+  it('respects disabled: true and does not include the provider', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ connections: [makeConnection()] }));
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      integrations: { linear: { disabled: true } },
+    })();
+    expect(tools).toEqual({});
+    expect(createTools).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative ttlMs synchronously', () => {
+    installProvider();
+    expect(() => connect({ projectId: 'proj_1', client: { accessToken: TOKEN }, ttlMs: -1 })).toThrow(
+      expect.objectContaining({ code: 'invalid_options' }),
+    );
+  });
+
+  it('surfaces multiple providers in one call', async () => {
+    installProvider();
+    const notionTools = { notion_fake: { id: 'notion_fake' } } as never;
+    const notionCreate = vi.fn().mockReturnValue(notionTools);
+    PROVIDERS.push({
+      integrationId: 'notion',
+      envVar: 'MASTRA_NOTION_CONNECTION_ID',
+      createTools: notionCreate,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        connections: [makeConnection(), makeConnection({ id: 'c_not', integrationId: 'notion' })],
+      }),
+    );
+    const tools = await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(tools).toEqual({ linear: fakeTools, notion: notionTools });
   });
 });
