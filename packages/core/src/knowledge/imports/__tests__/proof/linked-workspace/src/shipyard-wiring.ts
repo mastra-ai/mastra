@@ -11,7 +11,10 @@ import { createShipyardMaintenanceRuntime } from './shipyard-maintenance.js';
 import { createShipyardKnowledge } from './shipyard.js';
 
 const directory = await mkdtemp(join(tmpdir(), 'shipyard-wiring-'));
-const storage = new LibSQLStore({ id: 'shipyard-wiring-proof', url: `file:${join(directory, 'knowledge.db')}` });
+const storage = new LibSQLStore({
+  id: 'shipyard-wiring-proof',
+  url: process.argv.includes('--memory') ? ':memory:' : `file:${join(directory, 'knowledge.db')}`,
+});
 const { knowledge, scopes } = await createShipyardKnowledge(storage);
 let body = 'Verified source revision one';
 let available = true;

@@ -47,6 +47,23 @@ describe('Shipyard-shaped durable operations proof', () => {
     expect(result.recordId).not.toBe(seed.recordId);
   }, 180_000);
 
+  it.each([false, true])(
+    'runs source/import/maintenance wiring with private memory=%s',
+    async memory => {
+      const directory = await mkdtemp(join(tmpdir(), 'knowledge-shipyard-wiring-'));
+      temporaryDirectories.push(directory);
+      const workspace = join(directory, 'workspace');
+      await run(['exec', 'tsx', creator, '--out', workspace], root);
+      await run(['install', '--offline'], workspace);
+      const execution = await run(
+        ['exec', 'tsx', 'src/shipyard-wiring.ts', ...(memory ? ['--memory'] : [])],
+        workspace,
+      );
+      expect(execution.stdout).toContain('PROOF: GREEN — executable Shipyard source/import/maintenance wiring');
+    },
+    180_000,
+  );
+
   it.skipIf(process.env.RUN_SHIPYARD_GOAL_PROOF !== '1')(
     'repairs a gap with a native goal and judges real graph state',
     async () => {

@@ -6,7 +6,7 @@ import type { Client } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LibSQLStore } from '..';
-import { withClientWriteLock } from './write-lock';
+import { withClientReadLock, withClientWriteLock } from './write-lock';
 
 describe('withClientWriteLock', () => {
   // The WeakMap key is the client identity; a bare object is enough for unit tests.
@@ -35,6 +35,47 @@ describe('withClientWriteLock', () => {
     expect(maxActive).toBe(1); // never more than one critical section at a time
     expect(order).toEqual([1, 2, 3]); // FIFO
     expect(results).toEqual([1, 2, 3]);
+  });
+
+  it('allows owning reads but queues readers with a stale inherited context', async () => {
+    const client = fakeClient();
+    let releaseRead = () => {};
+    let releaseWriter = () => {};
+    let writerStarted = () => {};
+    const readGate = new Promise<void>(resolve => {
+      releaseRead = resolve;
+    });
+    const writerGate = new Promise<void>(resolve => {
+      releaseWriter = resolve;
+    });
+    const started = new Promise<void>(resolve => {
+      writerStarted = resolve;
+    });
+    let readFinished = false;
+    let staleRead = Promise.resolve();
+    await withClientWriteLock(client, async () => {
+      expect(await withClientReadLock(client, async () => 'owner')).toBe('owner');
+      staleRead = readGate.then(() =>
+        withClientReadLock(client, async () => {
+          readFinished = true;
+        }),
+      );
+    });
+    const writer = withClientWriteLock(client, async () => {
+      writerStarted();
+      await writerGate;
+    });
+    try {
+      await started;
+      releaseRead();
+      await new Promise(resolve => setImmediate(resolve));
+      expect(readFinished).toBe(false);
+    } finally {
+      releaseRead();
+      releaseWriter();
+      await Promise.all([writer, staleRead]);
+    }
+    expect(readFinished).toBe(true);
   });
 
   it('runs independently for different clients', async () => {
