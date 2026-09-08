@@ -2147,9 +2147,9 @@ class SessionState<TState = unknown> {
  *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
  *   The Session owns the resume data; the AgentController keeps the richer per-suspension
  *   UI snapshot on its display state.
- * - follow-up display metadata: signal IDs for messages the Session submits to
- *   the Agent-owned FIFO while a run is in progress. The Agent runtime schedules
- *   execution; the Session keeps the `queuedFollowUps` display mirror.
+ * - follow-up queue observation: a subscription to the Agent-owned FIFO for
+ *   the active resource/thread. The Agent runtime schedules messages; the
+ *   Session renders its current shared `queuedFollowUps` count.
  * - the interactive tool-approval gate (`session.approval`): when a tool needs
  *   user approval, the run parks on a promise here until the UI responds. The
  *   Session owns the gate; the AgentController maps the decision to its effects (run vs
