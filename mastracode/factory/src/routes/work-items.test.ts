@@ -979,12 +979,9 @@ describe('GET /web/factory/projects/:id/attention', () => {
           target: { kind: 'work-item', workItemId: workItem.id, board: 'work' },
         },
       ],
-      openCount: 1,
-      badgeCount: 1,
-      unreadCount: 1,
-      latestOccurrenceKey: firstKey,
-      latestOccurrenceAt: now.toISOString(),
-      latestOccurrenceUnread: true,
+      kinds: {
+        'automation-failed': { open: 1, unread: 1, latest: { key: firstKey, at: now.toISOString(), unread: true } },
+      },
       hasMore: false,
     });
     const receiptRead = findMany.mock.calls.find(([collection]) => collection === 'factory_attention_receipts');
@@ -1026,13 +1023,12 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?view=unread`)).json(),
-    ).resolves.toMatchObject({ items: [], openCount: 1, unreadCount: 0 });
+    ).resolves.toMatchObject({ items: [], kinds: { 'automation-failed': { open: 1, unread: 0 } } });
 
     expect((await json('POST', `${receiptPath}/archive`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      openCount: 0,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 0, unread: 0 } },
     });
     expect((await json('POST', `${receiptPath}/read`)).status).toBe(200);
     await expect(
@@ -1044,8 +1040,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     expect((await json('POST', `${receiptPath}/restore`)).status).toBe(200);
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ key: firstKey, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
     await seed.workItems.setAttentionReceipt({
       orgId: 'org1',
@@ -1090,8 +1085,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
     });
 
     const readAll = await json('POST', `/web/factory/projects/${PROJECT_ID}/attention/read-all`);
@@ -1099,8 +1093,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     await expect(readAll.json()).resolves.toEqual({ ok: true, hasMore: false });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [{ occurrence: 2, read: true, archived: false }],
-      openCount: 1,
-      unreadCount: 0,
+      kinds: { 'automation-failed': { open: 1, unread: 0 } },
     });
 
     const [retried, staleReceipt] = await Promise.all([
@@ -1186,9 +1179,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
           archived: false,
         },
       ],
-      badgeCount: 1,
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-proposed': { open: 1, unread: 1 } },
     });
 
     await seed.workItems.supersedeTerminalDecisionsForWorkItem({
@@ -1199,8 +1190,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
     await expect((await json('GET', `/web/factory/projects/${PROJECT_ID}/attention`)).json()).resolves.toMatchObject({
       items: [],
-      badgeCount: 0,
-      openCount: 0,
+      kinds: { 'automation-proposed': { open: 0 } },
     });
   });
 
@@ -1676,8 +1666,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       (await json('GET', `/web/factory/projects/${PROJECT_ID}/attention?limit=1`)).json(),
     ).resolves.toMatchObject({
       items: [{ decisionId: target.id }],
-      openCount: 1,
-      unreadCount: 1,
+      kinds: { 'automation-failed': { open: 1, unread: 1 } },
       hasMore: false,
     });
     await expect(

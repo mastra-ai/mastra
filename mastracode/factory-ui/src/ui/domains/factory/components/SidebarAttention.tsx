@@ -10,6 +10,7 @@ import { Link, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { ATTENTION_PREVIEW_LIMIT, useFactoryAttention } from '../../../../hooks/useFactoryAttention';
+import { attentionCountsIn, latestUnreadOrNewestIn } from '../services/attention';
 import { playAttentionSoundOnce } from '../services/attentionSound';
 import { AttentionItemRow } from './AttentionItemRow';
 import { useAttentionItemActions } from './useAttentionItemActions';
@@ -25,13 +26,13 @@ function triggerLabel(openCount: number, unreadCount: number): string {
 export function SidebarAttention() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const auth = useFactoryAuth();
-  const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'badge');
+  const attention = useFactoryAttention(factoryId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const rowProps = useAttentionItemActions(factoryId);
   const [open, setOpen] = useState(false);
   const items = attention.data?.items ?? [];
-  const openCount = attention.data?.openCount ?? 0;
-  const unreadCount = attention.data?.unreadCount ?? 0;
-  const badgeCount = attention.data?.badgeCount ?? 0;
+  const { open: openCount, unread: unreadCount } = attention.data
+    ? attentionCountsIn(attention.data.kinds, 'attention')
+    : { open: 0, unread: 0 };
   const soundScope = auth.data?.user?.userId ?? 'local';
   const soundBaseline = useRef<
     { scope: string; key: string | null; occurredAt: number; unreadCount: number } | undefined
@@ -40,11 +41,12 @@ export function SidebarAttention() {
   useEffect(() => {
     if (!attention.data) return;
     const scope = `${soundScope}:${factoryId ?? 'none'}`;
-    const key = attention.data.latestOccurrenceKey;
-    const occurredAt = Date.parse(attention.data.latestOccurrenceAt ?? '') || 0;
+    const latest = latestUnreadOrNewestIn(attention.data.kinds, 'attention');
+    const key = latest?.key ?? null;
+    const occurredAt = latest ? Date.parse(latest.at) : 0;
     const previous = soundBaseline.current;
     soundBaseline.current = { scope, key, occurredAt, unreadCount };
-    if (!previous || previous.scope !== scope || !key || !attention.data.latestOccurrenceUnread) return;
+    if (!previous || previous.scope !== scope || !latest?.unread) return;
     if (previous.key === key) return;
     if (
       occurredAt < previous.occurredAt ||
@@ -52,7 +54,7 @@ export function SidebarAttention() {
     ) {
       return;
     }
-    void playAttentionSoundOnce(scope, key);
+    void playAttentionSoundOnce(scope, latest.key);
   }, [attention.data, factoryId, soundScope, unreadCount]);
 
   if (!factoryId) return null;
@@ -69,9 +71,9 @@ export function SidebarAttention() {
           </span>
           <MainSidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>
-            {badgeCount > 0 ? (
+            {unreadCount > 0 ? (
               <Badge variant="orange" size="sm">
-                {badgeCount}
+                {unreadCount}
               </Badge>
             ) : null}
           </MainSidebar.NavLabel>
