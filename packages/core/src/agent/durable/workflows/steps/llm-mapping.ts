@@ -139,6 +139,15 @@ export function createDurableLLMMappingStep() {
             continue;
           }
 
+          // A processToolResult processor blocked this result via tripwire at
+          // tool-call time: a tripwire chunk was emitted instead of the
+          // tool-result, and no result crossed the boundary. Leave the
+          // invocation incomplete, mirroring the main loop's tripwire handling
+          // (commit and emission both skipped).
+          if (toolResult.resultBlocked) {
+            continue;
+          }
+
           // Provider-executed results are already committed by llm-execution's
           // buildMessagesFromChunks when the result arrives in-stream; committing
           // here again would overwrite that entry with the serialized copy (and

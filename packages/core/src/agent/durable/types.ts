@@ -368,6 +368,13 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * The call carries no result/error so the mapping step leaves it incomplete.
    */
   aborted?: boolean;
+  /**
+   * Set when a processToolResult processor blocked the result via tripwire.
+   * A tripwire chunk was emitted instead of the tool-result; the call carries
+   * no result so the mapping step leaves it incomplete (mirrors the main
+   * loop's tripwire handling, where commit and emission are both skipped).
+   */
+  resultBlocked?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
+import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
@@ -24,6 +25,7 @@ import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
+import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
@@ -67,6 +69,10 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // so the mapping step leaves the call incomplete. Must be declared or Zod strips it.
   // Mirrors the non-durable tool-call output schema (ledger L7).
   aborted: z.boolean().optional(),
+  // Set when a processToolResult processor blocked the result via tripwire; no result
+  // crosses the boundary and the mapping step leaves the call incomplete. Must be
+  // declared or Zod strips it.
+  resultBlocked: z.boolean().optional(),
   error: z
     .object({
       name: z.string(),
@@ -1254,7 +1260,7 @@ export function createDurableToolCallStep() {
           throw outcome.error;
         }
 
-        const result = outcome.result;
+        let result = outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
@@ -1292,6 +1298,89 @@ export function createDurableToolCallStep() {
           } catch (mappingError) {
             mappingSpan?.error({ error: mappingError as Error, endSpan: true });
             logger?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolName}": ${mappingError}`);
+          }
+        }
+
+        // Run processToolResult hooks before the tool-result chunk is emitted.
+        // In this engine subscribers receive tool-result chunks HERE, at
+        // tool-call time — running the hook later in llm-mapping would protect
+        // only the transcript after the raw value had already reached the
+        // stream. Processors mutate via messageList.updateToolInvocation, but
+        // llm-mapping re-derives the transcript from the llm-execution snapshot
+        // plus the serialized step outputs, so the processed value must travel
+        // through the returned `result` field. Requires the live in-process
+        // registry (processor states are unserializable) — a cross-process
+        // resume skips, same as the chunk pipeline below.
+        if (!wasSuspended && registryEntry?.outputProcessors?.length && registryEntry.processorStates && messageList) {
+          const resultProcessorRunner = new ProcessorRunner({
+            inputProcessors: [],
+            outputProcessors: registryEntry.outputProcessors,
+            logger,
+            agentName: initData.agentId,
+            processorStates: registryEntry.processorStates,
+          });
+          try {
+            await resultProcessorRunner.runProcessToolResult({
+              // The accumulated StepResult[] is not reconstructable at
+              // tool-call time in this engine (only serialized iteration state
+              // exists), so hooks that inspect prior steps see an empty array.
+              steps: [],
+              stepNumber: 0,
+              messages: messageList.get.all.db(),
+              messageList,
+              toolName,
+              toolCallId,
+              toolArgs: cleanedArgs,
+              result,
+              ...(processorObservabilityContext ?? {}),
+              requestContext: registryEntry.requestContext,
+              retryCount: 0,
+              writer: pubsub
+                ? {
+                    custom: async (data: { type: string }) => {
+                      await emitChunkEvent(pubsub, runId, data as ChunkType);
+                    },
+                  }
+                : undefined,
+              abortSignal: toolAbortSignal,
+            });
+            // Sync any processor mutation back so the emitted chunk and the
+            // serialized step output both carry the post-processor value.
+            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
+            if (postProcessorResult !== undefined && postProcessorResult !== result) {
+              result = postProcessorResult;
+            }
+          } catch (processorError) {
+            if (processorError instanceof TripWire) {
+              // Blocked: emit a tripwire chunk instead of the tool-result and
+              // leave the call incomplete (no result). llm-mapping skips
+              // `resultBlocked` entries the way it skips `aborted` ones, so
+              // the invocation stays in 'call' state — mirroring the main
+              // loop, where a tripwire skips both commit and emission.
+              if (pubsub) {
+                try {
+                  await emitChunkEvent(pubsub, runId, {
+                    type: 'tripwire',
+                    payload: {
+                      reason: processorError.message || 'Tool result blocked by processor',
+                      retry: processorError.options?.retry,
+                      metadata: processorError.options?.metadata,
+                      processorId: processorError.processorId,
+                    },
+                  } as ChunkType);
+                } catch (emitError) {
+                  logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
+                }
+              }
+              return {
+                ...typedInput,
+                resultBlocked: true,
+              };
+            }
+            // A non-tripwire processor failure must not kill the run in this
+            // engine (run and stream lifecycles are decoupled) — warn and
+            // continue with the raw result.
+            logger?.warn?.(`[DurableAgent] processToolResult failed for tool "${toolName}": ${processorError}`);
           }
         }
 
