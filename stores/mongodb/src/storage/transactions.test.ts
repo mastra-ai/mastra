@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { MongoDBStore } from './index';
 
-const STANDALONE_URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+const STANDALONE_URI = process.env.MONGODB_STANDALONE_URL || 'mongodb://localhost:27019';
 const REPLICA_SET_URI =
   process.env.MONGODB_RS_URL ||
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
