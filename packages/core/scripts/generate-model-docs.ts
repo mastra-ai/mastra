@@ -315,9 +315,6 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   provider.packageName = packageName;
   const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
-  // Check for AI SDK docs link if package is available
-  const aiSdkDocsLink = packageName ? await checkAiSdkDocsLink(provider.id) : null;
-
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
   const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
