@@ -43,6 +43,8 @@ interface TrackedSession {
 export class LiveSessions {
   readonly #byId = new Map<string, TrackedSession>();
   readonly #parkedListeners = new Set<(session: LiveSession) => void>();
+  /** A park stamp doubles as the receipt key, so two suspensions in one millisecond must not share one. */
+  #lastParkStamp = 0;
 
   constructor(controller: SessionNotifier) {
     controller.onSessionCreated(session => this.#track(session));
@@ -55,10 +57,15 @@ export class LiveSessions {
     });
   }
 
+  #nextParkStamp(): number {
+    this.#lastParkStamp = Math.max(Date.now(), this.#lastParkStamp + 1);
+    return this.#lastParkStamp;
+  }
+
   #track(session: LiveSession): void {
     const suspendedAt = new Map<string, number>();
     const unsubscribe = session.subscribe(event => {
-      if (event.type === 'tool_suspended') suspendedAt.set(event.toolCallId, Date.now());
+      if (event.type === 'tool_suspended') suspendedAt.set(event.toolCallId, this.#nextParkStamp());
       else if (event.type === 'tool_suspension_cancelled') suspendedAt.delete(event.toolCallId);
       else if (event.type === 'agent_end' && event.reason !== 'suspended') suspendedAt.clear();
       else return;

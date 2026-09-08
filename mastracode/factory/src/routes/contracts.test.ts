@@ -51,6 +51,7 @@ function registeredFactoryRoutes() {
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
     comments: {} as never,
+    liveSessions: {} as never,
     resolveProject: async () => ({}) as never,
   });
   const supervisor = buildSupervisorRoutes({
@@ -169,6 +170,7 @@ describe('Factory route contracts', () => {
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
         workItems: [{ id: projectId }],
         runningSessionIds: ['session-1'],
+        parkedSessionIds: ['session-2'],
       }).success,
     ).toBe(true);
     expect(

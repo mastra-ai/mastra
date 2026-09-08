@@ -106,6 +106,22 @@ describe('LiveSessions', () => {
     expect(registry.parked('session-1')).toBeUndefined();
   });
 
+  it('dates two parks in the same millisecond apart, so a receipt cannot carry over to the next wait', () => {
+    const controller = fakeController();
+    const registry = new LiveSessions(controller);
+    const fake = fakeSession('session-1');
+    controller.create(fake.session);
+
+    fake.park('call-1', 'ask_user');
+    fake.park('call-2', 'submit_plan');
+    const first = registry.parked('session-1');
+    fake.answer('call-1');
+    const second = registry.parked('session-1');
+
+    expect(first?.suspendedAt).toBe(new Date('2030-01-01T00:00:00Z').getTime());
+    expect(second?.suspendedAt).toBe(first!.suspendedAt + 1);
+  });
+
   it('lists the parked sessions of one project only', () => {
     const controller = fakeController();
     const registry = new LiveSessions(controller);

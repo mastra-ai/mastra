@@ -172,8 +172,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasQuery": false,
     "hasBody": false,
     "responseShape": {
-      "kind": "object-property",
-      "listProperty": "workItems"
+      "kind": "single"
     }
   },
   "PATCH /web/factory/projects/:id": {
@@ -905,11 +904,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "parkedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "workItems",
-        "runningSessionIds"
+        "runningSessionIds",
+        "parkedSessionIds"
       ]
     }
   },

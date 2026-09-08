@@ -361,7 +361,11 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/work-items',
     description: 'List Factory work items and running sessions',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({ workItems: z.array(entitySchema), runningSessionIds: z.array(z.string()) }),
+    responseSchema: z.object({
+      workItems: z.array(entitySchema),
+      runningSessionIds: z.array(z.string()),
+      parkedSessionIds: z.array(z.string()),
+    }),
   },
   workItemCreate: {
     method: 'POST',
