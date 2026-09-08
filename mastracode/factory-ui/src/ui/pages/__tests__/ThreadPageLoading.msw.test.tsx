@@ -213,7 +213,7 @@ describe('ThreadPage loading shell', () => {
 
   it('reveals loaded history without briefly rendering the empty thread state', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({ messages: assistantOnlyThreadMessages });
-    renderThreadRoute();
+    const { client } = renderThreadRoute();
     sessionGate.resolve();
     await screen.findByRole('status', { name: 'Preparing session' });
 
@@ -221,6 +221,7 @@ describe('ThreadPage loading shell', () => {
 
     messagesGate.resolve();
     await screen.findByText('There are no user turns in this thread.');
+    await waitForMutationsIdle(client);
     emptyPrompt.disconnect();
 
     expect(emptyPrompt.wasDrawn()).toBe(false);

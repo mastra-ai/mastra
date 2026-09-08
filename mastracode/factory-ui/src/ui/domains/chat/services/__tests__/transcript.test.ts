@@ -1685,4 +1685,17 @@ describe('the turn in flight carried by the session snapshot', () => {
 
     expect(withInFlightMessage(state, snapshot)).toBe(state.entries);
   });
+
+  it('claims the turn drawn from its tool call alone, so the streamed text lands beside the running tool', () => {
+    const state = transcriptReducer(createInitialTranscript(), {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+    });
+
+    const entries = withInFlightMessage(state, snapshot);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: 'message', streaming: true, message: { id: 'live-1' } });
+    expect(messageParts(entries[0])).toHaveLength(2);
+  });
 });

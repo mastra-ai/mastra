@@ -970,6 +970,11 @@ function toMessageEntry(
   };
 }
 
+/** The live turn drawn from its tool calls alone, before any message carried them. */
+function isUnclaimedTurn(entry: TimelineEntry): boolean {
+  return entry.kind === 'message' && entry.message.id.startsWith('assistant-tools-');
+}
+
 /**
  * Where an assistant message the timeline has never seen under this id belongs.
  * A live turn the message extends part for part is that turn re-identified —
@@ -982,7 +987,7 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   if (entry?.kind !== 'message') return -1;
   // The entry keeps the id it was drawn with, so what marks it unclaimed is the
   // message inside it still being the synthesized one.
-  if (entry.message.id.startsWith('assistant-tools-')) return index;
+  if (isUnclaimedTurn(entry)) return index;
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
 }
 
@@ -993,8 +998,13 @@ function indexOfMessage(entries: TimelineEntry[], message: MastraDBMessage): num
   return index === -1 && message.role === 'assistant' ? indexOfSameTurn(entries, message) : index;
 }
 
+function drawsMessage(entries: TimelineEntry[], message: MastraDBMessage): boolean {
+  const entry = entries[indexOfMessage(entries, message)];
+  return entry !== undefined && !isUnclaimedTurn(entry);
+}
+
 export function withInFlightMessage(state: TranscriptState, message: MastraDBMessage | undefined): TimelineEntry[] {
-  if (!message || indexOfMessage(state.entries, message) !== -1) return state.entries;
+  if (!message || drawsMessage(state.entries, message)) return state.entries;
   return upsertMessage(state, message, true).entries;
 }
 

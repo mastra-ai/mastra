@@ -273,6 +273,57 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
+  it('given a snapshot taken mid-run, when the run ends and another starts, then its in-flight message is dropped', async () => {
+    const encoder = new TextEncoder();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          running: true,
+          currentMessage: {
+            id: 'live-1',
+            role: 'assistant',
+            createdAt: '2026-09-08T10:00:00.000Z',
+            content: { format: 2, parts: [{ type: 'text', text: 'Checking out the pull request.' }] },
+          },
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.state?.currentMessage?.id).toBe('live-1');
+
+    emit({ type: 'agent_end', reason: 'complete' });
+    await waitFor(() => expect(result.current.state?.running).toBe(false));
+    expect(result.current.state?.currentMessage).toBeUndefined();
+
+    emit({ type: 'agent_start' });
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
+    expect(result.current.state?.currentMessage).toBeUndefined();
+  });
+
   it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
     const encoder = new TextEncoder();
     const onEvent = vi.fn();
