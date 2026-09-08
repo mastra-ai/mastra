@@ -112,7 +112,7 @@ function AgentSession() {
                     <ActivatedSkillsProvider>
                       <MainContentLayout>
                         <SessionHeader />
-                        <div className="relative grid h-full overflow-y-auto pt-6">
+                        <div className="relative grid h-full min-h-0">
                           <AgentChat
                             key={actualThreadId}
                             agentId={agentId!}
