@@ -47,7 +47,7 @@ export function TagPicker({
             type="button"
             aria-label={`Remove tag ${tag}`}
             onClick={() => removeTag(tag)}
-            className="hover:opacity-70"
+            className="cursor-pointer hover:opacity-70"
           >
             <X className="h-2.5 w-2.5" />
           </button>

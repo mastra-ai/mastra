@@ -24,4 +24,5 @@ export function expectComputedTag(element: HTMLElement | null, value: string) {
  */
 export function expectInheritsTagForeground(button: HTMLElement) {
   expect(button.className).not.toMatch(/(^|\s)(hover:)?text-(neutral|accent)\d/);
+  expect(button.className).toMatch(/(^|\s)cursor-pointer(\s|$)/);
 }

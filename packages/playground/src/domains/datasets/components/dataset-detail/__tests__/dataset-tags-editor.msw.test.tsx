@@ -78,7 +78,7 @@ describe('DatasetTagsEditor', () => {
       expectComputedTag(remove.parentElement, 'alpha');
     });
 
-    it('renders the remove action in the tag foreground color', async () => {
+    it('renders the remove action in the tag foreground color with a pointer cursor', async () => {
       renderEditor();
 
       expectInheritsTagForeground(await screen.findByRole('button', { name: 'Remove tag alpha' }));

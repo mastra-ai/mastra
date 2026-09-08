@@ -76,7 +76,7 @@ describe('ExperimentResultPanel metadata', () => {
       expect(onTagsChange).toHaveBeenCalledWith([]);
     });
 
-    it('renders the remove action in the tag foreground color', () => {
+    it('renders the remove action in the tag foreground color with a pointer cursor', () => {
       renderPanel(result);
 
       expectInheritsTagForeground(screen.getByRole('button', { name: 'Remove tag alpha' }));

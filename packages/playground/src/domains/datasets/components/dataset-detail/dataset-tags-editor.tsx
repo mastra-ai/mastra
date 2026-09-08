@@ -65,7 +65,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
             aria-label={`Remove tag ${tag}`}
             disabled={updateDataset.isPending}
             onClick={() => handleRemove(tag)}
-            className="rounded-sm hover:opacity-70 disabled:opacity-50"
+            className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
           >
             <X className="size-3" />
           </button>

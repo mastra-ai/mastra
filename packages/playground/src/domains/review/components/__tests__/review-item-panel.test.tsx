@@ -69,7 +69,7 @@ describe('ReviewItemPanel', () => {
       expectComputedTag(screen.getByRole('button', { name: 'Remove tag alpha' }).parentElement, 'alpha');
     });
 
-    it('renders the remove action in the tag foreground color', () => {
+    it('renders the remove action in the tag foreground color with a pointer cursor', () => {
       renderPanel({ item: { ...baseItem, tags: ['alpha'] } });
 
       expectInheritsTagForeground(screen.getByRole('button', { name: 'Remove tag alpha' }));
