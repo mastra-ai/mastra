@@ -7,12 +7,12 @@ import {
   buildThreadMetadataFromExtractedValues,
   getPriorExtractedValues,
 } from '../extracted-values';
+import { formatMessagesForExtractorHooks } from '../hook-message-context';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
 import { wrapInObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
-import { formatMessagesForObserver } from '../observer-agent';
 import { withRetry } from '../retry';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
@@ -78,7 +78,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
       activeObservations,
-      recentMessages: formatMessagesForObserver(messages),
+      recentMessages: formatMessagesForExtractorHooks(messages),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

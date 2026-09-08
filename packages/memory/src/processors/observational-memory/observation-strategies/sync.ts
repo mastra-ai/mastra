@@ -7,6 +7,7 @@ import {
   buildThreadMetadataFromExtractedValues,
   getPriorExtractedValues,
 } from '../extracted-values';
+import { formatMessagesForExtractorHooks } from '../hook-message-context';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -16,7 +17,6 @@ import {
 import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
-import { formatMessagesForObserver } from '../observer-agent';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
@@ -125,7 +125,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       previousValues: this.priorExtractedValues,
       rawObservations: result.observations,
       activeObservations: existingObservations,
-      recentMessages: formatMessagesForObserver(this.opts.messages),
+      recentMessages: formatMessagesForExtractorHooks(this.opts.messages),
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,

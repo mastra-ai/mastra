@@ -436,8 +436,15 @@ describe('Subconscious remind', () => {
     ['async-buffer', 'tool-result'],
     ['resource', 'text'],
     ['resource', 'tool-result'],
-  ])('forwards active observations and complete %s %s tails through strategy hooks', async (strategyName, kind) => {
-    const text = 'Deployment inventory reviewed. '.repeat(30) + 'TAIL_ONLY_APPROVAL';
+    ...['sync', 'async-buffer', 'resource'].flatMap(strategy =>
+      ['large-text', 'large-tool-result', 'reasoning', 'tool-args', 'many-messages'].map(kind => [strategy, kind]),
+    ),
+  ])('forwards active observations and bounded %s %s tails through strategy hooks', async (strategyName, kind) => {
+    const oversized = !['text', 'tool-result'].includes(kind);
+    const text =
+      'HEAD_ONLY_APPROVAL ' +
+      'Deployment inventory reviewed. '.repeat(oversized && kind !== 'many-messages' ? 1_000 : 30) +
+      'TAIL_ONLY_APPROVAL';
     const message: MastraDBMessage = {
       id: 'tail-message',
       role: kind === 'text' ? 'user' : 'assistant',
@@ -447,20 +454,34 @@ describe('Subconscious remind', () => {
       content: {
         format: 2,
         parts:
-          kind === 'text'
+          kind === 'text' || kind === 'large-text' || kind === 'many-messages'
             ? [{ type: 'text', text }]
-            : [
-                {
-                  type: 'tool-invocation',
-                  toolInvocation: {
-                    state: 'result',
-                    toolCallId: 'inventory',
-                    toolName: 'read_inventory',
-                    args: {},
-                    result: text,
-                  },
-                },
-              ],
+            : kind === 'reasoning'
+              ? [{ type: 'reasoning', reasoning: text, details: [] }]
+              : kind === 'tool-args'
+                ? [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'call',
+                        toolCallId: 'inventory',
+                        toolName: 'read_inventory',
+                        args: { text },
+                      },
+                    },
+                  ]
+                : [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolCallId: 'inventory',
+                        toolName: 'read_inventory',
+                        args: {},
+                        result: text,
+                      },
+                    },
+                  ],
       },
     };
     const onExtracted = vi.fn();
@@ -537,7 +558,10 @@ describe('Subconscious remind', () => {
       threadId: 'alpha',
       resourceId: 'user-42',
       record,
-      messages: [message],
+      messages:
+        kind === 'many-messages'
+          ? Array.from({ length: 100 }, (_, index) => ({ ...message, id: `window-${index}` }))
+          : [message],
       agent: mainAgent,
       ...(strategyName === 'async-buffer' ? { cycleId: 'new-buffer' } : {}),
     });
@@ -556,6 +580,9 @@ describe('Subconscious remind', () => {
       resourceId: 'user-42',
     });
     expect(alpha.recentMessages).not.toContain('OLDER_VISIBLE_FACT');
+    expect(alpha.recentMessages).toContain('HEAD_ONLY_APPROVAL');
+    expect(alpha.recentMessages.length).toBeLessThanOrEqual(11 * 1024);
+    if (oversized) expect(alpha.recentMessages).toContain('[middle context omitted]');
     if (strategyName === 'resource') {
       const beta = contexts.find(context => context.threadId === 'beta');
       expect(beta).toMatchObject({ activeObservations: 'OLDER_VISIBLE_FACT', resourceId: 'user-42', mainAgent });
