@@ -558,7 +558,25 @@ export const testWorkflow = createWorkflow({})
 
 Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one. See [Choosing the right pattern](#choosing-the-right-pattern) for guidance on when to use `.foreach()` vs other methods.
 
-![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+```mermaid
+flowchart LR
+  accTitle: Run a workflow step for each array item
+  accDescr: The foreach operation passes three example items into separate runs of step1, then passes their collected results to step2 before the workflow ends.
+  subgraph foreach[".foreach()"]
+    direction TB
+    step1a([step1])
+    step1b([step1])
+    step1c([step1])
+  end
+
+  start(( start )) -->|in| step1a
+  start -->|in| step1b
+  start -->|in| step1c
+  foreach -->|".then(step2)"<br/>out| step2([step2])
+  step2 -->|".commit()"<br/>out| endNode(( end ))
+
+  class endNode accent
+```
 
 ```typescript oxfmt:false {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
