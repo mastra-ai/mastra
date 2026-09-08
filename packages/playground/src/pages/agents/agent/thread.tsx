@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
@@ -10,7 +11,7 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -109,6 +110,15 @@ function AgentThread() {
 
   if (isAgentLoading) {
     return <AgentThreadLoadingSkeleton />;
+  }
+
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
   }
 
   if (!agent) {

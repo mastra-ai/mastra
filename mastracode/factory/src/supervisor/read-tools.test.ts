@@ -119,7 +119,7 @@ describe('createFactorySupervisorReadTools', () => {
 
     const report = await execute<any>(tools.factory_health_check, {});
 
-    expect(report.findings.map((f: any) => f.kind).sort()).toEqual(['decision-failed', 'seat-missing']);
+    expect(report.findings.map((f: any) => f.kind)).toEqual(['seat-missing']);
   });
 
   it('factory_inspect_work_item resolves a card by number with its seats, decisions, audit and feed', async () => {

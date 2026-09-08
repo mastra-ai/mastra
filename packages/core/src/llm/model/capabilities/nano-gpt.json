@@ -444,6 +444,7 @@
     "openai/gpt-oss-20b",
     "poolside/laguna-s-2.1",
     "poolside/laguna-s-2.1:thinking",
+    "poolside/laguna-xs-2.1",
     "qwen-max",
     "qwen-plus",
     "qwen-turbo",
