@@ -3585,8 +3585,11 @@ export class Session<TState = unknown> {
     const submittedAbortRequested = this.run.isAbortRequested();
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
+    const routesToActiveRun = Boolean(
+      !submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning,
+    );
 
-    if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
+    if (routesToActiveRun) {
       this.approval.respond({
         decision: 'decline',
         declineContext: {
@@ -3603,7 +3606,7 @@ export class Session<TState = unknown> {
       requestContext: requestContextInput,
       tracingContext,
       tracingOptions,
-      includeStreamOptions: !(!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning),
+      includeStreamOptions: !routesToActiveRun,
     });
     const result = this.machinery
       .getAgent()
