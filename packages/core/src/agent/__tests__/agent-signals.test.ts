@@ -4865,6 +4865,11 @@ describe('Agent signals', () => {
       cancelledSignalIds: [owned.signal.id],
     });
     expect(
+      runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
+    ).toEqual({
+      cancelledSignalIds: [],
+    });
+    expect(
       runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
     ).toEqual({
       cancelledSignalIds: [untagged.signal.id],
