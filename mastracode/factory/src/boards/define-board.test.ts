@@ -5,45 +5,57 @@ import {
   isTerminalFactoryRuleStage,
   isWorkingFactoryRuleStage,
 } from '../rules/types.js';
+import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 import { allowsBuiltInBoardTransition } from './index.js';
 
 describe('defineBoard', () => {
-  it.each(['', ' queued', 'queued ', 'queued\n', 'bad phase', 'bad/phase', '-phase', '_phase', 'é', 'x'.repeat(129)])(
-    'rejects malformed board and phase identifiers: %j',
+  it.each([
+    '',
+    ' queued',
+    'queued ',
+    'queued\n',
+    'bad phase',
+    'bad/phase',
+    '-phase',
+    '_phase',
+    'é',
+    'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH + 1),
+  ])('rejects malformed board and phase identifiers: %j', identifier => {
+    expect(() =>
+      defineBoard({
+        id: identifier,
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: { queued: { title: 'Queued', kind: 'resting' } },
+      }),
+    ).toThrow(BoardDefinitionError);
+    expect(() =>
+      defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: identifier,
+        phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
+      }),
+    ).toThrow(BoardDefinitionError);
+  });
+
+  it.each(['Release_1-ready', 'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH)])(
+    'preserves valid board and phase identifiers: %s',
     identifier => {
-      expect(() =>
-        defineBoard({
-          id: identifier,
-          title: 'Release',
-          initialPhase: 'queued',
-          phases: { queued: { title: 'Queued', kind: 'resting' } },
-        }),
-      ).toThrow(BoardDefinitionError);
-      expect(() =>
-        defineBoard({
-          id: 'release',
-          title: 'Release',
-          initialPhase: identifier,
-          phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
-        }),
-      ).toThrow(BoardDefinitionError);
+      const board = defineBoard({
+        id: identifier,
+        title: 'Release',
+        initialPhase: identifier,
+        phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
+      });
+      expect(board.id).toBe(identifier);
+      expect(board.initialPhase).toBe(identifier);
+      expect(Object.keys(board.phases)).toEqual([identifier]);
     },
   );
-
-  it.each(['Release_1-ready', 'x'.repeat(128)])('preserves valid board and phase identifiers: %s', identifier => {
-    const board = defineBoard({
-      id: identifier,
-      title: 'Release',
-      initialPhase: identifier,
-      phases: { [identifier]: { title: 'Queued', kind: 'resting' } },
-    });
-    expect(board.id).toBe(identifier);
-    expect(board.initialPhase).toBe(identifier);
-    expect(Object.keys(board.phases)).toEqual([identifier]);
-  });
 
   it('normalizes linear and outcome transitions', () => {
     const board = defineBoard({

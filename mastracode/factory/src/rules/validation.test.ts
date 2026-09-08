@@ -30,27 +30,35 @@ describe('Factory rule validation', () => {
     },
   );
 
-  it.each(['', ' queued', 'queued ', 'queued\n', 'bad phase', 'bad/phase', '-phase', '_phase', 'é', 'x'.repeat(129)])(
-    'rejects malformed board and phase identifiers: %j',
-    identifier => {
-      for (const type of ['transition', 'upsertLinkedWorkItem']) {
-        const decision = {
-          type,
-          idempotencyKey: 'identifier-check',
-          board: 'release',
-          stage: 'queued',
-          ...(type === 'upsertLinkedWorkItem'
-            ? { source: 'manual', sourceKey: 'release:1', title: 'Release', url: null }
-            : {}),
-        };
-        for (const field of ['board', 'stage']) {
-          expect(() => validateFactoryRuleDecision({ ...decision, [field]: identifier })).toThrow(
-            FactoryRuleValidationError,
-          );
-        }
+  it.each([
+    '',
+    ' queued',
+    'queued ',
+    'queued\n',
+    'bad phase',
+    'bad/phase',
+    '-phase',
+    '_phase',
+    'é',
+    'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH + 1),
+  ])('rejects malformed board and phase identifiers: %j', identifier => {
+    for (const type of ['transition', 'upsertLinkedWorkItem']) {
+      const decision = {
+        type,
+        idempotencyKey: 'identifier-check',
+        board: 'release',
+        stage: 'queued',
+        ...(type === 'upsertLinkedWorkItem'
+          ? { source: 'manual', sourceKey: 'release:1', title: 'Release', url: null }
+          : {}),
+      };
+      for (const field of ['board', 'stage']) {
+        expect(() => validateFactoryRuleDecision({ ...decision, [field]: identifier })).toThrow(
+          FactoryRuleValidationError,
+        );
       }
-    },
-  );
+    }
+  });
 
   it.each(['Release_1-ready', 'x'.repeat(MAX_BOARD_IDENTIFIER_LENGTH)])(
     'preserves valid identifiers exactly: %s',
