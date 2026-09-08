@@ -15,7 +15,6 @@ import type {
   FactoryRuleRejectionCode,
   FactoryRuleStage,
   FactoryTriageType,
-  FactoryRules,
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
@@ -61,7 +60,7 @@ export interface FactoryTransitionRequest {
 }
 
 export interface FactoryTransitionServiceOptions {
-  rules: FactoryRules;
+  configVersion: string;
   storage: WorkItemsStorage;
   boards?: BoardRegistry;
   /** Every commit, accepted or rejected, lands here as `stage_moved` / `transition_rejected` under the request's actor. */
@@ -201,7 +200,7 @@ async function withRuleTimeout<T>(operation: Promise<T>, timeoutMs: number): Pro
 }
 
 export class FactoryTransitionService {
-  readonly #rules: FactoryRules;
+  readonly #configVersion: string;
   readonly #boards: BoardRegistry;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
@@ -211,7 +210,7 @@ export class FactoryTransitionService {
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
-    this.#rules = options.rules;
+    this.#configVersion = options.configVersion;
     this.#boards = options.boards ?? createBoardRegistry();
     this.#storage = options.storage;
     this.#audit = options.audit;
@@ -221,8 +220,8 @@ export class FactoryTransitionService {
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
-  get ruleSetVersion(): string {
-    return this.#rules.version;
+  get configVersion(): string {
+    return this.#configVersion;
   }
 
   async transition(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
@@ -273,7 +272,7 @@ export class FactoryTransitionService {
           transitionId: result.transitionId,
           ingressType: request.ingress.type,
           cause: request.cause,
-          ruleSetVersion: this.#rules.version,
+          configVersion: this.#configVersion,
           from,
           ...detail,
         },
@@ -366,7 +365,7 @@ export class FactoryTransitionService {
       ingress: { type: request.ingress.type, id: request.ingress.identity },
       cause: request.cause,
       causalChain: request.causalChain ?? [],
-      ruleSetVersion: this.#rules.version,
+      configVersion: this.#configVersion,
       item: {
         id: item.id,
         source: itemSource,
@@ -527,7 +526,7 @@ export class FactoryTransitionService {
       destinationStage: request.stage,
       actorId: actorId(request.actor),
       ingress: { identity: request.ingress.identity, triggerType: request.ingress.type, transitionId },
-      ruleSetVersion: this.#rules.version,
+      configVersion: this.#configVersion,
       causalChain: [...(request.causalChain ?? [])],
       evaluation,
       ...(options.triageType ? { triageType: options.triageType } : {}),

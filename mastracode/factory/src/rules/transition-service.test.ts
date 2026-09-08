@@ -7,7 +7,6 @@ import { createTestBoard } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
@@ -45,7 +44,7 @@ function lifecycleOptions({
     ),
   });
   return {
-    rules: defaultFactoryRules({ version }),
+    configVersion: version,
     boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
   };
 }
@@ -128,7 +127,7 @@ describe('installed board transition policies', () => {
     const item = await createItem(storage, { board: board.id, stages: ['approval'] });
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'policy-test' }),
+      configVersion: 'policy-test',
       boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
     });
     return { storage, board, item, service };
@@ -183,7 +182,7 @@ describe('installed board transition policies', () => {
     const onAccepted = vi.fn();
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'policy-test' }),
+      configVersion: 'policy-test',
       boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       onAccepted,
     });
@@ -215,7 +214,7 @@ describe('installed board transition policies', () => {
       const { item, storage, board } = await setup(policy, onEnter);
       const service = new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'policy-test' }),
+        configVersion: 'policy-test',
         boards: createBoardRegistry({ boards: [board] }),
         timeoutMs: 100,
       });
@@ -274,7 +273,7 @@ describe('installed board transition policies', () => {
     });
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'policy-test' }),
+      configVersion: 'policy-test',
       boards: createBoardRegistry({ boards: [rejecting] }),
     });
     expect(await service.transition(request(item, { stage: 'shipped' }))).toMatchObject({
@@ -303,7 +302,7 @@ describe('installed board transition policies', () => {
   it('does not give Review a triage-role classification requirement', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { board: 'review', source: 'github-pr', metadata: { authorTrusted: true } });
-    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'policy-test' }) });
+    const service = new FactoryTransitionService({ storage, configVersion: 'policy-test' });
     expect(
       await service.transition({
         ...request(item, { stage: 'review' }),
@@ -331,7 +330,7 @@ describe('installed board transition policies', () => {
     const item = await createItem(storage, { board: board.id });
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'policy-test' }),
+      configVersion: 'policy-test',
       boards: createBoardRegistry({ boards: [board] }),
     });
     expect(
@@ -410,7 +409,7 @@ describe('installed board transition policies', () => {
     });
     const service = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'policy-test' }),
+      configVersion: 'policy-test',
       boards: createBoardRegistry({ boards: [board] }),
     });
     let item = await createItem(storage, { board: board.id, metadata: { authorTrusted: true } });
@@ -449,7 +448,7 @@ describe('FactoryTransitionService', () => {
       const item = await createItem(storage, { source, metadata: { autoStartCandidate: true } });
       const service = new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'manual-entry' }),
+        configVersion: 'manual-entry',
       });
       await expect(
         service.transition({ ...request(item, { stage: 'intake' }), initialEntry: true }),
@@ -473,7 +472,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -487,7 +486,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const classified = await service.transition({
@@ -516,7 +515,7 @@ describe('FactoryTransitionService', () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const item = await createItem(storage);
       const service = new FactoryTransitionService({
-        rules: defaultFactoryRules({ version: 'human-approval' }),
+        configVersion: 'human-approval',
         storage,
       });
       await service.transition({
@@ -556,7 +555,7 @@ describe('FactoryTransitionService', () => {
   it('allows a human to approve a classified feature into Planning', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     await service.transition({
       ...request(item, { stage: 'intake', identity: 'triage-feature' }),
       actor: { type: 'agent', bindingId: 'binding-1', role: 'triage' },
@@ -574,7 +573,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const classified = await service.transition({
@@ -661,7 +660,7 @@ describe('FactoryTransitionService', () => {
     async stage => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const item = await createItem(storage, { metadata: { authorTrusted: true } });
-      const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+      const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
       const reviewed = await service.transition({
         ...request(item, { stage: 'review', identity: 'classify-review' }),
         actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
@@ -703,7 +702,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage);
     const onAccepted = vi.fn();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onAccepted,
     });
@@ -751,7 +750,7 @@ describe('FactoryTransitionService', () => {
     const onAccepted = vi.fn().mockRejectedValue(new Error('label sync down'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onAccepted,
     });
@@ -789,7 +788,7 @@ describe('FactoryTransitionService', () => {
   it('keeps bugs autonomous and leaves grandfathered work and terminal transitions unaffected', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const bug = await createItem(storage, { metadata: { authorTrusted: true } });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     const planned = await service.transition({
       ...request(bug, { stage: 'planning', identity: 'bug-plan' }),
       actor: { type: 'agent', bindingId: 'triage', role: 'triage' },
@@ -873,7 +872,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage);
     const onTerminalStage = vi.fn();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
     });
@@ -905,7 +904,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage);
     const onTerminalStage = vi.fn().mockRejectedValue(new Error('release failed'));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
     });
@@ -922,7 +921,7 @@ describe('FactoryTransitionService', () => {
     // Never settles — models a hung sandbox-provider call during cleanup.
     const onTerminalStage = vi.fn(() => new Promise<void>(() => {}));
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
       onTerminalStage,
       terminalCleanupTimeoutMs: 20,
@@ -938,7 +937,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.autonomyArmedAt).toBeNull();
@@ -953,7 +952,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -970,7 +969,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
@@ -990,7 +989,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const dragged = await service.transition({ ...request(item, { stage: 'triage' }), cause: 'board_drag' });
@@ -1010,7 +1009,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'], metadata: { authorTrusted: false } });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1031,7 +1030,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1050,7 +1049,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1078,7 +1077,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1140,7 +1139,7 @@ describe('FactoryTransitionService', () => {
   it('rejects Review board moves outside its declared lifecycle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition(request(item, { board: 'review', stage: 'planning' }));
 
@@ -1156,7 +1155,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['review'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1183,7 +1182,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1199,7 +1198,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1220,7 +1219,7 @@ describe('FactoryTransitionService', () => {
       metadata: { authorTrusted: true },
     });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1245,7 +1244,7 @@ describe('FactoryTransitionService', () => {
       metadata: { authorTrusted: false },
     });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1265,7 +1264,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1283,7 +1282,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['planning'] });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
 
@@ -1386,7 +1385,7 @@ describe('FactoryTransitionService', () => {
   it('always returns typed stale on CAS loss and never overwrites canonical state', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-2', patch: { title: 'Changed concurrently' } });
 
     const result = await service.transition(request(item));
@@ -1441,7 +1440,7 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const result = await new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     }).transition(request(item, { stage: 'intake' }));
 
@@ -1456,7 +1455,7 @@ describe('FactoryTransitionService', () => {
       source: 'github-pr',
       sourceKey: 'github-pr:2',
     });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     const causalChain = Array.from({ length: MAX_FACTORY_RULE_CAUSAL_DEPTH + 1 }, (_, index) => ({
       ingressId: `ingress-${index}`,
       decisionType: 'transition' as const,
@@ -1483,7 +1482,7 @@ describe('FactoryTransitionService', () => {
   it('accepts a human cancel and can revive the item out of canceled', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['review'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
     expect(discard).toMatchObject({ status: 'accepted', stage: 'canceled' });
@@ -1525,7 +1524,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage, { stages: ['intake'] });
     const board = createTestBoard();
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       storage,
     });
@@ -1545,7 +1544,7 @@ describe('FactoryTransitionService', () => {
     const onEnter = vi.fn();
     const board = createTestBoard({ onShipped: onEnter });
     const service = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       storage,
     });
@@ -1575,7 +1574,7 @@ describe('audit trail', () => {
     const item = await createItem(seed.workItems);
     const service = new FactoryTransitionService({
       storage: seed.workItems,
-      rules: defaultFactoryRules({ version: 'audit-test' }),
+      configVersion: 'audit-test',
       audit: seed.audit,
     });
     const sweep = {
@@ -1604,7 +1603,7 @@ describe('audit trail', () => {
         transitionId: moved.transitionId,
         ingressType: 'rule',
         cause: 'sweep',
-        ruleSetVersion: 'audit-test',
+        configVersion: 'audit-test',
         from: 'intake',
         to: 'execute',
         revision: 2,
@@ -1622,7 +1621,7 @@ describe('audit trail', () => {
     const item = await createItem(seed.workItems);
     const service = new FactoryTransitionService({
       storage: seed.workItems,
-      rules: defaultFactoryRules({ version: 'audit-test' }),
+      configVersion: 'audit-test',
       audit: seed.audit,
     });
 
@@ -1643,7 +1642,7 @@ describe('phase semantics', () => {
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({ ...request(item, { stage }), cause: 'board_drag' });
 
@@ -1657,7 +1656,7 @@ describe('phase semantics', () => {
   it('seats a human kickoff into Review review with the review role', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { source: 'github-pr', stages: ['intake'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({
       ...request(item, { board: 'review', stage: 'review' }),
@@ -1672,7 +1671,7 @@ describe('phase semantics', () => {
   it('guards an agent moving an externally authored card from Work rest into work, but not between working lanes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['intake'], metadata: { authorTrusted: false } });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
     const agent = { type: 'agent' as const, bindingId: 'agent', role: 'work' };
 
     await expect(service.transition({ ...request(item, { stage: 'planning' }), actor: agent })).resolves.toMatchObject({
@@ -1699,7 +1698,7 @@ describe('phase semantics', () => {
       const item = await createItem(storage, { board: 'release', stages });
       const onTerminalStage = vi.fn();
       const service = new FactoryTransitionService({
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
         boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
         storage,
         onTerminalStage,
@@ -1747,7 +1746,7 @@ describe('phase semantics', () => {
         metadata: { authorTrusted: false },
       });
       const service = new FactoryTransitionService({
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
         boards: createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
         storage,
       });
@@ -1776,7 +1775,7 @@ describe('phase semantics', () => {
       });
       const onTerminalStage = vi.fn();
       const service = new FactoryTransitionService({
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
         boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
         storage,
         onTerminalStage,

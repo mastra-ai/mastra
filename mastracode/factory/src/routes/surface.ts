@@ -15,7 +15,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRuleActor, FactoryRules } from '../rules/types.js';
+import type { FactoryRuleActor } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -113,7 +113,7 @@ export interface FactoryApiRoutesDeps {
   factoryReady: boolean;
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
-  rules: FactoryRules;
+  configVersion: string;
   /** Boards installed for this Factory instance. */
   boardRegistry: BoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
@@ -328,7 +328,7 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    rules: FactoryRules;
+    configVersion: string;
     boardRegistry: BoardRegistry;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
@@ -367,7 +367,9 @@ export function buildIntegrationContext(
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
-      ? { rules: { config: deps.rules, workItems: deps.domains.workItems, boards: deps.boardRegistry } }
+      ? {
+          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+        }
       : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
@@ -488,7 +490,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const transitionService = deps.factoryReady
     ? (deps.factoryTransitionService ??
       new FactoryTransitionService({
-        rules: deps.rules,
+        configVersion: deps.configVersion,
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
       }))

@@ -1,6 +1,6 @@
 ---
 name: configure-factory-rules
-description: Configure definition-owned board handlers, integration event rules, and global tool-result rules
+description: Configure board-owned lifecycle, policy, phase-semantics, and tool-result rules, plus integration event rules
 ---
 
 # Configure Factory Rules
@@ -9,10 +9,10 @@ Help the user change Factory policy in the typed deployment configuration. Facto
 
 ## Find the configuration
 
-1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `defaultFactoryRules`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
+1. Search for `new MastraFactory`, its `boards` and `includeDefaultBoards` options, `defineBoard`, `configVersion`, and the installed `GithubIntegration`, `PlatformGithubIntegration`, `LinearIntegration`, or `PlatformLinearIntegration` constructors and their `rules` options.
 2. Read the existing rule configuration and its tests before editing.
 3. Import rule helpers and types from the same local Factory module used by the deployment.
-4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool rules, use `defaultFactoryRules({ version, overrides: { tools } })` and pass the result to `MastraFactory`. For GitHub or Linear rules, configure the installed integration constructor directly.
+4. For custom-board handlers or phase semantics (`kind`, `role`), edit the installed `defineBoard()` definition. For tool-result rules, add `tools: { <toolName>: { onResult } }` to the installed `defineBoard()` definition of the board whose seat produces the result. For GitHub or Linear rules, configure the installed integration constructor directly.
 
 Do not guess a file path. Factory deployments can assemble `MastraFactory` from different entry points.
 
@@ -20,7 +20,7 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work and Review install automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. The global rules tree contains only `version` and `tools.<toolName>.onResult`.
+Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, Review declares none, and custom boards inherit nothing.
 
 Work automatic intake requires both `linked_item_materialized` and `autoStartCandidate: true`. Do not remove these guards to reproduce the web deployment's former unconditional intake override. Noncandidate and manual arrivals stay unstarted merely from entering Intake; explicit issue triage and human-approval safeguards remain. Linear Intake and Review retain their existing defaults and guards.
 
@@ -68,13 +68,13 @@ Runtime reads the installed board's declarations for consent arming, the externa
 
 To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Decision and tool-input validation still accept only built-in board IDs and phase names, so custom-board handlers cannot emit `transition` decisions into custom phases yet.
 
-## Apply supported overrides
+## Change a built-in handler
 
-Tool-result overrides replace the exact handler leaf. Integration overrides replace one event handler. Neither composes with the built-in handler; siblings remain unchanged. Board handlers belong to their definitions, not this override mechanism.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`src/boards/work.ts`, handler in `src/boards/work-tool-rules.ts`) or install a custom board that declares its own `tools`.
 
-Before replacing a built-in leaf:
+Before changing a built-in handler:
 
-1. Find and read the built-in handler: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and tool defaults in `src/rules/defaults.ts` within the Factory package. Inspect Work and Review defaults in `src/boards/work.ts` and `src/boards/review.ts`, and custom handlers in their installed definitions.
+1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work and Review lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/review.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.
@@ -82,7 +82,7 @@ Before replacing a built-in leaf:
 
 ## Version changes
 
-Set an explicit, deployment-owned `version`. Change it whenever rule behavior changes. The version identifies persisted evaluations and audit records; it must not be used as event identity or added to ingress deduplication keys.
+Set an explicit, deployment-owned `configVersion` on `MastraFactory`. Change it whenever rule behavior changes. It labels persisted evaluations and audit records (stored in the `rule_set_version` column); it must not be used as event identity or added to ingress deduplication keys.
 
 ## Safety rules
 

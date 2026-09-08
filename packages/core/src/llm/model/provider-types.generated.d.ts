@@ -633,6 +633,7 @@ export type ProviderModelsMap = {
     'pokee-isaac',
     'poolside/laguna-s-2.1',
     'poolside/laguna-s-2.1:thinking',
+    'poolside/laguna-xs-2.1',
     'qvq-max',
     'qwen-3.6-plus',
     'qwen-long',
@@ -4177,6 +4178,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/qwen3p8-2p4t-a95b',
     'accounts/fireworks/models/qwen3p8-max',
     'accounts/fireworks/routers/glm-5p2-fast',
+    'accounts/fireworks/routers/glm-5p3-fast',
     'accounts/fireworks/routers/kimi-k3-fast',
   ];
   readonly opper: readonly [
@@ -4333,6 +4335,8 @@ export type ProviderModelsMap = {
   readonly klokintegration: readonly ['Kloker', 'Kloker-Integration-Architect', 'Kloker-Integration-Developer'];
   readonly 'privatemode-ai': readonly [
     'deepseek-ocr-2',
+    'glm-5.3',
+    'glm-latest',
     'gpt-oss-120b',
     'kimi-k2.6',
     'kimi-latest',
@@ -4627,9 +4631,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.7',
-    'minimax/minimax-m2.7:free',
     'minimax/minimax-m3',
-    'minimax/minimax-m3:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/ministral-14b-2512',
@@ -5465,9 +5467,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.7',
-    'minimax/minimax-m2.7:free',
     'minimax/minimax-m3',
-    'minimax/minimax-m3:free',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/ministral-14b-2512',

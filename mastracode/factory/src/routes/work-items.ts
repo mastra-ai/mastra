@@ -66,7 +66,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
-  transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
+  transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked. */

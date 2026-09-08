@@ -30,10 +30,12 @@ import {
   TABLE_DISCOVERY_PAIRS,
   TABLE_DELETION_REQUESTS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_FEEDBACK_EVENTS,
   TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
 } from './ddl';
+import { feedbackRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { compileClickHouseTraceQuery, runWithClickHouseTraceQueryTimeout } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -2530,6 +2532,34 @@ LIMIT 1`,
   // ==========================================================================
 
   describe('feedback', () => {
+    it('maps every persisted feedback column', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+
+      try {
+        const result = await client.query({
+          query: 'SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String}',
+          query_params: { table: TABLE_FEEDBACK_EVENTS },
+          format: 'JSONEachRow',
+        });
+        const columns = await result.json<{ name: string }>();
+        const row = feedbackRecordToRow({
+          feedbackId: 'feedback-column-parity',
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          feedbackSource: 'user',
+          feedbackType: 'rating',
+          value: 0,
+        });
+
+        expect(Object.keys(row).sort()).toEqual(columns.map(column => column.name).sort());
+      } finally {
+        await client.close();
+      }
+    });
+
     it('feedbackUserId round-trips through CH userId column', async () => {
       await storage.createFeedback({
         feedback: {

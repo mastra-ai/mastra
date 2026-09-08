@@ -558,6 +558,11 @@ export class SessionRunEngine {
         break;
       }
 
+      case 'text-end': {
+        state.textContentById.delete(getString(getPayload(chunk).id) ?? '');
+        break;
+      }
+
       case 'reasoning-start': {
         // Mirror text-start: a late start for an already-seeded id is a no-op.
         if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
@@ -586,6 +591,11 @@ export class SessionRunEngine {
           thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
         }
         this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'reasoning-end': {
+        state.thinkingContentById.delete(getString(getPayload(chunk).id) ?? '');
         break;
       }
 

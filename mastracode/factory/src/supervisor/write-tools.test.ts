@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { defaultFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -43,24 +42,8 @@ async function bindRun(storage: WorkItemsStorage, item: Awaited<ReturnType<typeo
 
 async function queueDecision(storage: WorkItemsStorage, number: number) {
   const item = await createItem(storage, number);
-  const rules = defaultFactoryRules({
-    version: 'rules-v1',
-    overrides: {
-      work: {
-        execute: {
-          issue: {
-            onEnter: () => ({
-              type: 'invokeSkill',
-              role: 'work',
-              skillName: 'factory-work',
-              idempotencyKey: `work-${number}`,
-            }),
-          },
-        },
-      },
-    },
-  });
-  const transitions = new FactoryTransitionService({ storage, rules });
+  const configVersion = 'rules-v1';
+  const transitions = new FactoryTransitionService({ storage, configVersion });
   const moved = await transitions.transition({
     ...SCOPE,
     workItemId: item.id,
@@ -90,7 +73,7 @@ async function setup() {
   const onAccepted = vi.fn();
   const transitionService = new FactoryTransitionService({
     storage: seed.workItems,
-    rules: defaultFactoryRules({ version: 'rules-v1' }),
+    configVersion: 'rules-v1',
     audit: seed.audit,
     onAccepted,
   });
@@ -209,7 +192,7 @@ describe('createFactorySupervisorWriteTools', () => {
       destinationStage: 'triage',
       actorId: 'triage-agent',
       ingress: { identity: 'classify-4', triggerType: 'tool', transitionId: 'classify-4' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       causalChain: [],
       evaluation: { outcome: 'accepted', decisions: [] },
       triageType: 'feature-request',

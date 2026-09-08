@@ -6,7 +6,6 @@ import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -339,7 +338,7 @@ describe('FactoryStartCoordinator', () => {
     let bindingsDuringRule = 0;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: {
           issue: {
@@ -496,7 +495,7 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),

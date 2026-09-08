@@ -108,3 +108,21 @@ export function presentTool(toolName: string, args: unknown): ToolPresentation {
   if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
   return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), command: detail };
 }
+
+export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });
+
+function stringField(args: unknown, key: string): string | undefined {
+  if (!args || typeof args !== 'object' || !hasProperty(args, key)) return undefined;
+  return typeof args[key] === 'string' ? args[key] : undefined;
+}
+
+export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined {
+  const path = stringField(args, 'path');
+  const newText = stringField(args, 'new_string');
+  if (/string_replace|str_replace|edit_file/i.test(toolName) && newText !== undefined) {
+    return { path, oldText: stringField(args, 'old_string') ?? '', newText };
+  }
+  const content = stringField(args, 'content');
+  if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
+  return undefined;
+}
