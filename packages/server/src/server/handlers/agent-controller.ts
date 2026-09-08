@@ -5,7 +5,6 @@ import type {
   AgentControllerEvent,
   ErrorCarryingAgentControllerEvent,
   JsonReadyAgentControllerEvent,
-  MastraDBMessage,
   ReservedThreadMetadataKey,
   Session,
   TokenUsage,
@@ -303,28 +302,6 @@ const taskSnapshotSchema = z.object({
   activeForm: z.string(),
 });
 type SessionTaskSnapshot = z.infer<typeof taskSnapshotSchema>;
-const messagePartSchema = z
-  .object({
-    type: z.string(),
-  })
-  .passthrough();
-// Mirrors the persisted `MastraMessageContentV2` shape (AI-SDK-v4 `UIMessage`-style):
-// `format: 2` plus a nested `parts` array, with optional companion fields preserved.
-const messageContentV2Schema = z
-  .object({
-    format: z.literal(2),
-    parts: z.array(messagePartSchema),
-  })
-  .passthrough();
-const messageSchema = z.object({
-  id: z.string(),
-  role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
-  content: messageContentV2Schema,
-  createdAt: z.string().optional(),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-  type: z.string().optional(),
-});
 const sessionStateResponseSchema = z.object({
   controllerId: z.string(),
   resourceId: z.string(),
@@ -333,8 +310,6 @@ const sessionStateResponseSchema = z.object({
   modelId: z.string(),
   /** Whether the agent is currently executing a run (for initial UI hydration). */
   running: z.boolean().optional(),
-  /** The assistant message of the turn in flight on the requested thread: what a client joining mid-step has missed. */
-  currentMessage: messageSchema.optional(),
   tasks: z.array(taskSnapshotSchema).optional(),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: tokenUsageSchema.optional(),
@@ -363,7 +338,32 @@ const threadResponseSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-const listMessagesResponseSchema = z.object({ messages: z.array(messageSchema) });
+const messagePartSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
+// Mirrors the persisted `MastraMessageContentV2` shape (AI-SDK-v4 `UIMessage`-style):
+// `format: 2` plus a nested `parts` array, with optional companion fields preserved.
+const messageContentV2Schema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(messagePartSchema),
+  })
+  .passthrough();
+const listMessagesResponseSchema = z.object({
+  messages: z.array(
+    z.object({
+      id: z.string(),
+      role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
+      content: messageContentV2Schema,
+      createdAt: z.string().optional(),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      type: z.string().optional(),
+    }),
+  ),
+});
 const listModelsResponseSchema = z.object({
   models: z.array(
     z.object({
@@ -465,18 +465,6 @@ function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisp
     pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
     activeSubagents: Object.fromEntries(snapshot.activeSubagents),
     modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
-  };
-}
-
-function toWireMessage(message: MastraDBMessage) {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
-    createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : undefined,
-    threadId: message.threadId,
-    resourceId: message.resourceId,
-    type: message.type,
   };
 }
 
@@ -833,7 +821,6 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
-      const liveMessage = ds.isRunning && threadId === session.thread.getId() ? ds.currentMessage : null;
       const storage = mastra.getStorage();
       if (requestedThreadId) {
         const memory = await storage?.getStore('memory');
@@ -859,7 +846,6 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         modeId: session.mode.get(),
         modelId: session.model.get(),
         running: ds.isRunning === true,
-        currentMessage: liveMessage ? toWireMessage(liveMessage) : undefined,
         tasks,
         omProgress: {
           status: om.status,
@@ -1240,7 +1226,15 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
       }
       const messages = await controller.queryThreadMessages({ threadId, limit });
       return {
-        messages: messages.map(toWireMessage),
+        messages: messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
+          createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
+          threadId: m.threadId,
+          resourceId: m.resourceId,
+          type: m.type,
+        })),
       };
     } catch (error) {
       return handleError(error, 'error listing controller thread messages');

@@ -10,28 +10,20 @@ interface LiveTasks {
   tasks: AgentControllerTaskSnapshot[];
 }
 
-/**
- * What the stream reported, stamped with the generation it arrived at. A state
- * response the stream overtook is older than those reports, so they lay over it.
- */
+/** What the stream reported, stamped with the generation it arrived at, so it outranks a state response it overtook. */
 export interface LiveEvents {
   generation: number;
   running?: { value: boolean; at: number };
-  runBoundaryAt?: number;
   tasks?: LiveTasks & { at: number };
 }
 
 /** Stamps what an event changed; returns the generation before it, to overlay the cached snapshot from. */
-export function recordLiveEvent(
-  live: LiveEvents,
-  event: { running?: boolean; runBoundary: boolean; tasks?: LiveTasks },
-): number {
+export function recordLiveEvent(live: LiveEvents, event: { running?: boolean; tasks?: LiveTasks }): number {
   const since = live.generation;
   const at = since + 1;
   live.generation = at;
   if (event.tasks) live.tasks = { ...event.tasks, at };
   if (event.running !== undefined) live.running = { value: event.running, at };
-  if (event.runBoundary) live.runBoundaryAt = at;
   return since;
 }
 
@@ -47,7 +39,6 @@ export function overlayLiveEvents(
     ...state,
     ...(tasks && tasks.at > since && tasks.threadId === threadId ? { tasks: tasks.tasks } : {}),
     ...(running && running.at > since ? { running: running.value } : {}),
-    ...((live.runBoundaryAt ?? 0) > since ? { currentMessage: undefined } : {}),
   };
 }
 

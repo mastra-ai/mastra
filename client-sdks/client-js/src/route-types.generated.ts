@@ -3616,23 +3616,6 @@ type Shared_Type_157 = {
   updatedAt: number;
 };
 
-type Shared_Type_158 = {
-  id: string;
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
-  content: {
-    format: 2;
-    parts: {
-      type: string;
-      [x: string]: unknown;
-    }[];
-    [x: string]: unknown;
-  };
-  createdAt?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  type?: string | undefined;
-};
-
 // ============================================================================
 // Route: GET /agents
 // ============================================================================
@@ -20773,7 +20756,6 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   modeId: string;
   modelId: string;
   running?: boolean | undefined;
-  currentMessage?: Shared_Type_158 | undefined;
   tasks?:
     | {
         id: string;
@@ -21072,7 +21054,22 @@ export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessa
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response = {
-  messages: Shared_Type_158[];
+  messages: {
+    id: string;
+    role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
+    content: {
+      format: 2;
+      parts: {
+        type: string;
+        [x: string]: unknown;
+      }[];
+      [x: string]: unknown;
+    };
+    createdAt?: string | undefined;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    type?: string | undefined;
+  }[];
 };
 
 export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<

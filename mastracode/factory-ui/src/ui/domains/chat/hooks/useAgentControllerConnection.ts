@@ -111,12 +111,10 @@ export function useAgentControllerConnection({
         ? event.displayState.isRunning
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
-    const runBoundary = event.type === 'agent_start' || event.type === 'agent_end';
     const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
     if (typeof running === 'boolean' || tasks) {
       const since = recordLiveEvent(liveEvents.current, {
         running,
-        runBoundary,
         tasks: tasks && { threadId: sessionThreadId, tasks },
       });
       const stateQueryKey = queryKeys.agentControllerConnectionState(

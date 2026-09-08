@@ -4,7 +4,7 @@
  * mounted with a centered spinner in the main slot only — clicking around the
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
-import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -54,15 +54,19 @@ function stubThreadRoute({
   threads = [],
   messages = [],
   sessionState = {},
+  streamed = [],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
-  /** What the session-state snapshot adds: a run in flight, the message it has streamed so far. */
+  /** What the session-state snapshot adds: a run in flight. */
   sessionState?: Record<string, unknown>;
+  /** What the session stream delivers on subscribe: the step a run in flight has streamed so far. */
+  streamed?: AgentControllerEvent[];
 } = {}) {
   const sessionGate = deferred();
   const messagesGate = deferred();
+  const encoder = new TextEncoder();
   const onSwitchThread = vi.fn<(threadId: string) => void>();
   let activeThreadId = initialThreadId;
 
@@ -133,9 +137,15 @@ function stubThreadRoute({
     http.get(
       `${AC}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              for (const event of streamed) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+            },
+            cancel() {},
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads })),
@@ -229,24 +239,27 @@ describe('ThreadPage loading shell', () => {
 
   it('joins a run mid-step with what it has streamed so far, never the empty prompt', async () => {
     const { sessionGate, messagesGate } = stubThreadRoute({
-      sessionState: {
-        running: true,
-        currentMessage: {
-          id: 'live-1',
-          role: 'assistant',
-          createdAt: '2026-09-08T10:00:00.000Z',
-          content: {
-            format: 2,
-            parts: [
-              { type: 'text', text: 'Checking out the pull request.' },
-              {
-                type: 'tool-invocation',
-                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
-              },
-            ],
+      sessionState: { running: true },
+      streamed: [
+        {
+          type: 'message_update',
+          message: {
+            id: 'live-1',
+            role: 'assistant',
+            createdAt: new Date('2026-09-08T10:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Checking out the pull request.' },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
+                },
+              ],
+            },
           },
         },
-      },
+      ],
     });
     const { client } = renderThreadRoute();
     const emptyPrompt = observeEmptyPrompt();

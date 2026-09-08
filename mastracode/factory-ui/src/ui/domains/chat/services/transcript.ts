@@ -970,11 +970,6 @@ function toMessageEntry(
   };
 }
 
-/** The live turn drawn from its tool calls alone, before any message carried them. */
-function isUnclaimedTurn(entry: TimelineEntry): boolean {
-  return entry.kind === 'message' && entry.message.id.startsWith('assistant-tools-');
-}
-
 /**
  * Where an assistant message the timeline has never seen under this id belongs.
  * A live turn the message extends part for part is that turn re-identified —
@@ -987,25 +982,8 @@ function indexOfSameTurn(entries: TimelineEntry[], message: MastraDBMessage): nu
   if (entry?.kind !== 'message') return -1;
   // The entry keeps the id it was drawn with, so what marks it unclaimed is the
   // message inside it still being the synthesized one.
-  if (isUnclaimedTurn(entry)) return index;
+  if (entry.message.id.startsWith('assistant-tools-')) return index;
   return entry.streaming && windowCopyCovers(entry.message.content.parts, message.content.parts) ? index : -1;
-}
-
-function indexOfMessage(entries: TimelineEntry[], message: MastraDBMessage): number {
-  const index = entries.findIndex(
-    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
-  );
-  return index === -1 && message.role === 'assistant' ? indexOfSameTurn(entries, message) : index;
-}
-
-function drawsMessage(entries: TimelineEntry[], message: MastraDBMessage): boolean {
-  const entry = entries[indexOfMessage(entries, message)];
-  return entry !== undefined && !isUnclaimedTurn(entry);
-}
-
-export function withInFlightMessage(state: TranscriptState, message: MastraDBMessage | undefined): TimelineEntry[] {
-  if (!message || drawsMessage(state.entries, message)) return state.entries;
-  return upsertMessage(state, message, true).entries;
 }
 
 function upsertMessage(
@@ -1016,7 +994,10 @@ function upsertMessage(
 ): TranscriptState {
   if (message.role !== 'assistant' && message.role !== 'signal') return state;
   const entries = [...state.entries];
-  let idx = indexOfMessage(entries, message);
+  let idx = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
+  if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
   }

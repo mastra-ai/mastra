@@ -1,7 +1,7 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInitialTranscript, initialTranscript, transcriptReducer, withInFlightMessage } from '../transcript';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -1652,50 +1652,5 @@ describe('live user signals sent by someone else', () => {
     );
     expect(drawable).toHaveLength(1);
     expect(drawable[0]?.id).toMatch(/^local-/);
-  });
-});
-
-describe('the turn in flight carried by the session snapshot', () => {
-  const snapshot = dbMessage('live-1', 'assistant', [
-    { type: 'text', text: 'Checking out the pull request.' },
-    {
-      type: 'tool-invocation',
-      toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
-    },
-  ]);
-
-  it('draws the snapshot while nothing on screen carries that message', () => {
-    const state = createInitialTranscript({
-      messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'Review this pull request' }])],
-    });
-
-    const entries = withInFlightMessage(state, snapshot);
-
-    expect(entries).toHaveLength(2);
-    expect(entries[1]).toMatchObject({ kind: 'message', id: 'live-1', streaming: true });
-    expect(messageParts(entries[1])).toHaveLength(2);
-  });
-
-  it('yields to the entry already drawing the message, even when the snapshot is staler', () => {
-    const fresher = dbMessage('live-1', 'assistant', [{ type: 'text', text: 'Checking out the pull request. Done.' }]);
-    const state = transcriptReducer(createInitialTranscript(), {
-      type: 'event',
-      event: { type: 'message_update', message: fresher },
-    });
-
-    expect(withInFlightMessage(state, snapshot)).toBe(state.entries);
-  });
-
-  it('claims the turn drawn from its tool call alone, so the streamed text lands beside the running tool', () => {
-    const state = transcriptReducer(createInitialTranscript(), {
-      type: 'event',
-      event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
-    });
-
-    const entries = withInFlightMessage(state, snapshot);
-
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ kind: 'message', streaming: true, message: { id: 'live-1' } });
-    expect(messageParts(entries[0])).toHaveLength(2);
   });
 });
