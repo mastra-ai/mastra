@@ -25,11 +25,27 @@ jobs:
     runs-on: starsling-ubuntu-24.04
     steps:
       - name: Create and execute workflow run
+        # Route all workflow_call inputs through env: instead of interpolating
+        # ${{ inputs.* }} directly into the script below. Direct interpolation
+        # inserts the raw value into the script text before the shell ever
+        # runs, so a value containing shell metacharacters (backticks, `$()`,
+        # quotes) executes as part of the script rather than as inert data —
+        # the WORKFLOW_NAME format check further down only inspects the
+        # variable *after* that substitution already happened, so it cannot
+        # catch an injection in the substitution itself. All current callers
+        # only ever pass static, hardcoded strings (see cron-every-2h.yml), so
+        # this isn't reachable today, but the workflow_call inputs are
+        # documented as generic ("Name of the external workflow to execute",
+        # "JSON input data for the workflow") with nothing here stopping a
+        # future caller from wiring in issue/PR-derived text. env: keeps the
+        # same values available to the script as plain data, closing that off
+        # regardless of what future callers pass.
+        env:
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          BASE_URL: ${{ inputs.base_url }}
+          INPUT_DATA: ${{ inputs.input_data }}
         run: |
           set -e
-
-          WORKFLOW_NAME="${{ inputs.workflow_name }}"
-          BASE_URL="${{ inputs.base_url }}"
 
           # Validate workflow_name to prevent unsafe characters in URL paths
           if ! echo "$WORKFLOW_NAME" | grep -Eq '^[a-zA-Z0-9_-]+$'; then
@@ -73,7 +89,7 @@ jobs:
           echo "Starting workflow with runId: $runId"
 
           # Use jq to properly escape and validate the input data
-          echo '${{ inputs.input_data }}' | jq -c . > /tmp/input_data.json
+          printf '%s' "$INPUT_DATA" | jq -c . > /tmp/input_data.json
 
           http_code=$(curl -w "%{http_code}" -o /tmp/start_response.json -s \
             --max-time 300 \
