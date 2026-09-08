@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../../../boards/index.js';
 import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.js';
 import { PlatformApiClient } from '../api-client.js';
 import { PlatformIncidentioIntegration } from './integration.js';
@@ -34,7 +35,7 @@ describe('PlatformIncidentioIntegration', () => {
     });
     const workers = integration.workers({
       storage: { projects: { listAll: async () => [] } },
-      rules: { config: {}, workItems: {} },
+      runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
     } as never);
 
     expect(workers.map(worker => worker.name)).toEqual(['incidentio-issue-reconcile']);

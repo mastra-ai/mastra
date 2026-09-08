@@ -1,3 +1,4 @@
+import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { Intake } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
@@ -9,13 +10,15 @@ export function attachIncidentioIssueReconciler(
   incidentio: { intake: Intake },
   context: IntegrationContext,
 ): IncidentioIssueReconciler | undefined {
-  if (!context.rules || !incidentio.intake.resolveIntakeDispatch) return undefined;
+  if (!context.runtime || !incidentio.intake.resolveIntakeDispatch) return undefined;
+  const boards = context.runtime.boards;
 
   return createIssueReconciler({
     integrationId: 'incidentio',
     intake: incidentio.intake,
     projects: context.storage.projects,
-    storage: context.rules.workItems,
+    storage: context.runtime.workItems,
+    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
     issueId: item => item.externalSource?.externalId,
     metadata: (_item, issue) => ({
       identifier: issue.identifier,

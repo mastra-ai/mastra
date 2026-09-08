@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../../boards/index.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
 import { IncidentioIntegration } from './integration.js';
@@ -64,7 +65,11 @@ describe('incident.io issue reconciler', () => {
     const integration = new IncidentioIntegration({ apiKey: 'incident-key', fetchImpl });
     const context = {
       storage: { projects: seeded.projects },
-      rules: { config: {}, workItems: seeded.workItems },
+      runtime: {
+        configVersion: 'test-v1',
+        workItems: seeded.workItems,
+        boards: createBoardRegistry(),
+      },
     } as unknown as IntegrationContext;
     const reconcile = attachIncidentioIssueReconciler(integration, context);
 
