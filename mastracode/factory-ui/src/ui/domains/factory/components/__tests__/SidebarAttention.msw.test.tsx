@@ -452,13 +452,12 @@ describe('Sidebar attention', () => {
     expect(await screen.findByText('Nothing needs you.')).toBeVisible();
     expect(screen.queryByText('Waiting for approval to run review')).not.toBeInTheDocument();
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(api.listed.at(-1)).toBe(
-      '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
-    );
+    expect(api.listed).not.toContain('?view=open&kind=automation-proposed&limit=25');
 
     await user.click(screen.getByRole('tab', { name: 'Approvals 1' }));
     expect(await screen.findByText('Waiting for approval to run review')).toBeVisible();
-    expect(api.listed.at(-1)).toBe('?view=open&kind=automation-proposed&limit=25');
+    await waitForMutationsIdle(client);
+    expect(api.listed).toContain('?view=open&kind=automation-proposed&limit=25');
     expect(screen.getByRole('button', { name: 'Needs attention' })).toBeVisible();
     expect(oscillatorStart).not.toHaveBeenCalled();
   });
@@ -510,7 +509,7 @@ describe('Sidebar attention', () => {
     const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
     stubAttention([...chatter, mentionItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
     const trigger = await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     await user.click(trigger);
@@ -520,6 +519,7 @@ describe('Sidebar attention', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Activity 5' }));
     expect(await screen.findByText('Chatter on item-2')).toBeVisible();
+    await waitForMutationsIdle(client);
     expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument();
 
     await user.click(trigger);

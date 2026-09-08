@@ -340,10 +340,11 @@ describe('computeFactoryHealth', () => {
       ...empty,
       items: [item({ id: 'item-1' })],
       bindings: [binding({ id: 'b-1' })],
-      decisions: [decision({ id: 'd-1', status: 'failed', updatedAt: ago(HOUR) })],
+      decisions: [decision({ id: 'd-1', status: 'retry', availableAt: ago(HOUR) })],
     };
     const first = computeFactoryHealth(inputs, NOW);
     const later = computeFactoryHealth(inputs, new Date(NOW.getTime() + HOUR));
+    expect(first.findings.map(f => f.id)).toEqual(['decision-stuck:d-1']);
     expect(later.findings).toEqual(first.findings);
   });
 });

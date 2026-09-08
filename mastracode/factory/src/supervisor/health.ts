@@ -274,7 +274,7 @@ export function computeFactoryHealth(
     }
   }
 
-  findings.sort((a, b) => beganAtMs(a) - beganAtMs(b));
+  findings.sort((a, b) => beganAtMs(a) - beganAtMs(b) || a.id.localeCompare(b.id));
   const counts = Object.fromEntries(FINDING_KINDS.map(kind => [kind, 0])) as Record<FactoryHealthFindingKind, number>;
   for (const finding of findings) counts[finding.kind] += 1;
   return { checkedAt: now.toISOString(), findings, counts };

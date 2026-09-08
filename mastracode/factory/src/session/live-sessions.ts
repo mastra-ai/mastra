@@ -48,8 +48,10 @@ export class LiveSessions {
     controller.onSessionCreated(session => this.#track(session));
     controller.onSessionDeleted(session => {
       const id = session.identity.getId();
+      const wasParked = this.parked(id) !== undefined;
       this.#byId.get(id)?.unsubscribe();
       this.#byId.delete(id);
+      if (wasParked) for (const listener of this.#parkedListeners) listener(session);
     });
   }
 

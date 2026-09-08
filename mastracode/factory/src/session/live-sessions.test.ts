@@ -143,4 +143,19 @@ describe('LiveSessions', () => {
     fake.park('call-2', 'ask_user');
     expect(changed).toHaveBeenCalledTimes(3);
   });
+
+  it('announces a parked session going away, so the inbox drops its item', () => {
+    const controller = fakeController();
+    const registry = new LiveSessions(controller);
+    const fake = fakeSession('session-1');
+    controller.create(fake.session);
+    const changed = vi.fn();
+    registry.onParkedChanged(changed);
+
+    fake.park('call-1', 'ask_user');
+    controller.delete(fake.session);
+
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(registry.parkedIn('project-1')).toEqual([]);
+  });
 });
