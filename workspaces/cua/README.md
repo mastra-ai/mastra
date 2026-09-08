@@ -148,5 +148,11 @@ Cleanup checks the namespace creation timestamp before deletion and never
 provisions resources. If reservation was not confirmed, the record has no
 creation timestamp and cleanup refuses deletion: inspect the recorded random
 namespace in Fleet before taking any manual action. A forbidden request is not
-proof of resource absence. After confirmed cleanup, archive `output/` before
-another run; the example refuses to overwrite a previous recovery record.
+proof of resource absence. After confirmed cleanup, the next run archives the
+record as `output/run-completed-<uuid>.json` and reserves a new `run.json`.
+Unfinished or malformed records block new runs. Archive screenshots and results
+before another run if you want to retain them.
+
+Record reservation uses `output/run.json.lock` to exclude simultaneous starts.
+If the process is interrupted during reservation, check that no example process
+is running before removing that lock file. Preserve `run.json` for cleanup.

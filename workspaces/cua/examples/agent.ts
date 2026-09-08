@@ -7,6 +7,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { CyclopsClient, CyclopsCredentials, uniffiInitAsync, type Sandbox } from '@trycua/fleet/node';
 import { CuaFleetSandbox } from '../src/index.js';
 import { FleetHttpClient, decodeGuestResponse } from '../src/fleet-session.js';
+import { reserveRunRecord } from './run-record.js';
 
 const require = createRequire(import.meta.url);
 const providerVersion = require('../package.json').version;
@@ -101,7 +102,7 @@ async function main() {
     const record: RecordFile = {
       name: `mastra-test-${randomUUID().replaceAll('-', '').slice(0, 20)}`,
     };
-    await writeFile(recordFile, JSON.stringify(record, null, 2), { flag: 'wx' });
+    await reserveRunRecord(recordFile, record);
     stage = 'namespace reservation';
     const ns = await client.createNamespace(record.name);
     record.createdAt = ns.createdAt;
