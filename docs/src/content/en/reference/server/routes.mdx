@@ -241,11 +241,11 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Run result
 
-`POST /api/workflows/:workflowId/start-async` responds once the run has finished. `status` tells you how the run ended, `result` holds the workflow's output, and `steps` holds one entry per step keyed by step ID. Each step entry carries its own `output`, so the workflow's final output is only found at the top level:
+`POST /api/workflows/:workflowId/start-async` responds when the run settles: it finished, failed, or stopped at a suspend point. `status` tells you which, `result` holds the workflow's output, and `steps` holds one entry per step keyed by step ID. Each step entry carries its own `output`, so the workflow's final output is only found at the top level. The declared response schema is:
 
 ```typescript oxfmt:false
 {
-  status:
+  status?:
     | 'running'
     | 'success'
     | 'failed'
@@ -258,9 +258,10 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
     | 'paused'
     | 'skipped';
   result?: unknown;                    // Workflow output, present when status is 'success'
-  error?: { message: string; name: string }; // Present when status is 'failed'
-  input: unknown;                      // The inputData the run started with
-  steps: {                             // Also holds the trigger data under the key 'input'
+  error?: unknown;                     // Present when status is 'failed'
+  payload?: unknown;                   // The inputData the run started with
+  initialState?: unknown;
+  steps?: {
     [stepId: string]: {
       status: string;
       output?: unknown;
@@ -269,12 +270,14 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
       endedAt?: number;
     };
   };
-  stepExecutionPath: string[];         // Step IDs in execution order
-  runId: string;
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: unknown[];
 }
 ```
 
-`GET /api/workflows/:workflowId/runs/:runId` returns the same execution state together with run metadata. `workflowName` is the workflow's `id`, which can differ from the registry key used in the path:
+The handler returns the value of `run.start()` unchanged, so a response can carry fields outside this schema, such as `runId`.
+
+`GET /api/workflows/:workflowId/runs/:runId` returns the persisted run state with run metadata. The run's input is exposed as `payload`, and the persisted path fields are included. `workflowName` is the workflow's `id`, which can differ from the registry key used in the path:
 
 ```typescript oxfmt:false
 {
@@ -634,12 +637,11 @@ Each record has the shape written by [score persistence](/docs/evals/overview#sc
 
 ```typescript oxfmt:false
 {
-  score: ScoreRowData;  // Same fields as the list routes return. Storage assigns createdAt and updatedAt,
-                        // and a random id when none is supplied
+  score: ScoreRowData;  // Same fields as the list routes return. Storage assigns createdAt and updatedAt
 }
 ```
 
-Supplying your own `id` makes storage upsert by that ID, so retried submissions converge on one row. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
+How a supplied `id` is treated depends on the storage adapter. Some adapters upsert by it, others always generate a new ID, so retried submissions can create duplicate rows there. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
 
 ## MCP
 
