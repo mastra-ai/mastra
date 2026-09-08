@@ -9,10 +9,8 @@
  * here, the generator fails at generation time (unknown property access)
  * rather than exploding at runtime.
  */
-import { proxyRequest, resolveClient, type ProxyRequestOptions } from '../client.js';
+import { proxyRequest, resolveClient, type ConnectClientOptions, type ProxyRequestOptions } from '../client.js';
 import { MastraConnectError } from '../errors.js';
-import type { ProviderToolsOptions } from '../toolset.js';
-import { resolveConnectionId } from '../toolset.js';
 
 /**
  * The shape of an individual request as templates author them — a strict
@@ -70,19 +68,25 @@ export interface PlatformProxy {
 }
 
 interface CreatePlatformProxyOptions {
-  envVar: string;
-  options?: ProviderToolsOptions;
+  connectionId?: string;
+  client?: ConnectClientOptions;
 }
 
 async function callProxy<T>(
   method: ProxyRequestOptions['method'],
-  { envVar, options }: CreatePlatformProxyOptions,
+  { connectionId, client: clientOptions }: CreatePlatformProxyOptions,
   config: PlatformProxyRequest,
 ): Promise<PlatformProxyResponse<T>> {
-  // Connection id and client config resolve lazily per call, so building
-  // toolsets without env vars set never throws.
-  const connectionId = resolveConnectionId(envVar, options?.connectionId);
-  const client = resolveClient(options?.client);
+  // Checked lazily per call, so building toolsets without a connection id
+  // never throws. `connect()` always supplies one; direct `create<Provider>Tools`
+  // callers must pass `connectionId`.
+  if (!connectionId) {
+    throw new MastraConnectError(
+      'missing_connection_id',
+      'Missing connection id: pass connectionId or resolve tools through connect().',
+    );
+  }
+  const client = resolveClient(clientOptions);
   const attempts = Math.max(1, Math.min(config.retries ?? 1, 5));
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {

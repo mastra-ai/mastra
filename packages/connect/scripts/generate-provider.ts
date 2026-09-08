@@ -298,7 +298,6 @@ export function ${action.toolFactoryName}(platformProxy: PlatformProxy) {
 }
 
 function emitToolsFile(integrationId: string, actions: ExtractedAction[]): string {
-  const envVar = `MASTRA_${integrationId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
   const imports = actions
     .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
     .join('\n');
@@ -312,10 +311,8 @@ import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
 ${imports}
 
-const ENV_VAR = '${envVar}';
-
 export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOptions) {
-  const platformProxy = createPlatformProxy({ envVar: ENV_VAR, options });
+  const platformProxy = createPlatformProxy({ connectionId: options?.connectionId, client: options?.client });
   const tools = {
 ${toolEntries}
   };

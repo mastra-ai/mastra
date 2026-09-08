@@ -7,7 +7,11 @@ import { proxyRequest, resolveClient } from './client.js';
 import { MastraConnectError } from './errors.js';
 
 export interface ProviderToolsOptions {
-  /** Connection to use. Falls back to the provider's MASTRA_<PROVIDER>_CONNECTION_ID env var at execute time. */
+  /**
+   * Connection to use. `connect()` always supplies one (resolving the
+   * registration's env var itself); direct `create<Provider>Tools` callers
+   * must pass it or tool calls fail with `missing_connection_id`.
+   */
   connectionId?: string;
   /** Restrict the returned toolset to these tool keys. Unknown names throw immediately. */
   allowTools?: string[];
