@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
@@ -9,8 +10,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -111,6 +111,15 @@ function AgentThread() {
     return <AgentThreadLoadingSkeleton />;
   }
 
+  // A 404 is authoritative even if a previous fetch left stale data in the cache.
+  if (error && is404NotFoundError(error)) {
+    return <div className="py-4 text-center">Agent not found</div>;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load agent" message={error.message} />;
+  }
+
   if (!agent) {
     return <div className="py-4 text-center">Agent not found</div>;
   }
@@ -160,9 +169,10 @@ function AgentThread() {
                                 threadId={actualThreadId}
                                 isLoading={isThreadsLoading}
                               />
-                              <div key={actualThreadId} className="relative min-h-0">
-                                <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex h-[calc(100%-0.75rem)] min-h-0 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0 lg:h-[calc(100%-1rem)]">
+                              <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
+                                <div className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame m-1.5 flex min-h-0 flex-1 flex-col overflow-hidden border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:m-2 lg:ml-0">
                                   <Header>
+                                    <MainSidebar.MobileTrigger className="-ml-1" />
                                     <HeaderTitle>Thread</HeaderTitle>
                                     {/* "new" is not a stored thread yet, so there is nothing to trace. */}
                                     {!isNewThread && (
@@ -178,13 +188,7 @@ function AgentThread() {
                                       </HeaderAction>
                                     )}
                                   </Header>
-                                  <div
-                                    className={cn(
-                                      'relative grid min-h-0 flex-1',
-                                      // The advanced view manages its own scroll container.
-                                      !isAdvancedVariant && 'overflow-y-auto pt-6',
-                                    )}
-                                  >
+                                  <div className="relative grid min-h-0 flex-1">
                                     {isAdvancedVariant ? (
                                       <ThreadViewByTrace threadId={actualThreadId} />
                                     ) : (

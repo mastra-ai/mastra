@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -73,7 +72,7 @@ function buildApp(
       comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
-        rules: builtInFactoryRules(),
+        configVersion: 'factory-config-v1',
         storage: seed.workItems,
         boards: boardRegistry,
       }),
@@ -571,7 +570,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
         action: 'factory.work_item.stage_moved',
-        metadata: expect.objectContaining({ ingressType: 'human', ruleSetVersion: 'factory-default-v1' }),
+        metadata: expect.objectContaining({ ingressType: 'human', configVersion: 'factory-config-v1' }),
       }),
     );
   });
@@ -869,7 +868,7 @@ describe('GET /web/factory/projects/:id/decisions', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: null,
       ingress: { identity: 'decision-source', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -918,7 +917,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
       ingress: { identity: 'attention-failure', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1145,7 +1144,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
       ingress: { identity: 'approval-queue', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1213,7 +1212,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
       ingress: { identity: 'approve-attribution', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1254,7 +1253,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: null,
       ingress: { identity: 'attention-refailure-order', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1343,7 +1342,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: terminalItem.id,
       ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: terminalItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1439,7 +1438,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: activeItem.id,
       ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: activeItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1562,7 +1561,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: null,
       ingress: { identity: 'legacy-attention-failure', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1622,7 +1621,7 @@ describe('GET /web/factory/projects/:id/attention', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: workItem.id,
       ingress: { identity: 'attention-pagination', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: workItem.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -1815,7 +1814,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // finishes it (triage → planning), then a human approves planning into done.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
+    const service = new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems });
     const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',

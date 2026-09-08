@@ -20,19 +20,14 @@ import type {
 } from '../storage/domains/work-items/base.js';
 
 export type FactoryHealthFindingKind =
-  | 'decision-failed'
   | 'decision-stuck'
   | 'start-stalled'
   | 'seat-orphaned'
   | 'seat-missing'
-  | 'proposal-waiting'
   | 'held-waiting'
   | 'label-drift';
 
 export type FactoryHealthRepair =
-  | { action: 'retry-decision'; decisionId: string }
-  | { action: 'dismiss-decision'; decisionId: string }
-  | { action: 'resolve-proposal'; decisionId: string }
   | { action: 'revoke-binding'; bindingId: string }
   | { action: 'accept-work-item'; workItemId: string }
   | { action: 'start-run'; workItemId: string; role: string }
@@ -66,7 +61,7 @@ export interface FactoryHealthThresholds {
   expiredLeaseMs: number;
   /** A pending start this old is not "booting", it is stalled. */
   stalledStartMs: number;
-  /** Proposals and held cards older than this are worth nudging a person about. */
+  /** Held cards older than this are worth nudging a maintainer about. */
   waitingOnPersonMs: number;
 }
 
@@ -78,12 +73,10 @@ export const DEFAULT_HEALTH_THRESHOLDS: FactoryHealthThresholds = {
 };
 
 const FINDING_KINDS: FactoryHealthFindingKind[] = [
-  'decision-failed',
   'decision-stuck',
   'start-stalled',
   'seat-orphaned',
   'seat-missing',
-  'proposal-waiting',
   'held-waiting',
   'label-drift',
 ];
@@ -153,17 +146,6 @@ export function computeFactoryHealth(
 
   for (const decision of inputs.decisions) {
     const base = subject(decision.workItemId);
-    if (decision.status === 'failed') {
-      findings.push({
-        kind: 'decision-failed',
-        id: `decision-failed:${decision.id}`,
-        ...base,
-        evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
-        ageMs: now.getTime() - decision.updatedAt.getTime(),
-        suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
-      });
-      continue;
-    }
     if (decision.status === 'retry' || decision.status === 'pending') {
       const overdue = now.getTime() - decision.availableAt.getTime();
       if (overdue > thresholds.stuckDecisionMs) {
@@ -188,20 +170,6 @@ export function computeFactoryHealth(
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) is still leased by ${decision.leaseOwner ?? 'unknown'} though the lease expired at ${decision.leaseExpiresAt.toISOString()}; the worker likely died mid-dispatch.`,
           ageMs: expired,
           suggestedRepair: null,
-        });
-      }
-      continue;
-    }
-    if (decision.status === 'proposed') {
-      const waiting = now.getTime() - decision.createdAt.getTime();
-      if (waiting > thresholds.waitingOnPersonMs) {
-        findings.push({
-          kind: 'proposal-waiting',
-          id: `proposal-waiting:${decision.id}`,
-          ...base,
-          evidence: `Proposed run ${decision.id} (${describeDecision(decision)}) has waited for a person since ${decision.createdAt.toISOString()}.`,
-          ageMs: waiting,
-          suggestedRepair: { action: 'resolve-proposal', decisionId: decision.id },
         });
       }
     }

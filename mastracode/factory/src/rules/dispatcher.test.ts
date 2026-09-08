@@ -6,7 +6,6 @@ import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../route
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, type WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -218,9 +217,9 @@ async function queueDecision(
   options?: { sourceKey?: string; ingress?: string },
 ) {
   const item = await createItem(storage, options?.sourceKey);
-  const rules = defaultFactoryRules({ version: 'rules-v1' });
+  const configVersion = 'rules-v1';
   const boards = createLifecycleTestRegistry({ execute: { issue: { onEnter: () => decision } } });
-  const transitionService = new FactoryTransitionService({ storage, rules, boards });
+  const transitionService = new FactoryTransitionService({ storage, configVersion, boards });
   const result = await transitionService.transition({
     orgId: 'org-1',
     factoryProjectId: PROJECT_ID,
@@ -252,7 +251,7 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
     destinationStage: item.stages[0]!,
     actorId: 'user-1',
     ingress: { identity: `arm-${armCount}`, triggerType: 'human', transitionId: `arm-${armCount}` },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     causalChain: [],
     evaluation: { outcome: 'accepted', decisions: [] },
     autonomy: 'arm',
@@ -315,7 +314,7 @@ async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprove
   return {
     item,
     transitionService: new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     }),
   };
@@ -332,7 +331,7 @@ describe('FactoryDecisionDispatcher', () => {
     const reconcileToolResults = vi.fn(async () => {});
     const { controller } = createSession();
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -362,7 +361,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
       reconcileIntervalMs: 30_000,
@@ -397,7 +396,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       staleBindingSweepIntervalMs: 10 * 60_000,
       staleBindingTtlMs: 24 * 60 * 60_000,
@@ -433,7 +432,7 @@ describe('FactoryDecisionDispatcher', () => {
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       isAutoRunEnabled: async () => true,
-      transitionService: new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage }),
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
       storage,
       reconcileToolResults,
     });
@@ -752,7 +751,7 @@ describe('FactoryDecisionDispatcher', () => {
     const item = await createItem(storage);
     await bindWorkRun(storage, item.id);
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
-    const transitionService = new FactoryTransitionService({ storage, rules: builtInFactoryRules() });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'factory-config-v1' });
     const transitioned = await transitionService.transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
@@ -2110,7 +2109,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2118,7 +2117,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2149,7 +2148,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2157,7 +2156,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-2', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2185,7 +2184,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage, false);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2193,7 +2192,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'push-3', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2237,7 +2236,7 @@ describe('FactoryDecisionDispatcher', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2245,7 +2244,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2274,7 +2273,7 @@ describe('FactoryDecisionDispatcher', () => {
     // Work is not installed here, so `work/canceled` has no declared semantics: fail closed and ask.
     const boards = createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
       storage,
     });
@@ -2283,7 +2282,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2324,7 +2323,7 @@ describe('FactoryDecisionDispatcher', () => {
       })
     ).item;
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     // The PR closes after its review card already settled: the mirrored move has nowhere to go.
@@ -2333,7 +2332,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'closed-after-done', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2384,7 +2383,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2392,7 +2391,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'external-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2438,7 +2437,7 @@ describe('FactoryDecisionDispatcher', () => {
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         planning: {
           issue: {
@@ -2501,7 +2500,7 @@ describe('FactoryDecisionDispatcher', () => {
     await armItem(storage, item.id);
     const armed = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2509,7 +2508,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'legacy-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'stranger', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -2549,7 +2548,7 @@ describe('FactoryDecisionDispatcher', () => {
       })
     ).item;
     const transitionService = new FactoryTransitionService({
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       storage,
     });
     await storage.commitRuleEvaluation({
@@ -2557,7 +2556,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'factory-run-1', triggerType: 'github' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'factory[bot]', trusted: false, factoryAuthored: true },
       outcome: { status: 'accepted' },
@@ -2598,7 +2597,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     const item = await createItem(storage);
@@ -2654,7 +2653,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     const item = await createItem(storage);
@@ -2995,7 +2994,7 @@ describe('FactoryDecisionDispatcher', () => {
     const { controller, session, emitAgentEnd } = createSession();
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards: createLifecycleTestRegistry({
         execute: {
           issue: {
@@ -3027,7 +3026,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
       ingress: { identity: 'failed-before-manual-run', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: beforeManualRun.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3601,7 +3600,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3637,7 +3636,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: null,
       ingress: { identity: 'github:pull-request:2:opened', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: null,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3660,7 +3659,7 @@ describe('FactoryDecisionDispatcher', () => {
     const resolveLinkedWorkItemParentId = vi.fn().mockResolvedValue(parent.id);
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3712,7 +3711,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
       ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3734,7 +3733,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3779,7 +3778,7 @@ describe('FactoryDecisionDispatcher', () => {
       factoryProjectId: PROJECT_ID,
       workItemId: card.id,
       ingress: { identity: 'poll:7:pull-request:3', triggerType: 'pull_request.opened' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -3801,7 +3800,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
     });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
@@ -3846,7 +3845,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3917,7 +3916,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -3977,7 +3976,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -4023,7 +4022,7 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      configVersion: 'rules-v1',
       boards,
     });
     await transitionService.transition({
@@ -4200,7 +4199,7 @@ describe('FactoryDecisionDispatcher', () => {
     return {
       transitionService: new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
       }),
     };
   }
@@ -4350,7 +4349,7 @@ describe('FactoryDecisionDispatcher', () => {
       const { controller } = createSession();
       const transitionService = new FactoryTransitionService({
         storage,
-        rules: defaultFactoryRules({ version: 'rules-v1' }),
+        configVersion: 'rules-v1',
       });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: controller as never,

@@ -853,7 +853,7 @@ describe('GithubIntegration workers', () => {
         projects: { listAll: async () => [] },
         intake: {},
       },
-      rules: { config: {}, workItems: {} },
+      runtime: { configVersion: 'test-v1', workItems: {} },
     } as any;
   }
 
