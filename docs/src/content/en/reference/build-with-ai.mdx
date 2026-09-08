@@ -96,7 +96,7 @@ Install by selecting the button below:
 
 If you followed the automatic installation, you'll see a popup when you open cursor in the bottom left corner to prompt you to enable the Mastra Docs MCP Server.
 
-![Popup inside Cursor showing: "New MCP server detected: mastra". The user can "Skip" or "Enable" it as an action.](/img/enable-mastra-docs-cursor.png)
+The popup will say "New MCP server detected: mastra". You can choose to "Skip" or "Enable" it as an action.
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
@@ -107,13 +107,9 @@ Google Antigravity is an agent-first development platform that supports MCP serv
 1. Open your Antigravity MCP configuration file:
 
    - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
-   - You can access it through the MCP Store interface in Antigravity
-
-   ![The Antigravity MCP store. At the top is a search bar and below a list of available MCP servers. On the very top right is a dropdown menu.](/img/antigravity_mcp_server.png)
+   - You can access it through the MCP Store interface in Antigravity.
 
 1. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and select **View raw config** in the main tab.
-
-   ![The Antigravity MCP store showing the Manage MCP Servers option and the View raw config button.](/img/antigravity_managed_mcp.png)
 
 1. Add the Mastra MCP server configuration:
 
@@ -129,8 +125,6 @@ Google Antigravity is an agent-first development platform that supports MCP serv
    ```
 
 1. Save the configuration and restart Antigravity
-
-   ![The UI shows that the MCP server is enabled. You can also toggle individual tools.](/img/antigravity_final_interface_mcp.png)
 
 Once configured, the Mastra MCP server exposes the following to Antigravity agents:
 
@@ -164,17 +158,11 @@ Once you installed the MCP server, you can use it like so:
 
 1. Open VSCode settings.
 1. Navigate to MCP settings.
-1. Click "enable" on the Chat > MCP option.
-
-   ![Entry in VSCode's settings page. The option is called "Chat > MCP: Enabled (Preview)". The description says: "Enables integration with Model Context Protocol servers to provide additional tools and functionality."](/img/vscode-mcp-setting.png)
+1. Check the checkbox on the **Chat > MCP: Enabled (Preview)** option.
 
 MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and select the "start" button. Note that the "start" button will only appear if the `.vscode` folder containing `mcp.json` is in your workspace root, or the highest level of the in-editor file explorer.
 
-![A screenshot of the mcp.json file showing the start button in the editor](/img/vscode-start-mcp.png)
-
 After starting the MCP server, select the tools button in the Copilot pane to see available tools.
-
-![Tools page of VSCode to see available tools](/img/vscode-mcp-running.png)
 
 [More info on using MCP servers with Visual Studio Code](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
