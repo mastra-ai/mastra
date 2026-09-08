@@ -27,11 +27,11 @@ interface ResolvedTarget {
 }
 
 function findEnvironment(environments: Environment[], envArg: string): Environment | undefined {
-  return environments.find((e) => e.id === envArg || e.name === envArg || e.slug === envArg);
+  return environments.find(e => e.id === envArg || e.name === envArg || e.slug === envArg);
 }
 
 function pickLatestDeployForEnv(deploys: EnvironmentDeploy[], envId: string): EnvironmentDeploy | undefined {
-  const forEnv = deploys.filter((d) => d.environmentId === envId);
+  const forEnv = deploys.filter(d => d.environmentId === envId);
   const sorted = [...forEnv].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
   return sorted[0];
 }
@@ -48,7 +48,7 @@ async function resolveTarget(
   // Fetch all deploys once and look it up.
   if (deployId) {
     const deploys = await fetchEnvironmentDeploys(token, orgId, project.id);
-    const deploy = deploys.find((d) => d.id === deployId);
+    const deploy = deploys.find(d => d.id === deployId);
     if (!deploy) {
       throw new Error(`Deploy not found in project ${project.name}: ${deployId}`);
     }
@@ -79,7 +79,7 @@ async function resolveTarget(
   } else if (environments.length === 1) {
     environment = environments[0]!;
   } else {
-    const slugs = environments.map((e) => e.slug).join(', ');
+    const slugs = environments.map(e => e.slug).join(', ');
     throw new Error(
       `Project ${project.name} has multiple environments (${slugs}). Pass --environment <name|slug|id> or a deploy id.`,
     );
@@ -121,7 +121,13 @@ export async function envSuggestionsAction(deployId: string | undefined, opts: S
 
     const target = await resolveTarget(token, orgId, opts, deployId);
 
-    const initial = await fetchEnvironmentDeployDiagnosis(token, orgId, target.projectId, target.envId, target.deployId);
+    const initial = await fetchEnvironmentDeployDiagnosis(
+      token,
+      orgId,
+      target.projectId,
+      target.envId,
+      target.deployId,
+    );
     if (initial.state === 'healthy') {
       p.outro('Deploy is running successfully. No suggestions required.');
       return;
