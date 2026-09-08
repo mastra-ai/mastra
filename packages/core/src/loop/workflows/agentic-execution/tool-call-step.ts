@@ -1016,7 +1016,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               context: {
                 // Executor — uses the tool from the current closure
                 executor: {
-                  execute: (
+                  execute: async (
                     bgArgs: Record<string, unknown>,
                     opts?: {
                       abortSignal?: AbortSignal;
@@ -1029,7 +1029,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     // would suspend the AGENT run via tool-call-approval) with
                     // the bg-task workflow's, so calling `suspend()` from the
                     // tool pauses the bg-task run instead.
-                    return resolvedTool.execute!(bgArgs, {
+                    const rawResult = await resolvedTool.execute!(bgArgs, {
                       ...toolOptions,
                       isBackgroundTask: true,
                       [BACKGROUND_WORK_CONTEXT]: {
@@ -1050,6 +1050,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                       abortSignal: opts?.abortSignal,
                     } as any);
+                    const result = ensureSerializable(rawResult);
+
+                    if ('onOutput' in resolvedTool && typeof (resolvedTool as any).onOutput === 'function') {
+                      try {
+                        await (resolvedTool as any).onOutput({
+                          toolCallId: inputData.toolCallId,
+                          toolName: inputData.toolName,
+                          output: result,
+                          abortSignal: opts?.abortSignal,
+                        });
+                      } catch (error) {
+                        logger?.error('Error calling onOutput', error);
+                      }
+                    }
+
+                    return rawResult;
                   },
                 },
 
@@ -1432,16 +1448,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
               if (bgResolved.disposition === 'awaited') {
                 const completedTask = await bgTask.waitForCompletion();
-                const reconciliation = await reconciliationComplete;
-                if (reconciliation.error) {
-                  throw reconciliation.error;
-                }
-
                 if (completedTask.status !== 'completed') {
                   throw new Error(
                     completedTask.error?.message ??
                       `Background task ${completedTask.status.replace('_', ' ')}: ${completedTask.id}`,
                   );
+                }
+
+                const reconciliation = await reconciliationComplete;
+                if (reconciliation.error) {
+                  throw reconciliation.error;
                 }
 
                 return {

@@ -362,8 +362,9 @@ describe('createToolCallStep background task stream replay', () => {
       completeTask = resolve;
     });
     const backgroundTaskManager = {
-      enqueue: vi.fn(async (_payload: any, context: any) => {
-        void (async () => {
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        setTimeout(async () => {
+          const result = await context.executor.execute(payload.args);
           await context.onResult({
             status: 'completed',
             taskId: 'task-awaited',
@@ -371,13 +372,13 @@ describe('createToolCallStep background task stream replay', () => {
             toolName: 'background-tool',
             agentId: 'agent-1',
             runId: 'current-run',
-            result: { answer: 42 },
+            result,
             startedAt: new Date(),
             completedAt: new Date(),
           });
           order.push('terminal');
           completeTask();
-        })();
+        }, 0);
         return { task: { id: 'task-awaited' }, fallbackToSync: false };
       }),
       waitForNextTask: vi.fn(async () => {
@@ -390,7 +391,10 @@ describe('createToolCallStep background task stream replay', () => {
     const tools = {
       'background-tool': {
         backgroundConfig: { enabled: true },
-        execute: vi.fn(),
+        execute: vi.fn(async () => ({ answer: 42 })),
+        onOutput: vi.fn(async () => {
+          order.push('onOutput');
+        }),
       },
     } as any;
 
@@ -421,8 +425,14 @@ describe('createToolCallStep background task stream replay', () => {
 
     expect(result).toMatchObject({ result: { answer: 42 } });
     expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], undefined);
-    expect(order).toEqual(['reconciled', 'flushed', 'terminal']);
-    expect(tools['background-tool'].execute).not.toHaveBeenCalled();
+    expect(tools['background-tool'].execute).toHaveBeenCalledOnce();
+    expect(tools['background-tool'].onOutput).toHaveBeenCalledWith({
+      toolCallId: 'call-awaited',
+      toolName: 'background-tool',
+      output: { answer: 42 },
+      abortSignal: undefined,
+    });
+    expect(order).toEqual(['onOutput', 'reconciled', 'flushed', 'terminal']);
   });
 
   it('awaits failed background work until the failure is reconciled', async () => {
@@ -492,6 +502,101 @@ describe('createToolCallStep background task stream replay', () => {
 
     expect(result as any).toMatchObject({ error: expect.objectContaining({ message: 'lookup failed' }) });
     expect(order).toEqual(['reconciled', 'terminal']);
+  });
+
+  it('returns an awaited cancellation without waiting for result reconciliation', async () => {
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async () => ({ task: { id: 'task-cancelled' }, fallbackToSync: false })),
+      waitForNextTask: vi.fn(async () => ({ id: 'task-cancelled', status: 'cancelled' })),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-cancelled',
+          toolName: 'background-tool',
+          args: { query: 'cancelled', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result as any).toMatchObject({
+      error: expect.objectContaining({ message: 'Background task cancelled: task-cancelled' }),
+    });
+  });
+
+  it('runs onOutput for deferred background execution', async () => {
+    const onOutput = vi.fn();
+    let resolveExecution!: () => void;
+    const executionComplete = new Promise<void>(resolve => {
+      resolveExecution = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (payload: any, context: any) => {
+        setTimeout(async () => {
+          await context.executor.execute(payload.args);
+          resolveExecution();
+        }, 0);
+        return { task: { id: 'task-deferred' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': {
+          backgroundConfig: { enabled: true },
+          execute: vi.fn(async () => ({ answer: 42 })),
+          onOutput,
+        },
+      } as any,
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-deferred',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'deferred' } },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({ result: expect.stringContaining('Background task started') });
+    await executionComplete;
+    expect(onOutput).toHaveBeenCalledOnce();
+    expect(onOutput).toHaveBeenCalledWith({
+      toolCallId: 'call-deferred',
+      toolName: 'background-tool',
+      output: { answer: 42 },
+      abortSignal: undefined,
+    });
   });
 });
 

@@ -369,7 +369,6 @@ export async function runIdleLoop<
     clearIdleTimer();
     if (isProcessing) return;
     if (runningTaskIds.size === 0) return;
-    if (pendingCompletions.length > 0) return;
     idleTimer = setTimeout(forceClose, maxIdleMs);
   };
 

@@ -503,6 +503,60 @@ describe('Agent.streamUntilIdle', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
+  it('re-arms maxIdleMs after a completion arrives mid-turn while another task remains running', async () => {
+    let finishInitialTurn!: () => void;
+    const initialTurnDone = new Promise<void>(resolve => {
+      finishInitialTurn = resolve;
+    });
+    const blockingStream = () =>
+      new ReadableStream<any>({
+        async start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          await initialTurnDone;
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          });
+          controller.close();
+        },
+      });
+    const { model } = makeScriptedModel([blockingStream]);
+    const agent = new Agent({ id: 'a-pending-idle', name: 'a-pending-idle', instructions: 'test', model });
+    mastra.addAgent(agent, 'a-pending-idle');
+
+    const publishLifecycle = (event: 'task.running' | 'task.completed', taskId: string) =>
+      (mastra.backgroundTaskManager as any).publishLifecycleEvent(event, {
+        id: taskId,
+        toolName: 'dummy',
+        toolCallId: taskId,
+        runId: 'run-1',
+        agentId: 'a-pending-idle',
+        threadId: 'thread-pending-idle',
+        resourceId: 'user-1',
+        status: event === 'task.running' ? 'running' : 'completed',
+        result: event === 'task.completed' ? {} : undefined,
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const result = await agent.streamUntilIdle('hi', {
+      memory: { thread: 'thread-pending-idle', resource: 'user-1' },
+      maxIdleMs: 100,
+    });
+    await publishLifecycle('task.running', 'task-completed');
+    await publishLifecycle('task.running', 'task-stalled');
+    await publishLifecycle('task.completed', 'task-completed');
+    finishInitialTurn();
+
+    const start = Date.now();
+    await drain(result.fullStream as ReadableStream<any>);
+    expect(Date.now() - start).toBeLessThan(2_000);
+  });
+
   it('does not close mid-turn when inner stream is slow (idle timer only runs between turns)', async () => {
     const memory = new MockMemory();
 

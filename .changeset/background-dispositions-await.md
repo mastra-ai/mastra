@@ -26,4 +26,16 @@ Eligible calls can now override their execution mode with `_background.dispositi
 }
 ```
 
+Add the background-work signal processor when tools need caller-scoped completion signals:
+
+```ts
+import { Agent } from '@mastra/core/agent';
+import { createBackgroundWorkSignalProcessor } from '@mastra/core/processors';
+
+const agent = new Agent({
+  // ...
+  inputProcessors: [createBackgroundWorkSignalProcessor()],
+});
+```
+
 `deferred` returns a task placeholder while the run continues, `awaited` uses durable background execution while holding the current branch for the authoritative result, and `foreground` executes inline. The legacy `_background.enabled` field remains supported.
