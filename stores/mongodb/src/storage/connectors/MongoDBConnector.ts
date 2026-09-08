@@ -80,6 +80,16 @@ export class MongoDBConnector {
     throw new Error('MongoDBStore: client cannot be empty. Check your MongoDBConnector configuration.');
   }
 
+  async listCollectionNames(): Promise<string[]> {
+    const db = await this.getConnection();
+    return (await db.listCollections({}, { nameOnly: true }).toArray()).map(collection => collection.name);
+  }
+
+  async createCollection(name: string): Promise<void> {
+    const db = await this.getConnection();
+    await db.createCollection(name);
+  }
+
   async getCollection(collectionName: string) {
     if (this.#handler) {
       return this.#handler.getCollection(collectionName);
