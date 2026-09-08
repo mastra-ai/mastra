@@ -326,6 +326,23 @@ function findStaticCustomWorkerNames(ast: AstNode, workers: AstNode | undefined)
   return [...names].sort();
 }
 
+/**
+ * True when the statically-visible `workers` option opts the instance out of a
+ * separate worker service: `workers: false` (no workers at all) or the inline
+ * forms `workers: 'inline'` / `workers: { mode: 'inline', ... }` (workers run
+ * in-process, so the manifest must not be emitted and managed deploys must not
+ * provision or prompt for a worker service).
+ */
+function isWorkersManifestSuppressed(workers: AstNode | undefined, preparedConfigs: Map<string, AstNode>): boolean {
+  if (!workers) return false;
+  if (workers.type === 'Literal') {
+    return workers.value === false || workers.value === 'inline';
+  }
+  if (workers.type !== 'ObjectExpression') return false;
+  const mode = resolvedObjectProperty(workers, 'mode', preparedConfigs);
+  return mode?.type === 'Literal' && mode.value === 'inline';
+}
+
 function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
   const preparedConfigs = findPreparedConfigSources(ast);
   let workersConfig: WorkersConfig | undefined;
@@ -339,7 +356,7 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
     const storage = resolvedObjectProperty(config, 'storage', preparedConfigs);
     const pubsub = resolvedObjectProperty(config, 'pubsub', preparedConfigs);
     const workers = resolvedObjectProperty(config, 'workers', preparedConfigs);
-    if (!isConfigured(storage) || !isConfigured(pubsub) || (workers?.type === 'Literal' && workers.value === false)) {
+    if (!isConfigured(storage) || !isConfigured(pubsub) || isWorkersManifestSuppressed(workers, preparedConfigs)) {
       return;
     }
 

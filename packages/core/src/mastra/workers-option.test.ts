@@ -98,4 +98,35 @@ describe('Mastra workers option (merge semantics)', () => {
     const mastra = new Mastra({ logger: false, workers: false });
     expect(mastra.workers).toEqual([]);
   });
+
+  it("workers: 'inline' behaves like the default (auto-created workers run in-process)", () => {
+    const inline = new Mastra({ logger: false, workers: 'inline' });
+    const defaults = new Mastra({ logger: false });
+    expect(inline.workers.map(w => w.name)).toEqual(defaults.workers.map(w => w.name));
+    expect(inline.workers.map(w => w.name)).toContain('orchestration');
+  });
+
+  it("{ mode: 'inline', workers } merges custom workers like the array form", () => {
+    const poller = new FakeWorker('github-poller');
+    const mastra = new Mastra({ logger: false, workers: { mode: 'inline', workers: [poller] } });
+    const names = mastra.workers.map(w => w.name);
+    expect(names).toContain('orchestration');
+    expect(names).toContain('github-poller');
+    expect(mastra.getWorker('github-poller')).toBe(poller);
+  });
+
+  it("{ mode: 'inline' } without workers behaves like the default", () => {
+    const mastra = new Mastra({ logger: false, workers: { mode: 'inline' } });
+    expect(mastra.workers.map(w => w.name)).toContain('orchestration');
+  });
+
+  it('MASTRA_WORKERS=false still disables workers for inline configs', () => {
+    vi.stubEnv('MASTRA_WORKERS', 'false');
+    try {
+      const mastra = new Mastra({ logger: false, workers: 'inline' });
+      expect(mastra.workers).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

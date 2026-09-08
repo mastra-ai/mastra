@@ -161,7 +161,11 @@ export type WorkersDeployMode = 'separate' | 'inline';
  *      switching a live environment to inline is a destructive-feeling
  *      change we don't perform without an explicit flag.
  *   3. If no workers are actually configured in the build, mode is
- *      irrelevant; return `separate` (the default, no side effects).
+ *      irrelevant; return `separate` (the default, no side effects). This is
+ *      also how code-level inline declarations (`workers: 'inline'` /
+ *      `{ mode: 'inline' }`) skip the prompt: the deployer suppresses the
+ *      workers.json manifest for them, so the build reports no enabled
+ *      workers and no worker service is provisioned or asked about.
  *   4. Non-interactive / `--yes` deploys default to the recommended
  *      `separate` mode.
  *   5. Otherwise prompt.
@@ -1513,6 +1517,11 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     // Re-derive so the deployment overview reflects the inline mode.
     workersConfig = await readWorkersConfig(targetDir);
     workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  }
+  if (opts.workers === 'separate' && !workersEnabled) {
+    p.log.warn(
+      "Ignoring --workers separate: the build emitted no enabled workers manifest — the Mastra config disables workers or declares them inline (`workers: false`, `workers: 'inline'`, or `{ mode: 'inline' }`). No dedicated worker service will be provisioned.",
+    );
   }
 
   const publicUrls = derivePublicUrls(environment.slug, projectType);

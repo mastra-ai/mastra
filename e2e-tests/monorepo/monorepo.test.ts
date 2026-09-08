@@ -530,6 +530,45 @@ export const mastra = new Mastra({
       timeout,
     );
 
+    it(
+      'should suppress the worker manifest when workers are declared inline',
+      async () => {
+        const sourcePath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+        const originalSource = await readFile(sourcePath, 'utf-8');
+        const inlineSource = originalSource
+          .replace(
+            "import { Mastra } from '@mastra/core/mastra';",
+            "import { Mastra } from '@mastra/core/mastra';\nimport { MastraWorker } from '@mastra/core/worker';",
+          )
+          .replace(
+            'export const mastra = new Mastra({',
+            `class CleanupWorker extends MastraWorker {
+  readonly name = 'cleanup-jobs';
+  get isRunning() { return false; }
+  async start() {}
+  async stop() {}
+}
+export const mastra = new Mastra({
+  storage: {},
+  pubsub: {},
+  scheduler: { tickIntervalMs: 10_000 },
+  workers: { mode: 'inline', workers: [new CleanupWorker()] },`,
+          );
+
+        try {
+          await writeFile(sourcePath, inlineSource);
+          await runBuild(fixturePath);
+
+          const workersPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'workers.json');
+          expect(JSON.parse(await readFile(workersPath, 'utf-8'))).toBeNull();
+        } finally {
+          await writeFile(sourcePath, originalSource);
+          await runBuild(fixturePath);
+        }
+      },
+      timeout,
+    );
+
     afterAll(async () => {
       if (proc) {
         try {

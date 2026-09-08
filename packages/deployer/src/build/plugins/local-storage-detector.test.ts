@@ -185,6 +185,43 @@ describe('localStorageDetector', () => {
     expect(workersConfig).toBeNull();
   });
 
+  it.each([
+    [
+      "workers: 'inline'",
+      `export const mastra = new Mastra({
+        storage,
+        pubsub,
+        workers: 'inline',
+        scheduler: { enabled: true },
+        backgroundTasks: { enabled: true },
+      });`,
+    ],
+    [
+      "workers: { mode: 'inline' }",
+      `export const mastra = new Mastra({
+        storage,
+        pubsub,
+        workers: { mode: 'inline' },
+        scheduler: { enabled: true },
+      });`,
+    ],
+    [
+      "workers: { mode: 'inline', workers: [...] }",
+      `class CleanupWorker extends MastraWorker {
+        name = 'cleanup-jobs';
+      }
+      export const mastra = new Mastra({
+        storage,
+        pubsub,
+        workers: { mode: 'inline', workers: [new CleanupWorker()] },
+      });`,
+    ],
+  ])('emits a null manifest when workers are declared inline through %s', (_label, code) => {
+    const { workersConfig } = runPlugin([{ id: '/project/src/mastra/index.ts', code }]);
+
+    expect(workersConfig).toBeNull();
+  });
+
   it('emits a null manifest without shared storage and pubsub or when tree-shaken', () => {
     const { workersConfig } = runPlugin([
       {
