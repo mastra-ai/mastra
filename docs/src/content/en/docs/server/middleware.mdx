@@ -131,6 +131,12 @@ export const mastra = new Mastra({
 
 After successful authentication, `mapUserToResourceId` is called with the authenticated user object. The returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context, which works across all server adapters (Hono, Express, Next.js, etc.).
 
+When configured, the callback must return a non-empty string. If it throws or returns `null`, `undefined`, an empty or whitespace-only string, or a non-string value, authentication middleware rejects the request with a 500 error before the route runs. This applies to all requests that run authentication, not just memory routes. A client-provided resource ID can't override a failed mapping.
+
+With `CompositeAuth`, this requirement applies to the provider that authenticated the request. A provider without a mapper keeps its existing behavior, even if another provider in the composite has one. The same validation applies to configured Studio auth mappers.
+
+Authentication alone doesn't enable user isolation. If you don't configure a mapper, you're responsible for setting a trusted resource ID in middleware or otherwise enforcing authorization.
+
 The resource ID doesn't have to be `user.id`. Common patterns:
 
 ```typescript

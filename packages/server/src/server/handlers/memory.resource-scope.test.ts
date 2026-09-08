@@ -2,174 +2,148 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { CompositeAuth } from '@mastra/core/server';
+import type { MastraAuthConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { coreAuthMiddleware } from '../auth/helpers';
 import { MASTRA_AUTH_MODE_KEY } from '../constants';
-import { HTTPException } from '../http-exception';
-import { GET_THREAD_BY_ID_ROUTE, LIST_MESSAGES_ROUTE, LIST_THREADS_ROUTE } from './memory';
+import { GET_THREAD_BY_ID_ROUTE, LIST_THREADS_ROUTE } from './memory';
 
-/**
- * Regression tests for cross-resource memory enumeration: an authenticated
- * request without a server-derived resource scope used to read and list every
- * resource's threads.
- */
-describe('memory resource scope enforcement', () => {
+describe('memory resource mapping', () => {
   let memory: MockMemory;
-  let agent: Agent;
-  let storage: InMemoryStore;
+  let mastra: Mastra;
 
   beforeEach(async () => {
-    storage = new InMemoryStore();
+    const storage = new InMemoryStore();
     memory = new MockMemory({ storage });
-    agent = new Agent({
+    const agent = new Agent({
       id: 'test-agent',
       name: 'test-agent',
       instructions: 'test-instructions',
       model: {} as any,
       memory,
     });
-    await memory.createThread({ threadId: 'alice-thread', resourceId: 'user-alice' });
-    await memory.createThread({ threadId: 'bob-thread', resourceId: 'user-bob' });
+    mastra = new Mastra({ logger: false, storage, agents: { 'test-agent': agent } });
+    await memory.createThread({ threadId: 'alice-thread', resourceId: 'alice' });
+    await memory.createThread({ threadId: 'bob-thread', resourceId: 'bob' });
   });
 
-  function createMastra(server?: Record<string, any>) {
-    return new Mastra({ logger: false, agents: { 'test-agent': agent }, server: server as any });
+  function authenticate(authConfig: MastraAuthConfig, requestContext: RequestContext, path = '/api/memory/threads') {
+    return coreAuthMiddleware({
+      mastra,
+      authConfig,
+      requestContext,
+      path,
+      method: 'GET',
+      token: 'test-token',
+      getHeader: () => undefined,
+      rawRequest: new Request(`http://localhost${path}?resourceId=alice`),
+      buildAuthorizeContext: () => null,
+    });
   }
 
-  function createContext({
-    mastra,
-    authenticated,
-    scopedResourceId,
-    authMode,
-  }: {
-    mastra: Mastra;
-    authenticated?: boolean;
-    scopedResourceId?: string;
-    authMode?: string;
-  }) {
-    const requestContext = new RequestContext();
-    if (authenticated) {
-      requestContext.set('user', { id: 'user-bob' });
-    }
-    if (scopedResourceId) {
-      requestContext.set(MASTRA_RESOURCE_ID_KEY, scopedResourceId);
-    }
-    if (authMode) {
-      requestContext.set(MASTRA_AUTH_MODE_KEY, authMode);
-    }
-    return { mastra, requestContext, abortSignal: new AbortController().signal };
+  function listThreads(requestContext: RequestContext, resourceId?: string) {
+    return LIST_THREADS_ROUTE.handler({
+      mastra,
+      requestContext,
+      agentId: 'test-agent',
+      page: 0,
+      perPage: 10,
+      resourceId,
+      abortSignal: new AbortController().signal,
+    });
   }
 
-  const listArgs = { agentId: 'test-agent', page: 0, perPage: 10 } as const;
+  const auth = { protected: ['/api/*'], authenticateToken: async () => ({ id: 'bob' }) };
 
-  it('denies thread listing for an authenticated request with no server-derived scope', async () => {
-    const mastra = createMastra();
-
-    await expect(
-      LIST_THREADS_ROUTE.handler({
-        ...createContext({ mastra, authenticated: true }),
-        ...listArgs,
-        resourceId: undefined,
-      } as any),
-    ).rejects.toThrow(HTTPException);
+  it.each([
+    '/api/memory/threads',
+    '/api/agents/test-agent/suspended-runs',
+    '/api/agents/test-agent/stream',
+    '/api/v1/responses/alice-response',
+  ])('rejects failed mapping before dispatching %s despite a client resource ID', async path => {
+    const context = new RequestContext();
+    const result = await authenticate({ ...auth, mapUserToResourceId: () => undefined }, context, path);
+    expect(result).toMatchObject({ action: 'error', status: 500 });
+    expect(context.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
 
-  it('ignores a client-supplied resourceId when a scope is required', async () => {
-    const mastra = createMastra();
-
-    await expect(
-      LIST_THREADS_ROUTE.handler({
-        ...createContext({ mastra, authenticated: true }),
-        ...listArgs,
-        resourceId: 'user-alice',
-      } as any),
-    ).rejects.toThrow(/resource scope/);
+  it.each(['api', 'studio'])('does not exempt failed mappings in %s mode', async mode => {
+    const context = new RequestContext();
+    context.set(MASTRA_AUTH_MODE_KEY, mode);
+    expect(await authenticate({ ...auth, mapUserToResourceId: () => null }, context)).toMatchObject({
+      action: 'error',
+      status: 500,
+    });
   });
 
-  it('denies reading another resource thread by id when no scope is derived', async () => {
-    const mastra = createMastra();
-
-    await expect(
-      GET_THREAD_BY_ID_ROUTE.handler({
-        ...createContext({ mastra, authenticated: true }),
-        agentId: 'test-agent',
-        threadId: 'alice-thread',
-        resourceId: undefined,
-      } as any),
-    ).rejects.toThrow(/resource scope/);
-  });
-
-  it('denies reading another resource thread messages when no scope is derived', async () => {
-    const mastra = createMastra();
-
-    await expect(
-      LIST_MESSAGES_ROUTE.handler({
-        ...createContext({ mastra, authenticated: true }),
-        agentId: 'test-agent',
-        threadId: 'alice-thread',
-        resourceId: undefined,
-      } as any),
-    ).rejects.toThrow(/resource scope/);
-  });
-
-  it('scopes listing to the server-derived resource id', async () => {
-    const mastra = createMastra();
-
-    const result = await LIST_THREADS_ROUTE.handler({
-      ...createContext({ mastra, authenticated: true, scopedResourceId: 'user-bob' }),
-      ...listArgs,
-      resourceId: 'user-alice',
-    } as any);
-
-    expect(result.threads).toHaveLength(1);
-    expect(result.threads[0]!.id).toBe('bob-thread');
-  });
-
-  it('still denies cross-resource reads when a scope is derived', async () => {
-    const mastra = createMastra();
-
+  it('uses mapped identity instead of the client resource ID and denies cross-resource reads', async () => {
+    const context = new RequestContext();
+    expect(await authenticate({ ...auth, mapUserToResourceId: () => 'bob' }, context)).toMatchObject({
+      action: 'next',
+    });
+    expect((await listThreads(context, 'alice')).threads.map(thread => thread.id)).toEqual(['bob-thread']);
     await expect(
       GET_THREAD_BY_ID_ROUTE.handler({
-        ...createContext({ mastra, authenticated: true, scopedResourceId: 'user-bob' }),
+        mastra,
+        requestContext: context,
         agentId: 'test-agent',
         threadId: 'alice-thread',
-      } as any),
-    ).rejects.toThrow(/different resource/);
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
-  it('leaves unauthenticated local development unrestricted', async () => {
-    const mastra = createMastra();
-
-    const result = await LIST_THREADS_ROUTE.handler({
-      ...createContext({ mastra }),
-      ...listArgs,
-      resourceId: undefined,
-    } as any);
-
-    expect(result.threads).toHaveLength(2);
+  it('preserves authenticated access without a mapper', async () => {
+    const context = new RequestContext();
+    expect(await authenticate(auth, context)).toMatchObject({ action: 'next' });
+    expect((await listThreads(context)).threads).toHaveLength(2);
+    expect((await listThreads(context, 'alice')).threads.map(thread => thread.id)).toEqual(['alice-thread']);
   });
 
-  it('exempts studio auth mode', async () => {
-    const mastra = createMastra();
-
-    const result = await LIST_THREADS_ROUTE.handler({
-      ...createContext({ mastra, authenticated: true, authMode: 'studio' }),
-      ...listArgs,
-      resourceId: undefined,
-    } as any);
-
-    expect(result.threads).toHaveLength(2);
+  it('preserves custom middleware scoping without a mapper', async () => {
+    const context = new RequestContext();
+    expect(await authenticate(auth, context)).toMatchObject({ action: 'next' });
+    context.set(MASTRA_RESOURCE_ID_KEY, 'bob');
+    expect((await listThreads(context, 'alice')).threads.map(thread => thread.id)).toEqual(['bob-thread']);
   });
 
-  it('honors the requireResourceScope opt-out', async () => {
-    const mastra = createMastra({ memory: { requireResourceScope: false } });
+  it('does not let an existing middleware scope rescue a failed mapping', async () => {
+    const context = new RequestContext();
+    context.set(MASTRA_RESOURCE_ID_KEY, 'bob');
+    expect(await authenticate({ ...auth, mapUserToResourceId: () => '' }, context)).toMatchObject({
+      action: 'error',
+      status: 500,
+    });
+  });
 
-    const result = await LIST_THREADS_ROUTE.handler({
-      ...createContext({ mastra, authenticated: true }),
-      ...listArgs,
-      resourceId: undefined,
-    } as any);
+  it('preserves no-mapper access inside a mixed composite', async () => {
+    const context = new RequestContext();
+    const composite = new CompositeAuth([
+      {
+        authenticateToken: async () => null,
+        authorizeUser: () => true,
+        mapUserToResourceId: () => 'alice',
+        protected: ['/api/*'],
+      },
+      { authenticateToken: async () => ({ id: 'bob' }), authorizeUser: () => true },
+    ]);
+    expect(await authenticate(composite, context)).toMatchObject({ action: 'next' });
+    expect(context.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    expect((await listThreads(context)).threads).toHaveLength(2);
+  });
 
-    expect(result.threads).toHaveLength(2);
+  it('rejects a failed mapping inside a mixed composite', async () => {
+    const context = new RequestContext();
+    const composite = new CompositeAuth([
+      { authenticateToken: async () => null, authorizeUser: () => true, protected: ['/api/*'] },
+      { authenticateToken: async () => ({ id: 'bob' }), authorizeUser: () => true, mapUserToResourceId: () => null },
+    ]);
+    expect(await authenticate(composite, context)).toMatchObject({ action: 'error', status: 500 });
+  });
+
+  it('preserves unauthenticated local access', async () => {
+    expect((await listThreads(new RequestContext())).threads).toHaveLength(2);
   });
 });

@@ -1,6 +1,5 @@
 ---
 '@mastra/server': patch
-'@mastra/core': patch
 ---
 
-Fixed a security issue where any authenticated user could list and read other users' memory threads when auth was configured without mapUserToResourceId. Memory routes now require a server-derived resource ID and return 403 when one cannot be determined. Set server.memory.requireResourceScope to false to keep the previous unscoped behavior.
+Fixed configured `mapUserToResourceId` callbacks silently disabling isolation when they return an invalid resource ID. Requests now fail before reaching a route instead of falling back to a client-provided resource ID. Providers without a mapper and custom middleware retain their existing behavior. Update `@mastra/core` as well when using `CompositeAuth` to receive the selected-provider validation fix.
