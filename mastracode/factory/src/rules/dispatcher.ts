@@ -963,7 +963,8 @@ export class FactoryDecisionDispatcher {
       }
     }
     assertFactoryDecisionTarget(decision, this.#boards);
-    const definition = this.#boards.get(decision.board)!;
+    const definition = this.#boards.get(decision.board);
+    if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
     const parentWorkItemId =
       record.workItemId ??
