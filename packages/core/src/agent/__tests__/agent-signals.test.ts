@@ -4795,18 +4795,26 @@ describe('Agent signals', () => {
       pubsub,
     );
 
+    const events: Array<{ type: 'queue-count-changed'; count: number }> = [];
     const counts: number[] = [];
-    const unsubscribe = runtime.subscribeQueuedMessages(
+    const unsubscribe = runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId: ownerId },
-      snapshot => counts.push(snapshot.count),
+      event => {
+        if (event.type === 'queue-count-changed') {
+          events.push(event);
+          counts.push(event.count);
+        }
+      },
       pubsub,
     );
     const sharedCounts: number[] = [];
-    const unsubscribeShared = runtime.subscribeQueuedMessages(
+    const unsubscribeShared = runtime.subscribeThreadEvents(
       otherAgent,
       { resourceId, threadId },
-      snapshot => sharedCounts.push(snapshot.count),
+      event => {
+        if (event.type === 'queue-count-changed') sharedCounts.push(event.count);
+      },
       pubsub,
     );
     const owned = runtime.queueMessage(
@@ -4862,6 +4870,11 @@ describe('Agent signals', () => {
       cancelledSignalIds: [untagged.signal.id],
     });
     expect(counts).toEqual([0, 1, 0]);
+    expect(events).toEqual([
+      { type: 'queue-count-changed', count: 0 },
+      { type: 'queue-count-changed', count: 1 },
+      { type: 'queue-count-changed', count: 0 },
+    ]);
     expect(() => runtime.cancelQueuedMessages(agent, { resourceId, threadId } as any, pubsub)).toThrow(
       'exactly one of signalIds or queueOwnerId',
     );
@@ -4894,18 +4907,20 @@ describe('Agent signals', () => {
     );
 
     const counts: number[] = [];
-    runtime.subscribeQueuedMessages(
+    runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId },
-      snapshot => {
-        counts.push(snapshot.count);
-        if (snapshot.count > 0) {
-          runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub);
+      event => {
+        if (event.type === 'queue-count-changed') {
+          counts.push(event.count);
+          if (event.count > 0) {
+            runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub);
+          }
         }
       },
       pubsub,
     );
-    runtime.subscribeQueuedMessages(
+    runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId },
       () => {
@@ -4956,10 +4971,12 @@ describe('Agent signals', () => {
       { memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
-    runtime.subscribeQueuedMessages(
+    runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId },
-      snapshot => counts.push(snapshot.count),
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
       pubsub,
     );
     const queued = runtime.queueMessage(
@@ -5013,10 +5030,12 @@ describe('Agent signals', () => {
         { memory: { resource: resourceId, thread: threadId } } as any,
         pubsub,
       );
-      runtime.subscribeQueuedMessages(
+      runtime.subscribeThreadEvents(
         agent,
         { resourceId, threadId, queueOwnerId },
-        snapshot => counts.push(snapshot.count),
+        event => {
+          if (event.type === 'queue-count-changed') counts.push(event.count);
+        },
         pubsub,
       );
       const queued = runtime.queueMessage(agent, `queued ${outcome}`, { resourceId, threadId, queueOwnerId }, pubsub);
@@ -5061,10 +5080,12 @@ describe('Agent signals', () => {
       { memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
-    runtime.subscribeQueuedMessages(
+    runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId },
-      snapshot => counts.push(snapshot.count),
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
       pubsub,
     );
     runtime.queueMessage(agent, 'lease failure', { resourceId, threadId, queueOwnerId }, pubsub);
@@ -5106,10 +5127,12 @@ describe('Agent signals', () => {
       { memory: { resource: resourceId, thread: threadId } } as any,
       pubsub,
     );
-    runtime.subscribeQueuedMessages(
+    runtime.subscribeThreadEvents(
       agent,
       { resourceId, threadId, queueOwnerId },
-      snapshot => counts.push(snapshot.count),
+      event => {
+        if (event.type === 'queue-count-changed') counts.push(event.count);
+      },
       pubsub,
     );
     const queued = runtime.queueMessage(

@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
+import type { AgentThreadEvent } from '../agent/types';
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
@@ -591,8 +592,8 @@ describe('AgentController signal messages', () => {
     });
 
     const agent = session.machinery.getAgent();
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((_scope, listener) => {
-      listener({ count: 1 });
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      listener({ type: 'queue-count-changed', count: 1 });
       return vi.fn();
     });
     vi.spyOn(agent, 'queueMessage').mockReturnValue({
@@ -608,15 +609,15 @@ describe('AgentController signal messages', () => {
   it('does not retain queued display state when queue acceptance rejects', async () => {
     const { session } = await createController(new InMemoryStore());
     const agent = session.machinery.getAgent();
-    let queueListener!: (snapshot: { count: number }) => void;
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((_scope, listener) => {
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
       queueListener = listener;
-      listener({ count: 0 });
+      listener({ type: 'queue-count-changed', count: 0 });
       return vi.fn();
     });
     vi.spyOn(agent, 'queueMessage').mockImplementation((() => {
-      queueListener({ count: 1 });
-      queueListener({ count: 0 });
+      queueListener({ type: 'queue-count-changed', count: 1 });
+      queueListener({ type: 'queue-count-changed', count: 0 });
       return {
         accepted: Promise.reject(new Error('queue rejected')),
         signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
@@ -634,8 +635,8 @@ describe('AgentController signal messages', () => {
     const { session } = await createController(new InMemoryStore());
     const agent = session.machinery.getAgent();
     const unsubscribe = vi.fn();
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((scope, listener) => {
-      listener({ count: scope.threadId === 'old-thread' ? 1 : 0 });
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((scope, listener) => {
+      listener({ type: 'queue-count-changed', count: scope.threadId === 'old-thread' ? 1 : 0 });
       return scope.threadId === 'old-thread' ? unsubscribe : vi.fn();
     });
     vi.spyOn(agent, 'queueMessage').mockReturnValue({
@@ -659,8 +660,8 @@ describe('AgentController signal messages', () => {
     const agent = session.machinery.getAgent();
     const unsubscribes = [vi.fn(), vi.fn()];
     let subscription = 0;
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((_scope, listener) => {
-      listener({ count: 0 });
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
+      listener({ type: 'queue-count-changed', count: 0 });
       return unsubscribes[subscription++];
     });
     vi.spyOn(agent, 'queueMessage').mockReturnValue({
@@ -752,14 +753,14 @@ describe('AgentController signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    let queueListener!: (snapshot: { count: number }) => void;
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((_scope, listener) => {
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
       queueListener = listener;
-      listener({ count: 0 });
+      listener({ type: 'queue-count-changed', count: 0 });
       return vi.fn();
     });
     const queueMessage = vi.spyOn(agent, 'queueMessage').mockImplementation(((_message: any, _target: any) => {
-      queueListener({ count: 1 });
+      queueListener({ type: 'queue-count-changed', count: 1 });
       return {
         accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
         signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
@@ -795,14 +796,14 @@ describe('AgentController signal messages', () => {
     const { session } = await createController(new InMemoryStore());
     const accepted = Promise.withResolvers<any>();
     const agent = session.machinery.getAgent();
-    let queueListener!: (snapshot: { count: number }) => void;
-    vi.spyOn(agent, 'subscribeQueuedMessages').mockImplementation((_scope, listener) => {
+    let queueListener!: (event: AgentThreadEvent) => void;
+    vi.spyOn(agent, 'subscribeThreadEvents').mockImplementation((_scope, listener) => {
       queueListener = listener;
-      listener({ count: 0 });
+      listener({ type: 'queue-count-changed', count: 0 });
       return vi.fn();
     });
     const queueMessage = vi.spyOn(agent, 'queueMessage').mockImplementation((() => {
-      queueListener({ count: 1 });
+      queueListener({ type: 'queue-count-changed', count: 1 });
       return { accepted: accepted.promise, signal: createSignal({ type: 'user', contents: 'queued follow-up' }) };
     }) as any);
     await session.thread.create();
@@ -811,7 +812,7 @@ describe('AgentController signal messages', () => {
     const followUp = session.followUp({ content: 'queued follow-up' });
     await waitFor(() => queueMessage.mock.calls.length === 1);
     expect(session.displayState.get().queuedFollowUps).toBe(1);
-    queueListener({ count: 0 });
+    queueListener({ type: 'queue-count-changed', count: 0 });
     accepted.resolve({ action: 'deliver', runId: 'queued-run-id' });
     await followUp;
 

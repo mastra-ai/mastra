@@ -30,9 +30,8 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
-  QueuedAgentMessagesListener,
-  QueuedAgentMessagesSnapshot,
-  SubscribeQueuedAgentMessagesOptions,
+  AgentThreadEventListener,
+  SubscribeAgentThreadEventsOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
   SendAgentMessageOptions,
@@ -219,9 +218,9 @@ type AdvertisedThreadPeer = AgentThreadPeerInfo & {
   unsubscribe: () => void;
 };
 
-type QueuedMessagesListenerRegistration = SubscribeQueuedAgentMessagesOptions & {
+type ThreadEventListenerRegistration = SubscribeAgentThreadEventsOptions & {
   agent: Agent<any, any, any, any>;
-  listener: QueuedAgentMessagesListener;
+  listener: AgentThreadEventListener;
   lastCount: number;
 };
 
@@ -259,7 +258,7 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
-  queuedMessagesListeners: Set<QueuedMessagesListenerRegistration>;
+  threadEventListeners: Set<ThreadEventListenerRegistration>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -353,7 +352,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     resumeTailsByRunId: new Map(),
     abortedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
-    queuedMessagesListeners: new Set(),
+    threadEventListeners: new Set(),
   };
 }
 
@@ -559,30 +558,29 @@ export class AgentThreadStreamRuntime {
     return state;
   }
 
-  #queuedMessagesSnapshot(
+  #queuedMessageCount(
     state: AgentThreadRuntimeState,
-    scope: SubscribeQueuedAgentMessagesOptions & { agent: Agent<any, any, any, any> },
-  ): QueuedAgentMessagesSnapshot {
+    scope: SubscribeAgentThreadEventsOptions & { agent: Agent<any, any, any, any> },
+  ): number {
     const key = this.#threadKey(scope.resourceId, scope.threadId);
     const matches = (pending: PendingIdleSignal<any> | undefined) =>
       pending !== undefined &&
       !pending.cancelled &&
       (scope.queueOwnerId === undefined ||
         (pending.agent === scope.agent && pending.queueOwnerId === scope.queueOwnerId));
-    return {
-      count:
-        (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
-        (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0),
-    };
+    return (
+      (state.pendingIdleSignalsByThread.get(key)?.filter(matches).length ?? 0) +
+      (matches(state.drainingIdleSignalsByThread.get(key)) ? 1 : 0)
+    );
   }
 
-  #notifyQueuedMessages(state: AgentThreadRuntimeState): void {
-    for (const registration of [...state.queuedMessagesListeners]) {
-      const snapshot = this.#queuedMessagesSnapshot(state, registration);
-      if (snapshot.count === registration.lastCount) continue;
-      registration.lastCount = snapshot.count;
+  #notifyThreadEvents(state: AgentThreadRuntimeState): void {
+    for (const registration of [...state.threadEventListeners]) {
+      const count = this.#queuedMessageCount(state, registration);
+      if (count === registration.lastCount) continue;
+      registration.lastCount = count;
       try {
-        registration.listener(snapshot);
+        registration.listener({ type: 'queue-count-changed', count });
       } catch {}
     }
   }
@@ -2421,7 +2419,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
-      this.#notifyQueuedMessages(state);
+      this.#notifyThreadEvents(state);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: pendingIdle.runId,
@@ -2438,7 +2436,7 @@ export class AgentThreadStreamRuntime {
         state.drainingIdleSignalsByThread.delete(key);
         state.threadKeysByRunId.delete(pendingIdle.runId);
         if (state.activeThreadRunIds.get(key) === pendingIdle.runId) state.activeThreadRunIds.delete(key);
-        this.#notifyQueuedMessages(state);
+        this.#notifyThreadEvents(state);
         void this.#drainPendingIdleSignals(state, pubsub, key);
         return true;
       }
@@ -2450,7 +2448,7 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
-      this.#notifyQueuedMessages(state);
+      this.#notifyThreadEvents(state);
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -2476,14 +2474,14 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(key);
       }
       this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
-      this.#notifyQueuedMessages(state);
+      this.#notifyThreadEvents(state);
       void this.#drainPendingIdleSignals(state, pubsub, key);
       return true;
     }
 
     try {
       state.drainingIdleSignalsByThread.delete(key);
-      this.#notifyQueuedMessages(state);
+      this.#notifyThreadEvents(state);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -3270,25 +3268,25 @@ export class AgentThreadStreamRuntime {
     return this.sendSignal<OUTPUT>(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
-  subscribeQueuedMessages(
+  subscribeThreadEvents(
     agent: Agent<any, any, any, any>,
-    scope: SubscribeQueuedAgentMessagesOptions,
-    listener: QueuedAgentMessagesListener,
+    scope: SubscribeAgentThreadEventsOptions,
+    listener: AgentThreadEventListener,
     pubsub?: PubSub,
   ): () => void {
     const state = this.#getState(pubsub);
-    const registration: QueuedMessagesListenerRegistration = { ...scope, agent, listener, lastCount: 0 };
-    const snapshot = this.#queuedMessagesSnapshot(state, registration);
-    registration.lastCount = snapshot.count;
-    state.queuedMessagesListeners.add(registration);
+    const registration: ThreadEventListenerRegistration = { ...scope, agent, listener, lastCount: 0 };
+    const count = this.#queuedMessageCount(state, registration);
+    registration.lastCount = count;
+    state.threadEventListeners.add(registration);
     try {
-      listener(snapshot);
+      listener({ type: 'queue-count-changed', count });
     } catch {}
     let subscribed = true;
     return () => {
       if (!subscribed) return;
       subscribed = false;
-      state.queuedMessagesListeners.delete(registration);
+      state.threadEventListeners.delete(registration);
     };
   }
 
@@ -3325,7 +3323,7 @@ export class AgentThreadStreamRuntime {
       draining.cancelled = true;
       cancelledSignalIds.push(draining.signal.id);
     }
-    if (cancelledSignalIds.length > 0) this.#notifyQueuedMessages(state);
+    if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
     return { cancelledSignalIds };
   }
 
@@ -3385,7 +3383,7 @@ export class AgentThreadStreamRuntime {
         queueOwnerId: target.queueOwnerId,
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
-      this.#notifyQueuedMessages(state);
+      this.#notifyThreadEvents(state);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }

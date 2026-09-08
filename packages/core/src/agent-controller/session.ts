@@ -3712,8 +3712,10 @@ export class Session<TState = unknown> {
     };
     this.#followUpBinding = binding;
     try {
-      const unsubscribe = agent.subscribeQueuedMessages({ resourceId, threadId }, ({ count }) => {
-        if (this.#followUpBinding === binding) this.emit({ type: 'follow_up_queued', count });
+      const unsubscribe = agent.subscribeThreadEvents({ resourceId, threadId }, event => {
+        if (event.type === 'queue-count-changed' && this.#followUpBinding === binding) {
+          this.emit({ type: 'follow_up_queued', count: event.count });
+        }
       });
       binding.unsubscribe = unsubscribe;
       if (this.#followUpBinding !== binding) {

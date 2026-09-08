@@ -216,8 +216,8 @@ import type {
   DiscoverAgentThreadPeersOptions,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
-  QueuedAgentMessagesListener,
-  SubscribeQueuedAgentMessagesOptions,
+  AgentThreadEventListener,
+  SubscribeAgentThreadEventsOptions,
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
@@ -8496,13 +8496,10 @@ export class Agent<
   }
 
   /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
+   * @experimental Agent thread event APIs are experimental and may change in a future release.
    */
-  subscribeQueuedMessages(
-    scope: SubscribeQueuedAgentMessagesOptions,
-    listener: QueuedAgentMessagesListener,
-  ): () => void {
-    return agentThreadStreamRuntime.subscribeQueuedMessages(
+  subscribeThreadEvents(scope: SubscribeAgentThreadEventsOptions, listener: AgentThreadEventListener): () => void {
+    return agentThreadStreamRuntime.subscribeThreadEvents(
       this as Agent<any, any, any, any>,
       scope,
       listener,
