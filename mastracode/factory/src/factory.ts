@@ -79,6 +79,7 @@ import { handleServerError } from './server-error.js';
 import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
+import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hydrateSessionModelPack } from './session/model-pack-hydration.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
@@ -304,6 +305,16 @@ function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
     if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
   }
   return undefined;
+}
+
+/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
+function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
+  const liveSessions = new LiveSessions(controller);
+  liveSessions.onParkedChanged(session => {
+    const { factoryOrgId, factoryProjectId } = session.state.get();
+    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
+  });
+  return liveSessions;
 }
 
 export class MastraFactory {
@@ -909,6 +920,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
+            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,

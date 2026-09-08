@@ -1,3 +1,4 @@
+import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,6 +96,46 @@ const renderView = ({ search = '' }: { search?: string } = {}) =>
   );
 
 describe('ThreadViewByTrace', () => {
+  describe('when the thread contains historical traces', () => {
+    afterEach(() => focusManager.setFocused(undefined));
+
+    it('refreshes only the selected trace on focus and stops after its detail closes', async () => {
+      installHandlers();
+      const requested = vi.fn();
+      server.use(
+        ...['trace-a', 'trace-b'].map(traceId =>
+          http.get(`${TEST_BASE_URL}/api/observability/traces/${traceId}`, () => {
+            requested(traceId);
+            return HttpResponse.json(traceId === 'trace-b' ? traceBSpans : traceASpans);
+          }),
+        ),
+      );
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requested.mock.calls.map(([id]) => id).sort()).toEqual(['trace-a', 'trace-b']);
+      requested.mockClear();
+      const refocus = () =>
+        act(async () => {
+          focusManager.setFocused(false);
+          focusManager.setFocused(true);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        });
+      await refocus();
+      expect(requested).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByText('Chef agent run'));
+      await screen.findByRole('button', { name: /close/i });
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(requested.mock.calls).toEqual([['trace-a']]);
+      requested.mockClear();
+      await refocus();
+      expect(requested.mock.calls).toEqual([['trace-a']]);
+      fireEvent.click(screen.getByRole('button', { name: /close/i }));
+      requested.mockClear();
+      await refocus();
+      expect(requested).not.toHaveBeenCalled();
+    });
+  });
   it('renders one row per trace, oldest first', async () => {
     installHandlers();
     const { queryClient } = renderView();

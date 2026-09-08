@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../../../../api/keys';
+import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import {
@@ -121,7 +122,7 @@ function supervisorFindingItem(): FactorySupervisorFindingAttentionItem {
     findingKey: `decision-stuck:${DECISION_ID}`,
     findingTitle: 'A decision is stuck',
     evidence: 'The decision has been retrying past its backoff.',
-    ageMs: 15 * 60_000,
+    beganAt: '2026-09-03T04:45:00.000Z',
     suggestedRepair: null,
     occurrence: 0,
     workItemId: 'item-1',
@@ -212,22 +213,12 @@ function stubAttention(initialItems: FactoryAttentionItem[]) {
         if (view === 'unread') return !item.read && !item.archived;
         return !item.archived;
       });
-      const unread = (rows: FactoryAttentionItem[]) => rows.filter(row => !row.read && !row.archived).length;
-      const badge = items.filter(item => item.kind !== 'activity');
-      const activity = items.filter(item => item.kind === 'activity');
-      const latest = badge[0];
-      const tierParam = url.searchParams.get('tier');
-      const tiered = tierParam === 'badge' ? visible.filter(item => item.kind !== 'activity') : visible;
+      const requestedKinds = url.searchParams.getAll('kind');
+      const matching = requestedKinds.length > 0 ? visible.filter(item => requestedKinds.includes(item.kind)) : visible;
       return HttpResponse.json({
-        items: tiered.slice(0, limit),
-        openCount: badge.filter(item => !item.archived).length,
-        badgeCount: unread(badge),
-        unreadCount: unread(badge),
-        activityUnreadCount: unread(activity),
-        latestOccurrenceKey: latest?.key ?? null,
-        latestOccurrenceAt: latest?.occurredAt ?? null,
-        latestOccurrenceUnread: latest !== undefined && !latest.read && !latest.archived,
-        hasMore: tiered.length > limit,
+        items: matching.slice(0, limit),
+        kinds: attentionKindSummaries(items),
+        hasMore: matching.length > limit,
       });
     }),
     http.post(
@@ -304,7 +295,7 @@ describe('Sidebar attention', () => {
 
     await waitFor(() => expect(api.retried).toEqual([DECISION_ID]));
     await waitForMutationsIdle(client);
-    expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
   });
 
   it('keeps read failures open and hides archived failures', async () => {
@@ -363,7 +354,7 @@ describe('Sidebar attention', () => {
     const { client } = renderAttention();
     const emptyTrigger = await screen.findByRole('button', { name: 'Needs attention' });
     await user.click(emptyTrigger);
-    await screen.findByText('Nothing needs attention.');
+    await screen.findByText('Nothing needs you.');
     await user.click(emptyTrigger);
     expect(oscillatorStart).not.toHaveBeenCalled();
 
@@ -447,21 +438,28 @@ describe('Sidebar attention', () => {
     expect(screen.getByRole('link', { name: 'Open thread for Fix the loader' })).toBeVisible();
   });
 
-  it('a parked run shows as a row you can release', async () => {
-    const api = stubAttention([proposedItem()]);
+  it('a parked run stays out of the badge and the sound, one tab away in the preview', async () => {
+    const api = stubAttention([]);
     const user = userEvent.setup();
     const { client } = renderAttention();
+    await screen.findByRole('button', { name: 'Needs attention' });
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
-
-    expect(await screen.findByText('Fix the loader')).toBeVisible();
-    expect(screen.getByText('Waiting for approval to run review')).toBeVisible();
-
-    await user.click(screen.getByRole('button', { name: 'Run Fix the loader' }));
+    api.setItems([proposedItem()]);
+    await client.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(FACTORY_ID) });
     await waitForMutationsIdle(client);
 
-    expect(api.settled).toEqual([`${DECISION_ID}/approve`]);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Needs attention' })).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Needs attention' }));
+    expect(await screen.findByText('Nothing needs you.')).toBeVisible();
+    expect(screen.queryByText('Waiting for approval to run review')).not.toBeInTheDocument();
+    expect(oscillatorStart).not.toHaveBeenCalled();
+    expect(api.listed).not.toContain('?view=open&kind=automation-proposed&limit=25');
+
+    await user.click(screen.getByRole('tab', { name: 'Approvals 1' }));
+    expect(await screen.findByText('Waiting for approval to run review')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(api.listed).toContain('?view=open&kind=automation-proposed&limit=25');
+    expect(screen.getByRole('button', { name: 'Needs attention' })).toBeVisible();
+    expect(oscillatorStart).not.toHaveBeenCalled();
   });
   it('the sidebar and the Overview preview share one attention query', async () => {
     const api = stubAttention([attentionItem()]);
@@ -492,7 +490,9 @@ describe('Sidebar attention', () => {
     await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     expect(await screen.findByText('No active Factory binding for role work.')).toBeVisible();
     await waitForMutationsIdle(client);
-    expect(api.listed).toEqual(['?view=open&tier=badge&limit=25']);
+    expect(api.listed).toEqual([
+      '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
+    ]);
   });
 
   it('deduplicates persisted sound claims by scope and occurrence', async () => {
@@ -505,15 +505,26 @@ describe('Sidebar attention', () => {
     expect(oscillatorStart).toHaveBeenCalledTimes(notesPerPlayback);
   });
 
-  it('keeps the popover on the badge tier when newer activity fills the page', async () => {
+  it('keeps the popover on what needs a person when newer activity fills the page', async () => {
     const chatter = ['item-2', 'item-3', 'item-4', 'item-5', 'item-6'].map(id => activityItem(id, `Chatter on ${id}`));
     stubAttention([...chatter, mentionItem()]);
     const user = userEvent.setup();
-    renderAttention();
+    const { client } = renderAttention();
 
-    await user.click(await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' }));
+    const trigger = await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
+    await user.click(trigger);
 
     expect(screen.getByText('Fix the loader')).toBeVisible();
+    expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Activity 5' }));
+    expect(await screen.findByText('Chatter on item-2')).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText('Fix the loader')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(await screen.findByText('Fix the loader')).toBeVisible();
     expect(screen.queryByText(/Chatter on/)).not.toBeInTheDocument();
   });
 });

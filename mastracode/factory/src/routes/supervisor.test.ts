@@ -34,7 +34,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
-      liveSessions: { isRunning: () => false },
+      liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
     }).routes(),
   );
   return app;
