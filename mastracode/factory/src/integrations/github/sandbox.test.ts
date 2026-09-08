@@ -498,6 +498,18 @@ describe('checkoutSessionBranch', () => {
     expect(joined).not.toContain('--unshallow');
   });
 
+  it('installs the credential helper on a session already on its PR branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'factory/pr-42\n', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', { ...opts, branch: 'factory/pr-42', pullRequestNumber: 42 });
+
+    expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
+    expect(sandbox.calls.join('\n')).not.toContain('fetch');
+  });
+
   it('surfaces the collision when the wedged ref cannot be dropped', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };

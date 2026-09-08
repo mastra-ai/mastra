@@ -80,7 +80,7 @@ Gate failures don't stop the review — they become findings for the verdict.
 
 ## Phase 4: History & Architecture
 
-For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. The history is complete but past file contents load on demand, one round trip per commit that needs them. Commit messages, `git log --grep`, `git log --name-status` and `gh pr view <n> --comments` need none, and `git show <sha>` costs one. Before `git blame` or `git log -p` on a file, pull its versions in one round trip: `git log --raw --no-abbrev --format= -- <file> | awk '{print $4}' | grep -v '^0*$' | git fetch --no-tags --no-write-fetch-head --stdin origin`. Keep `git log -S` to a file or a small directory: it walks every commit in scope at about a second each, so a package or the whole repository takes hours. Understand why the current code exists before judging the change to it.
+For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. Understand why the current code exists before judging the change to it.
 
 Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
 

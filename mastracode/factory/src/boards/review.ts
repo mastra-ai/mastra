@@ -29,6 +29,7 @@ function checkoutHint(item: FactoryRuleItemContext): string {
   const refresh = `${deepen} && git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
   return (
     `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
+    `Past file contents load on demand, so keep \`git log -S\` and \`-G\` to a path. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +
     `Read the change with \`gh pr diff ${number}\`.${headBranch}`
   );
