@@ -9,6 +9,8 @@
  * here, the generator fails at generation time (unknown property access)
  * rather than exploding at runtime.
  */
+import type { RequestContext } from '@mastra/core/request-context';
+
 import { proxyRequest, resolveClient, type ConnectClientOptions, type ProxyRequestOptions } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
@@ -65,11 +67,20 @@ export interface PlatformProxy {
   delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
   ActionError: typeof ToolActionError;
   log: (...args: unknown[]) => void;
+  /**
+   * The request context of the call currently being served, when bound via
+   * `withRequestContext`. Carried so connection resolution can use per-request
+   * end-user identity once user-scoped connections are supported.
+   */
+  readonly requestContext?: RequestContext;
+  /** Returns a copy of this proxy bound to one request's context. */
+  withRequestContext(requestContext: RequestContext): PlatformProxy;
 }
 
 interface CreatePlatformProxyOptions {
   connectionId?: string;
   client?: ConnectClientOptions;
+  requestContext?: RequestContext;
 }
 
 async function callProxy<T>(
@@ -142,5 +153,7 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
       // Templates use log for observability; forward to console.
       console.log('[@mastra/connect]', ...args);
     },
+    requestContext: context.requestContext,
+    withRequestContext: requestContext => createPlatformProxy({ ...context, requestContext }),
   };
 }

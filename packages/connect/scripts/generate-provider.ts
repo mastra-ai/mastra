@@ -285,13 +285,16 @@ import { z } from 'zod';
 ${proxyImport}
 ${action.moduleStatements.join('\n\n')}
 
-export function ${action.toolFactoryName}(platformProxy: PlatformProxy) {
+export function ${action.toolFactoryName}(proxy: PlatformProxy) {
   return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
     inputSchema: ${action.inputSchemaName},
     outputSchema: ${action.outputSchemaName},
-    execute: async (input): Promise<z.infer<typeof ${action.outputSchemaName}>> => ${action.execBody},
+    execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      return (async (): Promise<z.infer<typeof ${action.outputSchemaName}>> => ${action.execBody})();
+    },
   });
 }
 `;
