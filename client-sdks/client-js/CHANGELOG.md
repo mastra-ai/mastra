@@ -1,5 +1,38 @@
 # @mastra/client-js
 
+## 1.44.0-alpha.11
+
+### Minor Changes
+
+- Added methods to delete experiments. Deletion attempts to remove the observability traces produced by the experiment, including their spans and trace-linked signals. Unsupported observability storage leaves the traces in place and logs a warning. ([#22550](https://github.com/mastra-ai/mastra/pull/22550))
+
+  **Delete an experiment from a dataset**
+
+  ```ts
+  await client.deleteDatasetExperiment(datasetId, experimentId, {
+    organizationId,
+    projectId,
+  });
+  ```
+
+  **Delete any experiment, including orphaned experiments whose dataset was already deleted**
+
+  ```ts
+  await client.deleteExperiment(experimentId);
+  ```
+
+### Patch Changes
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/schema-compat@1.3.9-alpha.0
+
 ## 1.44.0-alpha.10
 
 ### Patch Changes
