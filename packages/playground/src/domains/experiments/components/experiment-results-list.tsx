@@ -71,7 +71,7 @@ export function ExperimentResultsList({
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
         {hasSelection ? (

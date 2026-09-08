@@ -141,11 +141,11 @@ export function ExperimentResultsSection({
 
   const resultsListColumns = useMemo(
     () => [
-      { name: 'itemId', label: 'Item ID', size: '7rem' },
-      { name: 'status', label: 'Status', size: 'max-content' },
-      { name: 'input', label: 'Input', size: 'minmax(200px,1fr)' },
-      { name: 'tags', label: 'Tags', size: 'max-content' },
-      ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
+      { name: 'itemId', label: 'Item ID', size: 'auto' },
+      { name: 'status', label: 'Status', size: 'auto' },
+      { name: 'input', label: 'Input', size: '1fr' },
+      { name: 'tags', label: 'Tags', size: 'auto' },
+      ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
     [scorerIds],
   );
