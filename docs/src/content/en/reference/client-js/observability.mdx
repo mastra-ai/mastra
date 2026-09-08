@@ -160,7 +160,7 @@ const response = await mastraClient.createFeedback({
 
 ### Deleting feedback and scores
 
-Delete feedback or score records by id. Deletion is idempotent, so missing ids are ignored. Optional `organizationId` and `resourceId` fields restrict each deletion to records with matching scope fields:
+Delete feedback or score records by id. Deletion is idempotent, so missing ids are ignored. Each request accepts at most 1,000 `feedbackIds` or 1,000 `scoreIds`. Optional `organizationId` and `resourceId` fields restrict each deletion to records with matching scope fields:
 
 ```typescript
 await mastraClient.deleteFeedback({

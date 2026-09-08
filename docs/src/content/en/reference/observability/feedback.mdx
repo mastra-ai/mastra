@@ -134,7 +134,7 @@ await observability.batchCreateFeedback({
 
 ### `deleteFeedback(args)`
 
-Deletes feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, they're ANDed into the delete predicate to restrict deletion to records with matching scope fields.
+Deletes up to 1,000 feedback records by id. The operation is idempotent: ids that don't exist are ignored, and an empty `feedbackIds` array is a no-op. When `organizationId` or `resourceId` are provided, they're ANDed into the delete predicate to restrict deletion to records with matching scope fields.
 
 ```typescript
 await mastraClient.deleteFeedback({
@@ -144,7 +144,11 @@ await mastraClient.deleteFeedback({
 
 <PropertiesTable
   content={[
-  { name: 'feedbackIds', type: 'string[]', description: 'Ids of the feedback records to delete.' },
+  {
+    name: 'feedbackIds',
+    type: 'string[]',
+    description: 'Ids of the feedback records to delete. Accepts at most 1,000 ids.',
+  },
   {
     name: 'organizationId',
     type: 'string',
@@ -566,6 +570,7 @@ These routes belong to a Mastra runtime and use its configured observability sto
 | `GET` | `/api/observability/feedback` | List feedback records | None derived |
 | `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
 | `DELETE` | `/api/observability/feedback` | Delete feedback records by id | `observability:delete` |
+| `DELETE` | `/api/observability/scores` | Delete score records by id | `observability:delete` |
 | `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
 | `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
 | `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |
