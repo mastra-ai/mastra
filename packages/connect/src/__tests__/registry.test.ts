@@ -8,9 +8,9 @@ import { PROVIDERS } from '../index.js';
 describe('shipped provider registry', () => {
   it('auto-registers every provider whose directory exists under src/providers', () => {
     const integrationIds = PROVIDERS.map(p => p.integrationId).sort();
-    // Every entry present here is a provider we intentionally ship. Extend
-    // when the CLI adds a new provider; remove when it removes one.
-    expect(integrationIds).toEqual(['linear']);
+    // Generated providers ship in stacked PRs. Extend this list when those
+    // provider branches land.
+    expect(integrationIds).toEqual([]);
   });
 
   it('gives every provider the required registration fields', () => {

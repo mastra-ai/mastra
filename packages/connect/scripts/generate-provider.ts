@@ -16,8 +16,8 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -30,12 +30,18 @@ import {
   type SourceFile,
   type Statement,
 } from 'ts-morph';
+import { format, resolveConfig } from 'prettier';
 
+import {
+  calculateFileChecksums,
+  currentTemplateSha,
+  providerDir,
+  providersDir,
+  templatesDir,
+  validateProviderId,
+  type ProviderManifest,
+} from './provider-utils.js';
 import { TEMPLATE_SHA } from './templates-config.js';
-
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const templatesDir = resolve(packageRoot, '.templates', 'integrations');
-const providersDir = resolve(packageRoot, 'src', 'providers');
 
 const SHIM_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'ActionError', 'log']);
 const ALLOWED_NANGO_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
@@ -141,6 +147,24 @@ function usesNamedImport(declaration: ImportDeclaration, name: string): boolean 
   return declaration.getNamedImports().some(namedImport => namedImport.getName() === name);
 }
 
+function sanitizeVendoredSource(source: string): string {
+  return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
+}
+
+async function formatGeneratedFiles(directory: string): Promise<void> {
+  const files = readdirSync(directory, { recursive: true })
+    .filter((entry): entry is string => typeof entry === 'string' && entry.endsWith('.ts'))
+    .map(entry => resolve(directory, entry));
+  const config = (await resolveConfig(directory)) ?? {};
+
+  await Promise.all(
+    files.map(async file => {
+      const formatted = await format(readFileSync(file, 'utf8'), { ...config, filepath: file });
+      writeFileSync(file, formatted);
+    }),
+  );
+}
+
 function extractAction(
   project: Project,
   candidate: ActionCandidate,
@@ -200,15 +224,15 @@ function extractAction(
   outputDeclaration.getVariableStatementOrThrow().setIsExported(true);
 
   const renamedExecBodyNode = execInitializer.getBody();
-  const execBody = Node.isBlock(renamedExecBodyNode)
-    ? renamedExecBodyNode.getText()
-    : `{ return ${renamedExecBodyNode.getText()}; }`;
+  const execBody = sanitizeVendoredSource(
+    Node.isBlock(renamedExecBodyNode) ? renamedExecBodyNode.getText() : `{ return ${renamedExecBodyNode.getText()}; }`,
+  );
 
   const nangoImport = source.getImportDeclaration('nango');
   const moduleStatements = source
     .getStatements()
     .filter(statement => shouldKeepStatement(statement, createActionCall))
-    .map(statement => statement.getText());
+    .map(statement => sanitizeVendoredSource(statement.getText()));
 
   return {
     kind: 'ok',
@@ -264,9 +288,9 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
     .join('\n');
 
   return `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.
+import type { ActionToolContext } from '../../runtime/action-tool.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
-import type { ActionToolContext } from '../../runtime/action-tool.js';
 ${imports}
 
 const ENV_VAR = '${envVar}';
@@ -298,14 +322,37 @@ export { ${factoryName} };
 `;
 }
 
-function main(): void {
-  const [, , integrationId] = process.argv;
-  if (!integrationId) usage();
+export interface GenerateProviderOptions {
+  providerId: string;
+  localId?: string;
+  expectedTemplateSha?: string;
+}
 
-  const actionDir = resolve(templatesDir, integrationId, 'actions');
+export interface GenerateProviderResult {
+  providerId: string;
+  localId: string;
+  toolCount: number;
+  skippedActions: ProviderManifest['skippedActions'];
+}
+
+export async function generateProvider({
+  providerId,
+  localId = providerId,
+  expectedTemplateSha = TEMPLATE_SHA,
+}: GenerateProviderOptions): Promise<GenerateProviderResult> {
+  validateProviderId(providerId, 'Provider ID');
+  validateProviderId(localId, 'Local ID');
+
+  const actionDir = resolve(templatesDir, providerId, 'actions');
   if (!existsSync(actionDir)) {
-    console.error(`No template actions directory at ${actionDir} — run \`pnpm sync-templates\` first.`);
-    process.exit(1);
+    throw new Error(`Unknown provider '${providerId}'. No actions directory exists in the template checkout.`);
+  }
+
+  const templateSha = currentTemplateSha();
+  if (templateSha !== expectedTemplateSha) {
+    throw new Error(
+      `Template checkout is at ${templateSha}, but the generator expects ${expectedTemplateSha}. Run \`pnpm sync-templates\`.`,
+    );
   }
 
   const project = new Project({ useInMemoryFileSystem: false, skipAddingFilesFromTsConfig: true });
@@ -319,7 +366,7 @@ function main(): void {
     const candidate: ActionCandidate = {
       file: resolve(actionDir, filename),
       actionSlug,
-      toolKey: `${integrationId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
+      toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };
     const result = extractAction(project, candidate);
     if (result.kind === 'ok') extracted.push(result.value);
@@ -327,31 +374,81 @@ function main(): void {
   }
 
   if (extracted.length === 0) {
-    console.error(`No usable actions found for ${integrationId}.`);
-    for (const skippedAction of skipped) {
-      console.error(`  - ${skippedAction.candidate.actionSlug}: ${skippedAction.reason}`);
+    const reasons = skipped.map(action => `${action.candidate.actionSlug}: ${action.reason}`).join('; ');
+    throw new Error(`No usable actions found for '${providerId}'. ${reasons}`);
+  }
+
+  const outputDir = providerDir(localId);
+  const temporaryDir = resolve(providersDir, `.${localId}.generate-${process.pid}`);
+  rmSync(temporaryDir, { recursive: true, force: true });
+  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
+
+  try {
+    for (const action of extracted) {
+      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action));
     }
-    process.exit(1);
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId));
+    await formatGeneratedFiles(temporaryDir);
+
+    const manifest: ProviderManifest = {
+      providerId,
+      localId,
+      templateSha,
+      generatedAt: new Date().toISOString(),
+      toolCount: extracted.length,
+      skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
+      files: calculateFileChecksums(temporaryDir),
+    };
+    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+    rmSync(outputDir, { recursive: true, force: true });
+    renameSync(temporaryDir, outputDir);
+  } catch (error) {
+    rmSync(temporaryDir, { recursive: true, force: true });
+    throw error;
   }
 
-  const outputDir = resolve(providersDir, integrationId);
-  rmSync(outputDir, { recursive: true, force: true });
-  mkdirSync(resolve(outputDir, 'tools'), { recursive: true });
-
-  for (const action of extracted) {
-    writeFileSync(resolve(outputDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action));
-  }
-  writeFileSync(resolve(outputDir, 'tools.ts'), emitToolsFile(integrationId, extracted));
-  writeFileSync(resolve(outputDir, 'index.ts'), emitIndexFile(integrationId));
-
-  console.log(`✓ Generated ${integrationId} (${extracted.length} tools, ${skipped.length} skipped)`);
-  if (skipped.length > 0) {
-    console.log('  Skipped:');
-    for (const skippedAction of skipped) {
-      console.log(`    - ${skippedAction.candidate.actionSlug}: ${skippedAction.reason}`);
-    }
-  }
-  console.log(`\nNext: add \`import './${integrationId}/index.js';\` to src/providers/index.ts`);
+  return {
+    providerId,
+    localId,
+    toolCount: extracted.length,
+    skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
+  };
 }
 
-main();
+function parseArguments(argv: string[]): GenerateProviderOptions {
+  const providerId = argv[0];
+  if (!providerId) usage();
+  let localId: string | undefined;
+
+  for (let index = 1; index < argv.length; index++) {
+    const argument = argv[index];
+    if (argument === '--as') {
+      localId = argv[++index];
+      if (!localId) usage();
+    } else {
+      usage();
+    }
+  }
+  return { providerId, localId };
+}
+
+async function main(): Promise<void> {
+  try {
+    const result = await generateProvider(parseArguments(process.argv.slice(2)));
+    console.log(
+      `✓ Generated ${result.providerId} as ${result.localId} (${result.toolCount} tools, ${result.skippedActions.length} skipped)`,
+    );
+    for (const skippedAction of result.skippedActions) {
+      console.log(`  - ${skippedAction.action}: ${skippedAction.reason}`);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void main();
+}

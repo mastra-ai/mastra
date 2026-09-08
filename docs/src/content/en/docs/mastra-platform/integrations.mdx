@@ -1,35 +1,25 @@
 ---
-title: "Integrations | Mastra platform"
-description: "Connect third-party providers once in Mastra platform, then use those connections as agent toolsets with @mastra/connect. No provider credentials in your app."
+title: 'Integrations | Mastra platform'
+description: 'Connect third-party providers once in Mastra platform, then use those connections as agent toolsets with @mastra/connect. No provider credentials in your app.'
 packages:
-  - "@mastra/connect"
+  - '@mastra/connect'
 ---
 
 # Integrations
 
-Mastra platform integrations connect your project to third-party providers such as Linear, Notion, and Snowflake. You complete a provider's authorization flow once and the platform stores the connection. Your application then consumes it through the `@mastra/connect` package.
+Mastra platform integrations connect your project to third-party providers. You complete a provider's authorization flow once and the platform stores the connection. Your application then consumes supported provider toolsets through the `@mastra/connect` package.
 
 Your app never handles provider credentials. Every tool call is routed through the platform connection proxy, which injects credentials and refreshes tokens on your behalf.
 
 ## Supported providers
 
-| Provider | Builder | Connection id env var |
-| - | - | - |
-| Anthropic | [`createAnthropicTools()`](/reference/connect/create-anthropic-tools) | `MASTRA_ANTHROPIC_CONNECTION_ID` |
-| Cloudflare | [`createCloudflareTools()`](/reference/connect/create-cloudflare-tools) | `MASTRA_CLOUDFLARE_CONNECTION_ID` |
-| GitLab | [`createGitlabTools()`](/reference/connect/create-gitlab-tools) | `MASTRA_GITLAB_CONNECTION_ID` |
-| Jira | [`createJiraTools()`](/reference/connect/create-jira-tools) | `MASTRA_JIRA_CONNECTION_ID` |
-| Linear | [`createLinearTools()`](/reference/connect/create-linear-tools) | `MASTRA_LINEAR_CONNECTION_ID` |
-| Neon | [`createNeonTools()`](/reference/connect/create-neon-tools) | `MASTRA_NEON_CONNECTION_ID` |
-| Notion | [`createNotionTools()`](/reference/connect/create-notion-tools) | `MASTRA_NOTION_CONNECTION_ID` |
-| Resend | [`createResendTools()`](/reference/connect/create-resend-tools) | `MASTRA_RESEND_CONNECTION_ID` |
-| Snowflake | [`createSnowflakeTools()`](/reference/connect/create-snowflake-tools) | `MASTRA_SNOWFLAKE_CONNECTION_ID` |
+Provider toolsets are generated and released independently from the `@mastra/connect` runtime. `connect()` automatically loads the generated providers included in the installed package version, so adding a provider doesn't change the API.
 
 ## Connect a provider
 
 Connect the provider from your project in the Mastra platform dashboard. OAuth providers open the provider's consent screen, while API-key providers accept the key directly. The resulting **connection** becomes available to your project.
 
-Multiple connections per provider are allowed. [`connect()`](/reference/connect/overview) and the per-provider builders resolve which connection to use at runtime, as described below.
+Multiple connections per provider are allowed. [`connect()`](/reference/connect/overview) resolves which connection to use at runtime, as described below.
 
 ## Install
 
@@ -70,55 +60,22 @@ const tools = connect()
 
 const toolsets = await tools()
 
-const response = await agent.generate('Summarize my open Linear issues.', { toolsets })
+const response = await agent.generate('Summarize my open issues.', { toolsets })
 ```
-
-### Wire providers explicitly
-
-Each provider has a builder that returns its curated toolset. Spread it into an agent's `tools`, or hold it for later:
-
-```typescript title="src/agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { createLinearTools, createNotionTools } from '@mastra/connect'
-
-const agent = new Agent({
-  name: 'ops',
-  instructions: 'You manage our workspaces.',
-  model: 'openai/gpt-5-mini',
-  tools: {
-    ...createLinearTools(),
-    ...createNotionTools(),
-  },
-})
-```
-
-Builders resolve their connection id lazily when a tool executes: the `connectionId` option wins, then the provider's `MASTRA_<PROVIDER>_CONNECTION_ID` env var. Building tools without either never throws.
 
 ## Limit agent access
 
-Both discovery and builders support name-based limiting.
-
-`allowTools` restricts a toolset to specific tool keys. Unknown names throw immediately, so typos surface at build time:
-
-```typescript
-import { createNotionTools } from '@mastra/connect'
-
-const readOnlyNotion = createNotionTools({
-  allowTools: ['notion_search', 'notion_get_page'],
-})
-```
-
-When using `connect()`, the `integrations` option acts as an allowlist. Listed providers are included, `false` excludes a provider, and a listed provider with no connection in the project yet is skipped with a warning until one is attached:
+The `integrations` option acts as an allowlist and can restrict a provider to specific tool keys. Unknown provider IDs and tool names throw immediately so configuration errors surface at startup.
 
 ```typescript
 const tools = connect({
   integrations: {
-    linear: true,
-    notion: { allowTools: ['notion_search'] },
-    snowflake: false,
+    'provider-id': { allowTools: ['provider_action'] },
   },
 })
 ```
+
+Set `disabled: true` to exclude a provider. You can also set `connectionId` when the project has multiple active connections for the same provider.
 
 ## Environment variables
 
@@ -132,7 +89,7 @@ const tools = connect({
 | `MASTRA_PROJECT_ID` | Project id used by `connect()` to list connections |
 | `MASTRA_PLATFORM_REGION` | `us` or `eu`; selects the regional integrations endpoint |
 | `MASTRA_INTEGRATIONS_API_URL` | Explicit integrations service base URL; overrides region resolution |
-| `MASTRA_<PROVIDER>_CONNECTION_ID` | Connection id fallback for each provider builder, e.g. `MASTRA_LINEAR_CONNECTION_ID` |
+| `MASTRA_<PROVIDER>_CONNECTION_ID` | Connection ID fallback for a generated provider toolset |
 
 The default integrations endpoint is `https://integrations.mastra.ai`. Setting `MASTRA_PLATFORM_REGION` to `us` or `eu` selects `https://integrations.us.mastra.ai` or `https://integrations.eu.mastra.ai`.
 
@@ -162,4 +119,3 @@ In this release, access limiting is name-based: `allowTools` per toolset and the
 
 - [`connect()`](/reference/connect/overview)
 - [`credential()`](/reference/connect/credential)
-- Provider toolsets: [Anthropic](/reference/connect/create-anthropic-tools), [Cloudflare](/reference/connect/create-cloudflare-tools), [GitLab](/reference/connect/create-gitlab-tools), [Jira](/reference/connect/create-jira-tools), [Linear](/reference/connect/create-linear-tools), [Neon](/reference/connect/create-neon-tools), [Notion](/reference/connect/create-notion-tools), [Resend](/reference/connect/create-resend-tools), [Snowflake](/reference/connect/create-snowflake-tools)

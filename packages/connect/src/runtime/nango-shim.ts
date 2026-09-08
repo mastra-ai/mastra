@@ -30,8 +30,11 @@ export interface NangoRequestConfig {
   retries?: number;
 }
 
+/** Nango action templates treat provider response bodies as untyped JSON until they validate them. */
+type ProviderResponseData = ReturnType<typeof JSON.parse>;
+
 /** Mirrors Nango's response shape closely enough for the templates we vendor. */
-export interface NangoResponse<T = unknown> {
+export interface NangoResponse<T = ProviderResponseData> {
   data: T;
   status: number;
   headers: Record<string, string>;
@@ -55,11 +58,11 @@ export class NangoActionError extends Error {
  * body. Only fields we've seen used are exposed.
  */
 export interface NangoContext {
-  get<T = unknown>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  post<T = unknown>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  put<T = unknown>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  patch<T = unknown>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
-  delete<T = unknown>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
+  get<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
+  post<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
+  put<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
+  patch<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
+  delete<T = ProviderResponseData>(config: NangoRequestConfig): Promise<NangoResponse<T>>;
   ActionError: typeof NangoActionError;
   log: (...args: unknown[]) => void;
 }

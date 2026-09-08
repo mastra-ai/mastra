@@ -4,8 +4,8 @@ import type { ProviderToolsOptions } from './toolset.js';
 
 /**
  * A provider registration. One entry per provider directory generated under
- * `packages/connect/src/providers/<integrationId>/` by
- * `mastra-connect add-provider`.
+ * `packages/connect/src/providers/<integrationId>/` by the maintainer-only
+ * `pnpm --filter @mastra/connect add-provider` command.
  *
  * `integrationId` is the Platform catalog id, the directory name, and the
  * toolset key returned by `connect()`. Provider matching against project
@@ -22,8 +22,8 @@ export interface ProviderRegistration {
 }
 
 /**
- * Providers with shipped toolsets. Populated by the CLI: `add-provider`
- * appends here, `remove-provider` deletes. `connect()` reads this list and
+ * Providers with shipped toolsets. Generated provider modules register
+ * themselves when imported by `src/providers/index.ts`. `connect()` reads this list and
  * exposes one toolset per matching Platform connection on the project.
  * Providers with no matching connection yet are kept and warned about once,
  * so tools appear automatically once a connection is attached.

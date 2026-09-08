@@ -135,7 +135,7 @@ function buildRequests(integrations: ConnectOptions['integrations']): Normalized
       throw new MastraConnectError(
         'invalid_options',
         `Unknown provider '${integrationId}' in integrations option. Known providers: ${
-          PROVIDERS.map(p => p.integrationId).join(', ') || '(none installed — run `mastra-connect add-provider`)'
+          PROVIDERS.map(p => p.integrationId).join(', ') || '(none shipped in this package build)'
         }.`,
       );
     }
