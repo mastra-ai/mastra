@@ -2013,7 +2013,6 @@ describe('AgentController message author', () => {
     session.run.ensureAbortController();
 
     await session.followUp({ content: 'queued follow-up', requestContext });
-    await session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
       { contents: 'queued follow-up', providerOptions: { mastra: { author } } },

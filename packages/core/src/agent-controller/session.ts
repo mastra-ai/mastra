@@ -3547,6 +3547,8 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
   }): Promise<void> {
     const messageInput = this.createMessageInput({ content, files });
+    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+    const messageWithAuthor = providerOptions ? { contents: messageInput, providerOptions } : messageInput;
     const wasActive = this.stream.isActive();
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
@@ -3595,7 +3597,9 @@ export class Session<TState = unknown> {
       const result = this.machinery
         .getAgent()
         .sendMessage(
-          submittedWhileWorking ? { contents: messageInput, attributes: { delivery: 'while-active' } } : messageInput,
+          submittedWhileWorking
+            ? { contents: messageInput, attributes: { delivery: 'while-active' }, providerOptions }
+            : messageWithAuthor,
           target,
         );
 
@@ -3649,7 +3653,11 @@ export class Session<TState = unknown> {
         tracingContext,
         tracingOptions,
       });
-      const result = this.machinery.getAgent().queueMessage(this.createMessageInput({ content, files }), target);
+      const messageInput = this.createMessageInput({ content, files });
+      const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+      const result = this.machinery
+        .getAgent()
+        .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
 
       if (wasActive) {
         await result.accepted;
@@ -3724,11 +3732,17 @@ export class Session<TState = unknown> {
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
       // Once submitted, the Agent owns this work independently of the Session.
       this.#preparingFollowUps.delete(operation);
-      await agent.queueMessage(this.createMessageInput({ content }), {
-        resourceId,
-        threadId,
-        ifIdle: { streamOptions: streamOptions as any },
-      }).accepted;
+      await agent.queueMessage(
+        {
+          contents: this.createMessageInput({ content }),
+          providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
+        },
+        {
+          resourceId,
+          threadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        },
+      ).accepted;
     } finally {
       this.#preparingFollowUps.delete(operation);
     }
