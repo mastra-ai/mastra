@@ -126,3 +126,10 @@ export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined 
   if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
   return undefined;
 }
+
+/** Task tools draw in the docked task list, never as a transcript row. */
+const TASK_TOOLS = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
+
+export function isTaskTool(toolName: string): boolean {
+  return TASK_TOOLS.has(toolName);
+}
