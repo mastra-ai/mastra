@@ -50,6 +50,7 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
       'E2B_API_KEY',
       'SANDBOX_PROVIDER',
+      'FACTORY_SANDBOX_PROVIDER',
     ]) {
       vi.stubEnv(name, '');
     }
@@ -140,7 +141,8 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
   );
 
   it('honors the local override even with all cloud credentials configured', { timeout: 60_000 }, async () => {
-    vi.stubEnv('SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'environment-1');
@@ -151,7 +153,8 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
   });
 
   it('honors the local override when only direct E2B is configured', { timeout: 60_000 }, async () => {
-    vi.stubEnv('SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('FACTORY_SANDBOX_PROVIDER', 'local');
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
     vi.stubEnv('E2B_API_KEY', 'direct-e2b');
     const callback = await importSandboxCallback();
 

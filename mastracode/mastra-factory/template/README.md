@@ -40,7 +40,7 @@ Day-to-day configuration (model providers, integrations) happens in the web UI. 
 | Distributed event bus    | `REDIS_URL` (only needed for multi-process deployments)                                                                                             |
 | Cloud sandboxes          | `MASTRA_PLATFORM_SECRET_KEY`, `MASTRA_PROJECT_ID`, `MASTRA_ENVIRONMENT_ID` (defaults to a local git sandbox otherwise)                              |
 
-Set `SANDBOX_PROVIDER=local` in `.env` to run sandbox commands on the machine running Factory, even when cloud credentials are configured. This leaves Platform auth and database settings unchanged. With Platform credentials configured, `e2b` and `railway` still select the PlatformSandbox cloud backend.
+Set `FACTORY_SANDBOX_PROVIDER=local` in `.env` to run sandbox commands on the machine running Factory, even when cloud credentials are configured. This leaves Platform auth and database settings unchanged. The separate `SANDBOX_PROVIDER` variable selects the PlatformSandbox cloud backend (`e2b` or `railway`).
 
 ### Database
 

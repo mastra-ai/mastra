@@ -289,7 +289,7 @@ export const factory = new MastraFactory({
   integrations,
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    const useLocalSandbox = process.env.SANDBOX_PROVIDER?.trim() === 'local';
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
     if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
