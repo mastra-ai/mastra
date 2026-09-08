@@ -356,7 +356,10 @@ async function startMastraCodeApp(
     envInitialState || configuredInitialState
       ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
       : undefined;
+  const { createInteractiveBindingHost } = await import('@mastra/code-sdk/plugins/interactive-binding');
+  const pluginInteractiveHost = createInteractiveBindingHost(error => console.error(error));
   const result = await createMastraCode({
+    pluginInteractiveHost,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
@@ -378,6 +381,7 @@ async function startMastraCodeApp(
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,
     pluginManager: result.pluginManager,
+    pluginInteractiveHost,
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,

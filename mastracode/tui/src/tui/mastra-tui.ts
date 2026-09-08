@@ -54,6 +54,7 @@ import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
+import { syncPluginBinding } from './plugin-binding.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
@@ -542,6 +543,8 @@ export class MastraTUI {
   stop(): void {
     if (this.stopped) return;
     this.stopped = true;
+    this.state.pluginInteractiveHost?.publish(undefined);
+    this.state.pluginInteractiveHost = undefined;
     this.stopCaffeinate();
 
     // Run SessionEnd hooks (best-effort, don't await)
@@ -666,6 +669,7 @@ export class MastraTUI {
     await syncInitialThreadState(this.state);
 
     this.state.isInitialized = true;
+    syncPluginBinding(this.state);
 
     // Start MCP connections now that the TUI owns the terminal.
     if (this.state.mcpManager?.hasServers()) {
@@ -806,6 +810,7 @@ export class MastraTUI {
     try {
       this.fireLifecycleHooksForEvent(event);
       await dispatchEvent(event, this.getEventContext(), this.state);
+      syncPluginBinding(this.state);
       this.captureAgentControllerAnalytics(event);
 
       if (event.type === 'thread_created') {

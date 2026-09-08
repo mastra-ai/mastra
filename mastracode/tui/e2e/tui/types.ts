@@ -69,6 +69,7 @@ export type ScenarioName =
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
+  | 'plugin-settings'
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
   | 'plugins-github-install-gh-cli-pnpm-10'
@@ -252,6 +253,7 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
+  expectedAimockRequests?: number;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;

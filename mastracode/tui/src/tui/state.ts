@@ -12,7 +12,9 @@ import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
 import type { McpManager } from '@mastra/code-sdk/mcp/manager';
 import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { createInteractiveBindingHost } from '@mastra/code-sdk/plugins/interactive-binding';
 import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
+import type { LoadedPluginSettingsCommand } from '@mastra/code-sdk/plugins/settings-commands';
 import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-diagnostics';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
@@ -121,6 +123,7 @@ export interface MastraTUIOptions {
 
   /** Plugin manager for /plugins. */
   pluginManager?: PluginManager;
+  pluginInteractiveHost?: ReturnType<typeof createInteractiveBindingHost>;
 
   /**
    * @deprecated Workspace is now obtained from the AgentController.
@@ -177,6 +180,7 @@ export interface TUIState {
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
   pluginManager?: PluginManager;
+  pluginInteractiveHost?: ReturnType<typeof createInteractiveBindingHost>;
   workspace?: Workspace;
 
   // ── TUI framework (set once) ──────────────────────────────────────────
@@ -327,6 +331,8 @@ export interface TUIState {
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
   customSlashCommands: SlashCommandMetadata[];
+  pluginSettingsCommands?: LoadedPluginSettingsCommand[];
+  pluginSettingsDiagnostics?: string[];
   skillCommands: SkillMetadata[];
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
@@ -394,6 +400,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
     pluginManager: options.pluginManager,
+    pluginInteractiveHost: options.pluginInteractiveHost,
     workspace: options.workspace,
 
     // TUI framework

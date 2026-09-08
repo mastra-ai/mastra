@@ -9,6 +9,7 @@ import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
 import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import { createInteractiveBindingHost } from '@mastra/code-sdk/plugins/interactive-binding';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import {
   stopProcessMemoryDiagnosticsWithTimeout,
@@ -79,7 +80,9 @@ async function tuiMain(pipedInput?: string | null) {
   };
 
   const initialState = resolveInitialStateFromEnv();
+  const pluginInteractiveHost = createInteractiveBindingHost(error => console.error('[plugin binding]', error));
   const result = await createMastraCode({
+    pluginInteractiveHost,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
@@ -149,6 +152,7 @@ async function tuiMain(pipedInput?: string | null) {
     authStorage,
     mcpManager,
     pluginManager: result.pluginManager,
+    pluginInteractiveHost,
     storageMaintenance: result.storageMaintenance,
     processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,

@@ -1,5 +1,6 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { askModalQuestion } from '../modal-question.js';
+import { withPluginBindingTransition } from '../plugin-binding.js';
 import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -84,10 +85,12 @@ export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void
   const customTitle = await askCloneName(state);
 
   try {
-    const clonedThread = await state.session.thread.clone({
-      sourceThreadId: currentThreadId,
-      ...(customTitle ? { title: customTitle } : {}),
-    });
+    const clonedThread = await withPluginBindingTransition(state, () =>
+      state.session.thread.clone({
+        sourceThreadId: currentThreadId,
+        ...(customTitle ? { title: customTitle } : {}),
+      }),
+    );
 
     await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
   } catch (error) {
