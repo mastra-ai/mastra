@@ -127,6 +127,7 @@ describe('custom board public runtime', () => {
         ].at(-1)?.[1];
         const publishing = handoffRequested && !publishRequested && phaseText.includes('Role: release-publisher');
         if (publishing || (!handoffRequested && phaseText.includes('Role: release-preparer'))) {
+          if (!publishing && currentRevision === undefined) throw new Error('Missing Factory phase expectedRevision.');
           if (publishing) publishRequested = true;
           else handoffRequested = true;
           const item = {
