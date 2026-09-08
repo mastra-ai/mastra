@@ -7,17 +7,17 @@
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-type Shared_Auxiliary_298 =
+type Shared_Auxiliary_302 =
   | string
   | number
   | boolean
   | null
-  | Shared_Auxiliary_298[]
+  | Shared_Auxiliary_302[]
   | {
-      [key: string]: Shared_Auxiliary_298;
+      [key: string]: Shared_Auxiliary_302;
     };
 
-type Shared_Auxiliary_589 =
+type Shared_Auxiliary_594 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -52,32 +52,32 @@ type Shared_Auxiliary_589 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_589[];
+      args: Shared_Auxiliary_594[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_589;
+      arg: Shared_Auxiliary_594;
     }
   | {
       spans:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_612;
           };
     }
   | {
       scores:
         | {
-            some: Shared_Auxiliary_607;
+            some: Shared_Auxiliary_612;
           }
         | {
-            none: Shared_Auxiliary_607;
+            none: Shared_Auxiliary_612;
           };
     };
 
-type Shared_Auxiliary_607 =
+type Shared_Auxiliary_612 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -112,14 +112,14 @@ type Shared_Auxiliary_607 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_607[];
+      args: Shared_Auxiliary_612[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_607;
+      arg: Shared_Auxiliary_612;
     };
 
-type Shared_Auxiliary_1140 =
+type Shared_Auxiliary_1145 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -164,19 +164,19 @@ type Shared_Auxiliary_1140 =
     }
   | {
       op: 'and' | 'or';
-      args: Shared_Auxiliary_1140[];
+      args: Shared_Auxiliary_1145[];
     }
   | {
       op: 'not';
-      arg: Shared_Auxiliary_1140;
+      arg: Shared_Auxiliary_1145;
     };
 
-type Shared_Auxiliary_1280 = {
+type Shared_Auxiliary_1285 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_1280[] | undefined;
+  children?: Shared_Auxiliary_1285[] | undefined;
 };
 
 type Shared_Type_0 = {
@@ -554,7 +554,17 @@ type Shared_Type_22 = {
 
 type Shared_Type_23 = {
   readOnly?: boolean | undefined;
-  lastMessages?: (number | false) | undefined;
+  lastMessages?:
+    | (
+        | number
+        | false
+        | {
+            maxMessages?: number | undefined;
+            maxTokens?: number | undefined;
+            atMaxRemoveTokens?: number | undefined;
+          }
+      )
+    | undefined;
   semanticRecall?: (boolean | Shared_Type_21) | undefined;
   generateTitle?: (boolean | Shared_Type_22) | undefined;
 };
@@ -1153,7 +1163,7 @@ type Shared_Type_49 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_298;
+          [key: string]: Shared_Auxiliary_302;
         };
       }
     | undefined;
@@ -1167,7 +1177,7 @@ type Shared_Type_50 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_298;
+          [key: string]: Shared_Auxiliary_302;
         };
       }
     | undefined;
@@ -1182,13 +1192,13 @@ type Shared_Type_51 = {
     | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_298;
+        [key: string]: Shared_Auxiliary_302;
       }
     | undefined;
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_298;
+          [key: string]: Shared_Auxiliary_302;
         };
       }
     | undefined;
@@ -1276,7 +1286,7 @@ type Shared_Type_54 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_298;
+        [key: string]: Shared_Auxiliary_302;
       }
     | undefined;
   attributes?:
@@ -1289,7 +1299,7 @@ type Shared_Type_54 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_298;
+          [key: string]: Shared_Auxiliary_302;
         };
       }
     | undefined;
@@ -1302,7 +1312,7 @@ type Shared_Type_55 = {
   createdAt?: (string | Date) | undefined;
   metadata?:
     | {
-        [key: string]: Shared_Auxiliary_298;
+        [key: string]: Shared_Auxiliary_302;
       }
     | undefined;
   attributes?:
@@ -1315,7 +1325,7 @@ type Shared_Type_55 = {
   providerOptions?:
     | {
         [key: string]: {
-          [key: string]: Shared_Auxiliary_298;
+          [key: string]: Shared_Auxiliary_302;
         };
       }
     | undefined;
@@ -2626,7 +2636,7 @@ type Shared_Type_112 = {
       }
     | undefined;
   steps: Shared_Type_107;
-  predicates: Shared_Auxiliary_1140[];
+  predicates: Shared_Auxiliary_1145[];
 };
 
 type Shared_Type_113 = {
@@ -2649,7 +2659,7 @@ type Shared_Type_113 = {
         description?: string | undefined;
       };
   loopType: 'dowhile' | 'dountil';
-  predicate: Shared_Auxiliary_1140;
+  predicate: Shared_Auxiliary_1145;
 };
 
 type Shared_Type_114 =
@@ -3003,7 +3013,7 @@ type Shared_Type_127 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1280[] | undefined;
+  files?: Shared_Auxiliary_1285[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -7373,7 +7383,17 @@ export type GetMemoryConfig_QueryParams = {
 export type GetMemoryConfig_Response = {
   memoryType?: ('local' | 'gateway') | undefined;
   config: {
-    lastMessages?: (number | false) | undefined;
+    lastMessages?:
+      | (
+          | number
+          | false
+          | {
+              maxMessages?: number | undefined;
+              maxTokens?: number | undefined;
+              atMaxRemoveTokens?: number | undefined;
+            }
+        )
+      | undefined;
     semanticRecall?: (boolean | unknown) | undefined;
     workingMemory?:
       | {
@@ -9124,7 +9144,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: Shared_Auxiliary_589 | undefined;
+  where?: Shared_Auxiliary_594 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -16793,7 +16813,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_1280[] | undefined;
+  files?: Shared_Auxiliary_1285[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -16851,7 +16871,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (Shared_Auxiliary_1280[] | undefined) | undefined;
+  files?: (Shared_Auxiliary_1285[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

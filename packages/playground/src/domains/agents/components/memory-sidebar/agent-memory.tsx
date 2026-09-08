@@ -5,6 +5,7 @@ import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
+import { getRecentMessagesSettings } from './lib/recent-messages';
 import { useThreadInput } from '@/domains/conversation';
 import {
   useMemoryConfig,
@@ -20,15 +21,6 @@ interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
-}
-
-function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
-  if (typeof lastMessages !== 'number') {
-    return 'Recent message history is not included in context.';
-  }
-
-  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
-  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -131,7 +123,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       <div className="border-border1 border-b p-4">
         <h3 className="text-neutral5 text-sm font-medium">Recent Messages</h3>
-        <p className="text-neutral3 mt-1 text-xs">{getRecentMessagesDescription(config?.lastMessages)}</p>
+        <p className="text-neutral3 mt-1 text-xs">{getRecentMessagesSettings(config?.lastMessages).description}</p>
       </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
