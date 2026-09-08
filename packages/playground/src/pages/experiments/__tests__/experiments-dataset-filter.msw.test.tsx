@@ -16,7 +16,7 @@ import {
   noScorers,
   noWorkflows,
 } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { EXPERIMENTS_PAGE_SIZE } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { EXPERIMENTS_LIST_PAGE_SIZE } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -97,7 +97,7 @@ describe('Experiments page — dataset filter from URL', () => {
     renderPage('/experiments?dataset=dataset-1');
 
     await screen.findByText('entity-extraction / model-a');
-    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_PAGE_SIZE));
+    expect(calls.datasetPerPage).toBe(String(EXPERIMENTS_LIST_PAGE_SIZE));
     expect(calls.global).toBe(0);
   });
 

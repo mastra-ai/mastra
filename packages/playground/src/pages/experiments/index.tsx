@@ -13,7 +13,7 @@ import {
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
+import { useInfiniteExperiments } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 
@@ -50,11 +50,14 @@ export default function Experiments() {
     data: experimentsData,
     isLoading: isLoadingExperiments,
     error: errorExperiments,
-  } = useExperimentsForDatasetFilter(datasetFilter === 'all' ? undefined : datasetFilter);
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter);
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
-  const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
+  const experiments = useMemo(() => experimentsData ?? [], [experimentsData]);
   const experimentDatasetOptions = useMemo(() => getExperimentDatasetOptions(datasets), [datasets]);
   const reviewByExperiment = useMemo(() => buildReviewByExperimentMap(reviewSummary), [reviewSummary]);
 
@@ -194,6 +197,9 @@ export default function Experiments() {
             ? { selectedExperimentIds: selectedIds, onToggleSelection: toggleExperimentSelection }
             : undefined
         }
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
       />
 
       {runDialog}

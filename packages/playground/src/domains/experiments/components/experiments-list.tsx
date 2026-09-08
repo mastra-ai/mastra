@@ -26,6 +26,10 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
   /** When provided, rows toggle selection (for comparison) instead of navigating. */
   selection?: ExperimentsListSelection;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  /** Ref for the end-of-list sentinel that triggers loading the next page. */
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
 export interface ExperimentsListSelection {
@@ -57,6 +61,9 @@ export function ExperimentsList({
   statusFilter = 'all',
   datasetFilter = 'all',
   selection,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
 }: ExperimentsListProps) {
   const isSelectionActive = selection !== undefined;
   const { paths, Link } = useLinkComponent();
@@ -150,6 +157,12 @@ export function ExperimentsList({
           </EntityList.RowWrapper>
         );
       })}
+
+      <EntityList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+      />
     </EntityList>
   );
 }
