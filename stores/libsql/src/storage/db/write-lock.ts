@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { SqliteClient } from './client';
 
 /**
@@ -17,14 +18,18 @@ import type { SqliteClient } from './client';
  * Serializing every write on a given client closes that window: writes — both
  * autocommit statements and full interactive transactions — run one at a time,
  * so none can interleave with an open transaction. Reads are intentionally not
- * gated; WAL readers never observe a partial write and must not queue behind a
- * long-running writer.
- *
- * `:memory:` databases and embedded replicas get a single pooled connection
- * instead; see `shared/single-connection-client.ts`, which gates *all* calls
- * (reads included) behind open transactions for those clients.
+ * gated for file-backed WAL connections. Single-connection clients are gated
+ * at the client boundary, while direct in-memory Knowledge reads use
+ * withClientReadLock to share the writer's retained connection.
  */
 const clientWriteChains = new WeakMap<SqliteClient, Promise<unknown>>();
+const activeWrite = new AsyncLocalStorage<{ client: SqliteClient; active: boolean }>();
+
+// Private in-memory reads share the writer's connection, unlike file-backed WAL reads.
+export function withClientReadLock<T>(client: SqliteClient, fn: () => Promise<T>): Promise<T> {
+  const current = activeWrite.getStore();
+  return current?.active && current.client === client ? fn() : withClientWriteLock(client, fn);
+}
 
 /**
  * Runs `fn` after every previously-enqueued write on `client` has settled, and
@@ -33,7 +38,17 @@ const clientWriteChains = new WeakMap<SqliteClient, Promise<unknown>>();
  */
 export function withClientWriteLock<T>(client: SqliteClient, fn: () => Promise<T>): Promise<T> {
   const previous = clientWriteChains.get(client) ?? Promise.resolve();
-  const result = previous.then(fn, fn);
+  const run = () => {
+    const context = { client, active: true };
+    return activeWrite.run(context, async () => {
+      try {
+        return await fn();
+      } finally {
+        context.active = false;
+      }
+    });
+  };
+  const result = previous.then(run, run);
   // Tail that never rejects so a failed write doesn't poison the chain.
   clientWriteChains.set(
     client,

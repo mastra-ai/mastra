@@ -81,6 +81,111 @@ describe('KnowledgeLibSQL atomic node and record creation', () => {
 });
 
 describe('LibSQLStore explicit Knowledge activation', () => {
+  it('preserves private in-memory Knowledge and unrelated data across transactions', async () => {
+    const client = createClient({ url: ':memory:' });
+    const adapter = new LibSQLStore({ id: 'private-memory', client });
+    try {
+      await client.execute('CREATE TABLE sentinel (id TEXT PRIMARY KEY)');
+      await client.execute("INSERT INTO sentinel VALUES ('preserve')");
+      const knowledge = await adapter.getStore('knowledge');
+      expect(knowledge).toBeDefined();
+      const scope = await knowledge!.createNode({ name: 'Private scope', isScope: true, scopeIds: [] });
+      expect((await client.execute('SELECT id FROM sentinel')).rows).toEqual([{ id: 'preserve' }]);
+      const node = await knowledge!.createNode({ name: 'Subject', scopeIds: [scope.id] });
+      expect(
+        (await client.execute({ sql: 'SELECT name FROM mastra_knowledge_nodes WHERE id=?', args: [node.id] })).rows,
+      ).toEqual([{ name: 'Subject' }]);
+    } finally {
+      await adapter.close();
+    }
+  });
+
+  it('retains native interactive mutations for a supplied file-backed client', async () => {
+    const file = join(tmpdir(), `knowledge-native-${randomUUID()}.db`);
+    const client = createClient({ url: `file:${file}` });
+    const knowledge = new KnowledgeLibSQL({ client });
+    try {
+      await knowledge.init();
+      const transaction = vi.spyOn(client, 'transaction');
+      await knowledge.createNode({ name: 'File scope', isScope: true, scopeIds: [] });
+      expect(transaction).toHaveBeenCalledWith('write');
+      transaction.mockRestore();
+    } finally {
+      client.close();
+      await Promise.all([file, `${file}-wal`, `${file}-shm`].map(path => rm(path, { force: true })));
+    }
+  });
+
+  it('keeps separate private in-memory clients isolated', async () => {
+    const clients = [createClient({ url: ':memory:' }), createClient({ url: ':memory:' })];
+    const first = new KnowledgeLibSQL({ client: clients[0]! });
+    const second = new KnowledgeLibSQL({ client: clients[1]! });
+    try {
+      await Promise.all([first.init(), second.init()]);
+      const node = await first.createNode({ name: 'Only first', isScope: true, scopeIds: [] });
+      expect(await first.getNode(node.id)).toMatchObject({ name: 'Only first' });
+      expect(await second.getNode(node.id)).toBeNull();
+    } finally {
+      clients.forEach(client => client.close());
+    }
+  });
+
+  it('blocks in-memory readers until a failed write rolls back without exposing partial state', async () => {
+    const client = createClient({ url: ':memory:' });
+    const knowledge = new KnowledgeLibSQL({ client });
+    await knowledge.init();
+    const scope = await knowledge.createNode({ name: 'Scope', isScope: true, scopeIds: [] });
+    const id = randomUUID();
+    let release = () => {};
+    let inserted = () => {};
+    const paused = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const reachedInsert = new Promise<void>(resolve => {
+      inserted = resolve;
+    });
+    const transaction = client.transaction.bind(client);
+    const spy = vi.spyOn(client, 'transaction').mockImplementation(async mode => {
+      const tx = await transaction(mode);
+      const execute = tx.execute.bind(tx);
+      vi.spyOn(tx, 'execute').mockImplementation(async statement => {
+        const result = await execute(statement);
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        if (sql.startsWith('INSERT INTO "mastra_knowledge_nodes"')) {
+          inserted();
+          await paused;
+          throw new Error('Injected post-insert failure');
+        }
+        return result;
+      });
+      return tx;
+    });
+    try {
+      const mutation = expect(knowledge.createNode({ id, name: 'Rollback', scopeIds: [scope.id] })).rejects.toThrow(
+        'Injected post-insert failure',
+      );
+      await reachedInsert;
+      let readFinished = false;
+      const reading = knowledge.getNode(id).then(node => {
+        readFinished = true;
+        return node;
+      });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(readFinished).toBe(false);
+      release();
+      await mutation;
+      expect(await reading).toBeNull();
+      spy.mockRestore();
+      expect((await knowledge.createNode({ name: 'After rollback', scopeIds: [scope.id] })).name).toBe(
+        'After rollback',
+      );
+    } finally {
+      release();
+      spy.mockRestore();
+      client.close();
+    }
+  });
+
   it.each([false, true])('does not create Knowledge objects during ordinary startup (composed=%s)', async composed => {
     const client = createClient({ url: ':memory:' });
     const adapter = new LibSQLStore({ id: 'ordinary', client });

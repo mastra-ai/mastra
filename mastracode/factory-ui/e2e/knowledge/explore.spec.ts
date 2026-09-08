@@ -1,13 +1,14 @@
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { KnowledgeGraphPayload } from '../../src/ui/domains/factory/services/knowledge';
 
 const projectId = 'factory-proof';
 const output = process.env.KNOWLEDGE_PROOF_OUTPUT ? path.resolve(process.env.KNOWLEDGE_PROOF_OUTPUT) : undefined;
 
-const graph = {
+const graph: KnowledgeGraphPayload = {
   view: 'project',
-  scopeId: 'kh_scope_project',
+  scope: { id: 'kh_scope_project', name: 'Proof Factory', kind: 'project' },
   nodes: [
     {
       id: 'kh_node_payments',
@@ -61,10 +62,8 @@ const graph = {
       text: 'Runbook covers payments.',
     },
   ],
-  truncated: false,
-  outOfWindow: [],
-  unresolvedCapped: { count: 0, names: [] },
-  pinCensus: { resource: 1, thread: null },
+  page: { truncated: false, terminalBounds: [] },
+  limits: { maxNodes: 250, maxEdges: 500, maxBoundaryNodes: 100, boundaryHops: 1 },
   version: 'proof-version',
 };
 
@@ -146,6 +145,11 @@ test('renders scoped knowledge and activity from sanitized network fixtures', as
   await page.goto(`/factories/${projectId}/knowledge`);
   await expect(page.getByRole('heading', { name: 'Knowledge' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Knowledge scopes' })).toBeVisible();
+  await expect(page.getByText('Select a scope to open its bounded knowledge lens.')).toBeVisible();
+  await page
+    .getByRole('complementary', { name: 'Knowledge scopes' })
+    .getByRole('button', { name: 'Proof Factory', exact: true })
+    .click();
   await expect(page.getByText('Payments Service')).toBeVisible();
 
   // The graph pane must actually have height — a broken flex chain renders

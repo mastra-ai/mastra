@@ -3,6 +3,7 @@ import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
 const storageSources = new WeakMap<MastraCompositeStore, MastraCompositeStore>();
+const augmentedStores = new WeakMap<MastraCompositeStore, MastraCompositeStore>();
 
 export function getStorageSource(storage: MastraCompositeStore): MastraCompositeStore {
   return storageSources.get(storage) ?? storage;
@@ -15,6 +16,8 @@ const initIndependentMethods = new Set<PropertyKey>([
 ] satisfies (keyof MastraCompositeStore)[]);
 
 export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
+  const existing = augmentedStores.get(storage);
+  if (existing) return existing;
   let hasInitialized: null | Promise<void> = null;
 
   // `logger` is protected on MastraBase, but always assigned at construction
@@ -114,5 +117,6 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
   });
 
   storageSources.set(proxy, getStorageSource(storage));
+  augmentedStores.set(storage, proxy);
   return proxy;
 }
