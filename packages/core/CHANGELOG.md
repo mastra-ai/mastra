@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.65.0-alpha.12
+
+### Patch Changes
+
+- Added Perplexity integration attribution while preserving custom headers. ([#22498](https://github.com/mastra-ai/mastra/pull/22498))
+
 ## 1.65.0-alpha.11
 
 ### Minor Changes

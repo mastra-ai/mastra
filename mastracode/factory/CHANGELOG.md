@@ -1,5 +1,15 @@
 # @mastra/factory
 
+## 0.13.0-alpha.18
+
+### Patch Changes
+
+- Fixed the sign-in callback redirecting straight back to the identity provider in a loop when it denies access (for example access_denied for an account that is not part of the organization). The denial now lands on the sign-in page with the error shown. ([#21188](https://github.com/mastra-ai/mastra/pull/21188))
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+  - @mastra/code-sdk@1.7.0-alpha.15
+
 ## 0.13.0-alpha.17
 
 ### Minor Changes
