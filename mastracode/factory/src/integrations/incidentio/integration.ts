@@ -2,7 +2,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryIntegration, IntegrationContext } from '../base.js';
 import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
-import { IncidentioApiClient, createIncidentioFetchRequest } from './api.js';
+import { IncidentioApiClient } from './api.js';
 import { createIncidentioIntake } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
@@ -25,13 +25,11 @@ export class IncidentioIntegration implements FactoryIntegration {
     }
     const baseUrl = config.baseUrl ?? 'https://api.incident.io';
     this.#endpointHost = new URL(baseUrl).host;
-    const api = new IncidentioApiClient(
-      createIncidentioFetchRequest({
-        apiKey,
-        ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
-        baseUrl,
-      }),
-    );
+    const api = new IncidentioApiClient({
+      baseUrl,
+      accessToken: apiKey,
+      ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
+    });
     this.intake = createIncidentioIntake({ api, connection: { type: 'oauth', accessToken: apiKey } });
   }
 

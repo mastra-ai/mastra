@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
 import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.js';
-import { PlatformApiClient } from '../api-client.js';
 import { PlatformIncidentioIntegration } from './integration.js';
 
 const incident = {
@@ -30,7 +29,7 @@ afterEach(() => {
 describe('PlatformIncidentioIntegration', () => {
   it('registers an incident and follow-up reconciliation worker', () => {
     const integration = new PlatformIncidentioIntegration({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' }),
+      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
       connectionId: 'connection-1',
     });
     const workers = integration.workers({
@@ -43,12 +42,14 @@ describe('PlatformIncidentioIntegration', () => {
 
   it('proxies incident.io requests through the configured Platform connection', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ incidents: [incident], pagination_meta: {} }));
-    const client = new PlatformApiClient({
-      baseUrl: 'https://integrations.example.com',
-      accessToken: 'platform-secret',
-      fetchImpl,
+    const integration = new PlatformIncidentioIntegration({
+      clientConfig: {
+        baseUrl: 'https://integrations.example.com',
+        accessToken: 'platform-secret',
+        fetchImpl,
+      },
+      connectionId: 'connection/1',
     });
-    const integration = new PlatformIncidentioIntegration({ client, connectionId: 'connection/1' });
 
     await expect(
       integration.intake.listItems({
@@ -71,7 +72,7 @@ describe('PlatformIncidentioIntegration', () => {
     );
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'configured-client',
+      endpointHost: 'integrations.example.com',
       connectionConfigured: true,
     });
   });
@@ -107,8 +108,11 @@ describe('PlatformIncidentioIntegration', () => {
 
   it('requires a Platform connection ID', () => {
     vi.stubEnv('MASTRA_INCIDENT_IO_CONNECTION_ID', '');
-    expect(() => new PlatformIncidentioIntegration({
-      client: new PlatformApiClient({ baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' }),
-    })).toThrow(/MASTRA_INCIDENT_IO_CONNECTION_ID/);
+    expect(
+      () =>
+        new PlatformIncidentioIntegration({
+          clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
+        }),
+    ).toThrow(/MASTRA_INCIDENT_IO_CONNECTION_ID/);
   });
 });

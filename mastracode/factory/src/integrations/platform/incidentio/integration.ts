@@ -1,7 +1,7 @@
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryIntegration, IntegrationContext } from '../../base.js';
-import { IncidentioApiClient, IncidentioApiError, type IncidentioRequest } from '../../incidentio/api.js';
+import { IncidentioApiClient } from '../../incidentio/api.js';
 import { createIncidentioIntake } from '../../incidentio/intake.js';
 import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
 import {
@@ -9,10 +9,10 @@ import {
   incidentioReconciliationInterval,
 } from '../../incidentio/reconciliation-config.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
 
 export interface PlatformIncidentioIntegrationConfig {
-  client?: PlatformApiClient;
+  clientConfig?: PlatformApiClientConfig;
   connectionId?: string;
 }
 
@@ -29,34 +29,18 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       throw new Error('PlatformIncidentioIntegration: missing required MASTRA_INCIDENT_IO_CONNECTION_ID.');
     }
 
-    let client: PlatformApiClient;
-    if (config.client) {
-      client = config.client;
-      this.#endpointHost = 'configured-client';
-    } else {
-      const platformConfig = platformApiClientConfigFromEnv();
-      client = new PlatformApiClient(platformConfig);
-      this.#endpointHost = new URL(platformConfig.baseUrl).host;
-    }
-
-    const request: IncidentioRequest = async (method, path, options = {}) => {
-      const query = new URLSearchParams();
-      for (const [key, value] of Object.entries(options.query ?? {})) {
-        if (value !== undefined) query.set(key, String(value));
-      }
-      const proxyPath = `/v2/connections/${encodeURIComponent(connectionId)}/proxy${path}${
-        query.size > 0 ? `?${query.toString()}` : ''
-      }`;
-      try {
-        return await client.request(method, proxyPath, options.body);
-      } catch (error) {
-        if (error instanceof PlatformApiError) throw new IncidentioApiError(error.message, error.status);
-        throw error;
-      }
-    };
+    const clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
+    this.#endpointHost = new URL(clientConfig.baseUrl).host;
+    const proxyBaseUrl = `${clientConfig.baseUrl.replace(/\/+$/, '')}/v2/connections/${encodeURIComponent(
+      connectionId,
+    )}/proxy`;
 
     this.intake = createIncidentioIntake({
-      api: new IncidentioApiClient(request),
+      api: new IncidentioApiClient({
+        baseUrl: proxyBaseUrl,
+        accessToken: clientConfig.accessToken,
+        ...(clientConfig.fetchImpl ? { fetchImpl: clientConfig.fetchImpl } : {}),
+      }),
       connection: { type: 'oauth', accessToken: `${CONNECTION_TOKEN_PREFIX}${connectionId}` },
     });
   }

@@ -56,17 +56,26 @@ export class IncidentioApiError extends Error {
   }
 }
 
-export type IncidentioRequest = <T>(
-  method: 'GET' | 'PUT',
-  path: string,
-  options?: { query?: Record<string, string | number | undefined>; body?: unknown },
-) => Promise<T>;
+export interface IncidentioApiClientConfig {
+  baseUrl: string;
+  accessToken: string;
+  fetchImpl?: typeof fetch;
+}
 
 export class IncidentioApiClient {
-  readonly #request: IncidentioRequest;
+  readonly #baseUrl: string;
+  readonly #accessToken: string;
+  readonly #fetch: typeof fetch;
 
-  constructor(request: IncidentioRequest) {
-    this.#request = request;
+  constructor(config: IncidentioApiClientConfig) {
+    const baseUrl = config.baseUrl.trim();
+    const accessToken = config.accessToken.trim();
+    if (!baseUrl || !accessToken) {
+      throw new Error('IncidentioApiClient requires a base URL and access token.');
+    }
+    this.#baseUrl = baseUrl.replace(/\/+$/, '');
+    this.#accessToken = accessToken;
+    this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
   async listIncidents(cursor?: string): Promise<IncidentioPage<IncidentioIncident>> {
@@ -111,35 +120,38 @@ export class IncidentioApiClient {
     );
     return result.follow_up;
   }
-}
 
-export function createIncidentioFetchRequest(config: {
-  apiKey: string;
-  fetchImpl?: typeof fetch;
-  baseUrl?: string;
-}): IncidentioRequest {
-  const baseUrl = (config.baseUrl ?? 'https://api.incident.io').replace(/\/+$/, '');
-  const fetchImpl = config.fetchImpl ?? globalThis.fetch;
-
-  return async <T>(
+  async #request<T>(
     method: 'GET' | 'PUT',
     path: string,
     options: { query?: Record<string, string | number | undefined>; body?: unknown } = {},
-  ): Promise<T> => {
+  ): Promise<T> {
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) query.set(key, String(value));
     }
-    const response = await fetchImpl(`${baseUrl}${path}${query.size > 0 ? `?${query.toString()}` : ''}`, {
-      method,
-      signal: AbortSignal.timeout(15_000),
-      headers: {
-        accept: 'application/json',
-        authorization: `Bearer ${config.apiKey}`,
-        ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    });
+
+    let response: Response;
+    try {
+      response = await this.#fetch(`${this.#baseUrl}${path}${query.size > 0 ? `?${query.toString()}` : ''}`, {
+        method,
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${this.#accessToken}`,
+          ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes(this.#accessToken)) {
+        const redacted = new Error(error.message.replaceAll(this.#accessToken, '[REDACTED]'));
+        redacted.name = error.name;
+        throw redacted;
+      }
+      throw error;
+    }
+
     if (!response.ok) {
       let detail = `incident.io API request failed (${response.status})`;
       try {
@@ -148,8 +160,8 @@ export function createIncidentioFetchRequest(config: {
       } catch {
         // Use the status-based message.
       }
-      throw new IncidentioApiError(detail, response.status);
+      throw new IncidentioApiError(detail.replaceAll(this.#accessToken, '[REDACTED]'), response.status);
     }
     return (await response.json()) as T;
-  };
+  }
 }
