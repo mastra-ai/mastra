@@ -110,6 +110,24 @@ describe('deleteExperimentTraces', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('exp-1'));
   });
 
+  it('rethrows an unsupported error after an earlier batch was deleted', async () => {
+    const error = storageError('OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_NOT_IMPLEMENTED');
+    const batchDeleteTraces = vi.fn(async () => {
+      if (batchDeleteTraces.mock.calls.length === 2) throw error;
+    });
+    const results = Array.from({ length: 1001 }, (_, index) => ({ traceId: `trace-${index}` }));
+
+    await expect(
+      deleteExperimentTraces({
+        storage: makeStorage({ batchDeleteTraces }),
+        experimentsStore: makeExperimentsStore([results]),
+        experimentId: 'exp-1',
+        logger,
+      }),
+    ).rejects.toBe(error);
+    expect(batchDeleteTraces).toHaveBeenCalledTimes(2);
+  });
+
   it('rethrows unexpected storage failures so the delete does not silently half-succeed', async () => {
     const batchDeleteTraces = vi.fn(async () => {
       throw storageError('OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_FAILED');

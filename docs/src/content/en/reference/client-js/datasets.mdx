@@ -279,7 +279,7 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## deleteDatasetExperiment()
 
-Deletes an experiment through its dataset. The server deletes the experiment's result records and attempts to delete its observability traces, including their spans and trace-linked signals. If storage doesn't support observability or trace deletion, the server logs a warning and leaves the traces in place.
+Deletes an experiment through its dataset. The server deletes the experiment's result records and attempts to delete its observability traces, including their spans and trace-linked signals, but unsupported storage leaves the traces in place and causes the server to log a warning.
 
 ```typescript
 await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
@@ -319,7 +319,7 @@ Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment ass
 
 ## deleteExperiment()
 
-Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's result records and attempts to delete its observability traces. If storage doesn't support observability or trace deletion, the server logs a warning and leaves the traces in place.
+Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's result records and attempts to delete its observability traces, but unsupported storage leaves the traces in place and causes the server to log a warning.
 
 ```typescript
 await client.deleteExperiment('experiment-id', {

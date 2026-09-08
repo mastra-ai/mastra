@@ -89,19 +89,19 @@ export async function deleteExperimentTraces(args: {
 
   const organizationId = args.filters?.organizationId;
 
-  try {
-    for (let i = 0; i < traceIds.length; i += BATCH_DELETE_TRACES_MAX_IDS) {
+  for (let i = 0; i < traceIds.length; i += BATCH_DELETE_TRACES_MAX_IDS) {
+    try {
       await observabilityStore.batchDeleteTraces({
         traceIds: traceIds.slice(i, i + BATCH_DELETE_TRACES_MAX_IDS),
         ...(organizationId !== undefined ? { organizationId } : {}),
       });
+    } catch (error) {
+      if (!isUnsupportedCascadeError(error) || i > 0) throw error;
+      args.logger?.warn(
+        `Skipping trace deletion for experiment ${args.experimentId}: ${(error as Error).message}. ${traceIds.length} trace(s) were left in place.`,
+      );
+      return [];
     }
-  } catch (error) {
-    if (!isUnsupportedCascadeError(error)) throw error;
-    args.logger?.warn(
-      `Skipping trace deletion for experiment ${args.experimentId}: ${(error as Error).message}. ${traceIds.length} trace(s) were left in place.`,
-    );
-    return [];
   }
 
   return traceIds;

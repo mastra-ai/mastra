@@ -399,7 +399,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 
 ### Delete an experiment
 
-Both delete routes remove the experiment, its result records, and the observability traces it produced. Trace deletion cascades to spans and trace-linked scores, feedback, metrics, and logs.
+Both delete routes remove the experiment and its result records. When storage supports observability and trace deletion, Mastra also removes the traces produced by the experiment together with their spans and trace-linked signals.
 
 Use the dataset-scoped route when you know the owning dataset:
 
