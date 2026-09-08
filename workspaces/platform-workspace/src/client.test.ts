@@ -212,23 +212,36 @@ describe('PlatformClient', () => {
     expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
   });
 
-  it.each([
-    [undefined, undefined, 'sk_secret', 'sk_secret'],
-    [undefined, 'jwt_platform', 'sk_secret', 'jwt_platform'],
-    ['explicit', 'jwt_platform', 'sk_secret', 'explicit'],
-    [undefined, '', 'sk_secret', 'sk_secret'],
-    [undefined, '  ', ' sk_secret ', 'sk_secret'],
-    [undefined, ' jwt_platform ', 'sk_secret', 'jwt_platform'],
-  ])('resolves credentials with explicit=%j, token=%j, key=%j', async (explicit, token, key, expected) => {
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', token);
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', key);
-    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+  it('authenticates with the local secret key when no access token is set', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', undefined);
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
-    const client = new PlatformClient({ accessToken: explicit, fetch: fetchMock });
+    const client = new PlatformClient({ projectId: 'proj_env', fetch: fetchMock });
 
-    expect(client.accessToken).toBe(expected);
     await client.request('/sandbox');
-    expect((fetchMock.mock.calls[0]![1].headers as Headers).get('authorization')).toBe(`Bearer ${expected}`);
+
+    expect((fetchMock.mock.calls[0]![1].headers as Headers).get('authorization')).toBe('Bearer sk_secret');
+  });
+
+  it('prefers the deployed access token over the local secret key', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env' }).accessToken).toBe('jwt_platform');
+  });
+
+  it('prefers an explicit credential over both environment credentials', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'jwt_platform');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env', accessToken: 'explicit' }).accessToken).toBe('explicit');
+  });
+
+  it('falls back to a trimmed secret key when the access token is whitespace', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '  ');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', ' sk_secret ');
+
+    expect(resolvePlatformOptions({ projectId: 'proj_env' }).accessToken).toBe('sk_secret');
   });
 
   it('requires a credential when both environment variables are blank', () => {
