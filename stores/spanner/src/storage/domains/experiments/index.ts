@@ -859,8 +859,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       // All requested tags must be present (AND semantics)
       (args.tags ?? []).forEach((tag, i) => {
         const param = `tag${i}`;
+        const tagsCol = quoteIdent('tags', 'column name');
         conditions.push(
-          `EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${quoteIdent('tags', 'column name')})) AS t WHERE JSON_VALUE(t) = @${param})`,
+          `(${tagsCol} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${tagsCol})) AS t WHERE JSON_VALUE(t) = @${param}))`,
         );
         params[param] = tag;
       });
