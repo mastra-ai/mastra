@@ -261,13 +261,11 @@ describe('createFactorySupervisorWriteTools', () => {
     const context = await setup();
     const item = await createItem(context.workItems, 7, 'execute');
     const { binding } = await bindRun(context.workItems, item, 7);
-    const list = vi
-      .spyOn(context.workItems, 'listRunBindings')
-      .mockResolvedValue([
-        { ...binding, id: 'revoked', status: 'revoked', role: 'old' },
-        binding,
-        { ...binding, id: 'second', role: 'review', threadId: 'second-thread' },
-      ]);
+    const list = vi.spyOn(context.workItems, 'listRunBindings').mockResolvedValue([
+      { ...binding, id: 'revoked', status: 'revoked', role: 'old' },
+      { ...binding, resourceId: 'distinct-resource' },
+      { ...binding, id: 'second', role: 'review', threadId: 'second-thread', resourceId: 'distinct-resource' },
+    ]);
     expect(context.tools.factory_signal_session.requireApproval).toBe(false);
     await expect(
       execute(context.tools.factory_signal_session, { sessionId: 'session-7', message: 'Continue.' }),
@@ -283,6 +281,12 @@ describe('createFactorySupervisorWriteTools', () => {
       execute(context.tools.factory_signal_session, { sessionId: 'session-7', message: 'Continue.' }),
     ).rejects.toThrow('does not belong');
     expect(context.signalSession).toHaveBeenCalledTimes(1);
+    expect(context.signalSession).toHaveBeenCalledWith({
+      sessionId: 'session-7',
+      resourceId: 'distinct-resource',
+      message: 'Continue.',
+      userId: 'user-supervisor',
+    });
   });
 
   it('signals only a session bound to this factory', async () => {
@@ -295,6 +299,7 @@ describe('createFactorySupervisorWriteTools', () => {
     ).resolves.toMatchObject({ delivered: true, workItemId: item.id });
     expect(context.signalSession).toHaveBeenCalledWith({
       sessionId: 'session-6',
+      resourceId: 'session-6',
       message: 'Please stop after tests.',
       userId: 'user-supervisor',
     });

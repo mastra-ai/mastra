@@ -38,7 +38,7 @@ async function setup({ current = true, busy = false } = {}) {
   const session = {
     thread: {
       getId: () => (current ? 'bound' : 'other'),
-      getById: vi.fn(async () => ({ metadata })),
+      getById: vi.fn(async () => ({ resourceId: 'resource', metadata })),
       setSettingOn: vi.fn(async ({ key, value }: { threadId: string; key: string; value: unknown }) => {
         metadata[key] = value;
       }),
@@ -220,6 +220,45 @@ describe('factory_update_session', () => {
     expect(results[0].applied).toEqual({ mode: 'now', model: 'now' });
     expect(results[0].warnings[0]).toContain('persistence or incoming-model reconciliation failed');
     expect(c.metadata.modeModelId_plan).toBe('new');
+  });
+
+  it('skips a binding revoked during session lookup', async () => {
+    const c = await setup();
+    vi.spyOn(c.workItems, 'listRunBindings')
+      .mockResolvedValueOnce([c.binding])
+      .mockResolvedValue([{ ...c.binding, status: 'revoked' }]);
+    const { results } = await c.call({
+      target: { all: true },
+      changes: { model: 'new', memory: { observationThreshold: 10 } },
+    });
+    expect(results[0].skipped.model).toBe('Worker binding is no longer active.');
+    expect(c.session.thread.setSettingOn).not.toHaveBeenCalled();
+    expect(c.session.state.set).not.toHaveBeenCalled();
+    expect(await c.audits()).toEqual([]);
+  });
+
+  it('refuses foreign-resource thread metadata', async () => {
+    const c = await setup({ current: false });
+    c.session.thread.getById.mockResolvedValue({ resourceId: 'foreign', metadata: {} });
+    const { results } = await c.call({ target: { all: true }, changes: { mode: 'plan', model: 'new' } });
+    expect(results[0].skipped.model).toContain('another resource');
+    expect(c.session.thread.setSettingOn).not.toHaveBeenCalled();
+    expect(await c.audits()).toEqual([]);
+  });
+
+  it.each(['lookup', 'audit'])('continues the batch after a per-binding %s failure', async failure => {
+    const c = await setup();
+    vi.spyOn(c.workItems, 'listRunBindings').mockResolvedValue([
+      c.binding,
+      { ...c.binding, id: 'second', threadId: 'second', role: 'review' },
+    ]);
+    if (failure === 'lookup') vi.spyOn(c.workItems, 'getForProject').mockRejectedValueOnce(new Error('lookup failed'));
+    else vi.spyOn(c.audit, 'record').mockRejectedValueOnce(new Error('audit failed'));
+    const { results } = await c.call({ target: { all: true }, changes: { model: 'new' } });
+    expect(results).toHaveLength(2);
+    expect(results[1].applied.model).toBe('next-thread-switch');
+    expect(results[0].warnings.join(' ')).toContain(`${failure} failed`);
+    if (failure === 'audit') expect(results[0].applied.model).toBe('now');
   });
 
   it('resyncs defaults per knob and reports already-matching state unchanged', async () => {

@@ -863,8 +863,8 @@ export class MastraFactory {
                                   ),
                               }
                             : {}),
-                          signalSession: async ({ sessionId, message }) => {
-                            const session = await prepared.base.controller.getSessionByResource(sessionId);
+                          signalSession: async ({ resourceId, message }) => {
+                            const session = await prepared.base.controller.getSessionByResource(resourceId);
                             if (!session) throw new Error('The worker session is not currently available.');
                             await session.sendMessage({
                               content: message,

@@ -15,7 +15,12 @@ interface SupervisorWriteDependencies {
   audit: AuditStorage;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
-  signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
+  signalSession?: (input: {
+    sessionId: string;
+    resourceId: string;
+    message: string;
+    userId: string;
+  }) => Promise<unknown>;
   now?: () => Date;
 }
 
@@ -195,7 +200,7 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
         const activeBindings = bindings.filter(row => row.sessionId === sessionId && row.status === 'active');
         const binding = activeBindings[0];
         if (!binding) throw new Error('The session does not belong to this factory.');
-        await deps.signalSession({ sessionId, message, userId: deps.userId });
+        await deps.signalSession({ sessionId, resourceId: binding.resourceId, message, userId: deps.userId });
         await audit(
           'factory.agent.signaled',
           { type: 'factory_session', id: sessionId },
