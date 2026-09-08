@@ -709,6 +709,39 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
     expect(auditRecorded).toEqual([]);
   });
 
+  it('starts the run under the caller, whatever actor the body claims', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const prepare = vi.fn(async (input: any) => ({
+      workItemId: input.workItem.id,
+      bindingId: 'binding-1',
+      threadId: input.sessionId,
+      resourceId: input.sessionId,
+      sessionId: input.sessionId,
+      branch: 'factory/issue-42',
+      revision: 2,
+      kickoffStatus: 'pending',
+      replayed: false,
+    }));
+    const app = buildApp(orgUser, { prepare });
+
+    const res = await app.request(`/web/factory/projects/${PROJECT_ID}/runs/start`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...startBody(workItem.id),
+        actor: { type: 'system', id: 'forged' },
+        userId: 'forged',
+        orgId: 'forged',
+      }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org1', userId: 'u1', actor: { type: 'human', id: 'u1' } }),
+    );
+  });
+
   it('rejects a non-UUID kickoff identity before coordination', async () => {
     const prepare = vi.fn();
     const app = buildApp(orgUser, { prepare });

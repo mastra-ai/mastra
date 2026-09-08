@@ -148,7 +148,7 @@ function parseStartBody(
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
   return parsed.success
-    ? { ...tenant, actor: { type: 'human', id: tenant.userId }, factoryProjectId, ...parsed.data }
+    ? { ...tenant, factoryProjectId, ...parsed.data, actor: { type: 'human', id: tenant.userId } }
     : null;
 }
 

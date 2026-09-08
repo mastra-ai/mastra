@@ -137,6 +137,11 @@ describe('observeAgentGitAction', () => {
     expect(recorded).toHaveLength(0);
   });
 
+  it('ignores a URL printed by a command that ran after the create', async () => {
+    await observe(toolCall(`gh pr create --dry-run --fill; printf '%s\\n' ${PR_URL}`, { output: `${PR_URL}\n` }));
+    expect(recorded).toHaveLength(0);
+  });
+
   it('ignores gh pr subcommands other than create', async () => {
     await observe(toolCall('gh pr view 42 && gh pr checks', { output: PR_URL }));
     expect(recorded).toHaveLength(0);

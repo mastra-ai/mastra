@@ -22,7 +22,7 @@ interface ToolObserverContext {
 /** Match command-start positions while ignoring command text embedded in heredoc bodies. */
 const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
-const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
+const GH_PR_CREATE_RE = /^\s*gh\s+pr\s+create(?:\s|$)/;
 /** `gh pr create` prints the new pull request URL alone on the last line, and nothing else does. */
 const CREATED_PULL_REQUEST_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
 
@@ -42,6 +42,15 @@ function stripHeredocBodies(command: string): string {
   }
 
   return executableLines.join('\n');
+}
+
+/** Only the command a chain ends on can have printed the last line of the output. */
+function endsWithPullRequestCreate(command: string): boolean {
+  const lastCommand = command
+    .split(/;|&&|\|\||\n/)
+    .filter(segment => segment.trim() !== '')
+    .at(-1);
+  return lastCommand !== undefined && GH_PR_CREATE_RE.test(lastCommand);
 }
 
 /**
@@ -102,7 +111,7 @@ export async function observeAgentGitAction({
       });
     }
 
-    const pullRequestUrl = GH_PR_CREATE_RE.test(command) ? createdPullRequestUrl(toolContext.output) : undefined;
+    const pullRequestUrl = endsWithPullRequestCreate(command) ? createdPullRequestUrl(toolContext.output) : undefined;
     if (pullRequestUrl) {
       await audit.emitAgent({
         requestContext: toolContext.context,

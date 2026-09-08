@@ -218,13 +218,17 @@ export class FactoryStartCoordinator {
       revision = transition.revision;
     }
 
-    await storage.markPendingStart(prepared.binding.id, 'sent');
-    prepared.pendingStart.status = 'sent';
+    // The marker opens the run, so it lands after the transition that could
+    // reject and before the kickoff row goes terminal and stops being retried.
     if (!prepared.replayed) {
       await session.thread.setSetting({
         key: FACTORY_OPEN_RUN_SETTING,
         value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
       });
+    }
+    await storage.markPendingStart(prepared.binding.id, 'sent');
+    prepared.pendingStart.status = 'sent';
+    if (!prepared.replayed) {
       await this.#recordRunStart(request, {
         item: prepared.item,
         bindingId: prepared.binding.id,
