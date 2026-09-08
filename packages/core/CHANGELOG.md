@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.65.0-alpha.10
+
+### Patch Changes
+
+- The agent controller's live message now closes a text or reasoning span on `text-end` / `reasoning-end`. A later step that reuses the provider's block id opens a new part instead of appending to the earlier one, so the live message keeps the same part order as the persisted one. ([#23271](https://github.com/mastra-ai/mastra/pull/23271))
+
+- Fixed tool result metadata being dropped when a UI message comes back from the browser. The AI SDK sends this metadata separately from the call-time metadata, and only the call half was read, so the `toModelOutput` projection stored on a tool result was lost and the raw result was rendered back into the prompt. ([#23290](https://github.com/mastra-ai/mastra/pull/23290))
+
+  Fixes [#22012](https://github.com/mastra-ai/mastra/issues/22012)
+
 ## 1.65.0-alpha.9
 
 ### Patch Changes

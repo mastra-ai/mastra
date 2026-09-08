@@ -615,6 +615,19 @@ export class PgFactoryStorage extends FactoryStorage {
       await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
     }
 
+    // Widening evolution: a column now declared bigint may still be the
+    // INTEGER an older schema created, which epoch-ms values overflow.
+    for (const [name, spec] of Object.entries(schema.columns)) {
+      if (spec.type !== 'bigint') continue;
+      const { rows } = await this.#pool.query<{ data_type: string }>(
+        `SELECT data_type FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = $2`,
+        [schema.name, name],
+      );
+      if (rows[0]?.data_type === 'integer') {
+        await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" TYPE BIGINT`);
+      }
+    }
+
     for (const index of schema.uniqueIndexes ?? []) {
       assertIdentifier('index', index.name);
       index.columns.forEach(column => assertIdentifier('column', column));

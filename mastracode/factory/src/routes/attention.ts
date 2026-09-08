@@ -7,6 +7,7 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryAttentionKind,
@@ -15,9 +16,9 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import { factoryAttentionKey } from '../storage/domains/work-items/base.js';
 import { ActivityAttentionProvider } from './attention-activity.js';
+import { ParkedRunAttentionProvider } from './attention-parked.js';
 import { proposedDecisionAttentionSpec } from './attention-proposed.js';
 import type {
-  AttentionLatest,
   AttentionPageResult,
   AttentionProvider,
   AttentionScope,
@@ -36,25 +37,11 @@ export { factoryDecisionType } from './attention-providers.js';
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
   comments: WorkItemCommentsStorage;
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
 }
 
 type AttentionCursorMap = Map<FactoryAttentionKind, AttentionStreamPosition | undefined>;
-
-/** Kinds the sidebar badge and the notification sound answer to. */
-const BADGE_KINDS: ReadonlySet<FactoryAttentionKind> = new Set([
-  'automation-failed',
-  'automation-proposed',
-  'mention',
-  'supervisor-finding',
-]);
-
-type AttentionTier = 'all' | 'badge' | 'activity';
-
-function kindInTier(tier: AttentionTier, kind: FactoryAttentionKind): boolean {
-  if (tier === 'all') return true;
-  return tier === 'badge' ? BADGE_KINDS.has(kind) : !BADGE_KINDS.has(kind);
-}
 
 function encodeAttentionCursor(cursors: AttentionCursorMap): string {
   const wire: Record<string, [string, string] | null> = {};
@@ -124,15 +111,6 @@ function mergeAttentionPages(
   };
 }
 
-function newestLatest(latests: Array<AttentionLatest | null>): AttentionLatest | null {
-  let newest: AttentionLatest | null = null;
-  for (const latest of latests) {
-    if (!latest) continue;
-    if (!newest || latest.at.getTime() > newest.at.getTime()) newest = latest;
-  }
-  return newest;
-}
-
 function receiptRoute(
   dependencies: AttentionRouteDependencies,
   verb: 'read' | 'archive' | 'restore',
@@ -158,6 +136,9 @@ function receiptRoute(
       });
       if (!parsedPath.success) return context.json({ error: 'invalid_attention_item' }, 422);
       const { kind, sourceId, occurrence } = parsedPath.data;
+      const stillParked =
+        kind !== 'agent-waiting' || dependencies.liveSessions.parked(sourceId)?.suspendedAt === occurrence;
+      if (!stillParked) return context.json({ error: 'attention_item_not_current' }, 409);
       await dependencies.workItems.ensureReady();
       const receipt = await dependencies.workItems.setAttentionReceipt({
         orgId: resolved.orgId,
@@ -181,13 +162,14 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems, comments } = dependencies;
+  const { workItems, comments, liveSessions } = dependencies;
   const providers: AttentionProvider[] = [
     new DecisionAttentionProvider({ workItems }, failedDecisionAttentionSpec),
     new DecisionAttentionProvider({ workItems }, proposedDecisionAttentionSpec),
     new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),
+    new ParkedRunAttentionProvider({ workItems, liveSessions }),
   ];
 
   return [
@@ -199,7 +181,7 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
         if ('response' in resolved) return resolved.response;
         const query = FACTORY_ROUTE_CONTRACTS.attentionList.querySchema.safeParse({
           view: context.req.query('view'),
-          tier: context.req.query('tier'),
+          kind: context.req.queries('kind'),
           before: context.req.query('before'),
           limit: context.req.query('limit'),
           search: context.req.query('search'),
@@ -209,8 +191,8 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           return context.json(
             {
               error:
-                field === 'tier'
-                  ? 'invalid_attention_tier'
+                field === 'kind'
+                  ? 'invalid_attention_kind'
                   : field === 'before'
                     ? 'invalid_cursor'
                     : 'invalid_attention_view',
@@ -218,15 +200,13 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
             400,
           );
         }
-        const { view, tier, before, search, limit } = query.data;
-        // `tier` scopes the item list only; the counts always describe every
-        // tier, so the badge popover can page badge kinds without losing the
-        // activity numbers.
+        const { view, before, search, limit } = query.data;
+        const kinds = query.data.kind ?? providers.map(provider => provider.kind);
         await workItems.ensureReady();
         await comments.ensureReady();
 
         const active = providers.filter(
-          provider => kindInTier(tier, provider.kind) && (!before || before.has(provider.kind)),
+          provider => kinds.includes(provider.kind) && (!before || before.has(provider.kind)),
         );
 
         const [summaries, pages] = await Promise.all([
@@ -251,31 +231,19 @@ export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): 
           ),
         ]);
 
-        // The badge tier and the activity tier are counted apart: activity
-        // leaking into `latests` would ring the notification sound on every
-        // teammate comment.
-        const badge = summaries.filter(summary => BADGE_KINDS.has(summary.kind));
-        const activity = summaries.filter(summary => !BADGE_KINDS.has(summary.kind));
-        const sum = (rows: typeof summaries, field: 'open' | 'unread') =>
-          rows.reduce((total, row) => total + row.counts[field], 0);
-        const openCount = sum(badge, 'open');
-        const unreadCount = sum(badge, 'unread');
-        // An unread item must never be masked by a newer already-read one of
-        // another kind — the streams are independent.
-        const latests = badge.map(summary => summary.latest);
-        const unreadLatests = latests.filter(latest => latest?.unread ?? false);
-        const latest = unreadLatests.length > 0 ? newestLatest(unreadLatests) : newestLatest(latests);
         const merged = mergeAttentionPages(pages, limit);
 
         return context.json({
           items: merged.items,
-          openCount,
-          badgeCount: unreadCount,
-          unreadCount,
-          activityUnreadCount: sum(activity, 'unread'),
-          latestOccurrenceKey: latest?.key ?? null,
-          latestOccurrenceAt: latest?.at.toISOString() ?? null,
-          latestOccurrenceUnread: latest?.unread ?? false,
+          kinds: Object.fromEntries(
+            summaries.map(summary => [
+              summary.kind,
+              {
+                ...summary.counts,
+                latest: summary.latest ? { ...summary.latest, at: summary.latest.at.toISOString() } : null,
+              },
+            ]),
+          ),
           hasMore: merged.hasMore,
           ...(merged.nextCursor ? { nextCursor: merged.nextCursor } : {}),
         });

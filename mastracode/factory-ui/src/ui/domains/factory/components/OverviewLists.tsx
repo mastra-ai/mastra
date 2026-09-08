@@ -1,7 +1,7 @@
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Bot, Brain, CircleAlert, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
+import { Bot, Brain, CircleAlert, Hourglass, MessageSquare, Sparkles, User, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -227,6 +227,7 @@ const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon
   'automation-proposed': { Glyph: Sparkles, tone: 'text-warning1', label: 'Suggested run' },
   'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-icon3', label: 'Comment' },
+  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning1', label: 'Agent waiting' },
 };
 
 /** What landed. Unread lives at the row's edge instead, so the titles stay aligned. */
@@ -244,7 +245,7 @@ function attentionWhere(item: FactoryAttentionItem): string {
 
 /** Read and archive stay on the attention page — a preview that acts is a second inbox. */
 export function AttentionPreview({ factoryProjectId }: { factoryProjectId: string | undefined }) {
-  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'badge');
+  const attention = useFactoryAttention(factoryProjectId, 'open', ATTENTION_PREVIEW_LIMIT, 'attention');
   const items = attention.data?.items ?? [];
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;

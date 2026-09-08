@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
 import { http } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
@@ -11,6 +12,15 @@ import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
 import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
 import { installHighlightApi } from '@/test/highlight-api';
 import type { HighlightApiHarness } from '@/test/highlight-api';
+
+let queryClient: QueryClient;
+beforeEach(() => {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+});
+const render = (ui: ReactNode) =>
+  renderUI(ui, {
+    wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+  });
 
 const baseProps: TraceDataPanelViewProps = {
   traceId: 'trace-1',
@@ -27,6 +37,7 @@ Element.prototype.scrollIntoView = scrollIntoView;
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
   scrollIntoView.mockClear();
 });
 
