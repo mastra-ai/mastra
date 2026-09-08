@@ -1,4 +1,5 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
@@ -51,12 +52,12 @@ function formatBody(fb: FeedbackItem): string {
 function FeedbackItems({
   variant,
   items,
-  onDelete,
+  onRequestDelete,
   isDeleting,
 }: {
   variant: CommentVariant;
   items: FeedbackItem[];
-  onDelete?: (feedbackId: string) => void | Promise<unknown>;
+  onRequestDelete?: (feedbackId: string) => void;
   isDeleting: boolean;
 }) {
   const rows = items.map((fb, index) => {
@@ -69,14 +70,14 @@ function FeedbackItems({
     );
     const feedbackId = fb.feedbackId;
     const actions =
-      onDelete && feedbackId ? (
+      onRequestDelete && feedbackId ? (
         <CommentItemActions className="ml-auto">
           <Button
             size="icon-sm"
             variant="ghost"
             aria-label="Delete feedback"
             disabled={isDeleting}
-            onClick={() => onDelete(feedbackId)}
+            onClick={() => onRequestDelete(feedbackId)}
           >
             <Trash2Icon />
           </Button>
@@ -122,7 +123,7 @@ function FeedbackItems({
 
 /**
  * Feedback rendered as a comment thread: existing records above, a composer below.
- * Owns nothing but the draft text — pagination and submission are driven by the caller.
+ * Pagination, submission, and deletion are driven by the caller.
  */
 export function FeedbackThread({
   feedbackData,
@@ -135,11 +136,23 @@ export function FeedbackThread({
   variant = 'thread',
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
+  const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
   const sendBlocked = text.trim().length === 0 || isSubmitting;
 
   const feedbackItems = feedbackData?.feedback ?? [];
   const currentPage = feedbackData?.pagination?.page ?? 0;
   const hasMore = feedbackData?.pagination?.hasMore ?? false;
+
+  const handleDeleteConfirm = async () => {
+    if (!feedbackIdToDelete || !onDelete) return;
+
+    try {
+      await onDelete(feedbackIdToDelete);
+      setFeedbackIdToDelete(undefined);
+    } catch {
+      // Keep the confirmation open so the deletion can be retried.
+    }
+  };
 
   return (
     <Comment variant={variant} className="min-h-0 gap-4 px-3">
@@ -153,7 +166,12 @@ export function FeedbackThread({
             No feedback yet
           </Txt>
         ) : (
-          <FeedbackItems variant={variant} items={feedbackItems} onDelete={onDelete} isDeleting={isDeleting} />
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onRequestDelete={onDelete ? setFeedbackIdToDelete : undefined}
+            isDeleting={isDeleting}
+          />
         )}
       </div>
 
@@ -195,6 +213,28 @@ export function FeedbackThread({
           <CommentComposerSend aria-label="Send feedback" disabled={sendBlocked} />
         </CommentComposerInput>
       </CommentComposer>
+
+      <AlertDialog
+        open={feedbackIdToDelete !== undefined}
+        onOpenChange={open => {
+          if (!open && !isDeleting) setFeedbackIdToDelete(undefined);
+        }}
+      >
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete feedback?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This permanently deletes this feedback comment. This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+            <Button variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </Comment>
   );
 }

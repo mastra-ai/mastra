@@ -85,9 +85,10 @@ describe('feedback tabs composer', () => {
 });
 
 describe('feedback tabs delete', () => {
-  it('deletes a span feedback record and refetches the list', async () => {
+  it('confirms a span feedback deletion, shows its pending state, and refetches the list', async () => {
     const onDelete = vi.fn<(body: unknown) => void>();
     const onList = vi.fn();
+    let resolveDelete: (() => void) | undefined;
     let listResponse = spanFeedbackResponse;
     server.use(
       http.get(FEEDBACK_URL, () => {
@@ -96,6 +97,9 @@ describe('feedback tabs delete', () => {
       }),
       http.delete(FEEDBACK_URL, async ({ request }) => {
         onDelete(await request.json());
+        await new Promise<void>(resolve => {
+          resolveDelete = resolve;
+        });
         listResponse = listFeedbackResponse([]);
         return HttpResponse.json({ success: true });
       }),
@@ -103,19 +107,27 @@ describe('feedback tabs delete', () => {
 
     render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
     await waitFor(() => expect(onList).toHaveBeenCalledTimes(1));
-    await screen.findByRole('button', { name: 'Delete feedback' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
     expect(onDelete.mock.calls[0][0]).toEqual({ feedbackIds: ['span-a-feedback'] });
+    expect(screen.getByRole('button', { name: 'Deleting…' }).getAttribute('disabled')).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+
+    resolveDelete?.();
+
     // Invalidation refetches; the emptied list drops the record from the thread.
     await waitFor(() => expect(onList).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete feedback' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
     expect(screen.getByText('No feedback yet')).toBeTruthy();
   });
 
-  it('deletes a trace-level feedback record by feedbackId', async () => {
+  it('deletes a trace-level feedback record by feedbackId after confirmation', async () => {
     const onDelete = vi.fn<(body: unknown) => void>();
     server.use(
       http.get(FEEDBACK_URL, () => HttpResponse.json(listFeedbackResponse([feedbackRecord({ feedbackId: 'fb-42' })]))),
@@ -126,12 +138,54 @@ describe('feedback tabs delete', () => {
     );
 
     render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
-    await screen.findByRole('button', { name: 'Delete feedback' });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
     expect(onDelete.mock.calls[0][0]).toEqual({ feedbackIds: ['fb-42'] });
+  });
+
+  it('cancels feedback deletion without sending a request', async () => {
+    const onDelete = vi.fn();
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => {
+        onDelete();
+        return HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
+  it('keeps the confirmation open after a failed deletion so it can be retried', async () => {
+    const onDelete = vi.fn();
+    server.use(
+      http.get(FEEDBACK_URL, () => HttpResponse.json(spanFeedbackResponse)),
+      http.delete(FEEDBACK_URL, () => {
+        onDelete();
+        return onDelete.mock.calls.length === 1
+          ? HttpResponse.json({ error: 'Delete failed' }, { status: 500 })
+          : HttpResponse.json({ success: true });
+      }),
+    );
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete feedback' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('heading', { name: 'Delete feedback?' })).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Delete feedback?' })).toBeNull());
   });
 
   it('shows no delete action for records without a feedbackId', async () => {
