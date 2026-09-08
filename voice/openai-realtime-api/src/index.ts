@@ -673,6 +673,12 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.client.on('session.updated', ev => {
       this.emit('session.updated', ev);
     });
+    this.client.on('input_audio_buffer.speech_started', ev => {
+      this.emit('input_audio_buffer.speech_started', ev);
+    });
+    this.client.on('input_audio_buffer.speech_stopped', ev => {
+      this.emit('input_audio_buffer.speech_stopped', ev);
+    });
     this.client.on('response.created', ev => {
       this.emit('response.created', ev);
 
@@ -688,6 +694,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('writing', { text: ev.delta, response_id: ev.item_id, role: 'user' });
     });
     this.client.on('conversation.item.input_audio_transcription.completed', ev => {
+      this.emit('conversation.item.input_audio_transcription.completed', ev);
       if (!userTranscriptionDeltaItems.has(ev.item_id) && ev.transcript) {
         this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user' });
       }
