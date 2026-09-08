@@ -117,14 +117,14 @@ describe('custom board public runtime', () => {
       let handoffRequested = false;
       let publishRequested = false;
       const model = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
         const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
         const phaseText = JSON.stringify(JSON.parse(body).input);
         phaseRequests.push(phaseText);
         const currentRevision = [
           ...phaseText.matchAll(/Use factory_transition_work_item with expectedRevision (\d+)/g),
         ].at(-1)?.[1];
-        const url = input instanceof Request ? input.url : String(input);
-        if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
         const publishing = handoffRequested && !publishRequested && phaseText.includes('Role: release-publisher');
         if (publishing || (!handoffRequested && phaseText.includes('Role: release-preparer'))) {
           if (publishing) publishRequested = true;
