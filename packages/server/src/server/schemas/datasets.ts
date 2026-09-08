@@ -269,7 +269,14 @@ export const paginationQuerySchema = z.object({
 
 export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
   tags: z
-    .preprocess(v => (typeof v === 'string' ? [v] : v), z.array(z.string()).optional())
+    .preprocess(v => {
+      // Repeated query params arrive as arrays; a single param arrives as a string.
+      // Blank values (`?tags=`) mean "no filter", not "match the empty tag".
+      const list = typeof v === 'string' ? [v] : v;
+      if (!Array.isArray(list)) return list;
+      const nonBlank = list.filter(tag => tag !== '');
+      return nonBlank.length > 0 ? nonBlank : undefined;
+    }, z.array(z.string()).optional())
     .describe('Only return results that have all of these tags'),
 });
 

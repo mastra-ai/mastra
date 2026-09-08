@@ -449,6 +449,12 @@ describe('Datasets Handlers', () => {
       expect(listExperimentResultsQuerySchema.parse({}).tags).toBeUndefined();
     });
 
+    it('listExperimentResultsQuerySchema treats blank tags as no filter', () => {
+      expect(listExperimentResultsQuerySchema.parse({ tags: '' }).tags).toBeUndefined();
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['', ''] }).tags).toBeUndefined();
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['a', '', 'b'] }).tags).toEqual(['a', 'b']);
+    });
+
     it('create is idempotent on a caller-supplied id', async () => {
       const { dataset } = await setupDatasetWithItems();
 

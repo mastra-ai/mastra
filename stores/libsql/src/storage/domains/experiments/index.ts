@@ -137,6 +137,21 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       ],
       'write',
     );
+
+    // Backfill: an earlier insert path JSON-encoded `tags` before handing it to
+    // LibSQLDB.insert, which encodes jsonb columns again. Those rows hold a JSON
+    // string wrapping an array (e.g. '"[\"a\"]"'), which json_each() can't match.
+    // Unwrap only string values whose decoded payload is a JSON array; idempotent.
+    await this.#client.execute({
+      sql: `UPDATE "${TABLE_EXPERIMENT_RESULTS}"
+        SET "tags" = json_extract("tags", '$')
+        WHERE "tags" IS NOT NULL
+          AND json_valid("tags")
+          AND json_type("tags") = 'text'
+          AND json_valid(json_extract("tags", '$'))
+          AND json_type(json_extract("tags", '$')) = 'array'`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
