@@ -184,6 +184,8 @@ function watchRun(
   return {
     arm,
     wait,
+    /** The run stopped on a suspended tool: it is holding a question, not gone. */
+    isParked: () => parked !== undefined,
     supersededAtEnd: () => supersededAtEnd,
     close: unsubscribe,
     /** The run's own verdict, thrown as what the dispatcher should record. */
@@ -959,10 +961,18 @@ export class FactoryDecisionDispatcher {
               if (!(await run.wait())) {
                 throw new Error('Factory skill invocation is waiting on a run that has not ended.');
               }
-              run.arm();
-              settled = await sendKickoff();
-              if (settled.action !== 'wake') {
-                throw new Error('Factory skill invocation was queued onto an ending run and never reached the agent.');
+              // A run that ended by parking on a tool is not free: it holds a
+              // question, and a redelivery would only queue behind it (and
+              // read as "never reached the agent"). Let `settle` record the
+              // park as what it is.
+              if (!run.isParked()) {
+                run.arm();
+                settled = await sendKickoff();
+                if (settled.action !== 'wake') {
+                  throw new Error(
+                    'Factory skill invocation was queued onto an ending run and never reached the agent.',
+                  );
+                }
               }
             }
           }

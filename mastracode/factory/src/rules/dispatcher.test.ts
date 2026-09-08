@@ -1916,6 +1916,63 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('records a kickoff whose in-flight run parked on a question as awaiting input, not as dropped', async () => {
+    // The kickoff is queued onto a run that is already going; that run then
+    // stops on ask_user. The prompt was not dropped (the worker is holding a
+    // question), so redelivering would only queue behind the suspension and
+    // burn the retry budget on a session that cannot take it.
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      arguments: 'Issue 42',
+      idempotencyKey: 'skill-delivered-then-parked',
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const { controller, session, getAgentEndListenerCount } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      suspendsOnTool: 'ask_user',
+      suspendedWith: { args: { question: 'Which database?', options: ['libsql', 'postgres'] } },
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('failed');
+    expect(decision?.failureCode).toBe('run_awaiting_input');
+    expect(decision?.suspension?.question).toBe('Which database?');
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
+    expect(getAgentEndListenerCount()).toBe(0);
+  });
+
   it('redelivers a kickoff dropped onto an ending run once that run finishes', async () => {
     // The condition that frees the session is the in-flight run ending, which
     // takes as long as a turn takes. Retrying on the generic backoff spends all
