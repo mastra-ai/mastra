@@ -524,7 +524,17 @@ export const testWorkflow = createWorkflow({})
 
 Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
-![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
+```mermaid
+flowchart LR
+  accTitle: Repeat a workflow step with dowhile
+  accDescr: The workflow runs step1, then repeats step2 while its condition remains true before continuing to the end.
+  start(( start )) -->|".then(step1)"<br/>in| step1([step1])
+  step1 -->|".dowhile(step2)"<br/>out| step2([step2])
+  step2 -->|".commit()"<br/>out| endNode(( end ))
+  step2 -- dowhile --> step2
+
+  class endNode accent
+```
 
 ```typescript oxfmt:false {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
