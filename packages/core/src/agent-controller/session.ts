@@ -2961,6 +2961,7 @@ export class Session<TState = unknown> {
   /** Await the terminal event for a specific accepted agent run. */
   private async waitForAcceptedRunCompletion<OUTPUT>(
     accepted: Promise<SendAgentSignalAccepted<OUTPUT>>,
+    { waitForDelivery = true }: { waitForDelivery?: boolean } = {},
   ): Promise<void> {
     const completedRunIds = new Set<string>();
     let runId: string | undefined;
@@ -2977,6 +2978,7 @@ export class Session<TState = unknown> {
 
     try {
       const result = await accepted;
+      if (result.action !== 'wake' && !waitForDelivery) return;
       runId = 'runId' in result ? result.runId : undefined;
       if (!runId || completedRunIds.has(runId)) return;
       await completion;
@@ -3651,7 +3653,7 @@ export class Session<TState = unknown> {
     if (wasActive) {
       await result.accepted;
     } else {
-      await this.waitForAcceptedRunCompletion(result.accepted);
+      await this.waitForAcceptedRunCompletion(result.accepted, { waitForDelivery: false });
     }
   }
 
