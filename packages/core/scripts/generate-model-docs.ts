@@ -412,26 +412,7 @@ const agent = new Agent({
 });
 \`\`\`
 
-${generateProviderOptionsSection(provider.id)}
-${
-  provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible'
-    ? `
-## Direct provider installation
-
-This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
-
-\`\`\`bash npm2yarn
-npm install ${provider.packageName}
-\`\`\`
-${
-  aiSdkDocsLink
-    ? `
-For detailed provider-specific documentation, see the [AI SDK ${provider.name} provider docs](${aiSdkDocsLink}).`
-    : ''
-}
-`
-    : ''
-}`;
+${generateProviderOptionsSection(provider.id)}`;
 }
 
 async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
