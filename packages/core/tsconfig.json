@@ -1,7 +1,12 @@
 {
   "extends": "../../tsconfig.node.json",
   "include": ["src/**/*", "vitest.config.ts", "tsdown.config.ts", "scripts/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts", "src/knowledge/imports/__tests__/proof/linked-workspace"],
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    "src/knowledge/imports/__tests__/proof/linked-workspace",
+    "src/knowledge/__tests__/proof/linked-workspace"
+  ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
   }

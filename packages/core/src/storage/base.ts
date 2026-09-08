@@ -28,6 +28,7 @@ import type {
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
+import { augmentWithInit } from './storageWithInit';
 
 const knowledgeInitializations = new WeakMap<KnowledgeStorage, Promise<void>>();
 
@@ -509,11 +510,11 @@ export class MastraCompositeStore extends MastraBase {
   async initKnowledge(): Promise<void> {
     const knowledge = this.stores?.knowledge;
     if (!knowledge) return;
+    // Share ordinary initialization with augmented callers before activating Knowledge.
+    await augmentWithInit(this).init();
     let initialization = knowledgeInitializations.get(knowledge);
     if (!initialization) {
-      initialization = Promise.resolve()
-        .then(() => this.init())
-        .then(() => knowledge.init())
+      initialization = Promise.resolve().then(() => knowledge.init())
         .catch(error => {
           knowledgeInitializations.delete(knowledge);
           throw error;
