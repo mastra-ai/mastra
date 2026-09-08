@@ -153,7 +153,7 @@ function KnowledgeLinkComponent({ id, source, target, data }: EdgeProps<Knowledg
   const edgeStyle = getKnowledgeEdgeStyle({ source, target, data });
   return (
     <>
-      <BaseEdge id={id} path={path} style={edgeStyle} />
+      <BaseEdge id={id} path={path} style={{ ...edgeStyle, vectorEffect: 'non-scaling-stroke' }} />
       {pinned && !source.startsWith('record:') && !target.startsWith('record:') ? (
         <EdgeLabelRenderer>
           <span

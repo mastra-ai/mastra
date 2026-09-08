@@ -13,6 +13,7 @@ import {
 
 export interface StaticKnowledgeNodeInput {
   readonly name: string;
+  readonly kind?: string;
   readonly metadata?: Record<string, unknown>;
 }
 
@@ -420,6 +421,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
           address: normalized,
           node: {
             name: input.name,
+            kind: input.kind,
             metadata: input.metadata,
             scopeIds: [this.#importer.scopeId],
             contextScopeId: this.#importer.scopeId,
@@ -431,6 +433,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     const existingScopeIds = await storage.getNodeScopeIds(existing.id);
     const matchesImporterState =
       existing.name === input.name.trim() &&
+      existing.kind === input.kind &&
       JSON.stringify(existing.metadata) === JSON.stringify(input.metadata) &&
       existingScopeIds.length === 1 &&
       existingScopeIds[0] === this.#importer.scopeId;
@@ -461,6 +464,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       id: existing.id,
       version: existing.version,
       name: input.name,
+      kind: input.kind,
       metadata: input.metadata,
       scopeIds: [this.#importer.scopeId],
       contextScopeId: this.#importer.scopeId,

@@ -32,6 +32,44 @@ function writePlugin(filePath: string, source: string): void {
 }
 
 describe('plugin loader', () => {
+  it.each(['mastracode', '@mastra/code-sdk'])(
+    'rejects a separate %s runtime before top-level plugin code runs',
+    async name => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-runtime-boundary-'));
+      const pluginDir = path.join(tempDir, 'unsafe');
+      const packageDir = path.join(pluginDir, 'node_modules', name);
+      fs.mkdirSync(packageDir, { recursive: true });
+      fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify({ name, main: 'index.js' }));
+      fs.writeFileSync(path.join(packageDir, 'index.js'), 'throw new Error("nested runtime executed");');
+      const sentinel = path.join(tempDir, 'storage-opened');
+      const entry = path.join(pluginDir, 'plugin.ts');
+      writePlugin(
+        entry,
+        `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(sentinel)}, 'opened'); export default { id: 'unsafe' };`,
+      );
+      await expect(loadPluginFromEntry(entry)).rejects.toThrow('Plugin runtime mismatch');
+      const safeDir = path.join(tempDir, 'safe');
+      writePlugin(path.join(safeDir, 'plugin.ts'), `export default { id: 'safe' };`);
+      const loaded = await loadPlugins({
+        projectRoot: tempDir,
+        homeDir: tempDir,
+        globalRegistry: { plugins: {} },
+        projectRegistry: {
+          plugins: {
+            unsafe: { enabled: true, source: 'local', specifier: pluginDir, path: pluginDir, entry: 'plugin.ts' },
+            safe: { enabled: true, source: 'local', specifier: safeDir, path: safeDir, entry: 'plugin.ts' },
+          },
+        },
+      });
+      expect(loaded.find(plugin => plugin.id === 'unsafe')).toMatchObject({
+        status: 'load failed',
+        error: expect.stringContaining('Do not reset storage.'),
+      });
+      expect(loaded.find(plugin => plugin.id === 'safe')).toMatchObject({ status: 'active' });
+      expect(fs.existsSync(sentinel)).toBe(false);
+    },
+  );
+
   it('loads default exported TypeScript plugins and resolves tools functions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const entryPath = path.join(tempDir, 'plugin.ts');
