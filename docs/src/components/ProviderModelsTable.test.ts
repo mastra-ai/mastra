@@ -36,4 +36,29 @@ describe('ProviderModelsTable', () => {
     )
     expect(html).toContain('1 available model')
   })
+
+  it('shows omitted extended capabilities as unknown without changing explicit unsupported values', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProviderModelsTable, {
+        models: [
+          {
+            model: 'provider/extended-model',
+            imageInput: true,
+            toolUsage: true,
+            reasoning: true,
+            audioInput: false,
+            videoInput: false,
+          },
+          {
+            model: 'provider/sparse-model',
+            imageInput: false,
+            toolUsage: false,
+          },
+        ],
+      }),
+    )
+
+    expect(html.match(/aria-label="Unknown"/g)).toHaveLength(3)
+    expect(html.match(/aria-label="Unsupported"/g)).toHaveLength(4)
+  })
 })

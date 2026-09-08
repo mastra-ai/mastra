@@ -57,7 +57,7 @@ interface ProviderModelsTableProps {
 }
 
 function Capability({ value }: { value: boolean | null | undefined }) {
-  if (value === null) return <span aria-label="Unknown">—</span>
+  if (value === null || value === undefined) return <span aria-label="Unknown">—</span>
   return value ? (
     <Check aria-label="Supported" className="inline-block h-[18px] w-[18px] text-green-600 dark:text-green-400" />
   ) : (
