@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { getOpenCodeConsoleModelOverride } from '../src/llm/model/gateways/opencode-console';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
 import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
 import type { ModelPageData } from './model-doc-metadata';
@@ -40,6 +41,7 @@ function formatProviderName(name: string): string {
     'moonshotai-cn': 'Moonshot AI (China)',
     zhipuai: 'Zhipu AI',
     opencode: 'OpenCode',
+    'opencode-console': 'OpenCode Console',
     'azure-openai': 'Azure OpenAI',
   };
 
@@ -61,6 +63,11 @@ function cleanDocumentationUrl(url: string | undefined): string | undefined {
 
   try {
     const parsed = new URL(url);
+
+    // Docs and guides are already human-facing URLs; don't treat them as API paths.
+    if (parsed.pathname.includes('/docs') || parsed.pathname.includes('/guides')) {
+      return url;
+    }
 
     // If it contains API paths, convert to homepage
     if (parsed.pathname.includes('/v1') || parsed.pathname.includes('/api') || parsed.pathname.includes('/inference')) {
@@ -245,30 +252,83 @@ async function parseProviders(): Promise<GroupedProviders> {
   return { gateways, popular, other };
 }
 
-async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPageData[]; packageName?: string }> {
+function registryOnlyModel(providerId: string, modelId: string): ModelPageData {
+  return {
+    model: `${providerId}/${modelId}`,
+    imageInput: null,
+    audioInput: null,
+    videoInput: null,
+    toolUsage: null,
+    reasoning: null,
+    contextWindow: null,
+    maxOutput: null,
+    inputCost: null,
+    outputCost: null,
+  };
+}
+
+function includeRegistryModels(
+  providerId: string,
+  models: ModelPageData[],
+  allowedModelIds?: readonly string[],
+): ModelPageData[] {
+  if (!allowedModelIds?.length) return models;
+
+  const seen = new Set(models.map(model => model.model.slice(providerId.length + 1)));
+  const merged = [...models];
+  for (const modelId of allowedModelIds) {
+    if (!seen.has(modelId)) {
+      merged.push(registryOnlyModel(providerId, modelId));
+    }
+  }
+
+  return merged.sort((a, b) => a.model.localeCompare(b.model));
+}
+
+async function fetchProviderInfo(
+  providerId: string,
+  allowedModelIds?: readonly string[],
+): Promise<{ models: ModelPageData[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
     const data = await response.json();
-    const provider = data[providerId];
+    const isConsole = providerId === 'opencode-console';
+    const provider = data[providerId] ?? (isConsole ? data.opencode : undefined);
+    const inheritedMetadata = isConsole && !data[providerId];
 
-    if (!provider?.models) return { models: [] };
+    if (!provider?.models) return { models: includeRegistryModels(providerId, [], allowedModelIds) };
 
-    const models = Object.entries(provider.models)
-      // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
-      .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
-      .map(([modelId, model]: [string, any]) => ({
-        model: `${providerId}/${modelId}`,
-        imageInput: model.modalities?.input?.includes('image') || false,
-        audioInput: model.modalities?.input?.includes('audio') || false,
-        videoInput: model.modalities?.input?.includes('video') || false,
-        toolUsage: model.tool_call !== false,
-        reasoning: model.reasoning === true,
-        contextWindow: model.limit?.context || null,
-        maxOutput: model.limit?.output || null,
-        inputCost: model.cost?.input || null,
-        outputCost: model.cost?.output || null,
-      }))
-      .sort((a, b) => a.model.localeCompare(b.model));
+    const allowed = allowedModelIds ? new Set(allowedModelIds) : undefined;
+    const models = includeRegistryModels(
+      providerId,
+      Object.entries(provider.models)
+        // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
+        .filter(
+          ([modelId, model]: [string, any]) => model.status !== 'deprecated' && (!allowed || allowed.has(modelId)),
+        )
+        .map(([modelId, model]: [string, any]) => {
+          const override = isConsole ? getOpenCodeConsoleModelOverride(modelId) : undefined;
+          const googleRoute = override?.npm === '@ai-sdk/google';
+          const modality = (type: string) => model.modalities?.input?.includes(type) ?? (isConsole ? null : false);
+          const cost = (type: 'input' | 'output') => {
+            if (!isConsole) return model.cost?.[type] || null;
+            return inheritedMetadata ? null : (model.cost?.[type] ?? null);
+          };
+          return {
+            model: `${providerId}/${modelId}`,
+            imageInput: modality('image'),
+            audioInput: isConsole && !googleRoute ? false : modality('audio'),
+            videoInput: isConsole && !googleRoute ? false : modality('video'),
+            toolUsage: isConsole ? (model.tool_call ?? null) : model.tool_call !== false,
+            reasoning: isConsole ? (model.reasoning ?? null) : model.reasoning === true,
+            contextWindow: model.limit?.context || null,
+            maxOutput: model.limit?.output || null,
+            inputCost: cost('input'),
+            outputCost: cost('output'),
+          };
+        }),
+      allowedModelIds,
+    );
 
     return {
       models,
@@ -276,7 +336,7 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPag
     };
   } catch (error) {
     console.error(`Failed to fetch models for ${providerId}:`, error);
-    return { models: [] };
+    return { models: includeRegistryModels(providerId, [], allowedModelIds) };
   }
 }
 
@@ -285,6 +345,9 @@ async function generateProviderPage(
   providerRegistry: Record<string, ProviderConfig>,
 ): Promise<string> {
   const modelCount = provider.models.length;
+  const isConsole = provider.id === 'opencode-console';
+  const exampleModel = isConsole ? 'glm-5.3-flash' : provider.models[0];
+  const advancedModel = isConsole ? 'qwen3.6-plus' : provider.models[provider.models.length - 1];
   const requiredEnvVars = getRequiredEnvVars(provider);
   const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
   const additionalEnvVars = requiredEnvVars.filter(envVar => !authEnvVars.includes(envVar));
@@ -304,20 +367,37 @@ async function generateProviderPage(
       ? authText
       : `${authText} Configure ${additionalEnvVars.map(envVar => `\`${envVar}\``).join(', ')} as well.`;
 
-  const introText = docUrl
-    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}
+  const introText = isConsole
+    ? `Use OpenCode Console models through Mastra's model router. Set \`OPENCODE_CONSOLE_API_KEY\` to a Console service-account API key. Console credentials are separate from OpenCode Zen and Go credentials. Paid inference requires available Console credit.
+
+Learn more in the [OpenCode Console inference guide](${docUrl}).
+
+:::warning[Catalog availability]
+
+The ${modelCount} entries below come from the public Console catalog or a last-known fallback. Catalog membership does not guarantee standalone Mastra access or account eligibility. Some free catalog models, including \`opencode-console/nemotron-3-ultra-free\`, reject key-only requests with \`MissingSessionID\` and require an \`x-session-id\` header even when \`OPENCODE_CONSOLE_API_KEY\` is set. Paid models such as \`opencode-console/glm-5.3-flash\` authenticate with the service-account key and need available Console credit.
+
+:::`
+    : docUrl
+      ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}
 
 Learn more in the [${provider.name} documentation](${docUrl}).`
-    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}`;
+      : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}`;
 
   // Fetch model capabilities from models.dev
-  const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
+  const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(
+    provider.id,
+    provider.id === 'opencode-console' ? provider.models : undefined,
+  );
   provider.packageName = packageName;
   const metadata = getProviderPageMetadata(provider.name, modelsWithCapabilities);
 
   // Generate static model data as JSON for the component (show all models)
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
-  const modelsDevAttribution = getModelsDevAttribution(modelsWithCapabilities);
+  const modelsDevAttribution = isConsole
+    ? `
+Model IDs come from Console's public model list or Mastra's fallback catalog. Metadata uses Console's models.dev record when available, otherwise overlapping OpenCode Zen records. Inherited capabilities and limits are provisional, not verified Console guarantees; inherited prices are omitted. A dash means unknown. Audio and video claims are limited to the configured SDK route, not every upstream model capability. Remote media acceptance still depends on Console.
+`
+    : getModelsDevAttribution(modelsWithCapabilities);
 
   return `---
 title: "${metadata.title}"
@@ -341,7 +421,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "${provider.id}/${provider.models[0]}"
+  model: "${provider.id}/${exampleModel}"
 });
 
 // Generate a response
@@ -349,46 +429,63 @@ const response = await agent.generate("Hello!");
 
 // Stream a response
 const stream = await agent.stream("Tell me a story");
-for await (const chunk of stream) {
+for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 \`\`\`
 ${
-  !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
-    ? // if it's not a directly supported provider then it's openai compatible, so warn about it
-      `
+  isConsole
+    ? `
+:::note[Native protocol routing]
+
+Mastra routes GPT models through OpenAI Responses, Claude and Qwen through Anthropic Messages, Gemini through Google's generateContent API, and other chat models through Chat Completions. The current Responses mapping for non-build Grok and Muse Spark models has not been verified against Console's protocol contract. Catalog entries are not a compatibility guarantee.
+
+:::
+`
+    : !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
+      ? // if it's not a directly supported provider then it's openai compatible, so warn about it
+        `
 :::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
 :::
 `
-    : ``
+      : ``
 }
 ## Models
 
-<ProviderModelsTable
+<ProviderModelsTable${isConsole ? '\n  catalogOnly' : ''}
   models={${modelDataJson}}
 />
 ${modelsDevAttribution}
 ## Advanced configuration
 
 ### Custom headers
-
+${
+  isConsole
+    ? `
+Keep the native model ID and omit \`url\` to preserve protocol routing. An explicit \`url\` selects a custom Chat Completions endpoint instead. The env-only setup above is enough for paid models with a service-account key. Free catalog models that return \`MissingSessionID\` also need \`x-session-id\`. If you use a Console user session token instead of a service-account key, Console requires an \`x-opencode-org-id\` header for the organization.
+`
+    : ''
+}
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
+  instructions: "You are a helpful assistant",
   model: {${
-    provider.url
+    provider.url && !isConsole
       ? `
     url: "${provider.url}",`
       : ''
   }
-    id: "${provider.id}/${provider.models[0]}",
+    id: "${provider.id}/${exampleModel}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
-      "X-Custom-Header": "value"
+      ${isConsole ? '"x-session-id": "your-session-id"' : '"X-Custom-Header": "value"'}
     }
   }
 });
@@ -397,16 +494,25 @@ const agent = new Agent({
 ### Dynamic model selection
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { RequestContext } from "@mastra/core/request-context";
+
+const requestContext = new RequestContext<{ task: "simple" | "complex" }>();
+requestContext.set("task", "complex");
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
+  instructions: "You are a helpful assistant",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+    const useAdvanced = requestContext.get("task") === "complex";
     return useAdvanced
-      ? "${provider.id}/${provider.models[provider.models.length - 1]}"
-      : "${provider.id}/${provider.models[0]}";
+      ? "${provider.id}/${advancedModel}"
+      : "${provider.id}/${exampleModel}";
   }
 });
+
+const response = await agent.generate("Explain this design", { requestContext });
 \`\`\`
 
 ${generateProviderOptionsSection(provider.id)}`;
@@ -433,6 +539,9 @@ async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
 }
 
 function getLogoUrl(providerId: string): string {
+  if (providerId === 'opencode-console') {
+    return 'https://models.dev/logos/opencode.svg';
+  }
   return `https://models.dev/logos/${providerId}.svg`;
 }
 
@@ -1091,7 +1200,8 @@ const agent = new Agent({
 })
 \`\`\`
 
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).
+`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
@@ -1349,6 +1459,22 @@ async function generateDocs() {
   const providerRegistry = registryData.providers;
 
   const grouped = await parseProviders();
+  const onlyProviderId = process.argv.find(arg => arg.startsWith('--only='))?.slice('--only='.length);
+
+  if (onlyProviderId) {
+    const provider = [...grouped.popular, ...grouped.other].find(candidate => candidate.id === onlyProviderId);
+    if (!provider) {
+      throw new Error(`Provider ${onlyProviderId} not found in the model registry`);
+    }
+
+    const content = await generateProviderPage(provider, providerRegistry);
+    await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+    console.info(`✅ Generated providers/${provider.id}.mdx`);
+    // Refresh registry-derived totals without regenerating unrelated provider pages.
+    await fs.writeFile(path.join(docsDir, 'index.mdx'), generateIndexPage(grouped));
+    console.info('✅ Generated models/index.mdx');
+    return;
+  }
 
   // Fetch all providers from models.dev for AI SDK provider filtering
   console.info('🔍 Fetching provider data from models.dev...');

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { ModelsDevGateway } from './models-dev.js';
+import {
+  OPENCODE_CONSOLE_ANTHROPIC_URL,
+  OPENCODE_CONSOLE_FALLBACK_MODELS,
+  OPENCODE_CONSOLE_GOOGLE_URL,
+  OPENCODE_CONSOLE_OPENAI_URL,
+  OPENCODE_CONSOLE_PROVIDER_ID,
+} from './opencode-console.js';
 
 const {
   callableModelMock,
@@ -378,6 +385,138 @@ describe('ModelsDevGateway', () => {
       await expect(gateway.fetchProviders()).rejects.toThrow('Failed to fetch from models.dev: Internal Server Error');
     });
 
+    it('registers OpenCode Console when models.dev does not list it', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [
+            { id: 'glm-5.3-flash' },
+            { id: 'gpt-5.6-luna' },
+            { id: 'claude-sonnet-5' },
+            { id: 'gemini-3.8-flash' },
+            { id: 'test' },
+          ],
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+      const consoleProvider = providers[OPENCODE_CONSOLE_PROVIDER_ID];
+
+      expect(consoleProvider).toBeDefined();
+      expect(consoleProvider.name).toBe('OpenCode Console');
+      expect(consoleProvider.url).toBe(OPENCODE_CONSOLE_OPENAI_URL);
+      expect(consoleProvider.apiKeyEnvVar).toBe('OPENCODE_CONSOLE_API_KEY');
+      expect(consoleProvider.models).toEqual(['claude-sonnet-5', 'gemini-3.8-flash', 'glm-5.3-flash', 'gpt-5.6-luna']);
+      expect(consoleProvider.models).not.toContain('test');
+      expect(consoleProvider.modelOverrides?.['gpt-5.6-luna']).toEqual({
+        shape: 'responses',
+        npm: '@ai-sdk/openai',
+      });
+      expect(consoleProvider.modelOverrides?.['claude-sonnet-5']).toEqual({
+        api: OPENCODE_CONSOLE_ANTHROPIC_URL,
+        npm: '@ai-sdk/anthropic',
+      });
+      expect(consoleProvider.modelOverrides?.['gemini-3.8-flash']).toEqual({
+        api: OPENCODE_CONSOLE_GOOGLE_URL,
+        npm: '@ai-sdk/google',
+      });
+      expect(consoleProvider.modelOverrides?.['glm-5.3-flash']).toBeUndefined();
+    });
+
+    it('keeps a fallback OpenCode Console catalog when the Console models API fails', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+      mockFetch.mockRejectedValueOnce(new Error('network down'));
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers[OPENCODE_CONSOLE_PROVIDER_ID]?.models).toContain('glm-5.3-flash');
+    });
+
+    it('uses the fallback OpenCode Console catalog when the models list is empty', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ object: 'list', data: [] }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers[OPENCODE_CONSOLE_PROVIDER_ID]?.models).toEqual([...OPENCODE_CONSOLE_FALLBACK_MODELS]);
+    });
+
+    it('copies overlapping OpenCode Zen capabilities onto OpenCode Console models', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ...mockApiResponse,
+          opencode: {
+            id: 'opencode',
+            name: 'OpenCode Zen',
+            models: {
+              'glm-5.3-flash': {
+                name: 'GLM 5.3 Flash',
+                attachment: true,
+                temperature: true,
+                structured_output: true,
+              },
+              'zen-only': { name: 'Zen Only', attachment: true },
+            },
+            env: ['OPENCODE_API_KEY'],
+            api: 'https://opencode.ai/zen/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          object: 'list',
+          data: [{ id: 'glm-5.3-flash' }, { id: 'console-only' }],
+        }),
+      });
+
+      await gateway.fetchProviders();
+
+      expect(gateway.getAttachmentCapabilities()[OPENCODE_CONSOLE_PROVIDER_ID]).toEqual(['glm-5.3-flash']);
+      expect(gateway.getTemperatureCapabilities()[OPENCODE_CONSOLE_PROVIDER_ID]).toEqual(['glm-5.3-flash']);
+      expect(gateway.getStructuredOutputCapabilities()[OPENCODE_CONSOLE_PROVIDER_ID]).toEqual(['glm-5.3-flash']);
+    });
+
+    it('does not overwrite an OpenCode Console provider already returned by models.dev', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ...mockApiResponse,
+          'opencode-console': {
+            id: 'opencode-console',
+            name: 'OpenCode Console',
+            models: {
+              'catalog-model': { name: 'Catalog Model' },
+            },
+            env: ['OPENCODE_CONSOLE_API_KEY'],
+            api: 'https://opencode.ai/inference/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers[OPENCODE_CONSOLE_PROVIDER_ID].models).toEqual(['catalog-model']);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should skip providers without API URLs or OpenAI compatibility', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -692,6 +831,60 @@ describe('ModelsDevGateway', () => {
 
       expect(gateway.buildUrl('neon/gpt-5-mini')).toBe('https://ex.neon.tech/ai-gateway/openai/v1');
       expect(gateway.buildUrl('neon/claude-haiku-4-5')).toBe('https://ex.neon.tech/ai-gateway/mlflow/v1');
+    });
+
+    it('routes OpenCode Console models to the matching Console inference endpoint', async () => {
+      gateway = new ModelsDevGateway({
+        'opencode-console': {
+          apiKeyEnvVar: 'OPENCODE_CONSOLE_API_KEY',
+          apiKeyHeader: 'Authorization',
+          name: 'OpenCode Console',
+          models: ['glm-5.3-flash', 'gpt-5.6-luna', 'claude-sonnet-5', 'gemini-3.8-flash'],
+          gateway: 'models.dev',
+          url: OPENCODE_CONSOLE_OPENAI_URL,
+          modelOverrides: {
+            'gpt-5.6-luna': { shape: 'responses', npm: '@ai-sdk/openai' },
+            'claude-sonnet-5': { api: OPENCODE_CONSOLE_ANTHROPIC_URL, npm: '@ai-sdk/anthropic' },
+            'gemini-3.8-flash': { api: OPENCODE_CONSOLE_GOOGLE_URL, npm: '@ai-sdk/google' },
+          },
+        },
+      });
+
+      expect(gateway.buildUrl('opencode-console/glm-5.3-flash')).toBe(OPENCODE_CONSOLE_OPENAI_URL);
+      expect(gateway.buildUrl('opencode-console/gpt-5.6-luna')).toBe(OPENCODE_CONSOLE_OPENAI_URL);
+      expect(gateway.buildUrl('opencode-console/claude-sonnet-5')).toBe(OPENCODE_CONSOLE_ANTHROPIC_URL);
+      expect(gateway.buildUrl('opencode-console/gemini-3.8-flash')).toBe(OPENCODE_CONSOLE_GOOGLE_URL);
+
+      await gateway.resolveLanguageModel({
+        providerId: 'opencode-console',
+        modelId: 'gpt-5.6-luna',
+        apiKey: 'sk-console',
+      });
+      expect(openAIResponsesMock).toHaveBeenCalledWith('gpt-5.6-luna');
+
+      await gateway.resolveLanguageModel({
+        providerId: 'opencode-console',
+        modelId: 'claude-sonnet-5',
+        apiKey: 'sk-console',
+      });
+      expect(createAnthropicMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'sk-console',
+          baseURL: OPENCODE_CONSOLE_ANTHROPIC_URL,
+        }),
+      );
+
+      await gateway.resolveLanguageModel({
+        providerId: 'opencode-console',
+        modelId: 'gemini-3.8-flash',
+        apiKey: 'sk-console',
+      });
+      expect(createGoogleGenerativeAIMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'sk-console',
+          baseURL: OPENCODE_CONSOLE_GOOGLE_URL,
+        }),
+      );
     });
   });
 

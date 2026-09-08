@@ -1,10 +1,10 @@
 export interface ModelPageData {
   model: string;
-  imageInput: boolean;
-  audioInput: boolean;
-  videoInput: boolean;
-  toolUsage: boolean;
-  reasoning: boolean;
+  imageInput: boolean | null;
+  audioInput: boolean | null;
+  videoInput: boolean | null;
+  toolUsage: boolean | null;
+  reasoning: boolean | null;
   contextWindow: number | null;
   maxOutput: number | null;
   inputCost: number | null;
