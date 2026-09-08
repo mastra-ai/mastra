@@ -18848,19 +18848,25 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams =
   PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
+export type DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
+
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_Response = PostAuthRefresh_Response;
 
 export type DeleteDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
   (DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
     ? {}
     : { params: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams
+        ? { query?: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }
+        : { query: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   pathParams: DeleteDatasetsDatasetIdExperimentsExperimentId_PathParams;
-  queryParams: never;
+  queryParams: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams;
   body: never;
   request: DeleteDatasetsDatasetIdExperimentsExperimentId_Request;
   response: DeleteDatasetsDatasetIdExperimentsExperimentId_Response;

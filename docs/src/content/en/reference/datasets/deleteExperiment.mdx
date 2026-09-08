@@ -7,7 +7,7 @@ packages:
 
 # deleteExperiment()
 
-Deletes an experiment, its result records, and the observability traces produced by the experiment. Trace deletion cascades to spans and trace-linked scores, feedback, metrics, and logs.
+Deletes an experiment and its result records, then attempts to delete the observability traces produced by the experiment. Trace deletion cascades to spans and trace-linked signals. Unsupported observability storage leaves the traces in place and logs a warning.
 
 Use `dataset.deleteExperiment()` when you have a `Dataset` instance. Use `mastra.datasets.deleteExperiment()` to delete by experiment ID without a dataset reference, including experiments orphaned by dataset deletion.
 

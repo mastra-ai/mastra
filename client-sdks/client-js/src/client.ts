@@ -2175,15 +2175,25 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Deletes a dataset experiment and its results.
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
    *
-   * The experiment's observability traces are deleted too, cascading to their
-   * spans and trace-linked scores, feedback, metrics and logs.
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
    */
-  public deleteDatasetExperiment(datasetId: string, experimentId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`, {
-      method: 'DELETE',
-    });
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
   }
 
   /**
@@ -2192,8 +2202,9 @@ export class MastraClient extends BaseResource {
    * are supplied, the server only deletes the experiment if it belongs to the
    * given tenant (silent no-op otherwise).
    *
-   * The experiment's observability traces are deleted too, cascading to their
-   * spans and trace-linked scores, feedback, metrics and logs.
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
    */
   public deleteExperiment(
     experimentId: string,

@@ -1007,6 +1007,24 @@ describe('MastraClient', () => {
       );
     });
 
+    it('scopes a dataset experiment DELETE with tenancy query parameters', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteDatasetExperiment('dataset-1', 'experiment-1', {
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
     it('issues a top-level DELETE for an experiment with tenancy query', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

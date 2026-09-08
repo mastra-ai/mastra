@@ -843,8 +843,8 @@ describe('Datasets Handlers', () => {
   });
 
   describe('DELETE_EXPERIMENT_ROUTE', () => {
-    async function createExperimentWithResult() {
-      const dataset = await mastra.datasets.create({ name: 'Delete Experiment DS' });
+    async function createExperimentWithResult(tenancy?: { organizationId?: string; projectId?: string }) {
+      const dataset = await mastra.datasets.create({ name: 'Delete Experiment DS', ...tenancy });
       const item = await dataset.addItem({ input: { q: 'q1' }, groundTruth: 'a1' });
       const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -878,6 +878,45 @@ describe('Datasets Handlers', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(results).toHaveLength(0);
+    });
+
+    it('deletes an experiment when tenancy matches', async () => {
+      const { dataset, experimentId } = await createExperimentWithResult({
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      const result = (await DELETE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).toBeNull();
+    });
+
+    it('returns 404 when tenancy does not match and leaves the experiment intact', async () => {
+      const { dataset, experimentId } = await createExperimentWithResult({
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const experimentsStore = (await mockStorage.getStore('experiments'))!;
+
+      await expect(
+        DELETE_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+
+      expect(await experimentsStore.getExperimentById({ id: experimentId })).not.toBeNull();
     });
 
     it('returns 404 when the experiment belongs to a different dataset and leaves it intact', async () => {

@@ -5384,9 +5384,12 @@ export const API_ROUTE_METADATA = {
       "datasetId",
       "experimentId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"

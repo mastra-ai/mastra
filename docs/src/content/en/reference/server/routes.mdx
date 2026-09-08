@@ -407,7 +407,7 @@ Use the dataset-scoped route when you know the owning dataset:
 curl -X DELETE http://localhost:4111/api/datasets/dataset-id/experiments/experiment-id
 ```
 
-The route returns `404` if the experiment doesn't exist or doesn't belong to the dataset.
+The route accepts optional `organizationId` and `projectId` query parameters. It returns `404` if the dataset is outside the supplied tenancy, the experiment doesn't exist, or the experiment doesn't belong to the dataset.
 
 Use the top-level route when you don't have a dataset reference, including when dataset deletion has orphaned the experiment by clearing its `datasetId`:
 
@@ -417,7 +417,7 @@ curl -X DELETE http://localhost:4111/api/experiments/experiment-id
 
 The top-level route accepts optional `organizationId` and `projectId` query parameters. When either is present, deletion is limited to that tenancy. A tenancy mismatch returns `{ "success": true }` without deleting the experiment. Without tenancy parameters, a missing experiment returns `404`.
 
-Both routes return `{ "success": true }` after deletion. They return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. Storage without observability or trace deletion support leaves the traces in place. Mastra logs a warning and still deletes the experiment with its result records.
+A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. Storage without observability or trace deletion support leaves the traces in place. Mastra logs a warning and still deletes the experiment with its result records.
 
 ### Caller-driven experiment routes
 

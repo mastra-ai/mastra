@@ -1035,20 +1035,22 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments/:experimentId',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete experiment',
   description:
     'Deletes an experiment and its results. Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, experimentId }) => {
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     // An older core still exposes Dataset.deleteExperiment, but it predates the
     // trace cascade and would report success while leaving the traces behind.
     // Fail loudly instead.
     assertExperimentDeletionAvailable();
     try {
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       // deleteExperiment asserts the experiment belongs to this dataset and
       // throws EXPERIMENT_NOT_FOUND (mapped to 404) otherwise.
       await ds.deleteExperiment({ experimentId });

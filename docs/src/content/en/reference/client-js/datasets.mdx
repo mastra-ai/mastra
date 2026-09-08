@@ -279,10 +279,13 @@ Returns `Promise<DatasetExperiment>`, the updated experiment record.
 
 ## deleteDatasetExperiment()
 
-Deletes an experiment through its dataset. The server also deletes the experiment's result records and observability traces, including their spans and trace-linked scores, feedback, metrics, and logs.
+Deletes an experiment through its dataset. The server deletes the experiment's result records and attempts to delete its observability traces, including their spans and trace-linked signals. If storage doesn't support observability or trace deletion, the server logs a warning and leaves the traces in place.
 
 ```typescript
-await client.deleteDatasetExperiment('dataset-id', 'experiment-id')
+await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
 ```
 
 <PropertiesTable
@@ -297,14 +300,26 @@ await client.deleteDatasetExperiment('dataset-id', 'experiment-id')
     type: 'string',
     description: 'ID of the experiment to delete.',
   },
+  {
+    name: 'tenancy.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the dataset lookup.',
+  },
+  {
+    name: 'tenancy.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the dataset lookup.',
+  },
 ]}
 />
 
-Returns `Promise<{ success: boolean }>`. A missing experiment or an experiment associated with another dataset returns a `404` response.
+Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment associated with another dataset, or a dataset outside the supplied tenancy returns a `404` response.
 
 ## deleteExperiment()
 
-Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server also deletes the experiment's result records and observability traces, including their spans and trace-linked scores, feedback, metrics, and logs.
+Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's result records and attempts to delete its observability traces. If storage doesn't support observability or trace deletion, the server logs a warning and leaves the traces in place.
 
 ```typescript
 await client.deleteExperiment('experiment-id', {
