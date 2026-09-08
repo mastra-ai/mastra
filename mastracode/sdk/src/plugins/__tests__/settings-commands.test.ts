@@ -1,3 +1,8 @@
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -43,6 +48,31 @@ function fixture() {
 }
 
 describe('settings commands', () => {
+  it('accepts a schema from an independently resolved compatible Zod copy', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'plugin-settings-zod-'));
+    try {
+      const require = createRequire(import.meta.url);
+      await cp(dirname(require.resolve('zod/package.json')), directory, { recursive: true });
+      const external = require(join(directory, 'index.cjs'));
+      expect(external.z.ZodType).not.toBe(z.ZodType);
+      const { command, entry, binding, save } = fixture();
+      const commands = validateSettingsCommands({
+        settings: {
+          ...command,
+          schema: external.z.object({ enabled: external.z.boolean(), policy: external.z.string() }),
+        },
+      });
+      const form = openSettingsCommand(
+        { ...entry, command: commands.settings! },
+        { ...identity, signal: binding.signal },
+      );
+      expect((await form.resolve()).success).toBe(true);
+      expect((await form.save({ enabled: true, policy: 'skip' })).success).toBe(true);
+      expect(save).toHaveBeenCalledOnce();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it('validates definitions and preserves a complete snapshot', async () => {
     const { command, form, save } = fixture();
     expect(validateSettingsCommands({ settings: command }).settings.fields).toEqual(command.fields);
