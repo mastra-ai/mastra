@@ -2,4 +2,6 @@
 // Updated by the maintainer-only add-provider and remove-provider commands.
 import type { ProviderRegistration } from '../registry.js';
 
-export const PROVIDERS: readonly ProviderRegistration[] = [];
+import { linearProvider } from './linear/index.js';
+
+export const PROVIDERS: readonly ProviderRegistration[] = [linearProvider];
