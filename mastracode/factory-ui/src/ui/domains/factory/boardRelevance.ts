@@ -37,7 +37,7 @@ export function boardRelevanceQueryValue(
 }
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'linear';
+  source: 'factory' | 'github' | 'linear' | 'gitlab';
 }
 
 interface RelevanceTarget {
@@ -59,6 +59,7 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 function externalId(source: RelevanceTarget['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
   if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
+  if (source === 'gitlab-issue') return `gitlab:${name.toLowerCase()}`;
   return undefined;
 }
 
@@ -73,14 +74,16 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
       source: 'github',
     };
   }
-  return { id, name, source: 'linear' };
+  // GitLab exposes no avatar URL by username the way GitHub does, so the
+  // participant renders with initials, like a Linear one.
+  return { id, name, source: source === 'gitlab-issue' ? 'gitlab' : 'linear' };
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
   if (target.source === 'github-issue' || target.source === 'github-pr') {
     return metadataString(target.metadata, 'author');
   }
-  if (target.source === 'linear-issue') {
+  if (target.source === 'linear-issue' || target.source === 'gitlab-issue') {
     return (
       metadataString(target.metadata, 'creator') ??
       metadataString(target.metadata, 'linearCreator') ??
@@ -96,7 +99,7 @@ function externalAssignees(target: RelevanceTarget): string[] {
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
   }
-  if (target.source === 'linear-issue') {
+  if (target.source === 'linear-issue' || target.source === 'gitlab-issue') {
     const assignee = metadataString(target.metadata, 'assignee') ?? metadataString(target.metadata, 'linearAssignee');
     return assignee ? [assignee] : [];
   }

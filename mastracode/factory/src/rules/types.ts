@@ -1,6 +1,6 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'gitlab-issue' | 'manual';
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
@@ -25,8 +25,9 @@ export function needsApproval(item: {
 export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
   if (!source) return 'manual';
   if (source.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
-  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId === 'gitlab') return 'gitlab-issue';
+  // Only GitHub, Linear, and GitLab carry a provider identity; anything else (a
+  // Slack thread, say) is a plain work item, not a mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -432,6 +433,12 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'linear-issue':
       return 'linearIssue';
+    // GitLab has no rule family yet: its ingress is a webhook stub, so no rule
+    // ever fires for one. Reported as `manual` so rule evaluation treats these
+    // items as operator-driven rather than silently matching another provider's
+    // rules. Give GitLab its own `FACTORY_RULE_SOURCES` entry when the webhook
+    // starts emitting events.
+    case 'gitlab-issue':
     case 'manual':
       return 'manual';
   }

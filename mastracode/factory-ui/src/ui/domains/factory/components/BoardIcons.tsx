@@ -1,4 +1,5 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { GitLabIcon } from '@mastra/playground-ui/icons/GitLabIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -23,6 +24,7 @@ const SOURCE_ICONS: Record<WorkItemSource, { icon: ComponentType<SVGProps<SVGSVG
   'github-issue': { icon: GithubIcon, className: 'text-icon5' },
   'github-pr': { icon: GitPullRequest, className: 'text-accent1' },
   'linear-issue': { icon: LinearIcon, className: 'text-accent3' },
+  'gitlab-issue': { icon: GitLabIcon, className: 'text-accent6' },
   'slack-thread': { icon: SlackIcon, className: '' },
   manual: { icon: CircleDot, className: 'text-icon3' },
 };

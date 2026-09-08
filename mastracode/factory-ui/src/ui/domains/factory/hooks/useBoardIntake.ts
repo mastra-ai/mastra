@@ -7,9 +7,11 @@ import {
   useIntakeConfigQuery,
   useIntakeLabelRoutesQuery,
 } from '../../../../hooks/useIntakeConfig';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useLinearIssuesQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
+import { useGitLabIssuesQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
+import { gitlabCandidate, issueCandidate, linearCandidate, pullRequestCandidate } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import { hasLabel } from '../boardItems';
 import type { InstalledBoardInfo } from '../../../../api/types';
@@ -87,13 +89,33 @@ export function useBoardIntake({
   const routesFailed = !review && labelRoutesQuery.isError;
   const routesSettled = review || labelRoutesQuery.isSuccess;
 
+  // GitLab reaches the board on the same four conditions as Linear. Its issues
+  // carry no Factory project either, so the routing rule is identical: bound
+  // sources win, and with no bindings at all a single-Factory org is
+  // unambiguous. The server enforces the same scoping on the feed route, so an
+  // unbound source contributes nothing even if this gate were wrong.
+  const gitlabStatusQuery = useGitLabStatusQuery();
+  const gitlabConnected = Boolean(gitlabStatusQuery.data?.serverConfigured && gitlabStatusQuery.data.connected);
+  const factoriesQuery = useFactoriesQuery();
+  const gitlabBindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === 'gitlab');
+  const gitlabRouted =
+    gitlabBindings.length === 0
+      ? (factoriesQuery.data?.length ?? 0) <= 1
+      : gitlabBindings.some(binding => binding.factoryProjectId === factoryProjectId);
+  const gitlabReady =
+    (config?.gitlab.enabled ?? false) && gitlabConnected && (config?.gitlab.sourceIds?.length ?? 0) > 0 && gitlabRouted;
+
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
   // confused with the Work board's review-receiving lane.
   const githubIntakeActive = (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
   const available: IntakeSource[] = review
     ? ['github-prs']
-    : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
+    : [
+        ...(githubIntakeActive ? (['github'] as const) : []),
+        ...(linearReady ? (['linear'] as const) : []),
+        ...(gitlabReady ? (['gitlab'] as const) : []),
+      ];
   const [selected, setSelected] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
@@ -127,6 +149,7 @@ export function useBoardIntake({
       return binding?.board === kind;
     });
   }, [linearIssues.data, bindingsQuery.data, factoryProjectId, kind]);
+  const gitlabIssues = useGitLabIssuesQuery(!review && gitlabReady ? factoryProjectId : undefined);
 
   const intakeIssues = useMemo(
     () => boardIssues.filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
@@ -136,20 +159,26 @@ export function useBoardIntake({
     () =>
       review
         ? (pulls.data ?? []).map(pullRequestCandidate)
-        : [...boardIssues.map(issueCandidate), ...boardLinearIssues.map(linearCandidate)],
-    [boardIssues, pulls.data, boardLinearIssues, review],
+        : [
+            ...boardIssues.map(issueCandidate),
+            ...boardLinearIssues.map(linearCandidate),
+            ...(gitlabIssues.data ?? []).map(gitlabCandidate),
+          ],
+    [boardIssues, pulls.data, boardLinearIssues, gitlabIssues.data, review],
   );
   const { candidates, alreadyMaterialized } = useMemo(() => {
     const all: BoardCandidate[] = review
       ? participantCandidates
       : active === 'linear'
         ? boardLinearIssues.map(issue => ({ ...linearCandidate(issue), column: initialPhase }))
-        : active === 'github'
-          ? [
-              ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
-              ...(triageIssues.data ?? []).map(issueCandidate),
-            ]
-          : [];
+        : active === 'gitlab'
+          ? (gitlabIssues.data ?? []).map(issue => ({ ...gitlabCandidate(issue), column: initialPhase }))
+          : active === 'github'
+            ? [
+                ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
+                ...(triageIssues.data ?? []).map(issueCandidate),
+              ]
+            : [];
     // A source materializes once per Factory, so items that already have a card
     // are held back. Only those carded on another board get counted: a card on
     // this board is visible in a column, so it needs no explanation.
@@ -163,6 +192,7 @@ export function useBoardIntake({
     intakeIssues,
     triageIssues.data,
     boardLinearIssues,
+    gitlabIssues.data,
     active,
     review,
     initialPhase,
@@ -186,7 +216,7 @@ export function useBoardIntake({
         refetch: () => bindingsQuery.refetch(),
       }
     : linearIssues;
-  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearFeed };
+  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearFeed, gitlab: gitlabIssues };
   const feed = active ? browsed[active] : undefined;
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
@@ -204,7 +234,10 @@ export function useBoardIntake({
     participantCandidates,
     feedByColumn,
     isPending:
-      (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
+      (!review &&
+        (configQuery.isPending ||
+          ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
+          ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending))) ||
       routesPending ||
       bindingsPending ||
       Boolean(feed?.isPending),

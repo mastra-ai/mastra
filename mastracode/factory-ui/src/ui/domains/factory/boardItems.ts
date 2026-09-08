@@ -8,9 +8,10 @@ import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/wo
 export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
-  'github-issue': 'Issue',
+  'github-issue': 'Issue (GitHub)',
   'github-pr': 'PR Review',
   'linear-issue': 'Linear',
+  'gitlab-issue': 'Issue (GitLab)',
   'slack-thread': 'Slack',
   manual: 'Manual',
 };
@@ -36,6 +37,20 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'metadata'>)
 export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   if (item.source !== 'linear-issue' || typeof item.metadata.identifier !== 'string') return;
   return item.metadata.identifier;
+}
+
+/**
+ * The intake external id (`project!iid`) of a GitLab-backed card. Source-gated
+ * like {@link linearIdentifierForItem}: both providers store a human
+ * `metadata.identifier`, so only the card's own source can say which endpoint
+ * owns it.
+ */
+export function gitlabIssueIdForItem(item: Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>): string | undefined {
+  if (item.source !== 'gitlab-issue') return;
+  // Candidates and stored work items both carry `gitlab:<project>!<iid>` as the
+  // source key; the id after the prefix is what the API takes.
+  const fromKey = item.sourceKey?.startsWith('gitlab:') ? item.sourceKey.slice('gitlab:'.length) : undefined;
+  return fromKey || undefined;
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';

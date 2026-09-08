@@ -42,25 +42,27 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
       avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
     };
   }
-  if (item.source === 'linear-issue') {
+  if (item.source === 'linear-issue' || item.source === 'gitlab-issue') {
     const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'linearCreator');
     if (!creator) return undefined;
-    return { id: `linear:${creator}`, name: creator };
+    const prefix = item.source === 'gitlab-issue' ? 'gitlab' : 'linear';
+    return { id: `${prefix}:${creator}`, name: creator };
   }
   return undefined;
 }
 
 /**
- * Best-effort current-assignee attribution for Linear issues. When present the
+ * Best-effort current-assignee attribution for Linear and GitLab issues. When present the
  * card treats the assignee as the "last worker" (they own the issue right
  * now), and the timeline gets a separate `assigned` event so the reporter and
  * assignee are both visible.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
-  if (item.source !== 'linear-issue') return undefined;
+  if (item.source !== 'linear-issue' && item.source !== 'gitlab-issue') return undefined;
   const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
   if (!assignee) return undefined;
-  return { id: `linear:${assignee}`, name: assignee };
+  const prefix = item.source === 'gitlab-issue' ? 'gitlab' : 'linear';
+  return { id: `${prefix}:${assignee}`, name: assignee };
 }
 
 export const CREATED_ACTION = 'factory.work_item.created' satisfies AuditAction;

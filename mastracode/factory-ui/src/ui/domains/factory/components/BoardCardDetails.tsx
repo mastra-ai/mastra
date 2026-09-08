@@ -2,19 +2,21 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
+import { useGitLabIssueDetail } from '../../../../hooks/useGitLabData';
 import { useLinearIssueDetail } from '../../../../hooks/useLinearData';
-import { githubNumberForItem, linearIdentifierForItem } from '../boardItems';
+import { githubNumberForItem, gitlabIssueIdForItem, linearIdentifierForItem } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
-type SourceItem = Pick<WorkItem, 'source' | 'metadata'>;
+type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
 
-function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'linear' | undefined {
+function descriptionSource(item: SourceItem): 'issue' | 'pull' | 'linear' | 'gitlab' | undefined {
   if (githubNumberForItem(item) !== undefined) {
     if (item.source === 'github-issue') return 'issue';
     if (item.source === 'github-pr') return 'pull';
   }
   if (linearIdentifierForItem(item) !== undefined) return 'linear';
+  if (gitlabIssueIdForItem(item) !== undefined) return 'gitlab';
   return undefined;
 }
 
@@ -39,7 +41,9 @@ export function useSourceDescription(
     source === 'linear' ? factoryProjectId : undefined,
     source === 'linear' ? identifier : undefined,
   );
-  return source === undefined ? undefined : { issue, pull, linear }[source];
+  // GitLab needs no Factory project: the issue id already names its project.
+  const gitlab = useGitLabIssueDetail(source === 'gitlab' ? gitlabIssueIdForItem(item) : undefined);
+  return source === undefined ? undefined : { issue, pull, linear, gitlab }[source];
 }
 
 export function CardSourceDescription({

@@ -43,7 +43,9 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
-  if (item.source === 'linear-issue') return [INVESTIGATE, BUILD];
+  // A GitLab issue offers the same moves as a Linear one: an external issue
+  // with no PR of its own, so investigate or build, never review.
+  if (item.source === 'linear-issue' || item.source === 'gitlab-issue') return [INVESTIGATE, BUILD];
   return item.source === 'github-pr' ? [REVIEW] : [];
 }
 

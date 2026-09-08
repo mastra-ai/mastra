@@ -17,6 +17,12 @@ function sourceRef(item: FactoryRuleItemContext): string {
     const identifier = linearIdentifier(item);
     return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
   }
+  if (item.source === 'gitlab-issue') {
+    // Same shape as Linear: the provider's own identifier reads better than a
+    // number, and GitLab's is `group/project#7`.
+    const identifier = linearIdentifier(item);
+    return identifier ? `GitLab issue ${identifier}${link}` : `GitLab issue ${item.title}${link}`;
+  }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;
   const noun = item.source === 'github-pr' ? 'GitHub pull request' : 'GitHub issue';
   const number = workItemNumber(item);

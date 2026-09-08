@@ -247,6 +247,7 @@ function BoardContent({
       if (stage !== definition.initialPhase || review || item.source === 'manual') return true;
       if (intake.active === 'github') return item.source === 'github-issue';
       if (intake.active === 'linear') return item.source === 'linear-issue';
+      if (intake.active === 'gitlab') return item.source === 'gitlab-issue';
       return false;
     });
   const workItemsForStage = (stage: (typeof stages)[number]['id']) =>

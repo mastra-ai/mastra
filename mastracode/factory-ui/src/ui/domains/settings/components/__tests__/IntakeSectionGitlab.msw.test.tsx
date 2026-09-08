@@ -2,6 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { JsonBodyType } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -64,7 +65,7 @@ const gitlabSources = [
 function stubGitlab({
   status = connectedStatus,
   config = baseConfig(),
-}: { status?: unknown; config?: IntakeConfig } = {}) {
+}: { status?: JsonBodyType; config?: IntakeConfig } = {}) {
   const saved: IntakeConfig[] = [];
   server.use(
     http.get(CONFIG_URL, () => HttpResponse.json({ config })),

@@ -131,3 +131,79 @@ export async function listGitLabProjects(baseUrl: string): Promise<GitLabProject
       };
     });
 }
+
+/**
+ * One issue as the board feed serves it. `IntakeIssue` on the server is already
+ * provider-neutral, so this is that shape verbatim — there is no GitLab-specific
+ * payload mapping to keep in sync on either side.
+ */
+export interface GitLabIssue {
+  /** `project!iid`, the intake external id. */
+  id: string;
+  /** `group/project#7`. */
+  identifier: string;
+  title: string;
+  url: string;
+  author: string | null;
+  state: string | null;
+  stateType: string | null;
+  assignee: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GitLabIssuePage {
+  issues: GitLabIssue[];
+  nextCursor: string | null;
+}
+
+/**
+ * The issues feeding one Factory project's board. The server applies the
+ * caller's project selection and the source→Factory bindings, so an unbound
+ * source contributes nothing here even when it is selected in Settings.
+ */
+export async function listGitLabIssues(
+  baseUrl: string,
+  factoryProjectId: string,
+  cursor?: string,
+): Promise<GitLabIssuePage> {
+  const params = new URLSearchParams({ factoryProjectId });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`${baseUrl}/web/gitlab/issues?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string; message?: string };
+      message = body.message ?? body.error ?? message;
+    } catch {
+      /* ignore non-JSON */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as GitLabIssuePage;
+}
+
+export interface GitLabIssueComment {
+  author: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface GitLabIssueDetail extends GitLabIssue {
+  description: string | null;
+  comments: GitLabIssueComment[];
+}
+
+/** One issue with its body and comments, for the card detail panel. */
+export async function getGitLabIssue(baseUrl: string, issueId: string): Promise<GitLabIssueDetail> {
+  const res = await fetch(`${baseUrl}/web/gitlab/issues/${encodeURIComponent(issueId)}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return (await res.json()) as GitLabIssueDetail;
+}

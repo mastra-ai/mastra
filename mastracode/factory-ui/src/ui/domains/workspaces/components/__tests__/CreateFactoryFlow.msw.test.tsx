@@ -245,7 +245,11 @@ describe('Create Factory wizard', () => {
     expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
     // The picked repository feeds Work intake without a trip to Settings.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
+      },
     ]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
@@ -454,8 +458,16 @@ describe('Create Factory wizard', () => {
     expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1', board: 'work' }]);
     // The link feeds the repository first; the Linear pick lands on top of it.
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
+      },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: true, sourceIds: ['lin-1'] },
+        gitlab: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 
@@ -484,7 +496,11 @@ describe('Create Factory wizard', () => {
     // No Linear routing without a picked project; only the repository feeds intake.
     expect(bindings).toEqual([]);
     expect(intakeConfigs).toEqual([
-      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
+      {
+        github: { enabled: true, sourceIds: ['octo/hello'] },
+        linear: { enabled: false, sourceIds: null },
+        gitlab: { enabled: false, sourceIds: null },
+      },
     ]);
   });
 

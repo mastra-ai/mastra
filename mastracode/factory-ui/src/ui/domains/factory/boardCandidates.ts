@@ -3,6 +3,7 @@ import { relativeTime } from '../../../lib/date/relativeTime';
 import { hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
+import type { GitLabIssue } from './services/gitlab';
 import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
@@ -16,6 +17,7 @@ export const INTAKE_SOURCES = [
   { id: 'github', label: 'Issues' },
   { id: 'github-prs', label: 'PRs' },
   { id: 'linear', label: 'Linear' },
+  { id: 'gitlab', label: 'GitLab' },
 ] as const;
 
 export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
@@ -89,6 +91,32 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
       state: issue.state,
       assignee: issue.assignee,
       creator: issue.creator ?? null,
+    },
+  };
+}
+
+/**
+ * A GitLab issue as an intake candidate. Mirrors {@link linearCandidate}: the
+ * provider identifier (`group/project#7`) carries more than a number would, and
+ * `iid` is kept in metadata because branch naming reads it (a `#` and slashes
+ * cannot go in a ref name).
+ */
+export function gitlabCandidate(issue: GitLabIssue): BoardCandidate {
+  const iid = Number(issue.id.split('!')[1]);
+  return {
+    sourceKey: `gitlab:${issue.id}`,
+    source: 'gitlab-issue',
+    title: issue.title,
+    url: issue.url,
+    meta: `${issue.identifier} · ${issue.state ?? 'opened'}${issue.assignee ? ` · ${issue.assignee}` : ''}`,
+    column: 'intake',
+    metadata: {
+      identifier: issue.identifier,
+      state: issue.state,
+      assignee: issue.assignee,
+      creator: issue.author ?? null,
+      labels: issue.labels,
+      ...(Number.isSafeInteger(iid) ? { iid } : {}),
     },
   };
 }

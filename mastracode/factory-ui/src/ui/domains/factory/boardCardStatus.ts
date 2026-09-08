@@ -50,6 +50,8 @@ function linkedSourceName(source: FactoryDecisionSummary['source']): string {
       return 'GitHub pull request';
     case 'linear-issue':
       return 'Linear issue';
+    case 'gitlab-issue':
+      return 'GitLab issue';
     default:
       // Every linked-card decision carries its source; only a manual card would land here.
       return 'card';

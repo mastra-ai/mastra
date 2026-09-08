@@ -29,7 +29,13 @@ export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
-const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
+const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
+  'github-issue',
+  'github-pr',
+  'linear-issue',
+  'gitlab-issue',
+  'manual',
+];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
   'forbidden',
   'invalid_transition',

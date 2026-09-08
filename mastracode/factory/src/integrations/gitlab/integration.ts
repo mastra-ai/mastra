@@ -49,6 +49,7 @@ import type {
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext } from '../base.js';
@@ -156,6 +157,47 @@ function readPendingAuth(settings: Record<string, unknown> | null): GitLabPendin
   return { pkceVerifier, nonce, redirectUri, startedAt };
 }
 
+/**
+ * Narrow the caller's selected GitLab sources to the ones that feed this
+ * Factory project.
+ *
+ * A GitLab issue carries no Factory project of its own, so without a binding
+ * every board would ingest every selected project's issues into whichever
+ * Factory happened to be on screen. Bound sources win; when the org has no
+ * bindings at all we fall back to the full selection for single-Factory
+ * installs, where "which project" is unambiguous. Same rule as Linear.
+ */
+async function scopeSourceIdsToProject({
+  intake,
+  projects,
+  orgId,
+  factoryProjectId,
+  selectedIds,
+}: {
+  intake: IntakeStorage;
+  projects: FactoryProjectsStorage | undefined;
+  orgId: string;
+  factoryProjectId: string;
+  selectedIds: string[];
+}): Promise<string[]> {
+  const bound = await intake.listBoundSourceIds({ orgId, integrationId: 'gitlab', factoryProjectId });
+  if (bound.length > 0) {
+    const boundSet = new Set(bound);
+    return selectedIds.filter(id => boundSet.has(id));
+  }
+  if ((await intake.listBindings({ orgId, integrationId: 'gitlab' })).length > 0) return [];
+  if (!projects) return [];
+  return (await projects.list({ orgId })).length <= 1 ? selectedIds : [];
+}
+
+/** Reject a cursor that could not have come from us before it reaches GitLab. */
+function parseCursor(raw: string | undefined): string | undefined | null {
+  if (raw === undefined || raw === '') return undefined;
+  return /^\d{1,6}$/.test(raw) ? raw : null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Erase a path-parameterized route handler's context to a plain `Context`. */
 function loose(c: unknown): Context {
   return c as Context;
@@ -192,6 +234,8 @@ export class GitLabIntegration implements FactoryIntegration {
   /** Captured in `routes()` from the `IntegrationContext`. */
   private stateSigner: StateSigner | undefined;
   private contextBaseUrl: string | undefined;
+  private intakeStorage: IntakeStorage | undefined;
+  private projectsStorage: FactoryProjectsStorage | undefined;
 
   /**
    * One in-flight refresh per org. GitLab rotates the refresh token on every
@@ -505,6 +549,8 @@ export class GitLabIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.stateSigner = ctx.stateSigner;
     this.contextBaseUrl = ctx.baseUrl;
+    this.intakeStorage = ctx.storage.intake;
+    this.projectsStorage = ctx.storage.projects;
 
     return [
       registerApiRoute('/web/gitlab/status', {
@@ -546,6 +592,121 @@ export class GitLabIntegration implements FactoryIntegration {
               reason: 'credential_rejected',
               detail: error instanceof Error ? error.message : String(error),
             });
+          }
+        },
+      }),
+
+      // The board's issue feed for one Factory project. Distinct from the
+      // generic `/web/intake/*` endpoints: a board request is also an ingest,
+      // so it only ever sees the sources bound to the project being viewed.
+      // Mirrors `/web/linear/issues`.
+      registerApiRoute('/web/gitlab/issues', {
+        method: 'GET',
+        handler: async c => {
+          const resolved = await this.resolveTenant(loose(c));
+          if ('response' in resolved) return resolved.response;
+
+          const cursor = parseCursor(c.req.query('cursor'));
+          if (cursor === null) return c.json({ error: 'invalid_cursor' }, 400);
+          const factoryProjectId = c.req.query('factoryProjectId');
+          if (factoryProjectId && !UUID_RE.test(factoryProjectId)) {
+            return c.json({ error: 'invalid_factory_project_id' }, 400);
+          }
+
+          const connection = await this.bearerForOrg(resolved.orgId);
+          if (!connection) {
+            return c.json({ error: 'gitlab_not_connected', message: 'Connect GitLab to see intake issues.' }, 409);
+          }
+
+          const intake = this.intakeStorage;
+          if (!intake) return c.json({ error: 'intake_unavailable' }, 503);
+          await intake.ensureReady();
+          const config = await intake.getConfig({
+            orgId: resolved.orgId,
+            userId: resolved.userId,
+            integrationIds: ['gitlab'],
+          });
+          const selection = config['gitlab'];
+          if (!selection?.enabled) {
+            return c.json(
+              { error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' },
+              404,
+            );
+          }
+
+          // No projects picked means nothing is synced — don't fan out to GitLab.
+          const selectedIds = selection.sourceIds ?? [];
+          const sourceIds = factoryProjectId
+            ? await scopeSourceIdsToProject({
+                intake,
+                projects: this.projectsStorage,
+                orgId: resolved.orgId,
+                factoryProjectId,
+                selectedIds,
+              })
+            : selectedIds;
+          if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
+
+          try {
+            // `IntakeIssue` is already provider-neutral, so it is the wire
+            // shape too — no per-provider payload mapping to keep in sync.
+            const page = await this.listIssues({ connection, sourceIds, ...(cursor ? { cursor } : {}) });
+            return c.json(page);
+          } catch (error) {
+            console.warn(`[gitlab] issue feed failed for org ${resolved.orgId}.`, error);
+            return c.json(
+              {
+                error: 'gitlab_unavailable',
+                message: error instanceof Error ? error.message : 'GitLab could not be reached.',
+              },
+              502,
+            );
+          }
+        },
+      }),
+
+      // One issue with its description and comments, for the card body.
+      // `:issueId` is the intake external id (`project!iid`), URL-encoded.
+      registerApiRoute('/web/gitlab/issues/:issueId', {
+        method: 'GET',
+        handler: async c => {
+          const resolved = await this.resolveTenant(loose(c));
+          if ('response' in resolved) return resolved.response;
+
+          const issueId = c.req.param('issueId');
+          const ref = parseIssueRef(issueId);
+          if (!ref) return c.json({ error: 'invalid_issue_id' }, 400);
+
+          const connection = await this.bearerForOrg(resolved.orgId);
+          if (!connection) {
+            return c.json({ error: 'gitlab_not_connected', message: 'Connect GitLab to see this issue.' }, 409);
+          }
+
+          // Scope by the caller's own selection: an issue from a project this
+          // user never picked is not theirs to read through the board.
+          const intake = this.intakeStorage;
+          if (!intake) return c.json({ error: 'intake_unavailable' }, 503);
+          await intake.ensureReady();
+          const config = await intake.getConfig({
+            orgId: resolved.orgId,
+            userId: resolved.userId,
+            integrationIds: ['gitlab'],
+          });
+          const selectedIds = config['gitlab']?.sourceIds ?? [];
+          if (!selectedIds.includes(ref.projectId)) return c.json({ error: 'not_found' }, 404);
+
+          try {
+            const detail = await this.getIssue({ connection, issueId });
+            return detail ? c.json(detail) : c.json({ error: 'not_found' }, 404);
+          } catch (error) {
+            console.warn(`[gitlab] issue detail failed for org ${resolved.orgId}.`, error);
+            return c.json(
+              {
+                error: 'gitlab_unavailable',
+                message: error instanceof Error ? error.message : 'GitLab could not be reached.',
+              },
+              502,
+            );
           }
         },
       }),

@@ -5,7 +5,13 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
  * map their `externalSource` into this with {@link workItemBranchSource}; the
  * board's own `WorkItem['source']` is already this union.
  */
-export type WorkItemBranchSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
+export type WorkItemBranchSource =
+  | 'github-issue'
+  | 'github-pr'
+  | 'linear-issue'
+  | 'gitlab-issue'
+  | 'slack-thread'
+  | 'manual';
 
 export interface WorkItemBranchInput {
   id: string;
@@ -17,8 +23,9 @@ export interface WorkItemBranchInput {
 export function workItemBranchSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
   if (!externalSource) return 'manual';
   if (externalSource.integrationId === 'linear') return 'linear-issue';
-  // Only GitHub and Linear carry provider identities; anything else (a Slack
-  // thread, say) is a plain work item rather than a mislabeled GitHub issue.
+  if (externalSource.integrationId === 'gitlab') return 'gitlab-issue';
+  // Only GitHub, Linear, and GitLab carry provider identities; anything else (a
+  // Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
   if (externalSource.integrationId !== 'github') return 'manual';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
@@ -61,6 +68,14 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   if (item.source === 'linear-issue' && typeof metadata.identifier === 'string') {
     const identifier = metadata.identifier.trim();
     if (identifier) return `factory/linear-${identifier.toLowerCase()}`;
+  }
+  // GitLab identifiers are paths (`group/project#7`), which cannot go in a
+  // branch name as-is: `#` is invalid and the slashes would nest refs under a
+  // directory that collides with `factory/`. The per-project iid is what makes
+  // it readable, so `group/project#7` becomes `factory/gitlab-7`.
+  if (item.source === 'gitlab-issue') {
+    const iid = branchNumber(metadata, 'iid');
+    if (iid !== undefined) return `factory/gitlab-${iid}`;
   }
   return `factory/item-${item.id}`;
 }
