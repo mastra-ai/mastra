@@ -1,5 +1,10 @@
 ---
 extends: existence
+# Miscellaneous vocabulary bucket. This rule owns only single words that no more
+# specific phrase or pattern rule covers. When a phrase or pattern rule claims a
+# word (AICompoundPhrases, AIAdjectiveNounPairs, PromotionalPuffery,
+# GrowthMetaphors, and the like), evict that word from here so one span raises
+# one alert. Inflected forms no sibling rule catches (an adverb, a plural) stay.
 message: "AI vocabulary: '%s'. Replace with a more specific or common word."
 level: error
 tokens:
@@ -7,15 +12,9 @@ tokens:
   - delves
   - delving
   - delved
-  - tapestry
-  - multifaceted
   - underscores
-  - pivotal
-  - intricate
   - intricacies
   - groundbreaking
-  - transformative
-  - seamless
   - seamlessly
   - robust
   - streamline
@@ -46,8 +45,6 @@ tokens:
   - paradigm
   - paradigms
   - unparalleled
-  - testament
-  - cornerstone
   - cornerstones
   - catalyst
   - catalyze
@@ -60,7 +57,6 @@ tokens:
   - myriad
   - plethora
   - burgeoning
-  - nascent
   - ubiquitous
   - encompasses
   - encompassing
@@ -106,6 +102,7 @@ tokens:
   - versatile
   - versatility
   - versatilely
+  - dynamic
   - dynamically
   - crucial
   - crucially
