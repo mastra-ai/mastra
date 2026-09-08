@@ -538,6 +538,70 @@ describe('PgVector', () => {
         const results = await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 });
         expect(results.map(result => result.id)).toEqual(['legacy-id']);
       });
+
+      it('re-checks after a missing table is created externally instead of caching a no-op', async () => {
+        const missingIndex = 'test_namespace_lazy_missing';
+        const drop = await vectorDB.pool.connect();
+        try {
+          await drop.query(`DROP TABLE IF EXISTS ${missingIndex}`);
+        } finally {
+          drop.release();
+        }
+
+        // First touch: table does not exist, so the caller's own query surfaces the error. This
+        // must NOT leave a cached "ready" result that skips migration once the table appears.
+        await expect(
+          lazyVectorDB.query({ indexName: missingIndex, queryVector: [1, 0, 0], topK: 10 }),
+        ).rejects.toBeDefined();
+
+        // An external initializer now creates a legacy (pre-namespace) table.
+        const setup = await vectorDB.pool.connect();
+        try {
+          await setup.query(`
+            CREATE TABLE ${missingIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+          await setup.query(
+            `INSERT INTO ${missingIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+            ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+          );
+        } finally {
+          setup.release();
+        }
+
+        try {
+          // Same instance must re-check and migrate now rather than reuse the earlier no-op.
+          const results = await lazyVectorDB.query({ indexName: missingIndex, queryVector: [1, 0, 0], topK: 10 });
+          expect(results.map(r => r.id)).toEqual(['legacy-id']);
+        } finally {
+          await lazyVectorDB.deleteIndex({ indexName: missingIndex });
+        }
+      });
+
+      it('rejects when a same-named index cannot serve the namespace conflict target', async () => {
+        // Add the namespace column plus a non-unique index that collides with the reserved name.
+        // `ensureNamespaceSchema`'s `CREATE UNIQUE INDEX IF NOT EXISTS` cannot replace it, so
+        // readiness must fail loudly rather than cache a state where upserts break on conflict.
+        const setup = await vectorDB.pool.connect();
+        try {
+          await setup.query(`ALTER TABLE ${lazyIndex} ADD COLUMN namespace VARCHAR(255) NOT NULL DEFAULT 'default'`);
+          await setup.query(`ALTER TABLE ${lazyIndex} DROP CONSTRAINT IF EXISTS ${lazyIndex}_vector_id_key`);
+          await setup.query(`CREATE INDEX ${lazyIndex}_namespace_vector_id_idx ON ${lazyIndex} (namespace, vector_id)`);
+        } finally {
+          setup.release();
+        }
+
+        await expect(
+          lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['legacy-id'] }),
+        ).rejects.toMatchObject({
+          id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED',
+          message: expect.stringContaining('Resolve conflicting index names'),
+        });
+      });
     });
   });
 
