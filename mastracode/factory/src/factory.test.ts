@@ -1,6 +1,6 @@
 import type * as authStudioModule from '@mastra/auth-studio';
 import { AgentControllerChannels } from '@mastra/core/channels';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -21,6 +21,7 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import type { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -547,6 +548,41 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
     expect(paths).toContain('/auth/me');
+  });
+
+  it('registers creation only for authenticated supervisor turns and passes the message author snapshot', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage });
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Test factory' } });
+    const extraTools = config.extraTools as (args: { requestContext: RequestContext }) => Promise<Record<string, any>>;
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      resourceId: `factory-supervisor:${project.id}`,
+      threadId: 'supervisor-thread',
+      getState: () => ({}),
+    });
+    await expect(extraTools({ requestContext })).resolves.not.toHaveProperty('factory_create_work_item');
+    requestContext.set('user', { organizationId: 'org-1' });
+    await expect(extraTools({ requestContext })).resolves.not.toHaveProperty('factory_create_work_item');
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-other' });
+    await expect(extraTools({ requestContext })).resolves.not.toHaveProperty('factory_create_work_item');
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, {
+      id: 'user-1',
+      name: 'Caleb Barnes',
+      avatarUrl: 'https://example.com/avatar.png',
+    });
+    const tools = await extraTools({ requestContext });
+    expect(tools.factory_create_work_item.requireApproval).toBe(false);
+    const result = await tools.factory_create_work_item.execute({ title: 'From supervisor', brief: 'A brief' }, {});
+    const comments = storage.getDomain<WorkItemCommentsStorage>('work-item-comments');
+    expect(
+      (await comments.list({ orgId: 'org-1', factoryProjectId: project.id, workItemId: result.workItemId })).comments[0]
+        ?.author,
+    ).toMatchObject({ id: 'user-1', displayName: 'Caleb Barnes', avatarUrl: 'https://example.com/avatar.png' });
+    requestContext.set('controller', { resourceId: 'worker-session', threadId: 'worker-thread', getState: () => ({}) });
+    await expect(extraTools({ requestContext })).resolves.not.toHaveProperty('factory_create_work_item');
   });
 
   it('registers the Factory transition tool only for exact active bindings', async () => {

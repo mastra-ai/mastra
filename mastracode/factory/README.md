@@ -29,6 +29,14 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Supervisor tools
+
+In an authenticated supervisor chat, `factory_create_work_item({ title, brief })` files a card on the person's behalf without an approval prompt. The person is recorded as its creator, and the brief is the first feed comment with the person's display name and avatar when available. Each creation is audited. The supervisor checks for existing work before filing a duplicate.
+
+The card enters the Work board's initial phase through its lifecycle rules. With the default board, manual cards stay in intake until a person starts them. Asking the supervisor to start one uses the approval-gated `factory_transition_work_item` tool to move it to planning.
+
+The public `@mastra/factory/work-item-create` subpath exports `createFactoryWorkItem` and its input/outcome types for integrations that need the same governed creation flow as the HTTP route. Callers supply the board and initial phase, storage, transition service, and actor. An optional `beforeEntry` hook prepares the card before lifecycle entry. Preparation failure, rejected entry, or an unavailable transition service deletes the new card and its feed state. Source-key reuse does not re-enter the lifecycle. The helper does not audit; callers own their audit event.
+
 ### Board lifecycle rules
 
 Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:

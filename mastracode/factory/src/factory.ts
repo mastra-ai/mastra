@@ -26,6 +26,7 @@ import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
+import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -103,6 +104,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { WorkItemRow } from './storage/domains/work-items/base.js';
+import { createFactorySupervisorActionTools } from './supervisor/action-tools.js';
 import { FactorySupervisorHealthWorker } from './supervisor/health-worker.js';
 import { SUPERVISOR_INSTRUCTIONS } from './supervisor/instructions.js';
 import { createFactorySupervisorReadTools } from './supervisor/read-tools.js';
@@ -827,6 +829,20 @@ export class MastraFactory {
                       }),
                     );
                     if (userId) {
+                      mergeTools(
+                        'factory-supervisor-actions',
+                        createFactorySupervisorActionTools({
+                          scope: supervisorScope,
+                          userId,
+                          messageAuthor: requestContext?.get(MASTRA_MESSAGE_AUTHOR_KEY),
+                          email: getFactoryAuthUserFromContext(requestContext)?.email,
+                          boards: this.#boards,
+                          workItems: workItemsStorage,
+                          comments: workItemCommentsStorage,
+                          audit: auditStorage,
+                          transitionService,
+                        }),
+                      );
                       mergeTools(
                         'factory-supervisor-write',
                         createFactorySupervisorWriteTools({
