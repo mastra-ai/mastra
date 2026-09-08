@@ -1,5 +1,5 @@
 ---
-'mastra': patch
+'@internal/playground': patch
 ---
 
-The Studio experiments list now loads more experiments as you scroll to the bottom, instead of stopping at the first 100. Older runs are reachable again, both on the global list and when the list is filtered by dataset.
+Fixed the Studio experiments list stopping at the first 100 experiments. The list now loads more as you scroll to the bottom, so older runs are reachable again, both on the global list and when it is filtered by dataset. Fixes [#22984](https://github.com/mastra-ai/mastra/issues/22984).
