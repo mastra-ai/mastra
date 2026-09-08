@@ -32,11 +32,11 @@ function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   return factoryProjectId;
 }
 
-/** Rewrite the cached board's cards, keeping the run activity read alongside them. */
+/** Rewrite the cached board's cards, keeping the session activity read alongside them. */
 function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: WorkItem[]) => WorkItem[]) {
   // Returning undefined skips the write: never seed a partial board before the list query loads.
   queryClient.setQueryData<BoardSnapshot>(listKey, board =>
-    board ? { runningSessionIds: board.runningSessionIds, workItems: patch(board.workItems) } : undefined,
+    board ? { ...board, workItems: patch(board.workItems) } : undefined,
   );
 }
 
@@ -56,7 +56,8 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // rebuilding it (and, for the set, breaking referential equality) per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectRunningSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.runningSessionIds);
-const NO_RUNNING_SESSIONS: ReadonlySet<string> = new Set();
+const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
+const NO_SESSIONS: ReadonlySet<string> = new Set();
 
 export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
@@ -84,7 +85,14 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
 export function useRunningSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
   const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectRunningSessions });
-  return data ?? NO_RUNNING_SESSIONS;
+  return data ?? NO_SESSIONS;
+}
+
+/** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
+export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
+  const { baseUrl } = useApiConfig();
+  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
+  return data ?? NO_SESSIONS;
 }
 
 /**
@@ -137,6 +145,7 @@ type TransitionWorkItemVariables = {
   board: FactoryBoard;
   stage: string;
   cause?: string;
+  reenter?: boolean;
 };
 
 function requireFactoryStage(stage: string): FactoryRuleStage {
@@ -151,13 +160,14 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const mutationKey = ['factory', 'transition-work-item', factoryProjectId] as const;
   const mutation = useMutation({
     mutationKey,
-    mutationFn: ({ item, board, stage, cause = 'board_drag' }: TransitionWorkItemVariables) =>
+    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
         stage: requireFactoryStage(stage),
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
+        ...(reenter ? { reenter } : {}),
       }),
     onMutate: async ({ item, stage }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
@@ -189,6 +199,9 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         }),
       );
       void queryClient.invalidateQueries({ queryKey: listKey });
+      // The lane's rule queues its run inside this commit; without this the card
+      // stays silent until the decisions poll comes round.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
     },
   });
   const pendingTransitions = useMutationState({

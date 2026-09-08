@@ -1,8 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
@@ -887,6 +887,22 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
+  it('isolates frozen constructor rules and rejects unknown events', () => {
+    const handler = vi.fn();
+    const rules = { issueOpened: handler, issueClosed: null };
+    const first = new PlatformGithubIntegration({ rules });
+    rules.issueOpened = vi.fn();
+    const second = new PlatformGithubIntegration();
+    expect(first.rules.issueOpened).toBe(handler);
+    expect(first.rules.issueClosed).toBeNull();
+    expect(second.rules.issueOpened).not.toBe(handler);
+    expect(second.rules.issueClosed).toBeTypeOf('function');
+    expect(Object.isFrozen(first.rules)).toBe(true);
+    expect(first.rules).not.toBe(second.rules);
+    // @ts-expect-error Verify JavaScript configuration validation.
+    expect(() => new PlatformGithubIntegration({ rules: { unknown: null } })).toThrow();
+  });
+
   it('attaches GitHub rules to polled issue ingress', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
@@ -894,7 +910,9 @@ describe('PlatformGithubIntegration', () => {
       if (url.includes('/issues?')) return json({ issues: [issue] });
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = createIntegration(fetchImpl);
+    vi.stubGlobal('fetch', fetchImpl);
+    const onEvent = vi.fn();
+    const integration = new PlatformGithubIntegration({ rules: { issueOpened: onEvent } });
     const sourceControl = seed.sourceControl.forIntegration('github');
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -924,7 +942,6 @@ describe('PlatformGithubIntegration', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/app',
     });
-    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       // Only presence is read here; the callback is never invoked.
@@ -937,12 +954,10 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-          overrides: { github: { issueOpened: { onEvent } } },
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });

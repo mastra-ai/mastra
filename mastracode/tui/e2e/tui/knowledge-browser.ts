@@ -1,4 +1,6 @@
+import { LOCAL_KNOWLEDGE_ORG_ID } from '@mastra/code-sdk';
 import { expect } from './expect.js';
+
 import type { McE2eScenario } from './types.js';
 
 const PRIMARY_TITLE = 'Knowledge E2E Primary';
@@ -19,7 +21,6 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         unixSocketPubSub: false,
       },
       async onCreated(result) {
-        const ownerId = result.session.identity.getOwnerId();
         const resourceId = result.session.identity.getResourceId();
         const primary = await result.session.thread.create({ title: PRIMARY_TITLE });
         const secondary = await result.session.thread.create({ title: SECONDARY_TITLE });
@@ -28,7 +29,8 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const knowledge = result.storage.stores?.knowledge;
         if (!knowledge) throw new Error('Knowledge storage unavailable in knowledge-browser E2E scenario.');
 
-        const orgScope = [`org:${ownerId}`];
+        // The inspector reads the rung the Subconscious writes under, not the session owner id.
+        const orgScope = [`org:${LOCAL_KNOWLEDGE_ORG_ID}`];
         const resourceScope = [...orgScope, `resource:${resourceId}`];
         const primaryScope = [...resourceScope, `thread:${primary.id}`];
         const secondaryScope = [...resourceScope, `thread:${secondary.id}`];

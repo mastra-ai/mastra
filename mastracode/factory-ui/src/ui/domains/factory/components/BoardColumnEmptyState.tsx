@@ -1,6 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { BoardKind } from '../boardStages';
+import { stageLabel } from '../stages';
 import type { BoardStageId } from '../stages';
 
 interface BoardColumnEmptyCopy {
@@ -66,6 +67,11 @@ function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSou
         title: 'Nothing canceled',
         description: 'Drag work here when it should leave the active flow.',
       };
+    default:
+      return {
+        title: `Nothing in ${stageLabel(stage)}`,
+        description: 'Drag work here when it reaches this stage.',
+      };
   }
 }
 
@@ -87,7 +93,7 @@ export function BoardColumnEmptyState({
       }
     : boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
-    <div className="border-border1 flex min-h-24 flex-col justify-center rounded-3xl border border-dashed px-4 py-4">
+    <div className="border-border1 rounded-card flex min-h-24 flex-col justify-center border border-dashed px-4 py-4">
       <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
         {copy.title}
       </Txt>

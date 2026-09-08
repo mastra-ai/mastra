@@ -670,6 +670,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/agent-lifecycle',
+              label: 'Agent lifecycle',
+              customProps: {
+                tags: ['new'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/authentication-identity',
               label: 'Authentication',
               customProps: {

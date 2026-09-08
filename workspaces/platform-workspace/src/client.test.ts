@@ -198,9 +198,18 @@ describe('PlatformClient', () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
     vi.stubEnv('MASTRA_PLATFORM_REGION', 'us');
-    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://staging.workspaces.example.com/');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', '  https://staging.workspaces.example.com/  ');
 
     expect(resolvePlatformOptions({}).proxyUrl).toBe('https://staging.workspaces.example.com');
+  });
+
+  it('ignores a whitespace-only MASTRA_WORKSPACE_PROXY_URL', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_test');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'eu');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', '   ');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.eu.mastra.ai');
   });
 
   it('does not use MASTRA_PLATFORM_SECRET_KEY as an access token fallback', () => {

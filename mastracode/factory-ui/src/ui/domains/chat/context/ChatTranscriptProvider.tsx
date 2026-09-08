@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useContext, useEffect, useEffectEvent, useReducer } from 'react';
 
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -33,7 +34,8 @@ export function ChatTranscriptProvider({
   isLoadingMoreHistory?: boolean;
   loadMoreHistory?: () => void;
 }) {
-  const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages });
+  const viewerId = useFactoryAuth().data?.user?.userId;
+  const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages, viewerId });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
   const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {
     transcriptApi.onEvent(event);
@@ -57,7 +59,12 @@ export function ChatTranscriptProvider({
   return (
     <ChatConnectionProvider onEvent={onEvent}>
       <ChatRuntimeValueProvider runtime={runtime}>
-        <ChatTranscriptValueProvider threadId={threadId} transcriptApi={transcriptApi} loadMore={loadMore}>
+        <ChatTranscriptValueProvider
+          threadId={threadId}
+          viewerId={viewerId}
+          transcriptApi={transcriptApi}
+          loadMore={loadMore}
+        >
           {children}
         </ChatTranscriptValueProvider>
       </ChatRuntimeValueProvider>
@@ -88,11 +95,13 @@ function ChatRuntimeValueProvider({ children, runtime }: { children: ReactNode; 
 function ChatTranscriptValueProvider({
   children,
   threadId,
+  viewerId,
   transcriptApi,
   loadMore,
 }: {
   children: ReactNode;
   threadId?: string;
+  viewerId?: string;
   transcriptApi: ReturnType<typeof useAgentControllerTranscript>;
   loadMore: LoadMoreHistory;
 }) {
@@ -125,6 +134,7 @@ function ChatTranscriptValueProvider({
   });
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
+    viewerId,
     busy,
     phase,
     initializing,

@@ -11,6 +11,10 @@ const REGIONAL_INTEGRATIONS_URLS: Record<'us' | 'eu', string> = {
 };
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
+  // MASTRA_INTEGRATIONS_API_URL is the dedicated override for the
+  // integrations service and takes precedence over MASTRA_PLATFORM_REGION.
+  // MASTRA_SHARED_API_URL is deliberately not consulted: it configures the
+  // shared platform API, and integrations routing is independent of it.
   const integrationsApiUrl = process.env.MASTRA_INTEGRATIONS_API_URL?.trim() || resolveIntegrationsUrl();
   // MASTRA_PLATFORM_ACCESS_TOKEN is the credential Mastra Platform injects
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
@@ -36,8 +40,14 @@ function resolveIntegrationsUrl(): string {
   return DEFAULT_INTEGRATIONS_URL;
 }
 
+/**
+ * Normalizes an integrations API URL to a bare origin. Callers pass fully
+ * versioned paths (`/v1/server/...`, `/v2/...`), so a trailing `/v1` — as in
+ * legacy platform API URLs like `https://platform.mastra.ai/v1` — is stripped
+ * to avoid duplicated version segments.
+ */
 function normalizeIntegrationsApiUrl(integrationsApiUrl: string): string {
-  return integrationsApiUrl.replace(/\/+$/, '');
+  return integrationsApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 export class PlatformApiError extends Error {

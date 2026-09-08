@@ -76,6 +76,8 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
   ObservabilityStorageStrategy,
+  TraceQueryResponse,
+  TrustedTraceQueryPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
@@ -86,6 +88,7 @@ import * as metricOps from './metrics';
 import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
 function buildSignalMigrationRequiredMessage(args: { tables: Array<{ table: string }> }): string {
@@ -204,10 +207,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   override getFeatures() {
     if (!deltaPollingFeatureEnabled()) {
-      return ['metrics', 'logs'] as const;
+      return ['metrics', 'logs', 'trace-query'] as const;
     }
 
-    return ['metrics', 'logs', 'delta-polling'] as const;
+    return ['metrics', 'logs', 'delta-polling', 'trace-query'] as const;
   }
 
   // Tracing
@@ -237,6 +240,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
+  }
+  override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
+    return traceQueryOps.queryTraces(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
     if (args.mode === 'delta') {

@@ -40,7 +40,7 @@ At the end of this phase, publish a small summary to the source issue as stated 
 | **Next step**  | Pending                                                                                                                                              |
 ```
 
-For GitHub issues, make sure the issue has the `status: needs triage` label. If not, add it using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
+For GitHub issues, add `status: needs triage` only if no `status:` label is present, using `gh issue edit "$ISSUE" --add-label "status: needs triage"`. For Linear issues, skip this GitHub-only label mutation.
 
 ## Phase 2: Related Issues & Prior Work
 

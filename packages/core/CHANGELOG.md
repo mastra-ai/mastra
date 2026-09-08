@@ -1,5 +1,229 @@
 # @mastra/core
 
+## 1.65.0-alpha.10
+
+### Patch Changes
+
+- The agent controller's live message now closes a text or reasoning span on `text-end` / `reasoning-end`. A later step that reuses the provider's block id opens a new part instead of appending to the earlier one, so the live message keeps the same part order as the persisted one. ([#23271](https://github.com/mastra-ai/mastra/pull/23271))
+
+- Fixed tool result metadata being dropped when a UI message comes back from the browser. The AI SDK sends this metadata separately from the call-time metadata, and only the call half was read, so the `toModelOutput` projection stored on a tool result was lost and the raw result was rendered back into the prompt. ([#23290](https://github.com/mastra-ai/mastra/pull/23290))
+
+  Fixes [#22012](https://github.com/mastra-ai/mastra/issues/22012)
+
+## 1.65.0-alpha.9
+
+### Patch Changes
+
+- Restore the default explore, plan, and execute subagents in Mastra Code while preserving explicit empty and custom subagent configurations. Match delegation prompt guidance to tool availability and permissions. ([#23217](https://github.com/mastra-ai/mastra/pull/23217))
+
+- Keep reactive and system-reminder signals out of live thread streams, matching default thread-history visibility while preserving model delivery and persistence in regular and durable agent runs. ([#23214](https://github.com/mastra-ai/mastra/pull/23214))
+
+- Fixed durable agent streaming being throttled by the event cache when it lives on a remote server (issue #22477). Every streamed chunk used to wait for two sequential cache round-trips before it could be published; it now waits for one, and cache backends can fuse index allocation and append into a single operation. ([#23161](https://github.com/mastra-ai/mastra/pull/23161))
+
+  Added a `shouldCache` option to `createDurableAgent`, `createEventedAgent`, and the `durable` agent config so specific topics can skip the replay cache and publish straight through when resumability is not needed for them.
+
+  ```ts
+  const durableAgent = createDurableAgent({
+    agent,
+    cache,
+    // Stream chunks are delivered live only; other topics stay resumable.
+    shouldCache: topic => !topic.startsWith('agent.stream.'),
+  });
+  ```
+
+## 1.65.0-alpha.8
+
+### Patch Changes
+
+- Preserve MCP tool descriptions and types in OpenTelemetry spans. Export MCP server names and optional versions as `mastra.mcp_tool_call.server_name` and `mastra.mcp_tool_call.server_version`, retaining `server.address` and preserving server metadata through Arize's OpenInference conversion. ([#23218](https://github.com/mastra-ai/mastra/pull/23218))
+
+## 1.65.0-alpha.7
+
+### Patch Changes
+
+- Added `MASTRA_MESSAGE_AUTHOR_KEY` to `@mastra/core/request-context`. Set it from your auth middleware to `{ id, name?, avatarUrl? }` and every message an agent-controller session sends on that request (`sendMessage`, `steer`, `followUp`) is stored with that sender under `providerMetadata.mastra.author`, so a thread several people share can show who wrote what. ([#23085](https://github.com/mastra-ai/mastra/pull/23085))
+
+  ```typescript
+  import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
+
+  requestContext.setRaw(MASTRA_MESSAGE_AUTHOR_KEY, { id: user.id, name: user.name, avatarUrl: user.avatarUrl });
+  ```
+
+- Added protected `getDatasetForMutation` and `listItemsForMutation` hooks to `DatasetsStorage`. The base `updateDataset`, `updateItem`, `deleteItem`, `batchInsertItems`, and `batchDeleteItems` flows now use these hooks for their pre-write dataset checks, so storage adapters that read from a replica can point those checks at the primary. Defaults are unchanged. ([#23154](https://github.com/mastra-ai/mastra/pull/23154))
+
+## 1.65.0-alpha.6
+
+### Patch Changes
+
+- Fixed BrowserViewer connections for Browser Use stdin commands while preserving thread isolation. ([#23142](https://github.com/mastra-ai/mastra/pull/23142))
+
+- Fixed dataset experiments to pass request context when resolving dynamic agent models. ([#23152](https://github.com/mastra-ai/mastra/pull/23152))
+
+- Fixed AgentController reply IDs after a suspended tool resumes so streamed replies match their saved messages in Memory. ([#23151](https://github.com/mastra-ai/mastra/pull/23151))
+
+- Added inference start timestamps to step-start stream events for accurate time-to-first-token measurement. ([#23094](https://github.com/mastra-ai/mastra/pull/23094))
+
+- Fixed unnecessary streaming overhead for final-only output processors. ([#23147](https://github.com/mastra-ai/mastra/pull/23147))
+
+## 1.65.0-alpha.5
+
+### Patch Changes
+
+- Fixed a message history compatibility issue. ([#23093](https://github.com/mastra-ai/mastra/pull/23093))
+
+- Fixed AI SDK v6/v7 message conversion throwing on reasoning parts with no text and no details, which could crash message rendering while a reasoning model streamed. ([#23134](https://github.com/mastra-ai/mastra/pull/23134))
+
+## 1.65.0-alpha.4
+
+### Minor Changes
+
+- Added tenant-scoped trace deletion arguments for observability storage with a limit of 1,000 trace IDs per batch. ([#22553](https://github.com/mastra-ai/mastra/pull/22553))
+
+  ```typescript
+  await storage.batchDeleteTraces({ traceIds: ['trace-1'], organizationId: 'org-1' });
+  ```
+
+### Patch Changes
+
+- Fixed dynamic agent models being resolved repeatedly when an agent uses tools from multiple sources. Each generation or stream now consistently uses a single model snapshot for all tools, including per-call model overrides. ([#23080](https://github.com/mastra-ai/mastra/pull/23080))
+
+## 1.65.0-alpha.3
+
+### Minor Changes
+
+- Added `handlers.onAction` to agent channels so apps can handle button clicks and select changes from their own cards. The built-in tool approval handling is available as `defaultHandler`, and `onAction: false` disables it. Fixes #22629 ([#22927](https://github.com/mastra-ai/mastra/pull/22927))
+
+  ```ts
+  const agent = new Agent({
+    // ...
+    channels: {
+      adapters: { slack: createSlackAdapter() },
+      handlers: {
+        onAction: async (event, defaultHandler) => {
+          if (event.actionId === 'retry') {
+            await event.thread?.post('Retrying...');
+            return;
+          }
+          await defaultHandler();
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed Cloudflare Workers builds by preventing Node-only runtime dependencies from being bundled. ([#20639](https://github.com/mastra-ai/mastra/pull/20639))
+
+- Applied `onDelegationComplete` result text replacements to failed subagent delegations while preserving failed tool result semantics. ([#23000](https://github.com/mastra-ai/mastra/pull/23000))
+
+## 1.65.0-alpha.2
+
+### Minor Changes
+
+- Added the core contract for advanced trace queries, including bounded time ranges, recursive trace, span, and score predicates, thread grouping, and deterministic cursor pagination. Invalid or overly complex requests are rejected before a storage adapter executes them. ([#22726](https://github.com/mastra-ai/mastra/pull/22726))
+
+  ```ts
+  const request = traceQueryRequestSchema.parse({
+    timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+    where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+  });
+  ```
+
+## 1.65.0-alpha.1
+
+### Minor Changes
+
+- Added optional `id`, `description`, and `metadata` to workflow control-flow entries: `.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`, `.sleep()`, `.sleepUntil()`, and `.map()`. Executable steps already supported these fields; the entries between them now follow the same model, so visual editors and review tools can label a parallel block or a sleep and address it with a stable id instead of a generated one or a position in the graph. ([#22633](https://github.com/mastra-ai/mastra/pull/22633))
+
+  ```typescript
+  workflow
+    .parallel([validateStep, enrichStep], {
+      id: 'independent-enrichment',
+      description: 'Run independent enrichment tasks concurrently',
+      metadata: { title: 'Independent enrichment' },
+    })
+    .sleep(5000, { id: 'wait-before-retry', metadata: { title: 'Wait before retry' } });
+  ```
+
+  The fields appear in `serializedStepGraph`, survive storage and rehydration of dynamic workflow definitions, and have no effect on execution. For `.map()`, `.sleep()`, and `.sleepUntil()`, a supplied `id` replaces the generated entry id.
+
+- Traces now show Mastra's built-in add-ons as the subsystem they came from, instead of anonymous processor runs. ([#22542](https://github.com/mastra-ai/mastra/pull/22542))
+
+  Skills, workspace instructions, observational memory and agent state signals all run on the processor pipeline, but you configure `skills`, `workspace`, `memory` and `signals` — not processors. Their spans were named after a pipeline phase you never chose:
+
+  | Was                                                      | Now                            |
+  | -------------------------------------------------------- | ------------------------------ |
+  | `input step processor: skills-processor`                 | `skill:inject`                 |
+  | `input step processor: workspace-instructions-processor` | `workspace:mount:instructions` |
+  | `input step processor: observational-memory`             | `memory: recall`               |
+
+  **New span types**
+
+  - `SKILL_ACTION` covers the whole skill lifecycle — resolve, inject, activate, search, read. `SKILL_RESOLUTION` is deprecated and no longer emitted.
+  - `AGENT_SIGNAL` records each state signal emission as a point-in-time event. A turn where the lane computes no change records nothing.
+
+  **Tracing your own processors**
+
+  Any processor can declare how it is traced, and one that declares nothing is unchanged:
+
+  ```ts
+  import { SpanType } from '@mastra/core/observability';
+  import type { Processor, ProcessorSpanPhase } from '@mastra/core/processors';
+
+  class MyProcessor implements Processor<'my-processor'> {
+    readonly id = 'my-processor' as const;
+    readonly spanType = SpanType.MEMORY_OPERATION;
+    readonly spanName = (phase: ProcessorSpanPhase) => `memory: ${phase === 'inputStep' ? 'recall' : 'save'}`;
+    readonly spanAttributes = { operationType: 'recall' } as const;
+  }
+  ```
+
+  **Fixes**
+
+  - The skills processor reports `skillCount` on every run. A skills path that resolved to nothing previously produced no span at all; it now shows as `skillCount: 0`.
+  - `computeStateSignal` implementations receive the `tracingContext` their argument type always advertised but never passed.
+
+- Added `dataset.updateExperiment()` to rename an experiment or change its description and metadata after it has been created. Status and result counters remain managed by the experiment lifecycle. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+  ```typescript
+  const dataset = await mastra.datasets.get({ id: 'dataset-id' });
+
+  await dataset.updateExperiment({
+    experimentId: 'exp-id',
+    name: 'Baseline vs. new prompt',
+    description: 'Run after switching to the shorter system prompt',
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde))
+
+- Fixed agent run traces leaking open spans when a run ends abnormally. Errors, aborts, suspensions, tripwires, and prepare failures now close the whole span tree, and a span that ends early hands its still-open children to the nearest live ancestor. Exporters that wait for every span to finish (such as Datadog) no longer retain the trace and its payloads in memory forever. ([#22764](https://github.com/mastra-ai/mastra/pull/22764))
+
+  Added an `endTree` option to `span.end()` and `span.error()` for terminal points: it also closes any still-open descendant spans, without applying the terminal output or error to them.
+
+- Fixed durable agents dropping `scoringData` from `generate()` and `stream()` results when `returnScorerData: true` is set. The flag was serialized into the durable workflow input but never forwarded to the client-side output, so `runEvals` and `startExperiment` scorers silently evaluated `undefined` output. Durable agents now return `scoringData` across generate, stream, resume, and recovery paths, matching non-durable agents. Also fixed tool-calling durable runs replacing the run's message list mid-run, which left resumed runs reading stale messages. Fixes #22743 ([#22878](https://github.com/mastra-ai/mastra/pull/22878))
+
+- Fixed durable agent runs being restarted by the generic boot-time workflow recovery. On server start, `Mastra.restartAllActiveWorkflowRuns()` restarted every active workflow run, including the internal workflows that back durable agents — even when `recovery.durableAgents` was `'off'` (the default), and racing the dedicated recovery path when set to `'auto'`. Durable agent runs are now only recovered through `recovery.durableAgents: 'auto'`. The internal durable agent workflows also no longer appear in `listWorkflows()` or the Studio workflow list; they remain accessible by id. Fixes [#22598](https://github.com/mastra-ai/mastra/issues/22598). ([#22960](https://github.com/mastra-ai/mastra/pull/22960))
+
+  **New workflow option `autoRestartActiveRuns`**
+
+  Any workflow can now opt out of the automatic boot-time restart, for example when its side effects must not be re-driven by a blanket restart:
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'my-workflow',
+    inputSchema,
+    outputSchema,
+    options: {
+      // Exclude this workflow from Mastra.restartAllActiveWorkflowRuns()
+      autoRestartActiveRuns: false,
+    },
+  });
+  ```
+
 ## 1.64.1-alpha.0
 
 ### Patch Changes

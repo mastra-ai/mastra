@@ -1,5 +1,30 @@
 # @mastra/platform
 
+## 1.6.0-alpha.1
+
+### Minor Changes
+
+- Added `MASTRA_PLATFORM_REGION` support to `PlatformSandbox` and `PlatformFilesystem`. Set it to `us` or `eu` (case-insensitive) to route the workspace proxy to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. When unset, calls continue to hit the global default `https://workspaces.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` still overrides both. ([#20925](https://github.com/mastra-ai/mastra/pull/20925))
+
+  ```bash
+  # Route platform workspaces to the EU replica
+  export MASTRA_PLATFORM_REGION=eu
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Repository templates now pin to the last default-branch head resolved for the same clone URL when the lookup fails, instead of dropping the repo steps and booting the base image. ([#22947](https://github.com/mastra-ai/mastra/pull/22947))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0-alpha.1
+
 ## 1.5.0
 
 ### Minor Changes

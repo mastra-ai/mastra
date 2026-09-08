@@ -452,8 +452,9 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(bindings).toEqual([{ integrationId: 'linear', sourceId: 'lin-1', factoryProjectId: 'fp-1' }]);
-    // Both picks land in one config write, each selected and switched on.
+    // The link feeds the repository first; the Linear pick lands on top of it.
     expect(intakeConfigs).toEqual([
+      { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: false, sourceIds: null } },
       { github: { enabled: true, sourceIds: ['octo/hello'] }, linear: { enabled: true, sourceIds: ['lin-1'] } },
     ]);
   });
@@ -569,14 +570,16 @@ const linkedRepository = {
 
 /**
  * Stub the intake config the last step reads and writes, collecting every
- * saved config body.
+ * saved config body. Stateful: each PUT becomes what the next GET returns.
  */
-function stubIntakeConfig(config: Record<string, unknown> = {}) {
+function stubIntakeConfig(initial: Record<string, unknown> = {}) {
+  let config = initial;
   const savedConfigs: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config })),
-    http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
-      savedConfigs.push(await request.json());
+    http.put<never, Record<string, unknown>>(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      config = await request.json();
+      savedConfigs.push(config);
       return HttpResponse.json({ config });
     }),
   );

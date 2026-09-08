@@ -37,6 +37,8 @@ export interface IssueReconcilerOptions<TScope = void> {
    * the provider's rules ingress.
    */
   onClosed?(item: WorkItemRow, issue: IntakeIssue, project: FactoryProject): Promise<void>;
+  /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
+  isTerminal(item: WorkItemRow): boolean;
 }
 
 export type IssueReconciler<TScope = void> = TScope extends void
@@ -127,9 +129,7 @@ export function createIssueReconciler<TScope = void>(
 
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
-          const stage = item.stages[0];
-          const isTerminal = stage === 'done' || stage === 'canceled';
-          if (isClosed && !isTerminal && options.onClosed) {
+          if (isClosed && !options.isTerminal(item) && options.onClosed) {
             await options.onClosed(item, issue, project);
             summary.closed += 1;
             continue; // Skip metadata patch for closed issues

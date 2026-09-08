@@ -1,8 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -459,7 +459,7 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
     const requestContext = new RequestContext();
-    requestContext.set('controller', { resourceId: projectRecord.id });
+    requestContext.set('controller', { resourceId: projectRecord.id, getState: () => ({}) });
 
     expect(integration.id).toBe('linear');
     expect(integration.intake).toBeDefined();
@@ -506,7 +506,9 @@ describe('PlatformLinearIntegration', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const integration = createIntegration(fetchImpl);
+    vi.stubGlobal('fetch', fetchImpl);
+    const onEvent = vi.fn();
+    const integration = new PlatformLinearIntegration({ rules: { issueObserved: onEvent } });
     const projectRecord = await seed.projects.create({
       orgId: 'org-1',
       userId: 'user-1',
@@ -517,7 +519,6 @@ describe('PlatformLinearIntegration', () => {
       userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       storage: {
@@ -526,12 +527,10 @@ describe('PlatformLinearIntegration', () => {
         projects: seed.projects,
         intake: seed.intake,
       },
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-          overrides: { linear: { issueObserved: { onEvent } } },
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
       stateSigner: {},
       baseUrl: 'https://factory.example',
@@ -581,7 +580,7 @@ describe('PlatformLinearIntegration', () => {
       projects: { listAll: async () => [] },
       intake: {},
     },
-    rules: { config: {}, workItems: {} },
+    runtime: { configVersion: 'test-v1', workItems: {} },
   };
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {

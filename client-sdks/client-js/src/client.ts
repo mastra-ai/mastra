@@ -9,6 +9,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
+  TraceQueryRequest,
+  TraceQueryResponse,
   ListBranchesArgs,
   ListBranchesResponse,
   GetBranchArgs,
@@ -31,7 +33,6 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
@@ -102,6 +103,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -1088,6 +1090,11 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
+  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  queryTraces(params: TraceQueryRequest): Promise<TraceQueryResponse> {
+    return this.observability.queryTraces(params);
+  }
+
   /**
    * Retrieves paginated list of traces carrying only the fields a trace list renders.
    * Same contract as {@link listTraces}, but rows omit the `attributes`/`input`/`output`
@@ -1120,6 +1127,16 @@ export class MastraClient extends BaseResource {
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
     return this.observability.listScoresBySpan(params);
+  }
+
+  /**
+   * Deletes traces by ID, cascading to all associated spans and trace-linked
+   * signal events (scores, feedback, metrics, logs). Signals without a trace ID
+   * are untouched. On ClickHouse-backed stores, reads may briefly return
+   * deleted rows until the delete is fully applied.
+   */
+  deleteTraces(params: { traceIds: string[] }): Promise<{ success: true }> {
+    return this.observability.deleteTraces(params);
   }
 
   /** Scores one or more traces using a specified scorer (fire-and-forget). */
@@ -2155,6 +2172,48 @@ export class MastraClient extends BaseResource {
    */
   public getDatasetExperiment(datasetId: string, experimentId: string): Promise<DatasetExperiment> {
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
+  }
+
+  /**
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
