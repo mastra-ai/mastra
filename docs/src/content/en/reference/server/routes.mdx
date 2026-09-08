@@ -417,7 +417,7 @@ curl -X DELETE http://localhost:4111/api/experiments/experiment-id
 
 The top-level route accepts optional `organizationId` and `projectId` query parameters. When either is present, deletion is limited to that tenancy. A tenancy mismatch returns `{ "success": true }` without deleting the experiment. Without tenancy parameters, a missing experiment returns `404`.
 
-A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. Storage without observability or trace deletion support leaves the traces in place. Mastra logs a warning and still deletes the experiment with its result records.
+A successful deletion returns `{ "success": true }`. The top-level route returns the same response for a tenancy mismatch, but doesn't delete anything. Both routes return `501` unless the installed `@mastra/core` advertises support through the `experiment-deletion` feature flag, including when an older version predates this support. When storage lacks observability or trace deletion support, Mastra logs a warning, leaves the traces in place, and still deletes the experiment with its result records. If trace cleanup fails after an earlier batch succeeds, the route returns `500` and preserves the experiment and result records even though some traces may already have been removed.
 
 ### Caller-driven experiment routes
 
