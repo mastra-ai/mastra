@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
-import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
-import { EntityType, SpanType } from '../../../../observability';
+import { SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
@@ -137,29 +140,31 @@ export function createDurableLLMMappingStep() {
           }
 
           if (isDeniedApproval(toolResult)) {
-            messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'output-denied' as const,
-                toolCallId: toolResult.toolCallId,
-                toolName: toolResult.toolName,
-                args: toolResult.args,
+            commitToolResult({
+              messageList,
+              outcome: {
+                kind: 'denied',
                 approval: {
                   id: toolResult.approval!.id,
                   approved: false,
                   reason: toolResult.approval!.reason,
                 },
               },
+              toolCallId: toolResult.toolCallId,
+              toolName: toolResult.toolName,
+              toolArgs: toolResult.args,
             });
             continue;
           }
 
-          const result = toolResult.error ? toolResult.error.message : toolResult.result;
-
           // Compute toModelOutput for successful tool results (Bug 9 parity).
           // Start from the existing providerMetadata so it's preserved even when
           // toModelOutput is absent or fails — otherwise provider-executed tools
-          // or tools without a mapper lose their metadata.
+          // or tools without a mapper lose their metadata. Results that already
+          // carry a mapped output from tool-call.ts (`modelOutputComputed`) are
+          // not recomputed: the serialization boundary is why tool-call maps
+          // eagerly, and this step only covers results that crossed the boundary
+          // unmapped (background completion, provider fallback).
           let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
             | Record<string, unknown>
             | undefined;
@@ -169,88 +174,41 @@ export function createDurableLLMMappingStep() {
             !toolResult.providerExecuted &&
             !toolResult.modelOutputComputed
           ) {
-            const tool = registryTools?.[toolResult.toolName] as
-              | { toModelOutput?: (output: unknown) => unknown }
-              | undefined;
-
-            if (tool?.toModelOutput) {
-              const mappingSpan = stepSpan?.createChildSpan({
-                type: SpanType.MAPPING,
-                name: `tool output mapping: '${toolResult.toolName}'`,
-                entityType: EntityType.TOOL,
-                entityId: toolResult.toolName,
-                entityName: toolResult.toolName,
-                input: toolResult.result,
-                attributes: {
-                  mappingType: 'toModelOutput',
-                  toolCallId: toolResult.toolCallId,
-                },
-              });
-              try {
-                let modelOutput = await tool.toModelOutput(toolResult.result);
-                modelOutput = normalizeModelOutput(modelOutput);
-                mappingSpan?.end({ output: modelOutput });
-
-                // A nullish return means "no special mapping needed" — the raw result is
-                // already what the model should see (see read-file.ts / sandboxToModelOutput).
-                // Writing the key anyway would make the consumer in MessageList (which keys
-                // off presence) override the real result with `undefined`, producing a tool
-                // message with no `output`. Mirrors the non-durable llm-mapping-step.
-                if (modelOutput != null) {
-                  const existingMastra = (toolResult.providerMetadata as any)?.mastra;
-                  providerMetadata = {
-                    ...toolResult.providerMetadata,
-                    mastra: { ...existingMastra, modelOutput },
-                  };
-                }
-              } catch (err) {
-                mappingSpan?.error({ error: err as Error, endSpan: true });
+            providerMetadata = await computeModelOutputProviderMetadata({
+              tool: registryTools?.[toolResult.toolName] as
+                | { toModelOutput?: (output: unknown) => unknown }
+                | undefined,
+              toolName: toolResult.toolName,
+              toolCallId: toolResult.toolCallId,
+              result: toolResult.result,
+              existingProviderMetadata: toolResult.providerMetadata as Record<string, unknown> | undefined,
+              parentSpan: stepSpan,
+              onMappingError: (err: unknown) => {
                 // toModelOutput errors are non-fatal — the tool result is still usable
                 (mastra as Mastra | undefined)
                   ?.getLogger?.()
                   ?.warn?.(`[DurableAgent] toModelOutput failed for tool "${toolResult.toolName}": ${err}`);
-              }
-            }
+              },
+            });
           }
 
-          const updated = messageList.updateToolInvocation({
-            type: 'tool-invocation' as const,
-            toolInvocation: {
-              // A tool error must be recorded as `output-error` with the message in
-              // `errorText` so the transcript/adapters read it as a failure rather than
-              // a normal result. Successful results keep `state: 'result'` + `result`.
-              ...(toolResult.error
-                ? { state: 'output-error' as const, errorText: toolResult.error.message }
-                : { state: 'result' as const, result }),
-              toolCallId: toolResult.toolCallId,
-              toolName: toolResult.toolName,
-              args: toolResult.args,
-              // Preserve the approval decision for an approved approval-gated tool so it
-              // round-trips on recall as `approval: { approved: true }`.
-              ...(toolResult.approval ? { approval: toolResult.approval } : {}),
-            },
-            ...(providerMetadata ? { providerMetadata: providerMetadata as any } : {}),
+          // A tool error must be recorded as `output-error` with the message in
+          // `errorText` so the transcript/adapters read it as a failure rather than
+          // a normal result. Successful results keep `state: 'result'` + `result`.
+          // The approval decision for an approved approval-gated tool is preserved
+          // so it round-trips on recall as `approval: { approved: true }`.
+          commitToolResult({
+            messageList,
+            outcome: toolResult.error
+              ? { kind: 'error', errorText: toolResult.error.message }
+              : { kind: 'result', result: toolResult.result },
+            toolCallId: toolResult.toolCallId,
+            toolName: toolResult.toolName,
+            toolArgs: toolResult.args,
+            approval: toolResult.approval,
+            providerMetadata: providerMetadata as any,
+            fallbackAppend: true,
           });
-
-          if (!updated) {
-            messageList.add(
-              [
-                {
-                  role: 'tool' as const,
-                  content: [
-                    {
-                      type: 'tool-result' as const,
-                      toolCallId: toolResult.toolCallId,
-                      toolName: toolResult.toolName,
-                      result,
-                      isError: toolResult.error !== undefined,
-                    },
-                  ],
-                },
-              ],
-              'response',
-            );
-          }
         }
       }
 
