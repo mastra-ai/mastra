@@ -141,7 +141,12 @@ export function DatasetItemsView({
         />
       </div>
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-      <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
+      <JSONImportDialog
+        datasetId={datasetId}
+        datasetName={dataset?.name}
+        open={importJsonDialogOpen}
+        onOpenChange={setImportJsonDialogOpen}
+      />
       <CreateDatasetFromItemsDialog
         open={createDialogOpen}
         onOpenChange={handleCreateDialogOpenChange}
