@@ -283,7 +283,7 @@ function incidentStateType(category: string): string | null {
   }
 }
 
-function followUpStateType(status: IncidentioFollowUp['status']): string {
+function followUpStateType(status: IncidentioFollowUp['status']): string | null {
   switch (status) {
     case 'outstanding':
       return 'unstarted';
@@ -292,6 +292,8 @@ function followUpStateType(status: IncidentioFollowUp['status']): string {
     case 'deleted':
     case 'not_doing':
       return 'canceled';
+    default:
+      return null;
   }
 }
 

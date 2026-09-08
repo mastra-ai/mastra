@@ -232,6 +232,29 @@ describe('IncidentioIntegration', () => {
     );
   });
 
+  it('uses a nullable state type for an unsupported follow-up status', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(json({ follow_ups: [{ ...followUp, status: 'unknown' }], pagination_meta: {} }));
+    const integration = new IncidentioIntegration({ apiKey: 'incident-key', fetchImpl });
+
+    await expect(
+      integration.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [INCIDENTIO_FOLLOW_UPS_SOURCE_ID],
+      }),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({
+          status: 'unknown',
+          metadata: expect.objectContaining({ incidentioStateType: null, stateType: null }),
+        }),
+      ],
+      nextCursor: null,
+    });
+  });
+
   it('updates follow-up status while preserving its required title', async () => {
     const completedFollowUp = { ...followUp, status: 'completed' as const, updated_at: '2026-09-03T11:00:00Z' };
     const fetchImpl = vi
