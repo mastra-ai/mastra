@@ -289,14 +289,15 @@ export const factory = new MastraFactory({
   integrations,
   configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    if (hasPlatformSandboxEnv) {
+    const useLocalSandbox = process.env.SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
 
-    if (process.env.E2B_API_KEY?.trim()) {
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
         template: createE2BRepoTemplate(ctx),
