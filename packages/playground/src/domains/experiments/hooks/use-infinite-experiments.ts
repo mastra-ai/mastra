@@ -32,7 +32,9 @@ export function useInfiniteExperiments(datasetId: string | undefined) {
   });
 
   useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
+    // Stop after a failed page: the page shows its error state, and re-firing on every
+    // render while the sentinel stays in view would hammer the server in a loop.
+    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage && !query.isFetchNextPageError) {
       void query.fetchNextPage();
     }
   }, [isEndOfListInView, query]);

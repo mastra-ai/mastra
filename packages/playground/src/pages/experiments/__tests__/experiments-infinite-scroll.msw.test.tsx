@@ -61,7 +61,12 @@ const dataset = buildDataset({ id: 'dataset-1', name: 'Dataset One' });
 /** Two pages: the first holds `experiments[0]` and reports more, the second holds `experiments[1]`. */
 const pages: DatasetExperiment[][] = [[experiments[0]], [experiments[1]]];
 
-function setupHandlers() {
+interface HandlerOptions {
+  /** Page index the server answers with a 500 instead of data. */
+  failPage?: number;
+}
+
+function setupHandlers({ failPage }: HandlerOptions = {}) {
   const requestedPages: string[] = [];
 
   server.use(
@@ -75,6 +80,9 @@ function setupHandlers() {
       const url = new URL(request.url);
       requestedPages.push(`${url.searchParams.get('page')}:${url.searchParams.get('perPage')}`);
       const page = Number(url.searchParams.get('page'));
+      if (page === failPage) {
+        return HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      }
       const response = buildListExperimentsResponse(pages[page] ?? []);
       return HttpResponse.json({
         ...response,
@@ -126,5 +134,21 @@ describe('Experiments page — infinite scroll', () => {
     await scrollToEndOfList();
 
     await waitFor(() => expect(requestedPages).toHaveLength(2));
+  });
+
+  it('does not keep re-requesting a page that failed while the sentinel stays in view', async () => {
+    const requestedPages = setupHandlers({ failPage: 1 });
+    renderPage();
+
+    await screen.findByText('entity-extraction / model-a');
+    await scrollToEndOfList();
+
+    expect(await screen.findByText('Failed to load experiments')).toBeDefined();
+    // The client SDK retries a 5xx a few times before surfacing the error; those are one fetch.
+    // After that, the sentinel is unmounted but still counts as "in view", so the hook must not refire.
+    const requestsWhenErrorShown = requestedPages.length;
+    await act(() => new Promise(resolve => setTimeout(resolve, 300)));
+    expect(requestedPages).toHaveLength(requestsWhenErrorShown);
+    expect(requestedPages.filter(page => page.startsWith('0:'))).toHaveLength(1);
   });
 });
