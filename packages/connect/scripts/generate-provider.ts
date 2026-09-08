@@ -1,28 +1,23 @@
 #!/usr/bin/env node
 /**
- * WIP generator (do not invoke on real providers yet).
- *
  * Generates a shipped provider directory (packages/connect/src/providers/<id>/)
  * from a NangoHQ/integration-templates provider (packages/connect/.templates/
  * integrations/<id>/). Maintainer-only.
  *
- * KNOWN GAP: Every Nango action file declares its own local `InputSchema` /
- * `OutputSchema` / `ProviderResponseSchema` consts. The current extractor
- * emits them into a single `schemas.ts` and dedupes by name, which collapses
- * every action's schemas to whichever action was seen first. Before this
- * generator is safe to invoke on real providers we must rename each action's
- * local schemas to `<actionSlug>_<name>` and rewrite every reference to those
- * names in both the vendored schema declarations and the exec body.
+ * Design note — schema namespacing: every Nango action file typically declares
+ * its own local `InputSchema` / `OutputSchema` / `ProviderResponseSchema` /
+ * etc. Concatenating those consts across actions would collide on name, so
+ * the extractor renames every top-level schema const in a source file to
+ * `<actionCamel>_<OriginalName>` and rewrites references in both the vendored
+ * schema declarations and the exec body. That gives us a self-consistent
+ * `schemas.ts` per provider and a `tools.ts` that imports the namespaced
+ * names directly.
  *
- * The Linear provider at src/providers/linear was hand-written for the
- * vertical slice and does not depend on this generator.
- *
- * Coverage plan (once the naming fix lands): templates whose exec bodies only
- * call methods present on our runtime nango-shim (get/post/put/patch/delete/
- * ActionError/log). Actions that touch getConnection/getMetadata/paginate/
- * setMetadata are skipped with a per-action reason logged. Skipped actions
- * never appear in tools.ts, so the emitted module always type-checks against
- * the current shim.
+ * Coverage: templates whose exec bodies only call methods present on our
+ * runtime nango-shim (get/post/put/patch/delete/ActionError/log). Actions
+ * that touch getConnection/getMetadata/paginate/setMetadata are skipped
+ * with a per-action reason logged, so the emitted module always type-checks
+ * against the current shim.
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -35,6 +30,7 @@ import {
   type CallExpression,
   type ObjectLiteralExpression,
   type SourceFile,
+  type VariableDeclaration,
 } from 'ts-morph';
 
 import { TEMPLATE_SHA } from './templates-config.js';
@@ -48,18 +44,24 @@ const SHIM_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'ActionEr
 
 interface ActionCandidate {
   file: string;
-  actionSlug: string; // e.g. 'create-issue' -> tool key stem
-  toolKey: string; // e.g. '<provider>_create_issue'
+  actionSlug: string; // 'create-issue'
+  toolKey: string; // '<provider>_create_issue'
+}
+
+/** One vendored schema const, with its original name in the source file and the namespaced export name. */
+interface VendoredSchema {
+  originalName: string;
+  exportedName: string;
+  code: string; // full `export const <exportedName> = <rhs>;` statement
 }
 
 interface ExtractedAction {
   candidate: ActionCandidate;
   description: string;
-  inputSchemaCode: string;
-  outputSchemaCode: string;
-  extraSchemas: string; // additional const declarations referenced by input/output/exec
+  inputExportedName: string;
+  outputExportedName: string;
+  vendoredSchemas: VendoredSchema[];
   execBody: string;
-  schemaImports: Set<string>; // names to import from ./schemas.js in tools.ts
 }
 
 interface SkippedAction {
@@ -81,6 +83,11 @@ function toPascal(slug: string): string {
     .split(/[-_]/)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join('');
+}
+
+function toCamel(slug: string): string {
+  const pascal = toPascal(slug);
+  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
 /** Reads an action file, extracts what we need, or returns a skip reason. */
@@ -112,81 +119,102 @@ function extractAction(
     return { kind: 'skip', reason: 'input/output are not simple identifier references (schemas expected as const)' };
   }
 
-  // Locate the const declarations for input/output and any additional
-  // schema const declarations in the same file — we vendor them wholesale.
-  const constDecls = new Map<string, string>();
-  for (const stmt of source.getStatements()) {
-    if (Node.isVariableStatement(stmt)) {
-      for (const decl of stmt.getDeclarationList().getDeclarations()) {
-        const name = decl.getName();
-        const init = decl.getInitializer();
-        if (!init) continue;
-        // Only vendor schema-like constants (z.object, z.union, z.enum, etc.)
-        const text = init.getText();
-        if (text.startsWith('z.') || text.includes('z.object(') || text.includes('z.union(')) {
-          constDecls.set(name, stmt.getText());
-        }
-      }
-    }
-  }
-  const inputSchemaCode = constDecls.get(inputName);
-  const outputSchemaCode = constDecls.get(outputName);
-  if (!inputSchemaCode || !outputSchemaCode) {
-    return { kind: 'skip', reason: 'could not locate input/output schema const declarations' };
-  }
-
-  // Extract the exec body.
+  // Extract exec body before renaming so we can validate nango method usage
+  // and discover top-level declarations referenced by the implementation.
   const execInit = execProp.asKindOrThrow(SyntaxKind.PropertyAssignment).getInitializerOrThrow();
   if (!Node.isArrowFunction(execInit) && !Node.isFunctionExpression(execInit)) {
     return { kind: 'skip', reason: 'exec is not an arrow/function expression' };
   }
   const body = execInit.getBody();
-  const bodyText = Node.isBlock(body) ? body.getText() : `{ return ${body.getText()}; }`;
+  const originalBodyText = Node.isBlock(body) ? body.getText() : `{ return ${body.getText()}; }`;
 
-  // Guard: exec must only use shim methods. Any other `nango.*` access disqualifies.
+  // Guard: exec must only use shim-supported nango.* methods.
   const nangoAccess = /\bnango\.([A-Za-z_$][\w$]*)/g;
   const usedMethods = new Set<string>();
-  for (const match of bodyText.matchAll(nangoAccess)) {
-    usedMethods.add(match[1]!);
-  }
+  for (const match of originalBodyText.matchAll(nangoAccess)) usedMethods.add(match[1]!);
   const unshimmed = [...usedMethods].filter(m => !SHIM_METHODS.has(m));
   if (unshimmed.length > 0) {
     return { kind: 'skip', reason: `exec uses unshimmed nango methods: ${unshimmed.join(', ')}` };
   }
 
-  // Collect all schema const decls referenced by input/output/exec so schemas.ts is self-contained.
-  const referencedSchemas = new Set<string>([inputName, outputName]);
-  for (const name of constDecls.keys()) {
-    if (bodyText.includes(name) || inputSchemaCode.includes(name) || outputSchemaCode.includes(name)) {
-      referencedSchemas.add(name);
+  // Index every top-level const. Starting from the input/output schemas and
+  // identifiers referenced by exec, walk initializer dependencies recursively.
+  // This handles aliases such as `const OutputSchema = ModelSchema` as well as
+  // nested schema graphs without relying on fragile `z.*` text heuristics.
+  const topLevelDecls = new Map<string, VariableDeclaration>();
+  const declarationOrder: string[] = [];
+  for (const stmt of source.getVariableStatements()) {
+    const declarations = stmt.getDeclarations();
+    if (declarations.length !== 1) {
+      return { kind: 'skip', reason: 'top-level variable statement contains multiple declarations' };
     }
+    const decl = declarations[0]!;
+    if (!decl.getInitializer()) continue;
+    topLevelDecls.set(decl.getName(), decl);
+    declarationOrder.push(decl.getName());
   }
 
-  // Emit all referenced schemas in declaration order.
-  const orderedSchemaCode: string[] = [];
-  for (const stmt of source.getStatements()) {
-    if (Node.isVariableStatement(stmt)) {
-      for (const decl of stmt.getDeclarationList().getDeclarations()) {
-        if (referencedSchemas.has(decl.getName())) {
-          // Rewrite `const X = ...` to `export const X = ...` so tools.ts can import.
-          const text = stmt.getText().replace(/^const\s+/, 'export const ');
-          orderedSchemaCode.push(text);
-        }
+  if (!topLevelDecls.has(inputName) || !topLevelDecls.has(outputName)) {
+    return { kind: 'skip', reason: 'could not locate input/output schema const declarations' };
+  }
+
+  const includedNames = new Set<string>([inputName, outputName]);
+  for (const identifier of body.getDescendantsOfKind(SyntaxKind.Identifier)) {
+    const name = identifier.getText();
+    if (topLevelDecls.has(name)) includedNames.add(name);
+  }
+
+  const pending = [...includedNames];
+  while (pending.length > 0) {
+    const name = pending.pop()!;
+    const initializer = topLevelDecls.get(name)?.getInitializer();
+    if (!initializer) continue;
+    for (const identifier of initializer.getDescendantsOfKind(SyntaxKind.Identifier)) {
+      const dependency = identifier.getText();
+      if (topLevelDecls.has(dependency) && !includedNames.has(dependency)) {
+        includedNames.add(dependency);
+        pending.push(dependency);
       }
     }
   }
-  const extraSchemas = orderedSchemaCode.join('\n\n');
+
+  // Use ts-morph's symbol-aware rename rather than text substitution. This
+  // rewrites identifier references without touching string literals, comments,
+  // property keys, or substrings in unrelated identifiers.
+  const actionCamel = toCamel(candidate.actionSlug);
+  const renames = new Map<string, string>();
+  for (const name of declarationOrder) {
+    if (!includedNames.has(name)) continue;
+    renames.set(name, `${actionCamel}_${name}`);
+  }
+  for (const [name, exportedName] of renames) {
+    topLevelDecls.get(name)!.rename(exportedName);
+  }
+
+  const vendoredSchemas: VendoredSchema[] = declarationOrder
+    .filter(name => includedNames.has(name))
+    .map(originalName => {
+      const exportedName = renames.get(originalName)!;
+      const statementText = topLevelDecls.get(originalName)!.getVariableStatementOrThrow().getText();
+      return {
+        originalName,
+        exportedName,
+        code: statementText.replace(/^const\s+/, 'export const '),
+      };
+    });
+
+  const renamedBody = execInit.getBody();
+  const execBody = Node.isBlock(renamedBody) ? renamedBody.getText() : `{ return ${renamedBody.getText()}; }`;
 
   return {
     kind: 'ok',
     value: {
       candidate,
       description,
-      inputSchemaCode,
-      outputSchemaCode,
-      extraSchemas,
-      execBody: bodyText,
-      schemaImports: referencedSchemas,
+      inputExportedName: renames.get(inputName)!,
+      outputExportedName: renames.get(outputName)!,
+      vendoredSchemas,
+      execBody,
     },
   };
 }
@@ -216,19 +244,12 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
 }
 
 function emitSchemasFile(actions: ExtractedAction[]): string {
-  const header = `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.\nimport { z } from 'zod';\n\n`;
-  // De-duplicate schema declarations by name across actions.
-  const seen = new Set<string>();
+  const header = `// AUTO-GENERATED from NangoHQ/integration-templates @ ${TEMPLATE_SHA.slice(0, 12)} — do not edit by hand.\nimport { z } from 'zod';\n`;
   const blocks: string[] = [];
   for (const action of actions) {
-    for (const block of action.extraSchemas.split(/\n\n+/)) {
-      // Cheap dedupe: use the first identifier after `export const`.
-      const match = /export const (\w+)/.exec(block);
-      if (!match) continue;
-      const name = match[1]!;
-      if (seen.has(name)) continue;
-      seen.add(name);
-      blocks.push(block);
+    blocks.push(`\n// —— ${action.candidate.actionSlug} ——`);
+    for (const schema of action.vendoredSchemas) {
+      blocks.push(schema.code);
     }
   }
   return header + blocks.join('\n\n') + '\n';
@@ -237,27 +258,24 @@ function emitSchemasFile(actions: ExtractedAction[]): string {
 function emitToolsFile(integrationId: string, actions: ExtractedAction[]): string {
   const envVar = `MASTRA_${integrationId.replace(/-/g, '_').toUpperCase()}_CONNECTION_ID`;
   const allSchemaNames = new Set<string>();
-  for (const a of actions) for (const n of a.schemaImports) allSchemaNames.add(n);
+  for (const a of actions) for (const s of a.vendoredSchemas) allSchemaNames.add(s.exportedName);
 
   const importList = [...allSchemaNames].sort().join(', ');
+  const proxyConfigurationImport = actions.some(action => /\bProxyConfiguration\b/.test(action.execBody))
+    ? "import type { NangoRequestConfig as ProxyConfiguration } from '../../runtime/nango-shim.js';\n"
+    : '';
   const factoriesCode = actions
-    .map(a => {
-      const factoryName = `make${toPascal(a.candidate.actionSlug)}`;
-      // schemaImports is a Set built with input first, then output, then extras
-      // (see extractAction). Iterating a Set preserves insertion order in modern JS.
-      const declared = [...a.schemaImports];
-      const inputSchema = declared[0]!;
-      const outputSchema = declared[1]!;
-      return `function ${factoryName}(ctx: ActionToolContext) {
-  return defineActionTool<z.infer<typeof ${inputSchema}>, z.infer<typeof ${outputSchema}>>(ctx, {
+    .map(
+      a => `function make${toPascal(a.candidate.actionSlug)}(ctx: ActionToolContext) {
+  return defineActionTool<z.infer<typeof ${a.inputExportedName}>, z.infer<typeof ${a.outputExportedName}>>(ctx, {
     id: '${a.candidate.toolKey}',
     description: ${JSON.stringify(a.description)},
-    inputSchema: ${inputSchema},
-    outputSchema: ${outputSchema},
+    inputSchema: ${a.inputExportedName},
+    outputSchema: ${a.outputExportedName},
     exec: async (nango, input) => ${a.execBody},
   });
-}`;
-    })
+}`,
+    )
     .join('\n\n');
 
   const toolMapEntries = actions
@@ -268,7 +286,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[]): strin
 import type { z } from 'zod';
 
 import { defineActionTool, type ActionToolContext } from '../../runtime/action-tool.js';
-import type { ProviderToolsOptions } from '../../toolset.js';
+${proxyConfigurationImport}import type { ProviderToolsOptions } from '../../toolset.js';
 import { applyAllowTools } from '../../toolset.js';
 import { ${importList} } from './schemas.js';
 
@@ -338,9 +356,7 @@ function main(): void {
   }
 
   const outputDir = resolve(providersDir, integrationId);
-  if (!existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
-  }
+  if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true });
 
   writeFileSync(resolve(outputDir, 'schemas.ts'), emitSchemasFile(extracted));
   writeFileSync(resolve(outputDir, 'tools.ts'), emitToolsFile(integrationId, extracted));
