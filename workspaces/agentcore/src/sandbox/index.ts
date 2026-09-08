@@ -96,12 +96,20 @@ function safeEnvName(name: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
 }
 
-function buildCommand(command: string, args: string[] | undefined, options: ExecuteCommandOptions | undefined): string {
+function buildCommand(
+  command: string,
+  args: string[] | undefined,
+  options: ExecuteCommandOptions | undefined,
+  workingDirectory?: string,
+): string {
   const baseCommand = args?.length ? `${command} ${args.map(arg => shellQuote(arg)).join(' ')}` : command;
   const parts: string[] = [];
 
-  if (options?.cwd) {
-    parts.push(`cd ${shellQuote(options.cwd)}`);
+  // The cd target is shell-quoted, which defeats `~` expansion — the sandbox's
+  // workingDirectory option must be an absolute path on this provider.
+  const cwd = options?.cwd ?? workingDirectory;
+  if (cwd) {
+    parts.push(`cd ${shellQuote(cwd)}`);
   }
 
   const env = options?.env ?? {};
@@ -298,7 +306,12 @@ export class AgentCoreRuntimeSandbox extends MastraSandbox {
     await this.ensureRunning();
 
     // Merge the sandbox env under per-call env — this exec path bypasses the process manager
-    const fullCommand = buildCommand(command, args, { ...options, env: { ...this.getEnv(), ...options?.env } });
+    const fullCommand = buildCommand(
+      command,
+      args,
+      { ...options, env: { ...this.getEnv(), ...options?.env } },
+      this.workingDirectory,
+    );
     const timeoutMs = options?.timeout ?? this._commandTimeout;
     const timeoutSeconds = toAgentCoreTimeoutSeconds(timeoutMs);
     const startTime = Date.now();

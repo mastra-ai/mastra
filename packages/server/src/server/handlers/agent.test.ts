@@ -572,7 +572,7 @@ describe('Agent Handlers', () => {
         agentId: 'test-agent',
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         name: 'test-agent',
         description: 'A test agent for unit testing',
         instructions: 'test instructions',

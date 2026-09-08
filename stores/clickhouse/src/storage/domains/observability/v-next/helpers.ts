@@ -20,6 +20,7 @@ import type {
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
 import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------
 // ClickHouse query settings
@@ -527,6 +528,8 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   };
 }
 
+// Keep both feedback mappers lossless: updateFeedbackReviewStatus uses them
+// to reinsert the entire row, so an omitted column would reset to its default.
 export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const hasNumber = row.valueNumber != null;
   const feedbackSource = nullableString(row.feedbackSource);
@@ -562,6 +565,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
     serviceName: nullableString(row.serviceName),
     feedbackUserId,
     sourceId: nullableString(row.sourceId),
+    reviewStatus: coerceFeedbackReviewStatus(row.reviewStatus),
     feedbackSource,
     feedbackType: row.feedbackType,
     value: hasNumber ? Number(row.valueNumber) : (nullableString(row.valueString) ?? ''),
@@ -572,6 +576,8 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   };
 }
 
+// Keep both feedback mappers lossless: updateFeedbackReviewStatus uses them
+// to reinsert the entire row, so an omitted column would reset to its default.
 export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<string, unknown> {
   const metadata = feedback.metadata ?? null;
   const feedbackSource = feedback.feedbackSource ?? feedback.source ?? '';
@@ -607,6 +613,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
     serviceName: feedback.serviceName ?? null,
     feedbackUserId,
     sourceId: feedback.sourceId ?? null,
+    reviewStatus: feedback.reviewStatus ?? 'needs-review',
     feedbackSource,
     feedbackType: feedback.feedbackType,
     valueString: typeof feedback.value === 'string' ? feedback.value : null,

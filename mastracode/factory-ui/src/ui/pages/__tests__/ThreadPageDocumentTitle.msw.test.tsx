@@ -70,15 +70,6 @@ function stubBase({ workItems, threads }: { workItems: unknown[]; threads: unkno
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () =>
-      HttpResponse.json({
-        resourceId: SESSION_ID,
-        factoryProjectId: FACTORY_ID,
-        projectRepositoryId: REPO_ID,
-        sandboxId: 'sb-1',
-        sandboxWorkdir: '/local/acme/app',
-      }),
-    ),
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: THREAD_ID }),
     ),

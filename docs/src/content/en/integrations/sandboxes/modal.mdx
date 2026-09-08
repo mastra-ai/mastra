@@ -1,6 +1,6 @@
 ---
 title: "Modal | Sandbox"
-description: "Documentation for the ModalSandbox provider for isolated cloud code execution via Modal."
+description: "Run Mastra workspace commands in isolated Modal cloud sandboxes with authentication, lifecycle controls, background processes, and reconnection."
 packages:
   - "@mastra/modal"
 ---
@@ -100,9 +100,16 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     isOptional: true,
   },
   {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Default working directory inside the sandbox, used for command execution when no per-command `cwd` is given. A per-command `cwd` always wins.',
+    isOptional: true,
+  },
+  {
     name: 'workdir',
     type: 'string',
-    description: 'Default working directory inside the sandbox.',
+    description: 'Deprecated alias for `workingDirectory`. When both are set, `workingDirectory` wins.',
     isOptional: true,
   },
   {

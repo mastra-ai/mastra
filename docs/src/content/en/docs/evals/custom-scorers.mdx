@@ -1,5 +1,6 @@
 ---
 title: "Custom scorers | Evals"
+description: "Build custom Mastra scorers with createScorer using JavaScript functions or LLM prompts across preprocess, analyze, generateScore, and generateReason steps."
 packages:
   - "@mastra/core"
 ---
@@ -43,7 +44,7 @@ You can mix and match approaches within a single scorer - for example, use a fun
 
 Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
-```typescript prettier:false
+```typescript oxfmt:false
 import { createScorer } from '@mastra/core/evals';
 
 const glutenCheckerScorer = createScorer({
@@ -127,7 +128,7 @@ Prepares input/output data when you need to extract specific elements or filter 
 
 **Functions:** `({ run, results }) => any`
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer(...)
 .preprocess(({ run }) => {
   // Extract and clean recipe text
@@ -144,7 +145,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` to structure LLM-based preprocessing.
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer(...)
 .preprocess({
   description: 'Extract ingredients from the recipe',
@@ -169,7 +170,7 @@ Performs core evaluation analysis, gathering insights that will inform the scori
 
 **Functions:** `({ run, results }) => any`
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(({ run, results }) => {
@@ -191,7 +192,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Prompt Objects:** Use `description`, `outputSchema`, and `createPrompt` for LLM-based analysis.
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze({
@@ -219,7 +220,7 @@ Converts analysis results into a numerical score. This is the only required step
 
 **Functions:** `({ run, results }) => number`
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -242,7 +243,7 @@ Generates human-readable explanations for the score, useful for debugging, trans
 
 **Functions:** `({ run, results, score }) => string`
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -260,7 +261,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Prompt Objects:** Use `description` and `createPrompt` for LLM-generated explanations.
 
-```typescript prettier:false
+```typescript oxfmt:false
 const glutenCheckerScorer = createScorer({...})
 .preprocess(...)
 .analyze(...)
@@ -278,7 +279,7 @@ const glutenCheckerScorer = createScorer({...})
 
 ## Input filtering
 
-Agent conversations can contain hundreds of messages with tool calls and data parts, plus system metadata. Most scorers only need a subset of this data. The `prepareRun` option transforms the run data before the scorer pipeline executes, reducing noise and keeping scorers focused.
+Agent conversations can contain hundreds of messages whose tool calls and data parts are accompanied by system metadata. Most scorers need only a subset. Before the scorer pipeline executes, the `prepareRun` option transforms the run data to reduce noise and keep each scorer focused.
 
 ### Declarative filtering with `filterRun()`
 
@@ -314,20 +315,19 @@ See the [`filterRun()` reference](/reference/evals/filter-run) for the full list
 
 For logic that `filterRun()` doesn't cover, write a `prepareRun` function directly:
 
-```typescript prettier:false
+```typescript
 import { createScorer } from '@mastra/core/evals'
 
 const customScorer = createScorer({
   id: 'recent-output',
   description: 'Scores only the last response',
   type: 'agent',
-  prepareRun: (run) => ({
+  prepareRun: run => ({
     ...run,
     output: run.output.slice(-1), // Keep only the last message
     requestContext: undefined,
   }),
-})
-.generateScore(({ run }) => {
+}).generateScore(({ run }) => {
   return run.output.length > 0 ? 1 : 0
 })
 ```
@@ -442,7 +442,7 @@ export const glutenCheckerScorer = createScorer({
 
 Sets up the LLM model and defines its role as a domain expert.
 
-```typescript prettier:false
+```typescript oxfmt:false
 judge: {
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
   instructions: GLUTEN_INSTRUCTIONS,
@@ -453,7 +453,7 @@ judge: {
 
 Defines how the LLM should analyze the input and what structured output to return.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .analyze({
   description: 'Analyze the output for gluten',
   outputSchema: z.object({
@@ -477,7 +477,7 @@ The analysis step uses a prompt object to:
 
 Converts the LLM's structured analysis into a numerical score.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .generateScore(({ results }) => {
   return results.analyzeStepResult.isGlutenFree ? 1 : 0;
 })
@@ -489,7 +489,7 @@ The score generation function takes the analysis results and applies business lo
 
 Provides human-readable explanations for the score using another LLM call.
 
-```typescript prettier:false
+```typescript oxfmt:false
 .generateReason({
   description: 'Generate a reason for the score',
   createPrompt: ({ results }) => {
@@ -518,7 +518,7 @@ console.log('Reason:', result.reason)
 
 ### High gluten-free output
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 1,
   analyzeStepResult: {
@@ -544,7 +544,7 @@ console.log('Reason:', result.reason)
 
 ### Partial gluten output
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 0,
   analyzeStepResult: {
@@ -570,7 +570,7 @@ console.log('Reason:', result.reason)
 
 ### Low gluten-free output
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   score: 0,
   analyzeStepResult: {

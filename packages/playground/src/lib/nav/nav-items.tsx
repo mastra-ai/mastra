@@ -14,7 +14,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, LayoutGrid } from 'lucide-react';
+import { BookIcon, ClipboardCheck, Inbox, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -59,6 +59,18 @@ const signalsNavItem: NavItem = {
 };
 
 export const mainNav: NavSection[] = [
+  {
+    key: 'inbox',
+    title: '',
+    items: [
+      {
+        name: 'Inbox',
+        url: '/inbox',
+        Icon: Inbox,
+        isOnMastraPlatform: true,
+      },
+    ],
+  },
   {
     key: 'primitives',
     title: 'Primitives',
@@ -144,7 +156,7 @@ export const mainNav: NavSection[] = [
         name: 'Datasets',
         url: '/datasets',
         Icon: DatasetsIcon,
-        docs: { href: 'https://mastra.ai/en/docs/datasets/overview', label: 'Datasets documentation' },
+        docs: { href: 'https://mastra.ai/docs/evals/datasets', label: 'Datasets documentation' },
         isOnMastraPlatform: true,
       },
       {
@@ -152,7 +164,17 @@ export const mainNav: NavSection[] = [
         url: '/experiments',
         Icon: ExperimentsIcon,
         docs: {
-          href: 'https://mastra.ai/en/docs/datasets/running-experiments',
+          href: 'https://mastra.ai/docs/evals/experiments',
+          label: 'Experiments documentation',
+        },
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Review Queue',
+        url: '/experiments/review-queue',
+        Icon: ClipboardCheck,
+        docs: {
+          href: 'https://mastra.ai/docs/evals/experiments',
           label: 'Experiments documentation',
         },
         isOnMastraPlatform: true,

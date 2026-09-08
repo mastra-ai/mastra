@@ -11,6 +11,7 @@ interface PiTuiInternals {
   previousWidth: number;
   previousHeight: number;
   previousViewportTop: number;
+  renderRequested: boolean;
   stopped: boolean;
   hasOverlay(): boolean;
   applyLineResets(lines: string[]): string[];
@@ -42,6 +43,7 @@ export class FooterAnimationRenderer {
     if (
       this.disposed ||
       ui.stopped ||
+      ui.renderRequested ||
       ui.hasOverlay() ||
       ui.children.at(-1) !== this.footer ||
       ui.previousWidth !== width ||

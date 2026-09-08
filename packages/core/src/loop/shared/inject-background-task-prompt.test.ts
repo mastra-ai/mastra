@@ -71,6 +71,42 @@ describe('injectBackgroundTaskPrompt', () => {
     expect(systemContent).toContain('bar');
   });
 
+  it('returns inputMessages unchanged when no tool is background-eligible (issue #22724)', () => {
+    const inputMessages = makePrompt();
+    const result = injectBackgroundTaskPrompt({
+      inputMessages,
+      backgroundTaskManager: fakeManager,
+      tools: { foo: {}, bar: { background: { enabled: false } } },
+    });
+    expect(result).toBe(inputMessages);
+  });
+
+  it('lists only eligible tools, not every tool (issue #22724)', () => {
+    const inputMessages = makePrompt();
+    const result = injectBackgroundTaskPrompt({
+      inputMessages,
+      backgroundTaskManager: fakeManager,
+      tools: { 'agent-biExecutor': {}, readFile: {}, editFile: {} },
+      agentBackgroundConfig: { tools: { biExecutor: { enabled: true } } },
+    });
+    const systemContent = (result[0] as { content: string }).content;
+    expect(systemContent).toContain('- agent-biExecutor (default: background)');
+    expect(systemContent).not.toContain('readFile');
+    expect(systemContent).not.toContain('editFile');
+  });
+
+  it('reads converted CoreTool `backgroundConfig` as well as raw `background`', () => {
+    const inputMessages = makePrompt();
+    const result = injectBackgroundTaskPrompt({
+      inputMessages,
+      backgroundTaskManager: fakeManager,
+      tools: { converted: { backgroundConfig: { enabled: true } }, plain: {} },
+    });
+    const systemContent = (result[0] as { content: string }).content;
+    expect(systemContent).toContain('- converted (default: background)');
+    expect(systemContent).not.toContain('plain');
+  });
+
   it('only injects into the leading system message, never user/assistant', () => {
     const inputMessages: LanguageModelV2Prompt = [
       { role: 'system', content: 'System A' },

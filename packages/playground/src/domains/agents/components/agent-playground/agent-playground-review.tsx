@@ -828,7 +828,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                           <Txt variant="ui-xs" className="text-neutral4 font-mono">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
-                          {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
+                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
                         </span>
                       ) : (
                         <Txt variant="ui-xs" className="text-neutral2">

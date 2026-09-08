@@ -1,6 +1,6 @@
 ---
 title: "Studio"
-description: Learn how to use Studio to build, test, and manage your agents, workflows, and tools.
+description: "Use Mastra Studio to build, test, and manage agents, workflows, processors, tools, and MCP servers while inspecting traces and runtime behavior."
 packages:
   - "@mastra/core"
 ---
@@ -28,7 +28,7 @@ Once the server is running, you can:
 - Open the Studio UI at [`localhost:4111`](http://localhost:4111/) to interact with your agents, workflows, and tools.
 - Visit [`localhost:4111/swagger-ui`](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
 
-While Studio is running, you can edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
+Studio lets you edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
 
 ## Deploy Studio
 
@@ -94,13 +94,13 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 Create and manage collections of test cases to evaluate your agents and workflows. Import items from CSV or JSON and define input and ground-truth schemas, plus pin to specific versions so you can reproduce experiments exactly. Run experiments with [scorers](/docs/evals/overview) to compare quality across prompts, models, or code changes.
 
-See [datasets overview](/docs/datasets/overview) for the full API and versioning details.
+See [datasets overview](/docs/evals/datasets) for the full API and versioning details.
 
 ### Experiments
 
 Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
 
-See [datasets overview](/docs/datasets/overview) for setup details.
+See [datasets overview](/docs/evals/datasets) for setup details.
 
 ## Observability
 

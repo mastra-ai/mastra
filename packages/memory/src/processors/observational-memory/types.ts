@@ -273,7 +273,10 @@ export interface ObservationConfig {
    * endpoints) while the main agent uses a multimodal model. The same
    * filter applies to tool results that contain image or file parts.
    *
-   * @default true
+   * When omitted, images and PDFs are forwarded. Use `true` to explicitly
+   * forward every attachment type.
+   *
+   * @default ['image/*', 'application/pdf']
    */
   observeAttachments?: 'auto' | boolean | string[];
 }
@@ -945,12 +948,6 @@ export interface ObservationalMemoryConfig {
 
   /** Active Memory instance, when Observational Memory is created by Memory. */
   memory?: Memory;
-
-  /**
-   * Run the subconscious curator (via `memory.runCuration`) after every N committed
-   * observation runs on the synchronous observe path. Off by default. Requires `memory`.
-   */
-  curationCadence?: number;
 
   /**
    * Enable retrieval-mode observation group metadata.

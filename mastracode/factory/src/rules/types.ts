@@ -1,7 +1,72 @@
+import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+
 export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
 
+/** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
+export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
+export const AUTO_TRIAGED_LABEL = 'status: auto-triaged';
+
+// The label only holds a card at rest: once a person accepted it, or it sits in a working
+// lane only a person could have moved it into, the label is stale until the source catches up.
+export function needsApproval(item: {
+  metadata: Record<string, unknown> | null;
+  stages?: readonly string[];
+  acceptedAt?: Date | string | null;
+}): boolean {
+  const labels = item.metadata?.labels;
+  if (!Array.isArray(labels)) return false;
+  return (
+    labels.some(label => typeof label === 'string' && label.toLowerCase() === NEEDS_APPROVAL_LABEL) &&
+    !item.acceptedAt &&
+    (item.stages ?? ['intake']).every(stage => stage === 'intake' || stage === 'triage')
+  );
+}
+
+export function workItemSource(source: ExternalWorkItemSource | null): WorkItemSource {
+  if (!source) return 'manual';
+  if (source.integrationId === 'linear') return 'linear-issue';
+  // Only GitHub and Linear have provider-specific rules; anything else (a Slack
+  // thread, say) is a plain work item, not a mislabeled GitHub issue.
+  if (source.integrationId !== 'github') return 'manual';
+  return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
+}
+
+// Authored outside the write-access circle: a missing trust stamp fails closed until
+// the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
+export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
+  if (item.source !== 'github-pr' && item.source !== 'github-issue') return false;
+  if (item.metadata?.factoryAuthored === true) return false;
+  return item.metadata?.authorTrusted !== true;
+}
+
+// The board mark claims only what GitHub answered: a missing stamp is silence, not an outside contribution.
+export function knownExternalAuthor(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
+  return externallyAuthored(item) && item.metadata?.authorTrusted === false;
+}
+
+export function externallyAuthoredWorkItem(item: {
+  externalSource: ExternalWorkItemSource | null;
+  metadata: Record<string, unknown> | null;
+}): boolean {
+  return externallyAuthored({ source: workItemSource(item.externalSource), metadata: item.metadata });
+}
+
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
+
+// Each role and the working stage its run holds the card in. Key order is the
+// seat pipeline order — Resume depth derives from it.
+export const FACTORY_ROLE_STAGES = {
+  triage: 'triage',
+  plan: 'planning',
+  work: 'execute',
+  review: 'review',
+} as const satisfies Record<string, FactoryRuleStage>;
+export type FactoryRole = keyof typeof FACTORY_ROLE_STAGES;
+
+export function isFactoryRole(value: string): value is FactoryRole {
+  return value in FACTORY_ROLE_STAGES;
+}
 
 export const FACTORY_TRIAGE_TYPES = [
   'bug',
@@ -28,7 +93,7 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
 
 export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
   const stage = stages.length === 1 ? stages[0] : undefined;
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return typeof stage === 'string' && stage.length > 0 ? stage : undefined;
 }
 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
@@ -36,8 +101,19 @@ export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
   return stage === 'done' || stage === 'canceled';
 }
 
+/** Working lanes hold cards with a seat engaged; Intake, Done and Canceled rest them. */
+export function isWorkingFactoryRuleStage(stage: FactoryRuleStage): boolean {
+  return stage !== 'intake' && !isTerminalFactoryRuleStage([stage]);
+}
+
+// Consulted only for the Intake exit: roles don't own lanes, so a card already
+// in a working or terminal lane stays put when a run starts.
+export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
+  return isFactoryRole(role) ? FACTORY_ROLE_STAGES[role] : undefined;
+}
+
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
-export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
+export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
 export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -78,6 +154,7 @@ export interface FactoryRuleItemContext {
   title: string;
   url: string | null;
   stages: readonly string[];
+  acceptedAt: Date | null;
   /** Intake-stamped facts about the source — repository id, reporter login, labels. */
   metadata: Record<string, unknown> | null;
 }
@@ -104,7 +181,7 @@ export interface FactoryRuleContextBase {
   ingress: FactoryRuleIngressIdentity;
   cause: string;
   causalChain: readonly FactoryRuleCausalEntry[];
-  ruleSetVersion: string;
+  configVersion: string;
 }
 
 export interface FactoryBoundRuleContext extends FactoryRuleContextBase {
@@ -172,11 +249,15 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     assignees?: string[];
     requestedReviewers?: string[];
     labels?: string[];
+    author?: string;
+    factoryAuthored: boolean;
     headBranch: string;
     baseBranch: string;
   };
   /** Present on `pullRequestReviewRequested`: who review was (re-)requested from. */
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
+  /** Present when a PR comment uses Factory's exact review command. */
+  reviewCommand?: { command: 'review' | 're-review'; target: string };
   /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
   review?: { id: number; state: string; url: string };
 }
@@ -210,39 +291,6 @@ export type FactoryRuleHandler<TContext> = (
 export interface FactoryBoardRuleLeaf {
   onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
   onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
-
-export interface FactoryToolRuleLeaf {
-  onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
-}
-
-export interface FactoryGithubRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
-}
-
-export interface FactoryLinearRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
-}
-
-export type FactoryBoardRules = Partial<
-  Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
->;
-
-export interface FactoryRules {
-  version: string;
-  work: FactoryBoardRules;
-  review: FactoryBoardRules;
-  tools: Record<string, FactoryToolRuleLeaf>;
-  github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
-}
-
-export interface FactoryRulesOverrides {
-  work?: FactoryBoardRules;
-  review?: FactoryBoardRules;
-  tools?: Record<string, FactoryToolRuleLeaf>;
-  github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =
@@ -317,7 +365,8 @@ export type FactoryInvokeSkillDecision = FactoryInvokeSkillDecisionBase &
 
 export interface FactorySendMessageDecision extends FactoryCommitDecisionBase {
   type: 'sendMessage';
-  role: string;
+  /** Omitted: the card's live session, whichever seat holds it. Required with `prepareBinding`. */
+  role?: string;
   message: string;
   priority?: 'medium' | 'high' | 'urgent';
   idleBehavior?: 'persist' | 'wake';

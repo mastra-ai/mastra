@@ -2,7 +2,8 @@ import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { CircleCheckIcon, CircleXIcon, ExternalLinkIcon } from 'lucide-react';
+import { AlertCircleIcon } from 'lucide-react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
@@ -39,26 +40,24 @@ export function ExperimentResultsList({
 }: ExperimentResultsListProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
-  const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
+  const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
+  const hasTagsColumn = columns.some(col => col.name === 'tags');
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
 
-  // Scorer columns get the scorers icon (matching the sidebar nav) plus an
-  // external link to the scorer page, so score columns are recognizable even
+  // Scorer columns get the scorers icon (matching the sidebar nav) plus a
+  // link to the scorer page, so score columns are recognizable even
   // when the scorer name isn't self-explanatory.
   const renderTopCell = (col: { name: string; label: string }) =>
     scorerIds?.includes(col.name) ? (
       <DataList.TopCell key={col.name}>
         <LinkComponent
           href={paths.scorerLink(col.name)}
-          target="_blank"
-          rel="noopener noreferrer"
           className="flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
           <span className="min-w-0 truncate">{col.label}</span>
-          <ExternalLinkIcon className="text-neutral3" />
         </LinkComponent>
       </DataList.TopCell>
     ) : (
@@ -90,26 +89,31 @@ export function ExperimentResultsList({
 
             const rowCells = (
               <>
-                <DataList.IdCell id={result.itemId} />
-                <DataList.Cell>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
-                          {hasError ? (
-                            <CircleXIcon role="img" aria-label="Error" className="text-error size-4" />
-                          ) : (
-                            <CircleCheckIcon role="img" aria-label="Success" className="text-accent1 size-4" />
-                          )}
-                        </div>
-                      }
-                    />
-                    <TooltipContent>{hasError ? 'Error' : 'Success'}</TooltipContent>
-                  </Tooltip>
+                <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
+                  <span>{result.itemId?.slice(0, 8) ?? ''}</span>
+                  {hasError && (
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                      />
+                      <TooltipContent>{result.error?.message || 'Error'}</TooltipContent>
+                    </Tooltip>
+                  )}
                 </DataList.Cell>
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
+
+                {hasTagsColumn && (
+                  <DataList.Cell
+                    className="flex items-center gap-1 overflow-hidden"
+                    data-testid={`result-tags-${result.id}`}
+                  >
+                    {result.tags?.map(tag => (
+                      <ComputedTag key={tag} value={tag} className="shrink-0" />
+                    ))}
+                  </DataList.Cell>
                 )}
 
                 {scorerIds?.map(scorerId => {

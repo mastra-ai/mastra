@@ -1,6 +1,6 @@
 ---
 title: "Reference: Channels | Agents"
-description: "API reference for the ChannelConfig agent channels object, which connects agents to messaging platforms like Slack, Discord, and Telegram."
+description: "Channels connect agents to messaging platforms. Configure them via the channels property on the Agent constructor."
 packages:
   - "@mastra/core"
 ---
@@ -234,7 +234,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'cards' ('grouped' for Slack)",
     description:
-      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the streaming widget, or `undefined` to skip rendering that event. Add `openIfEmpty: false` to a stream result when its chunk should only apply to an active streaming session. Approve/deny prompts always render as a separate card regardless of mode.',
+      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the streaming widget, or `undefined` to skip rendering that event. Add `openIfEmpty: false` to a stream result when its chunk should only apply to an active streaming session. Approve/deny prompts render as a separate built-in card in every string mode; a `toolDisplay` function receives the `approval` event and may replace the card by returning `{ kind: "post", message }`.',
   },
   {
     name: 'typingStatus',
@@ -291,9 +291,13 @@ toolDisplay: event => {
 }
 ```
 
-Approve/deny prompts (`requireApproval`) always render as a separate card
-regardless of mode, because inline task entries can't carry interactive
-buttons.
+Approve/deny prompts (`requireApproval`) render as a separate built-in card in
+every string mode, because inline task entries can't carry interactive buttons.
+With a `toolDisplay` function, the `approval` event is passed to your function
+in both streaming and static modes; return a non-blank `{ kind: 'post', message }`
+to replace the built-in card with your own message (for example, a localized
+one). Returning `undefined`, a blank message, or `{ kind: 'stream' }` falls back
+to the built-in card so the approval stays actionable.
 
 ```typescript title="src/mastra/agents/streaming.ts"
 import { Agent } from '@mastra/core/agent'

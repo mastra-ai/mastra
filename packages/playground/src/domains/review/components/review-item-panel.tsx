@@ -11,6 +11,7 @@ import { CheckCircle, FileInputIcon, FileOutputIcon, GaugeIcon, ThumbsDown, Thum
 import { useState, useEffect, useRef } from 'react';
 import type { ReviewItem } from './review-item-card';
 import { TagPicker } from './tag-picker';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 function formatUnknown(value: unknown): string {
   if (typeof value === 'string') return value;
   try {
@@ -125,7 +126,7 @@ export function ReviewItemPanel({
                   </Button>
                 </ButtonsGroup>
                 {item.rating && (
-                  <Badge variant={item.rating === 'positive' ? 'success' : 'error'}>
+                  <Badge variant={item.rating === 'positive' ? 'green' : 'red'}>
                     {item.rating === 'positive' ? 'Good' : 'Bad'}
                   </Badge>
                 )}
@@ -137,7 +138,7 @@ export function ReviewItemPanel({
                 <Txt variant="ui-sm" className="text-neutral3">
                   Rating
                 </Txt>
-                <Badge variant={item.rating === 'positive' ? 'success' : 'error'}>
+                <Badge variant={item.rating === 'positive' ? 'green' : 'red'}>
                   {item.rating === 'positive' ? 'Good' : 'Bad'}
                 </Badge>
               </div>
@@ -151,11 +152,7 @@ export function ReviewItemPanel({
               {isCompleted ? (
                 <div className="flex flex-wrap gap-1">
                   {item.tags.length > 0 ? (
-                    item.tags.map(tag => (
-                      <Badge key={tag} variant="default">
-                        {tag}
-                      </Badge>
-                    ))
+                    item.tags.map(tag => <ComputedTag key={tag} value={tag} size="sm" />)
                   ) : (
                     <Txt variant="ui-sm" className="text-neutral2">
                       No tags
@@ -182,7 +179,7 @@ export function ReviewItemPanel({
                       <Txt variant="ui-xs" className="text-neutral4">
                         {name}:
                       </Txt>
-                      <Badge variant={score >= 0.5 ? 'success' : 'error'}>{score.toFixed(3)}</Badge>
+                      <Badge variant={score >= 0.5 ? 'green' : 'red'}>{score.toFixed(3)}</Badge>
                     </div>
                   ))}
                 </div>

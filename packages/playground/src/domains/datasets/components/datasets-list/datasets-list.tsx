@@ -1,60 +1,34 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useMemo } from 'react';
-import type { DatasetTargetType } from '../target-type-options';
-import { getDatasetTargetTypes, matchesDatasetTargetFilter } from './helpers';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: DatasetExperiment[];
-  reviewByDataset?: Map<string, { needsReview: number; complete: number }>;
   isLoading: boolean;
   search?: string;
-  targetFilter?: string;
   experimentFilter?: string;
   tagFilter?: string;
-  currentPage?: number;
-  hasMore?: boolean;
-  onNextPage?: () => void;
-  onPrevPage?: () => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
 }
 
-const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
+const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
-function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
-  return {
-    rowLinkColEnd: hasExperimentsAction ? -3 : hasReviewAction ? -2 : -1,
-    showExperimentsPlaceholder: !hasExperimentsAction,
-    showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
-    showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
-  };
-}
-
-function TargetTypeIcon({ type }: { type: DatasetTargetType }) {
-  const className = 'size-3.5 shrink-0 text-neutral2';
-  switch (type) {
-    case 'agent':
-      return <AgentIcon className={className} aria-hidden />;
-    case 'workflow':
-      return <WorkflowIcon className={className} aria-hidden />;
-    case 'scorer':
-      return <ScorersIcon className={className} aria-hidden />;
-    case 'processor':
-      return <ProcessorIcon className={className} aria-hidden />;
-    default:
-      return null;
-  }
+function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
+  if (successPct !== null && successPct >= 70) return 'green';
+  if (successPct !== null && successPct >= 40) return 'yellow';
+  return 'red';
 }
 
 function formatDate(dateStr: string | Date | undefined | null): string {
@@ -66,16 +40,13 @@ function formatDate(dateStr: string | Date | undefined | null): string {
 export function DatasetsList({
   datasets,
   experiments,
-  reviewByDataset,
   isLoading,
   search = '',
-  targetFilter = 'all',
   experimentFilter = 'all',
   tagFilter = 'all',
-  currentPage,
-  hasMore,
-  onNextPage,
-  onPrevPage,
+  isFetchingNextPage,
+  hasNextPage,
+  setEndOfListElement,
 }: DatasetsListProps) {
   const { paths, Link } = useLinkComponent();
 
@@ -85,8 +56,7 @@ export function DatasetsList({
       const completed = dsExperiments.filter(e => e.status === 'completed').length;
       const total = dsExperiments.length;
       const successPct = total > 0 ? Math.round((completed / total) * 100) : null;
-      const targetTypes = getDatasetTargetTypes(ds.targetType, dsExperiments);
-      return { ...ds, experimentCount: total, successPct, targetTypes };
+      return { ...ds, experimentCount: total, successPct };
     });
   }, [datasets, experiments]);
 
@@ -94,15 +64,14 @@ export function DatasetsList({
     const term = search.toLowerCase();
     return enrichedDatasets.filter(ds => {
       const matchesSearch = !term || ds.name.toLowerCase().includes(term);
-      const matchesTarget = matchesDatasetTargetFilter(ds.targetTypes, targetFilter);
       const matchesExperiment =
         experimentFilter === 'all' ||
         (experimentFilter === 'with' && ds.experimentCount > 0) ||
         (experimentFilter === 'without' && ds.experimentCount === 0);
       const matchesTag = tagFilter === 'all' || (Array.isArray(ds.tags) && (ds.tags as string[]).includes(tagFilter));
-      return matchesSearch && matchesTarget && matchesExperiment && matchesTag;
+      return matchesSearch && matchesExperiment && matchesTag;
     });
-  }, [enrichedDatasets, search, targetFilter, experimentFilter, tagFilter]);
+  }, [enrichedDatasets, search, experimentFilter, tagFilter]);
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
 
@@ -111,35 +80,25 @@ export function DatasetsList({
   }
 
   return (
-    <EntityList columns={COLUMNS} variant="striped" scrollRef={containerRef}>
+    <EntityList columns={COLUMNS} scrollRef={containerRef}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
         <EntityList.TopCell>Tags</EntityList.TopCell>
         <EntityList.TopCell>Version</EntityList.TopCell>
-        <EntityList.TopCell>Target</EntityList.TopCell>
         <EntityList.TopCell>Last Updated</EntityList.TopCell>
         <EntityList.TopCell>Experiments</EntityList.TopCell>
-        <EntityList.TopCell className="justify-center">Review</EntityList.TopCell>
       </EntityList.Top>
 
       {filteredData.map((ds, index) => {
-        const experimentsChipColor: 'green' | 'yellow' | 'red' =
-          ds.successPct !== null && ds.successPct >= 70
-            ? 'green'
-            : ds.successPct !== null && ds.successPct >= 40
-              ? 'yellow'
-              : 'red';
-
-        const review = reviewByDataset?.get(ds.id);
-        const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
+        const experimentsBadgeVariant = getExperimentsBadgeVariant(ds.successPct);
+        const tags = Array.isArray(ds.tags) ? ds.tags.filter(tag => typeof tag === 'string') : [];
         const hasExperimentsAction = ds.experimentCount > 0;
-        const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
         return (
           <EntityList.RowWrapper key={ds.id}>
             <EntityList.RowLink
-              colEnd={rowLayout.rowLinkColEnd}
+              colEnd={hasExperimentsAction ? -2 : -1}
               to={paths.datasetLink(ds.id)}
               LinkComponent={Link}
               {...getRowProps(index)}
@@ -150,9 +109,7 @@ export function DatasetsList({
                 {tags.length > 0 ? (
                   <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
                     {tags.slice(0, 2).map(tag => (
-                      <Chip key={tag} color="gray" size="small" className="shrink-0">
-                        {tag}
-                      </Chip>
+                      <ComputedTag key={tag} value={tag} className="shrink-0" />
                     ))}
                     {tags.length > 2 && <span className="text-neutral2 shrink-0 text-[10px]">+{tags.length - 2}</span>}
                   </div>
@@ -161,65 +118,31 @@ export function DatasetsList({
                 )}
               </EntityList.Cell>
               <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-              <EntityList.Cell className="text-neutral4 text-ui-smd">
-                {ds.targetTypes.length > 0 ? (
-                  <span className="flex min-w-0 items-center gap-2 overflow-hidden">
-                    {ds.targetTypes.map(type => (
-                      <span key={type} className="flex min-w-0 items-center gap-1 capitalize">
-                        <TargetTypeIcon type={type} />
-                        <span className="truncate">{type}</span>
-                      </span>
-                    ))}
-                  </span>
-                ) : (
-                  <span className="text-neutral2">—</span>
-                )}
-              </EntityList.Cell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-              {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
-              {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}
+              {hasExperimentsAction ? null : <EntityList.Cell className="justify-center" />}
             </EntityList.RowLink>
 
             {hasExperimentsAction ? (
               <Button
                 as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=experiments`}
+                to={`/experiments?dataset=${ds.id}`}
                 variant="ghost"
                 size="sm"
                 className="h-full w-full rounded-lg p-0!"
               >
-                <Chip color={experimentsChipColor}>
+                <Badge variant={experimentsBadgeVariant} size="sm">
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
-                </Chip>
+                </Badge>
               </Button>
-            ) : null}
-
-            {review ? (
-              <Button
-                as={Link}
-                to={`${paths.datasetLink(ds.id)}?tab=review`}
-                variant="ghost"
-                size="sm"
-                className="h-full w-full rounded-lg p-0!"
-              >
-                {review.needsReview > 0 ? (
-                  <Chip color="yellow">{review.needsReview} pending</Chip>
-                ) : (
-                  <Chip color="green">{review.complete} reviewed</Chip>
-                )}
-              </Button>
-            ) : rowLayout.showReviewPlaceholderAfterExperiments ? (
-              <EntityList.Cell className="justify-center" />
             ) : null}
           </EntityList.RowWrapper>
         );
       })}
 
-      <EntityList.Pagination
-        currentPage={currentPage}
-        hasMore={hasMore}
-        onNextPage={onNextPage}
-        onPrevPage={onPrevPage}
+      <EntityList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
       />
     </EntityList>
   );

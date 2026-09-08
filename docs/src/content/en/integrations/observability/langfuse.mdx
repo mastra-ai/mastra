@@ -1,6 +1,6 @@
 ---
 title: "Langfuse | Observability"
-description: "Send traces to Langfuse for LLM observability and analytics"
+description: "Export Mastra traces to Langfuse for open-source LLM observability, configure credentials and endpoints, and inspect prompts, tools, and generations."
 packages:
   - "@mastra/langfuse"
   - "@mastra/observability"
@@ -200,10 +200,13 @@ const tracingOptions = {
 
 This example produces `langfuse.trace.metadata.customerId` and `langfuse.trace.metadata.tier`.
 
+Metadata on the root span is also forwarded. Mastra sets `runId` and `resourceId` on every agent and workflow root span, and you can add your own keys through `tracingOptions.metadata`. The exporter forwards each of these root span keys to `langfuse.trace.metadata.<key>`. Keys that map to a dedicated Langfuse field (`userId`, `sessionId`, `threadId`, `traceName`, and `version`) are not duplicated as trace metadata. Metadata on child spans stays on the observation and never changes the trace.
+
 Notes:
 
 - The reserved `prompt` key is used for [prompt linking](#prompt-linking) and isn't forwarded as trace metadata.
 - The reserved identity keys `agentId`, `agentName`, `workflowId`, and `workflowName` are set from the root span and take precedence over custom values with the same name.
+- Keys under `langfuse` take precedence over root span metadata with the same name.
 - Values are sent as strings, because Langfuse maps trace metadata attributes as strings. Numbers, booleans, and objects are serialized with JSON. Langfuse Cloud restores them to their original types on ingestion.
 
 ## Prompt linking

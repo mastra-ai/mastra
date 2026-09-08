@@ -230,7 +230,7 @@ describe('schema-backed extraction does not leak the temporary observer identity
 
   // Reproduces the reported bug: for a schema-backed Extractor the observer runs a
   // structured-extraction pass with a temporary `structured-observer` memory. If that
-  // agent.generate call runs with the parent's RequestContext, it overwrites the shared
+  // agent.stream call runs with the parent's RequestContext, it overwrites the shared
   // `MastraMemory` entry, and the parent OM turn later injects a continuation message
   // with resourceId 'structured-observer' — which fails MessageList's resourceId
   // validation ("Received input message with wrong resourceId").
@@ -242,21 +242,23 @@ describe('schema-backed extraction does not leak the temporary observer identity
 
     vi.spyOn(observer as any, 'createAgent').mockReturnValue({
       id: 'observational-memory-observer',
-      stream: async () => ({
-        getFullOutput: async () => ({
-          text: '<observations>\n- learned something\n</observations>',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        }),
-      }),
-      generate: async (_prompt: unknown, options: { requestContext?: RequestContext }) => {
-        extractionRequestContext = options.requestContext;
-        // Emulate agent.generate writing the temporary observer memory identity onto
-        // the RequestContext it is given.
-        options.requestContext?.set('MastraMemory', {
-          thread: { id: 'structured-observer-xyz' },
-          resourceId: 'structured-observer',
-        });
-        return { object: { 'support-profile': { os: 'macOS' } } };
+      stream: async (_prompt: unknown, options?: { requestContext?: RequestContext; structuredOutput?: unknown }) => {
+        if (options?.structuredOutput) {
+          extractionRequestContext = options.requestContext;
+          // Emulate agent.stream writing the temporary observer memory identity onto
+          // the RequestContext it is given.
+          options.requestContext?.set('MastraMemory', {
+            thread: { id: 'structured-observer-xyz' },
+            resourceId: 'structured-observer',
+          });
+          return { object: Promise.resolve({ 'support-profile': { os: 'macOS' } }) };
+        }
+        return {
+          getFullOutput: async () => ({
+            text: '<observations>\n- learned something\n</observations>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        };
       },
     });
 
@@ -275,19 +277,21 @@ describe('schema-backed extraction does not leak the temporary observer identity
 
     vi.spyOn(reflector as any, 'createAgent').mockReturnValue({
       id: 'observational-memory-reflector',
-      stream: async () => ({
-        getFullOutput: async () => ({
-          text: '<observations>\n- compressed memory\n</observations>',
-          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        }),
-      }),
-      generate: async (_prompt: unknown, options: { requestContext?: RequestContext }) => {
-        extractionRequestContext = options.requestContext;
-        options.requestContext?.set('MastraMemory', {
-          thread: { id: 'structured-reflector-xyz' },
-          resourceId: 'structured-reflector',
-        });
-        return { object: { 'support-profile': { os: 'macOS' } } };
+      stream: async (_prompt: unknown, options?: { requestContext?: RequestContext; structuredOutput?: unknown }) => {
+        if (options?.structuredOutput) {
+          extractionRequestContext = options.requestContext;
+          options.requestContext?.set('MastraMemory', {
+            thread: { id: 'structured-reflector-xyz' },
+            resourceId: 'structured-reflector',
+          });
+          return { object: Promise.resolve({ 'support-profile': { os: 'macOS' } }) };
+        }
+        return {
+          getFullOutput: async () => ({
+            text: '<observations>\n- compressed memory\n</observations>',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          }),
+        };
       },
     });
 

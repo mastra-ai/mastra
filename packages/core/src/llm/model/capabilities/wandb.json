@@ -8,7 +8,7 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
-    "moonshotai/Kimi-K3"
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "JetBrains/Mellum2-12B-A2.5B-Instruct",
@@ -23,6 +23,7 @@
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
     "google/gemma-4-31B-it",
     "ibm-granite/granite-4.1-8b",
     "ibm-granite/granite-4.2-8b",
@@ -31,12 +32,12 @@
     "meta-llama/Llama-3.3-70B-Instruct",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
-    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "JetBrains/Mellum2-12B-A2.5B-Instruct",
@@ -51,6 +52,7 @@
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
     "google/gemma-4-31B-it",
     "ibm-granite/granite-4.1-8b",
     "ibm-granite/granite-4.2-8b",
@@ -59,11 +61,11 @@
     "meta-llama/Llama-3.3-70B-Instruct",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
-    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

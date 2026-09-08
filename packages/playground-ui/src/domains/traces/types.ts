@@ -27,6 +27,11 @@ export type UISpan = {
   endTime?: string;
   spans?: UISpan[];
   parentSpanId?: string | null;
+  /**
+   * Set when the span survived the active search because of its payload, not its name — the
+   * timeline paints such a row differently since the term is nowhere on it.
+   */
+  matchedInPayloadOnly?: boolean;
 };
 
 export type UISpanStyle = {

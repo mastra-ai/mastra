@@ -1,11 +1,11 @@
 ---
-title: "Traces | Observability"
-description: "Record and inspect hierarchical execution for agents, workflows, tools, and model calls."
+title: "Usage | Traces"
+description: "Trace Mastra agents, workflows, tools, and model calls with hierarchical spans, sampling, metadata, tags, filtering, serialization, and external context."
 packages:
   - "@mastra/observability"
 ---
 
-# Traces
+# Usage
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
@@ -77,7 +77,7 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 1. **Ratio-Based Sampling**: Randomly samples a percentage of traces. Ideal for production environments where you want statistical insights without the cost of full tracing. The probability value ranges from 0 (no traces) to 1 (all traces).
 
-   ```ts prettier:false
+   ```ts oxfmt:false
    sampling: {
      type: 'ratio',
      probability: 0.1  // Sample 10% of traces
@@ -86,7 +86,7 @@ The `sampling` option allows you to control which traces are collected, helping 
 
 1. **Custom Sampling**: Implements your own sampling logic based on request context, metadata, or business rules. Perfect for complex scenarios like sampling based on user tier, request type, or error conditions.
 
-   ```ts prettier:false
+   ```ts oxfmt:false
    sampling: {
      type: 'custom',
      sampler: (options) => {
@@ -149,7 +149,7 @@ export const mastra = new Mastra({
 })
 ```
 
-If `environment` isn't set, Mastra falls back to `process.env.NODE_ENV`. If neither is set, the field is left undefined rather than guessed.
+If `environment` isn't set, runs started through `mastra dev` resolve to `development` (even though the dev server itself runs with `NODE_ENV=production`); otherwise Mastra falls back to `process.env.NODE_ENV`. If none of these are set, the field is left undefined rather than guessed.
 
 Per-call `tracingOptions.metadata.environment` always takes precedence, so individual calls can override the value when needed.
 
@@ -664,8 +664,8 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-service',
         serializationOptions: {
-          maxStringLength: 2048, // Maximum length for string values (default: 1024)
-          maxDepth: 10, // Maximum depth for nested objects (default: 6)
+          maxStringLength: 2048, // Maximum length for string values (default: 131072)
+          maxDepth: 10, // Maximum depth for nested objects (default: 8)
           maxArrayLength: 100, // Maximum number of items in arrays (default: 50)
           maxObjectKeys: 75, // Maximum number of keys in objects (default: 50)
         },
@@ -680,8 +680,8 @@ export const mastra = new Mastra({
 
 | Option | Default | Description |
 | - | - | - |
-| `maxStringLength` | 1024 | Maximum length for string values. Longer strings are truncated. |
-| `maxDepth` | 6 | Maximum depth for nested objects. Deeper levels are omitted. |
+| `maxStringLength` | 131072 (128 KB) | Maximum length for string values. Longer strings are truncated. |
+| `maxDepth` | 8 | Maximum depth for nested objects. Deeper levels are omitted. |
 | `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
 | `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
 
@@ -689,17 +689,17 @@ export const mastra = new Mastra({
 
 **Increasing limits for debugging**: Increase these limits to capture more context for large documents and API responses, as well as other data structures:
 
-```ts prettier:false
+```ts oxfmt:false
 serializationOptions: {
-  maxStringLength: 8192,  // Capture longer text content
-  maxDepth: 12,           // Handle deeply nested JSON responses
-  maxArrayLength: 200,    // Keep more items from large lists
+  maxStringLength: 262144, // Capture longer text content (256 KB)
+  maxDepth: 12,            // Handle deeply nested JSON responses
+  maxArrayLength: 200,     // Keep more items from large lists
 }
 ```
 
 **Reducing trace size for production**: Lower these values to reduce storage costs and improve performance when you don't need full payload visibility:
 
-```ts prettier:false
+```ts oxfmt:false
 serializationOptions: {
   maxStringLength: 256,   // Truncate strings aggressively
   maxDepth: 3,            // Shallow object representation

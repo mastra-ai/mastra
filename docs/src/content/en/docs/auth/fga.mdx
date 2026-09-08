@@ -1,6 +1,6 @@
 ---
 title: "Fine-Grained Authorization (FGA) | Auth"
-description: "Add resource-level authorization to your Mastra application with FGA providers."
+description: "Configure Mastra Fine-Grained Authorization for resource-level permissions that map routes to actions and scope stored resources for enterprise users."
 packages:
   - "@mastra/auth-workos"
   - "@mastra/core"
@@ -28,10 +28,10 @@ FGA is designed for multi-tenant B2B products where permissions are contextual:
 
 Configure FGA in your Mastra server config alongside authentication and RBAC:
 
-```typescript prettier: false
-import { Mastra } from '@mastra/core/mastra';
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
-import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos';
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { MastraFGAPermissions } from '@mastra/core/auth/ee'
+import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
 
 const mastra = new Mastra({
   server: {
@@ -42,8 +42,8 @@ const mastra = new Mastra({
     }),
     fga: new MastraFGAWorkos({
       resourceMapping: {
-        agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
-        workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+        agent: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
+        workflow: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
         thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
       },
       permissionMapping: {
@@ -57,7 +57,7 @@ const mastra = new Mastra({
       scope: true,
     },
   },
-});
+})
 ```
 
 When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`. WorkOS FGA checks need the user's organization memberships to resolve the correct membership ID for authorization.
@@ -70,7 +70,7 @@ When `server.fga` is configured, Mastra enforces FGA on protected actions. If a 
 
 The `resourceMapping` tells Mastra how to resolve FGA resource types and IDs from request context. Keys are Mastra resource types, values define the FGA resource type and how to derive the ID:
 
-```typescript prettier: false
+```typescript oxfmt:false
 resourceMapping: {
   // When checking "can user execute agent X?", resolve the FGA resource
   // as the user's team (type: 'team', id: user.teamId)
@@ -96,7 +96,7 @@ For thread and memory checks, Mastra still passes the raw `threadId` as the reso
 
 The `permissionMapping` translates Mastra's internal permission strings to your FGA provider's permission slugs:
 
-```typescript prettier: false
+```typescript oxfmt:false
 import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 
 permissionMapping: {
@@ -113,7 +113,7 @@ Use `validatePermissions()` to validate the full set of permissions Mastra may e
 
 FGA authorizes access to a resource. It doesn't automatically filter stored records that live in shared storage. Enable stored resource scoping when the built-in stored resource APIs are used in a multi-tenant app.
 
-```typescript prettier: false
+```typescript
 const mastra = new Mastra({
   server: {
     auth: new MastraAuthWorkos({
@@ -124,14 +124,14 @@ const mastra = new Mastra({
       scope: true,
     },
   },
-});
+})
 ```
 
 With `scope: true`, Mastra reads `MASTRA_RESOURCE_ID_KEY` from the request context. `mapUserToResourceId()` sets this value after authentication. Stored resource handlers persist the scope in record metadata and filter list, read, update, publish, and delete operations by that scope.
 
 Use an object when the scope needs custom request logic:
 
-```typescript prettier: false
+```typescript oxfmt:false
 storedResources: {
   scope: {
     metadataKey: 'teamId',
@@ -149,7 +149,7 @@ Mastra includes route-level FGA metadata for built-in resource routes, including
 
 To deny protected routes that don't resolve FGA metadata, configure route policy coverage on the FGA provider:
 
-```typescript prettier: false
+```typescript
 const fga = new MastraFGAWorkos({
   resourceMapping: {
     project: { fgaResourceType: 'project' },
@@ -162,15 +162,15 @@ const fga = new MastraFGAWorkos({
   validatePermissions: async permissions => {
     // Throw if a Mastra permission is missing from permissionMapping.
   },
-});
+})
 ```
 
 Set `auditProtectedRoutes: 'error'` to fail startup when protected routes are missing built-in FGA metadata. If `requireForProtectedRoutes` is enabled, Mastra logs this audit as a warning by default.
 
 For custom routes, prefer route-level `fga` metadata. This keeps authorization policy next to the route:
 
-```typescript prettier: false
-import { createRoute } from '@mastra/server/server-adapter';
+```typescript
+import { createRoute } from '@mastra/server/server-adapter'
 
 export const getProjectRoute = createRoute({
   method: 'GET',
@@ -183,15 +183,15 @@ export const getProjectRoute = createRoute({
     permission: 'projects:read',
   },
   handler: async () => {
-    return { project: null };
+    return { project: null }
   },
-});
+})
 ```
 
 Use `resolveRouteFGA()` only when route metadata must be derived centrally from route, params, or request context. A route map scales better than string-prefix checks:
 
-```typescript prettier: false
-import type { FGARouteConfig, FGARouteResolver } from '@mastra/core/auth/ee';
+```typescript
+import type { FGARouteConfig, FGARouteResolver } from '@mastra/core/auth/ee'
 
 const routeFGA = {
   'GET /billing/:accountId': {
@@ -199,14 +199,14 @@ const routeFGA = {
     resourceIdParam: 'accountId',
     permission: 'billing:read',
   },
-} satisfies Record<string, FGARouteConfig>;
+} satisfies Record<string, FGARouteConfig>
 
-const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`]
 
 const fga = new MastraFGAWorkos({
   /* ... */
   resolveRouteFGA,
-});
+})
 ```
 
 ## Enforcement points
@@ -274,7 +274,7 @@ Autonomous and scheduled agents run without an end user. Mark these calls with a
 - `true` or `{ actorKind: 'system' }` identifies an anonymous system actor.
 - The object form can also carry `agentId`, `permissions`, and `scope` to identify and constrain the acting agent.
 
-By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. It receives the actor and the same `FGACheckParams` as `require`, and throws `FGADeniedError` to deny. When your provider doesn't implement `requireActor`, the trusted-actor bypass is preserved, so adding it's backward compatible.
+By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. The method receives the actor with the same `FGACheckParams` as `require` and denies access by throwing `FGADeniedError`. Providers that omit `requireActor` preserve the trusted-actor bypass, which makes the addition backward compatible.
 
 ```typescript
 import { FGADeniedError } from '@mastra/core/auth/ee'

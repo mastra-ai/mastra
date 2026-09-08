@@ -20,23 +20,46 @@ jobs:
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          fetch-depth: 0
-          # Partial clone: name-only diffs need trees, not blob contents.
-          filter: blob:none
-
       - name: Check for code changes
         id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
+          compare_json=$(mktemp)
+
+          if ! gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$REPOSITORY/compare/$BASE_SHA...$HEAD_SHA" \
+            > "$compare_json"; then
+            echo "Compare API failed; running Prebuild fail-closed."
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! file_count=$(jq -er \
+            'if (.files | type) == "array" then (.files | length) else error("missing files array") end' \
+            "$compare_json"); then
+            echo "Compare API result was invalid; running Prebuild fail-closed."
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$file_count" -ge 300 ]; then
+            echo "Compare API result reached its 300-file response limit; running Prebuild fail-closed."
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(jq -r '.files[].filename' "$compare_json" \
             | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
           if [ -n "$CHANGED" ]; then
-            echo "has_code=true" >> $GITHUB_OUTPUT
+            echo "has_code=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_code=false" >> $GITHUB_OUTPUT
+            echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
   prebuild:
@@ -95,6 +118,8 @@ jobs:
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
       affected_store_tests: ${{ steps.compute.outputs.affected_store_tests }}
       affected_workspace_tests: ${{ steps.compute.outputs.affected_workspace_tests }}
+      workspace_packages: ${{ steps.compute.outputs.workspace_packages }}
+      workspace_docker_packages: ${{ steps.compute.outputs.workspace_docker_packages }}
       affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
     permissions:
       contents: read
@@ -109,6 +134,11 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+
+      - name: Install affected-test dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter mastra-turbo
 
       - name: Compute affected test files
         id: compute
@@ -170,18 +200,23 @@ jobs:
           const affectedStoreTests = affected(file => file.startsWith('stores/'));
           const affectedWorkspaceTests = affected(file => file.startsWith('workspaces/'));
           const affectedMemoryTests = affected(file => file.startsWith('packages/memory/integration-tests/'));
+          const {
+            discoverWorkspacePackages,
+            selectWorkspacePackages,
+          } = require('./.github/scripts/ci-routing.cjs');
+          const workspaceSelection = selectWorkspacePackages({
+            affectedTests,
+            changedFiles,
+            runFull,
+            workspacePackages: discoverWorkspacePackages(),
+          });
 
           const storesChanged = affectedStoreTests || changed(file =>
             file.startsWith('stores/') ||
             file === '.github/workflows/test-combined-stores.yml' ||
             file === '.github/workflows/prebuild.yml'
           );
-          const workspacesChanged = affectedWorkspaceTests || changed(file =>
-            file.startsWith('workspaces/') ||
-            file === '.github/workflows/test-workspaces.yml' ||
-            file === '.github/workflows/secrets.test-workspaces.yml' ||
-            file === '.github/workflows/prebuild.yml'
-          );
+          const workspacesChanged = workspaceSelection.packages.length > 0;
           const memoryChanged = affectedMemoryTests || changed(file =>
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
@@ -201,7 +236,12 @@ jobs:
           );
 
           output(`affected_store_tests=${affectedStoreTests}\n`);
+          const workspaceDockerPackages = workspaceSelection.packages.filter(packageName =>
+            ['s3', 'gcs', 'azure'].includes(packageName),
+          );
           output(`affected_workspace_tests=${affectedWorkspaceTests}\n`);
+          output(`workspace_packages=${JSON.stringify(workspaceSelection.packages)}\n`);
+          output(`workspace_docker_packages=${JSON.stringify(workspaceDockerPackages)}\n`);
           output(`affected_memory_tests=${affectedMemoryTests}\n`);
           output(`stores_changed=${storesChanged}\n`);
           output(`workspaces_changed=${workspacesChanged}\n`);
@@ -225,6 +265,11 @@ jobs:
           console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
           console.error(`Affected unit/type tests: ${unitTestFiles.length}`);
           console.error(`Affected package E2E tests: ${e2eTestFiles.length}`);
+          console.error(`Workspace packages (${workspaceSelection.reason}): ${workspaceSelection.packages.join(', ') || 'none'}`);
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `## Workspace test routing\n\n- Reason: \`${workspaceSelection.reason}\`\n- Packages: ${workspaceSelection.packages.length ? workspaceSelection.packages.map(pkg => `\`${pkg}\``).join(', ') : 'none'}\n`,
+          );
 
           if (runFull) {
             console.error('Above 50% threshold — running full suite.');
@@ -252,6 +297,7 @@ jobs:
           MEMORY_CHANGED: ${{ steps.compute.outputs.memory_changed }}
           AFFECTED_STORE_TESTS: ${{ steps.compute.outputs.affected_store_tests }}
           AFFECTED_WORKSPACE_TESTS: ${{ steps.compute.outputs.affected_workspace_tests }}
+          WORKSPACE_PACKAGES: ${{ steps.compute.outputs.workspace_packages }}
           AFFECTED_MEMORY_TESTS: ${{ steps.compute.outputs.affected_memory_tests }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -265,6 +311,7 @@ jobs:
           echo "$MEMORY_CHANGED" > /tmp/affected-outputs/memory_changed.txt
           echo "$AFFECTED_STORE_TESTS" > /tmp/affected-outputs/affected_store_tests.txt
           echo "$AFFECTED_WORKSPACE_TESTS" > /tmp/affected-outputs/affected_workspace_tests.txt
+          echo "$WORKSPACE_PACKAGES" > /tmp/affected-outputs/workspace_packages.json
           echo "$AFFECTED_MEMORY_TESTS" > /tmp/affected-outputs/affected_memory_tests.txt
           echo "$BASE_SHA" > /tmp/affected-outputs/base_sha.txt
           echo "$HEAD_SHA" > /tmp/affected-outputs/head_sha.txt
@@ -350,6 +397,8 @@ jobs:
       contents: read
     with:
       head_sha: ${{ github.event.pull_request.head.sha }}
+      workspace_packages: ${{ needs.affected-tests.outputs.workspace_packages }}
+      workspace_docker_packages: ${{ needs.affected-tests.outputs.workspace_docker_packages }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -406,7 +455,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Build dependencies
-        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed" --filter "@internal/llm-recorder" --filter "@internal/test-utils"
+        run: pnpm turbo build --filter "./stores/libsql" --filter "./stores/pg" --filter "./stores/upstash" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed" --filter "@internal/llm-recorder" --filter "@internal/test-utils"
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 

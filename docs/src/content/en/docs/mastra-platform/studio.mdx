@@ -1,6 +1,6 @@
 ---
 title: "Studio | Mastra platform"
-description: Deploy and host Studio on Mastra platform for a shared visual workspace for your Mastra application.
+description: "Deploy Mastra Studio as a hosted team workspace for testing agents and workflows, with trace inspection and no UI infrastructure to manage."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -62,7 +62,7 @@ To run the same codebase across `production` and `staging`, use [`mastra deploy 
 
 ## Create a new project non-interactively
 
-`mastra deploy` can create a project on first run. If `--project <name>` doesn't match an existing project, the CLI uses the value as the new project name and creates it after confirmation. Combined with `--yes`, this is fully scriptable:
+On its first run, `mastra deploy` can create a project. When `--project <name>` doesn't match an existing project, the CLI treats the value as a new project name and creates it after confirmation. Add `--yes` to make this flow fully scriptable:
 
 ```bash
 mastra deploy --project "my-new-project" --yes

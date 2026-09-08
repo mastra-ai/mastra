@@ -1,5 +1,9 @@
 packages:
   - '.'
 
+pnpm:
+  overrides:
+    hono@<4.12.34: 4.12.34
+
 # a dependency install script this project never needed must not fail a preview deploy
 strictDepBuilds: false

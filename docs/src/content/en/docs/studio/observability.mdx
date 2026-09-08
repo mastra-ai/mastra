@@ -1,6 +1,6 @@
 ---
 title: "Observability | Studio"
-description: Use the metrics dashboard and traces view, and logs browser in Studio to monitor agent, workflow, plus tool performance.
+description: "Monitor Mastra agents, workflows, tools, and model calls in Studio with metrics dashboards, hierarchical traces, and searchable correlated logs."
 packages:
   - "@mastra/core"
   - "@mastra/observability"
@@ -92,7 +92,7 @@ Above the trace list, open **Columns** to show or hide input, entity, duration, 
 
 Token and estimated cost columns require an observability store that supports metrics. These columns stay hidden in the **Branches** view because several branch rows can belong to the same trace.
 
-Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [tracing overview](/docs/observability/tracing/overview) for more details.
+Tracing filters out low-level framework details so your traces stay focused and readable. Visit [Traces usage](/docs/observability/tracing/overview) for more details.
 
 To export a trace, select **Download trace JSON** in the trace panel header. This saves the entire trace as a `trace-<id>.json` file, with every span and its full input, output, metadata, and attributes. Use it to share a trace or attach it to a bug report, or alternatively build an evaluation dataset offline.
 
@@ -106,6 +106,6 @@ Log forwarding is enabled by default when you configure observability. See [logg
 
 - [Observability overview](/docs/observability/overview)
 - [Metrics overview](/docs/observability/metrics/overview)
-- [Tracing overview](/docs/observability/tracing/overview)
+- [Traces usage](/docs/observability/tracing/overview)
 - [Logging](/docs/observability/logging)
 - [Mastra platform observability](/docs/mastra-platform/observability)

@@ -19,6 +19,8 @@ import { getErrorFromUnknown } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { createRunScopeKey } from '../mastra/run-scope';
+import type { RunScope } from '../mastra/run-scope';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -28,6 +30,7 @@ import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
 
+import { readMessageAuthor, withMessageAuthor } from './message-author';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -46,6 +49,8 @@ import type {
   TokenUsage,
   ToolCategory,
 } from './types';
+
+export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -264,8 +269,14 @@ export interface ThreadDataStore {
 export interface SessionMachinery {
   /** Resolve the agent that should answer for the session's current mode/model. */
   getAgent(): Agent;
+  /** Get the ephemeral state associated with an active or suspended run. */
+  getRunScope(runId: string): RunScope | undefined;
   /** Open a fresh subscription to a thread's agent event stream. */
-  subscribeToThread(input: { resourceId: string; threadId: string }): Promise<AgentThreadSubscription<any>>;
+  subscribeToThread(input: {
+    agent?: Agent;
+    resourceId: string;
+    threadId: string;
+  }): Promise<AgentThreadSubscription<any>>;
   /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
   buildStreamOptions(input: {
     requestContext?: RequestContext;
@@ -538,16 +549,15 @@ export class SessionThread {
    * Ensure the session is subscribed to the given agent/thread stream, opening a
    * fresh subscription (and driving its run loop) when the binding changed.
    */
-  async ensureSubscription(threadId: string): Promise<void> {
+  async ensureSubscription(threadId: string, agent = this.#owner.machinery.getAgent()): Promise<void> {
     const session = this.#owner;
-    const agent = session.machinery.getAgent();
     const resourceId = this.#getResourceId();
     const key = SessionStream.keyFor({ agent, resourceId, threadId });
     if (session.stream.matches({ key })) return;
 
     this.cleanupSubscription();
-    const subscription = await session.machinery.subscribeToThread({ resourceId, threadId });
-    session.stream.attach({ subscription, key });
+    const subscription = await session.machinery.subscribeToThread({ agent, resourceId, threadId });
+    session.stream.attach({ subscription, agent, key });
     void session.processSubscribedThreadStream(subscription);
   }
 
@@ -969,6 +979,8 @@ export class SessionThread {
 export class SessionStream {
   /** The live subscription to the active thread, or null when none is open. */
   #subscription: AgentThreadSubscription<any> | null = null;
+  /** Agent that created the live subscription, or null when none is open. */
+  #agent: Agent | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
   readonly #teardownWaiters = new Set<() => void>();
@@ -1005,10 +1017,24 @@ export class SessionStream {
     return this.#key === key && this.#subscription !== null;
   }
 
-  /** Adopt `subscription` as the live one, recording its dedup `key`. */
-  attach({ subscription, key }: { subscription: AgentThreadSubscription<any>; key: string }): void {
+  /** Adopt `subscription` as the live one, recording its owning agent and dedup `key`. */
+  attach({
+    subscription,
+    agent,
+    key,
+  }: {
+    subscription: AgentThreadSubscription<any>;
+    agent?: Agent;
+    key: string;
+  }): void {
     this.#subscription = subscription;
+    this.#agent = agent ?? null;
     this.#key = key;
+  }
+
+  /** Agent that owns `subscription`, when it is the live subscription. */
+  getAgent({ subscription }: { subscription: AgentThreadSubscription<any> }): Agent | null {
+    return this.#subscription === subscription ? this.#agent : null;
   }
 
   /** Whether a subscription is currently open. */
@@ -1042,6 +1068,7 @@ export class SessionStream {
   detach(): void {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
+    this.#agent = null;
     this.#key = null;
     this.#notifyTeardown();
   }
@@ -1051,6 +1078,7 @@ export class SessionStream {
     this.#subscription?.abort();
     this.#subscription?.unsubscribe();
     this.#subscription = null;
+    this.#agent = null;
     this.#key = null;
     this.#notifyTeardown();
   }
@@ -3377,7 +3405,12 @@ export class Session<TState = unknown> {
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
     const submitted = createSignal(
       'content' in input
-        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        ? {
+            type: 'user',
+            tagName: 'user',
+            contents: input.content,
+            providerOptions: withMessageAuthor(input.providerOptions, readMessageAuthor(requestContextInput)),
+          }
         : input,
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
@@ -3605,11 +3638,17 @@ export class Session<TState = unknown> {
           tracingContext: options?.tracingContext,
           tracingOptions: options?.tracingOptions,
         });
-        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
-          resourceId: this.identity.getResourceId(),
-          threadId,
-          ifIdle: { streamOptions: streamOptions as any },
-        });
+        const result = agent.queueMessage(
+          {
+            contents: this.createMessageInput({ content: next.content }),
+            providerOptions: withMessageAuthor(undefined, readMessageAuthor(next.requestContext)),
+          },
+          {
+            resourceId: this.identity.getResourceId(),
+            threadId,
+            ifIdle: { streamOptions: streamOptions as any },
+          },
+        );
         // Let a rejected `accepted` propagate: `next` is already dequeued, so a
         // setup/misconfig failure must reach the outer catch to requeue it
         // rather than being swallowed into a false success (the follow-up would
@@ -3720,7 +3759,14 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {
-      await this.resumeToolCall({ resumeData: response, toolCallId, requestContext });
+      // The caller aborts once the rejected tool result is persisted. Waiting for
+      // the run to terminate here would prevent that abort from ever being sent.
+      await this.resumeToolCall({
+        resumeData: response,
+        toolCallId,
+        requestContext,
+        resolveOnToolEnd: true,
+      });
       return;
     }
 
@@ -3812,16 +3858,19 @@ export class Session<TState = unknown> {
     });
   }
 
-  private createSubscribedResumeBoundaryWaiter(toolCallId?: string): { promise: Promise<void>; cancel: () => void } {
+  private createSubscribedResumeBoundaryWaiter({
+    toolCallId,
+    resolveOnToolEnd = false,
+  }: {
+    toolCallId: string;
+    resolveOnToolEnd?: boolean;
+  }): { promise: Promise<void>; cancel: () => void } {
     let unsubscribe: (() => void) | undefined;
     const promise = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
-        if (
-          event.type === 'tool_suspended' ||
-          event.type === 'agent_end' ||
-          event.type === 'error' ||
-          (event.type === 'tool_end' && toolCallId && event.toolCallId === toolCallId)
-        ) {
+        const isTerminal = event.type === 'tool_suspended' || event.type === 'agent_end' || event.type === 'error';
+        const completedResumedTool = resolveOnToolEnd && event.type === 'tool_end' && event.toolCallId === toolCallId;
+        if (isTerminal || completedResumedTool) {
           unsubscribe?.();
           resolve();
         }
@@ -3847,17 +3896,24 @@ export class Session<TState = unknown> {
     resumeData,
     toolCallId,
     requestContext: requestContextInput,
+    resolveOnToolEnd = false,
   }: {
     resumeData: any;
     toolCallId: string;
     requestContext?: RequestContext;
+    resolveOnToolEnd?: boolean;
   }): Promise<void> {
     const suspension = this.suspensions.get({ toolCallId });
     if (!suspension) {
       throw new Error('No active suspension to resume');
     }
 
-    const agent = this.machinery.getAgent();
+    // Resume through the agent that suspended the run. A `submit_plan` approval
+    // switches modes before resuming, but suspended snapshots are owned by their
+    // originating agent so another mode's agent cannot reclaim one by run id.
+    // An explicit, authorized run-handoff would be required to transfer ownership.
+    const agent =
+      this.machinery.getRunScope(suspension.runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? this.machinery.getAgent();
 
     // Remove before resuming so a re-suspend during the resumed run can
     // re-register the same toolCallId without being clobbered by this cleanup.
@@ -3872,10 +3928,8 @@ export class Session<TState = unknown> {
       throw new Error('Cannot resume a suspended tool without a current thread');
     }
 
-    await this.thread.ensureSubscription(threadId);
-    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(
-      suspension.toolName === 'submit_plan' ? toolCallId : undefined,
-    );
+    await this.thread.ensureSubscription(threadId, agent);
+    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
 
     try {
       const resourceId = this.identity.getResourceId();
@@ -3905,6 +3959,7 @@ export class Session<TState = unknown> {
       await resumedSubscriptionBoundary.promise;
     } finally {
       resumedSubscriptionBoundary.cancel();
+      await this.thread.ensureSubscription(threadId);
     }
   }
 

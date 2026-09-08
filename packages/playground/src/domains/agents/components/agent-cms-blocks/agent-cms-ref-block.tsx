@@ -130,12 +130,12 @@ const RefBlockContent = ({
                 {promptBlock.name}
               </Txt>
               {isDraft && (
-                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Draft prompt block">
+                <Badge size="xs" variant="yellow" aria-label="Draft prompt block">
                   Draft
                 </Badge>
               )}
               {hasUnpublishedEdits && (
-                <Badge size="xs" variant="warning" className="text-ui-2xs" aria-label="Unpublished prompt block edits">
+                <Badge size="xs" variant="yellow" aria-label="Unpublished prompt block edits">
                   Unpublished edits
                 </Badge>
               )}

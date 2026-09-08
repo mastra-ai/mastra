@@ -48,7 +48,7 @@ import { PostgresStore } from '@mastra/pg';
 
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory } from './agents/memory.js';
+import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -58,14 +58,15 @@ import {
   createGitRefReminderReader,
   getStaticallyLoadedInstructionPaths,
 } from './agents/prompts/agent-instructions.js';
-// import { executeSubagent } from './agents/subagents/execute.js';
-// import { exploreSubagent } from './agents/subagents/explore.js';
-// import { planSubagent } from './agents/subagents/plan.js';
+import { executeSubagent } from './agents/subagents/execute.js';
+import { exploreSubagent } from './agents/subagents/explore.js';
+import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -92,6 +93,7 @@ import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.j
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
+import { setAuthStorage as setKimiCodingAuthStorage } from './providers/kimi-coding.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
@@ -241,7 +243,7 @@ export interface MastraCodeConfig {
   homeDir?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
   modes?: AgentControllerMode[];
-  /** Override or extend subagent definitions. Default: explore/plan/execute */
+  /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
@@ -274,6 +276,10 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Trusted host instructions resolved outside mutable session state. */
+  hostInstructions?:
+    | string
+    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
@@ -326,6 +332,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setKimiCodingAuthStorage(authStorage);
   setXAIAuthStorage(authStorage);
   return authStorage;
 }
@@ -632,6 +639,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  // Only the default memory wiring registers the subconscious tools; a
+  // caller-supplied memory is opaque here, so its prompt must not advertise them.
+  const hasSubconscious =
+    config?.memory === undefined ? (state: MastraCodeState | undefined) => hasSubconsciousTools(vector, state) : false;
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -738,6 +749,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
       ? new GithubSignals({
           cwd: project.rootPath,
+          pollIntervalMs: globalSettings.signals.githubPollIntervalMs,
           gitcrawlCommand:
             process.env.MASTRACODE_GITCRAWL_BIN ??
             process.env.GITCRAWL_BIN ??
@@ -832,7 +844,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
-    instructions: getDynamicInstructions,
+    instructions: async ({ requestContext }) => {
+      const configured = config?.hostInstructions;
+      const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
+      return getDynamicInstructions({
+        requestContext,
+        hostInstructions,
+        hasSubconscious,
+        hasSubagents: subagents.length > 0,
+      });
+    },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
@@ -984,6 +1005,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const githubCopilotCred = authStorage.get('github-copilot');
+  const kimiCodingCred = authStorage.get('kimi-for-coding');
   const startupAccess: ProviderAccess = {
     anthropic:
       anthropicCred?.type === 'oauth'
@@ -1001,6 +1023,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
+    'kimi-for-coding':
+      kimiCodingCred?.type === 'oauth' && isKimiCodingDeviceId(kimiCodingCred.deviceId)
+        ? 'oauth'
+        : (kimiCodingCred?.type === 'api_key' && kimiCodingCred.key.trim().length > 0) ||
+            Boolean(process.env.KIMI_API_KEY?.trim())
+          ? 'apikey'
+          : false,
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
   if (mgApiKey) {
@@ -1048,11 +1077,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     throw new Error('MastraCode requires at least one mode');
   }
 
-  // Map subagent types to mode models: explore→fast, plan→plan, execute→build
-  // const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  // Subagents inherit workspace tools from the parent agent's workspace automatically.
-  // Apply disabledTools filter to both default and custom subagents.
-  // const subagents = [];
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const disabledTools = new Set(config?.disabledTools);
+  const subagents = (config?.subagents ?? [exploreSubagent, planSubagent, executeSubagent]).map(definition => ({
+    ...definition,
+    ...(config?.subagents == null && {
+      defaultModelId:
+        modes.find(mode => mode.id === subagentModeMap[definition.id])?.defaultModelId ??
+        modes.find(mode => mode.id === defaultModeId)?.defaultModelId,
+    }),
+    allowedControllerTools: definition.allowedControllerTools?.filter(name => !disabledTools.has(name)),
+    allowedWorkspaceTools: definition.allowedWorkspaceTools?.filter(name => !disabledTools.has(name)),
+    ...(definition.tools && {
+      tools: Object.fromEntries(Object.entries(definition.tools).filter(([name]) => !disabledTools.has(name))),
+    }),
+  }));
 
   // Build initial state with global preferences. OM knobs are skipped when the
   // host persists memory settings elsewhere (`disableSettingsOmSeed`) so the
@@ -1107,7 +1146,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
     agent: codeAgent,
-    subagents: config?.subagents ?? [],
+    subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
@@ -1497,6 +1536,7 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
+export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session

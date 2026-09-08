@@ -8,7 +8,7 @@ import { queryKeys } from '../../api/keys';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
 import { useDeleteWorkItemMutation, useRunningSessions, useTransitionWorkItemMutation } from '../useWorkItems';
 
-const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [] });
+const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -28,6 +28,10 @@ function item(revision: number, stage: string): WorkItem {
     stageHistory: [],
     sessions: {},
     metadata: {},
+    triageType: null,
+    acceptedAt: null,
+    commentCount: 0,
+    feedActivityAt: null,
     revision,
     createdAt: '2026-07-18T00:00:00.000Z',
     updatedAt: '2026-07-18T00:00:00.000Z',

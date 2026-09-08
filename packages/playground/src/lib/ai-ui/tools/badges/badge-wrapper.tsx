@@ -15,6 +15,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { useTraceHighlight } from '@/domains/traces/components/trace-highlight-context';
 import { useChatRunning } from '@/lib/ai-ui/chat/chat-context';
 
 export interface BadgeWrapperProps {
@@ -30,6 +31,8 @@ export interface BadgeWrapperProps {
   /** Replaces the assembled icon/title/detail header — the tool path passes ToolCallPresentedHeader. */
   header?: React.ReactNode;
   status?: ToolCallStatus;
+  /** Lets the trace view feature the spans behind this tool when the badge is opened. */
+  toolCallId?: string;
   'data-testid'?: string;
 }
 
@@ -43,10 +46,17 @@ export const BadgeWrapper = ({
   extraInfo,
   header: headerOverride,
   status = 'idle',
+  toolCallId,
   'data-testid': dataTestId,
 }: BadgeWrapperProps) => {
   const [open, setOpen] = useState(!initialCollapsed);
   const { isRunning } = useChatRunning();
+  const { onToolOpen } = useTraceHighlight();
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next && toolCallId) onToolOpen?.(toolCallId);
+  };
   // A badge already on screen when the thread loaded was not just called.
   const [arrivedLive] = useState(() => isRunning);
 
@@ -74,7 +84,7 @@ export const BadgeWrapper = ({
   return (
     <ToolCall
       open={bodyOpen}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       status={status}
       className={cn(arrivedLive && 'motion-safe:animate-in fade-in-0 slide-in-from-bottom-1')}
       data-testid={dataTestId}

@@ -39,6 +39,11 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   };
 }
 
+/** Every session row of the repository, factory workspaces and user sessions alike. */
+export function allSessionRows(data: WorkspacesData | undefined): FactoryUserSession[] {
+  return [...(data?.workspaces ?? []), ...(data?.userSessions ?? [])];
+}
+
 async function loadWorkspaces(baseUrl: string, projectRepositoryId: string, signal?: AbortSignal) {
   return splitSessions(await listUserSessions(baseUrl, projectRepositoryId, signal));
 }
@@ -138,8 +143,9 @@ const UNMATERIALIZED_POLL_WINDOW_MS = 10 * 60_000;
 /**
  * Poll gently while any listed session has not been materialized yet. The
  * sidebar status dots derive "initializing" from `materializedAt`, which the
- * server stamps out-of-band (first agent exec, warm-up, another tab) — with no
- * poll the cached `null` never resolved and dots wedged on "initializing".
+ * server stamps out-of-band (the session's first command, or another tab) —
+ * with no poll the cached `null` never resolved and dots wedged on
+ * "initializing".
  */
 export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = Date.now()): number | false {
   if (!data) return false;

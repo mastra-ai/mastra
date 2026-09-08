@@ -58,6 +58,39 @@ describe('getDynamicInstructions', () => {
     );
   });
 
+  it('never leaks the host cwd, branch, or instruction files into a session without a project', async () => {
+    const { getCurrentGitBranchAsync } = await import('../../utils/project.js');
+    const { loadAgentInstructions } = await import('../prompts/agent-instructions.js');
+    vi.mocked(getCurrentGitBranchAsync).mockClear();
+    vi.mocked(loadAgentInstructions).mockClear();
+
+    const prompt = await getDynamicInstructions({
+      requestContext: {
+        get: vi.fn(key => {
+          const getState = vi.fn(() => ({
+            // Hosted chat-only session: no project identity at all.
+            projectPath: '',
+            projectName: '',
+            gitBranch: '',
+            permissionRules: { tools: {} },
+          }));
+          return key === 'controller'
+            ? { getState, session: { modeId: 'build', state: { get: getState } } }
+            : undefined;
+        }),
+      },
+    });
+
+    expect(prompt).toContain('Working directory: (no workspace attached)');
+    expect(prompt).toContain('Not a git repository');
+    expect(prompt).not.toContain(process.cwd());
+    // No host probes: git never ran, no instruction files were read (project
+    // locations would resolve against the server cwd, globals against the
+    // server homedir).
+    expect(getCurrentGitBranchAsync).not.toHaveBeenCalled();
+    expect(loadAgentInstructions).not.toHaveBeenCalled();
+  });
+
   it('appends active plugin instructions to the base prompt', async () => {
     const prompt = await getDynamicInstructions({
       requestContext: {

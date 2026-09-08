@@ -1,7 +1,7 @@
 import { format, isToday } from 'date-fns';
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
-import { dataListRowRevealStyles, dataListStickyStartStyles } from './shared';
+import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ export function DataListActionsCell({ children, className, ...rest }: DataListCe
       <span
         className={cn(
           'flex w-full items-center justify-end gap-1 pr-3 transition-opacity duration-200',
-          dataListRowRevealStyles,
+          dataListRowActionRevealStyles,
         )}
       >
         {children}
@@ -133,7 +133,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
     <DataListCell
       sticky="start"
       className={cn(
-        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none rounded-l-lg pr-4 pl-5 text-left text-ui-sm font-medium text-neutral2',
+        'data-list-row-header -mr-4 -ml-5 w-auto max-w-none pr-4 pl-5 text-left text-ui-sm font-medium text-neutral2',
         className,
       )}
       {...rest}
@@ -203,10 +203,10 @@ export function DataListSelectCell({ checked, onToggle, disabled, ...rest }: Dat
       as="label"
       className={cn(
         'size-8 justify-items-center self-center overflow-visible px-0',
-        !checked && dataListRowRevealStyles,
         disabled ? 'cursor-not-allowed' : 'cursor-pointer',
       )}
       onClick={e => e.stopPropagation()}
+      data-selected={checked || undefined}
     >
       <Checkbox
         checked={checked}
@@ -236,6 +236,20 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   return (
     <DataListCell className="text-ui-smd text-neutral2">
       {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
+    </DataListCell>
+  );
+}
+
+export interface DataListCreatedCellProps {
+  timestamp: Date | string;
+}
+
+/** Combined date + time cell — `MMM dd h:mm:ss a` (e.g. `Aug 31 1:07:47 pm`), no milliseconds. */
+export function DataListCreatedCell({ timestamp }: DataListCreatedCellProps) {
+  const date = toDate(timestamp);
+  return (
+    <DataListCell className="text-ui-smd text-neutral3 tabular-nums">
+      {date ? format(date, 'MMM dd h:mm:ss aaa') : null}
     </DataListCell>
   );
 }

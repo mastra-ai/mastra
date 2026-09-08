@@ -203,7 +203,8 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     },
     capabilities: {
       label: 'Postgres vNext',
-      preferredStrategy: 'insert-only',
+      preferredStrategy: 'event-sourced',
+      traceQuery: true,
     },
     cleanup: async storage => {
       await storage.dangerouslyClearAll();

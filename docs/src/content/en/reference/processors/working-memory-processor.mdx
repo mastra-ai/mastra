@@ -1,6 +1,6 @@
 ---
 title: "Reference: WorkingMemory | Processors"
-description: "Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions."
+description: "The WorkingMemory is an input processor that injects working memory data as a system message."
 packages:
   - "@mastra/core"
   - "@mastra/pg"
@@ -213,7 +213,7 @@ const processor = new WorkingMemory({
    - Resource record (`scope: 'resource'`)
 1. Resolves the template (from provider, options, or default)
 1. Generates system instructions based on mode:
-   - **Normal mode**: Includes guidelines for storing/updating information, template structure, and current data
+   - **Normal mode**: Includes guidelines for storing and updating information, along with the template structure and current data
    - **Read-only mode** (`readOnly: true`): Includes only the current data as context without update instructions
 1. Adds the instruction as a system message with `source: 'memory'` tag
 

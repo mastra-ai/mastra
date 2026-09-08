@@ -6,6 +6,7 @@ import type { Config } from '@docusaurus/types'
 import type { ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
+import { normalizeSiteSectionRoot, SITE_SECTION_ROOTS } from './src/utils/canonical-url'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 const SHARED_REMARK_PLUGINS = [
@@ -86,7 +87,7 @@ const config: Config = {
       {
         id: 'integrations',
         path: 'src/content/en/integrations',
-        routeBasePath: 'integrations',
+        routeBasePath: SITE_SECTION_ROOTS.integrations.slice(1),
         sidebarPath: './src/content/en/integrations/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -98,7 +99,7 @@ const config: Config = {
       {
         id: 'models',
         path: 'src/content/en/models',
-        routeBasePath: 'models',
+        routeBasePath: SITE_SECTION_ROOTS.models.slice(1),
         sidebarPath: './src/content/en/models/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -110,7 +111,7 @@ const config: Config = {
       {
         id: 'reference',
         path: 'src/content/en/reference',
-        routeBasePath: 'reference',
+        routeBasePath: SITE_SECTION_ROOTS.reference.slice(1),
         sidebarPath: './src/content/en/reference/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
@@ -136,7 +137,7 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/docs',
+            link: SITE_SECTION_ROOTS.docs,
           },
           { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
           {
@@ -178,7 +179,7 @@ const config: Config = {
       {
         docs: {
           path: 'src/content/en/docs',
-          routeBasePath: 'docs',
+          routeBasePath: SITE_SECTION_ROOTS.docs.slice(1),
           sidebarPath: './src/content/en/docs/sidebars.js',
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
@@ -196,6 +197,11 @@ const config: Config = {
           priority: 0.5,
           ignorePatterns: ['/tags/**'],
           filename: 'sitemap.xml',
+          createSitemapItems: async params => {
+            const items = await params.defaultCreateSitemapItems(params)
+
+            return items.map(item => ({ ...item, url: normalizeSiteSectionRoot(item.url) }))
+          },
         },
       },
     ],

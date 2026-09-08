@@ -233,8 +233,8 @@ describe('agent-controller routes', () => {
     });
   });
 
-  // The messages/steer/follow-up routes ack immediately and let the session
-  // finish the turn in the background. Session methods can still reject (e.g.
+  // The messages/steer/follow-up/tool-suspension routes ack immediately and let
+  // the session finish the turn in the background. Session methods can still reject (e.g.
   // `sendMessage` rejects when signal submission fails before a stream starts),
   // and an unobserved rejection crashes the process on Node's default
   // `--unhandled-rejections=throw` (see mastra-ai/mastra#19734). The routes must
@@ -250,6 +250,11 @@ describe('agent-controller routes', () => {
       { name: 'sendMessage', method: 'sendMessage', route: SEND_AGENT_CONTROLLER_MESSAGE_ROUTE },
       { name: 'steer', method: 'steer', route: STEER_AGENT_CONTROLLER_SESSION_ROUTE },
       { name: 'followUp', method: 'followUp', route: FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE },
+      {
+        name: 'respondToToolSuspension',
+        method: 'respondToToolSuspension',
+        route: AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
+      },
     ] as const;
 
     for (const { name, method, route } of cases) {
@@ -425,6 +430,24 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-2', resumeData: 'Yes', requestContext });
+    });
+
+    it('acks a tool suspension without waiting for the resumed run to finish', async () => {
+      const session = await getRouteSession('user-suspension-ack');
+      vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
+
+      const result = await Promise.race([
+        AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-suspension-ack',
+          toolCallId: 'call-3',
+          resumeData: 'Yes',
+        } as any),
+        new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 50)),
+      ]);
+
+      expect(result).toEqual({ ok: true });
     });
   });
 

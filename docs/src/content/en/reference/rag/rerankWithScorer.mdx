@@ -1,6 +1,6 @@
 ---
 title: "Reference: rerankWithScorer() | RAG"
-description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+description: "Use rerankWithScorer() with a RelevanceScoreProvider to reorder vector search results by semantic relevance and vector similarity while accounting for position."
 packages:
   - "@mastra/rag"
 ---
@@ -9,7 +9,7 @@ packages:
 
 The `rerankWithScorer()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring.
 
-```typescript prettier:false
+```typescript oxfmt:false
 function rerankWithScorer({
   results: QueryResult[],
   query: string,

@@ -1,5 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { MastraCodeComposedState } from '../schema.js';
+import type { MastraCodeComposedState, MastraCodeState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import type { PromptContext, PromptSection } from './prompts/index.js';
@@ -7,10 +7,18 @@ import { buildFullPromptSections, joinPromptSections } from './prompts/index.js'
 
 export async function getDynamicInstructions({
   requestContext,
+  hostInstructions,
+  hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
+  hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<string> {
-  return joinPromptSections(await getDynamicInstructionSections({ requestContext }));
+  return joinPromptSections(
+    await getDynamicInstructionSections({ requestContext, hostInstructions, hasSubconscious, hasSubagents }),
+  );
 }
 
 /**
@@ -20,20 +28,34 @@ export async function getDynamicInstructions({
  */
 export async function getDynamicInstructionSections({
   requestContext,
+  hostInstructions,
+  hasSubconscious,
+  hasSubagents,
 }: {
   requestContext: { get(key: string): unknown };
+  hostInstructions?: string;
+  /**
+   * The subconscious knowledge tools are registered on the agent. A function
+   * is resolved against the session state, since Factory sessions can refuse
+   * the subconscious per request.
+   */
+  hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
+  hasSubagents?: boolean;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
     | undefined;
   const state = agentControllerContext?.getState();
   const modeId = agentControllerContext?.session?.modeId ?? 'build';
-  const projectPath = state?.projectPath ?? process.cwd();
+  // No host fallback: when the session carries no project (hosted chat-only
+  // sessions), the prompt gets no working directory and no git probe — the
+  // server's own cwd/branch must never leak into a session's prompt.
+  const projectPath = state?.projectPath ?? '';
 
   const promptCtx: PromptContext = {
     projectPath,
     projectName: state?.projectName ?? '',
-    gitBranch: (await getCurrentGitBranchAsync(projectPath)) ?? state?.gitBranch,
+    gitBranch: projectPath ? ((await getCurrentGitBranchAsync(projectPath)) ?? state?.gitBranch) : undefined,
     platform: process.platform,
     commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
@@ -42,8 +64,11 @@ export async function getDynamicInstructionSections({
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,
-    workingDir: state?.projectPath ?? process.cwd(),
+    workingDir: projectPath,
     state,
+    hostInstructions,
+    hasSubagents,
+    hasSubconscious: typeof hasSubconscious === 'function' ? hasSubconscious(state) : hasSubconscious,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

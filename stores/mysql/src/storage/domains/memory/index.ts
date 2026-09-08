@@ -2146,6 +2146,10 @@ export class MemoryMySQL extends MemoryStorage {
         }
 
         const existingChunks = parseBufferedChunks(currentRows[0]!.bufferedObservationChunks);
+        if (existingChunks.some(existing => existing.cycleId === input.chunk.cycleId)) {
+          await connection.commit();
+          return;
+        }
 
         const newChunk: BufferedObservationChunk = {
           id: `ombuf-${randomUUID()}`,

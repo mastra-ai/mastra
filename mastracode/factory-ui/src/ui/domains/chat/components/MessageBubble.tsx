@@ -5,18 +5,18 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Slack } from 'lucide-react';
-import { useState } from 'react';
 
+import { channelOrigin, messageAuthor } from '../services/message-author';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { MESSAGE_HOVER, MessageMeta } from './MessageMeta';
+import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { parseSkillActivation, SkillMessage } from './SkillMessage';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
 import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
-import { isRecord, resultBlock, stringify } from './transcript-shared';
+import { resultBlock, stringify } from './transcript-shared';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -30,46 +30,6 @@ import {
   SUPPRESSED_STATE_SIGNAL_IDS,
   TimeGap,
 } from './TranscriptSignals';
-
-const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
-  slack: 'Slack',
-};
-
-/**
- * Channel provenance for a message that arrived via a channel adapter.
- * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
- * with author facts on inbound messages exactly so UIs can show origin
- * without unpacking the signal envelope.
- */
-export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
-  const mastra = entry.message.content.providerMetadata?.mastra;
-  const channels = isRecord(mastra) ? mastra.channels : undefined;
-  if (!isRecord(channels)) return undefined;
-  const platform = Object.keys(channels)[0];
-  if (!platform) return undefined;
-  const info = channels[platform];
-  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
-  const authorName =
-    typeof author?.fullName === 'string'
-      ? author.fullName
-      : typeof author?.userName === 'string'
-        ? author.userName
-        : undefined;
-  return { platform, authorName };
-}
-
-export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
-  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
-  return (
-    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
-      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
-      <span>
-        via {label}
-        {origin.authorName ? ` · ${origin.authorName}` : ''}
-      </span>
-    </div>
-  );
-}
 
 function steeringLabel(entry: MessageEntry): string | undefined {
   if (!entry.steer) return undefined;
@@ -101,6 +61,7 @@ export function MessageBubble({
   reply,
   isSubmitting,
   onRespond,
+  viewerId,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -108,17 +69,11 @@ export function MessageBubble({
   reply?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  /** The signed-in user; anyone else's message gets their avatar beside it. */
+  viewerId?: string;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
-  // Decided the first time the entry is drawn and never revisited: only calls already
-  // there when the reader arrived may fold into a group. A call landing under them —
-  // a live run being watched, or one restored mid-run — stays the row it played as.
-  const [groupable] = useState<ReadonlySet<string>>(() =>
-    entry.streaming
-      ? new Set()
-      : new Set(written.flatMap(part => (part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : []))),
-  );
   // Always the projected parts, never the raw message: a partially revealed part
   // keeps the same part count as the full one, so no cheap identity check can
   // tell them apart — and this sits inside the entry's memo, so a fresh object
@@ -126,8 +81,10 @@ export function MessageBubble({
   const message = { ...entry.message, content: { ...entry.message.content, parts } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
-  const toolGroups = collectToolGroups(parts, suspensions, entry.runtimeTools, groupable);
-  const origin = channelOrigin(entry);
+  const toolGroups = collectToolGroups(parts, suspensions);
+  const origin = channelOrigin(entry.message);
+  const author = messageAuthor(entry.message);
+  const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(written);
   const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
@@ -135,25 +92,28 @@ export function MessageBubble({
   const steeringFailed = entry.deliveryStatus === 'failed';
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] flex-col items-end')}>
-        <div
-          className={cn(
-            'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
-            steeringPending && 'border-border1 border-dashed',
-          )}
-        >
-          {children}
-        </div>
-        {steeringStatus && (
-          <span
-            className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
-            aria-live="polite"
+      <div className={cn(MESSAGE_HOVER, 'my-3 ml-auto flex w-fit max-w-[70%] items-start gap-2')}>
+        {sender && <SenderAvatar author={sender} />}
+        <div className="flex min-w-0 flex-col items-end">
+          <div
+            className={cn(
+              'text-text1 bg-neutral6/5 rounded-xl border border-transparent px-4 py-2 break-words',
+              steeringPending && 'border-border1 border-dashed',
+            )}
           >
-            {steeringStatus}
-          </span>
-        )}
-        {origin && <ChannelOriginBadge origin={origin} />}
-        {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="end" /> : null}
+            {children}
+          </div>
+          {steeringStatus && (
+            <span
+              className={cn('text-ui-xs text-icon3 mt-1', steeringFailed && 'text-notice-destructive-fg')}
+              aria-live="polite"
+            >
+              {steeringStatus}
+            </span>
+          )}
+          {origin && <ChannelOriginBadge origin={origin} />}
+          {meta ? <MessageMeta text={meta} createdAt={entry.message.createdAt} align="end" /> : null}
+        </div>
       </div>
     ),
     Assistant: ({ children }) => (
@@ -194,17 +154,25 @@ export function MessageBubble({
     },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const group = toolGroups.byFirstId.get(toolCallId);
-      if (group)
+      const group = toolGroups.byFirstKey.get(toolCallId);
+      if (group) {
+        const tools = group.map(member =>
+          toolFromInvocationPart(
+            member,
+            entry.runtimeTools?.[member.toolInvocation.toolCallId],
+            entry.message.createdAt,
+          ),
+        );
         return (
           <Arriving>
-            <ToolGroup tools={group} />
+            <ToolGroup tools={tools} />
           </Arriving>
         );
-      if (toolGroups.memberIds.has(toolCallId)) return null;
+      }
+      if (toolGroups.memberKeys.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
-      const tool = toolFromInvocationPart(part, runtime);
+      const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
       const suspension = suspensions.get(tool.toolCallId);
       return (
         <Arriving>
@@ -228,7 +196,16 @@ export function MessageBubble({
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
       : undefined;
-  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (skillActivation) {
+    return skillActivation.feed === undefined ? (
+      <SkillMessage activation={skillActivation} />
+    ) : (
+      <div className="flex flex-col">
+        <SkillMessage activation={skillActivation} />
+        <SignalRow kind="reactive" label="Work item feed" message={skillActivation.feed} />
+      </div>
+    );
+  }
   if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);

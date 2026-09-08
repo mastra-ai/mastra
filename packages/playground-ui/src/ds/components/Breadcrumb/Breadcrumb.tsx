@@ -53,7 +53,7 @@ export const Crumb = ({ className, as, isCurrent, action, children, ...props }: 
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
-            'flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 py-0.5 text-ui-md leading-ui-md',
+            'flex min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 py-0.5 text-ui-sm leading-ui-sm',
             transitions.colors,
             isCurrent
               ? 'font-medium text-neutral6'

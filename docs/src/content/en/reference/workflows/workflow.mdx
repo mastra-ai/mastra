@@ -1,6 +1,6 @@
 ---
 title: "Reference: Workflow class | Workflows"
-description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+description: "The Workflow class enables you to create state machines for complex sequences of operations with conditional branching and data validation."
 packages:
   - "@mastra/core"
 ---
@@ -35,7 +35,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
 
 <Tabs>
   <TabItem value="zod" label="Zod">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { z } from "zod";
 
@@ -56,7 +56,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
   </TabItem>
 
   <TabItem value="valibot" label="Valibot">
-    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import * as v from "valibot";
     import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -78,7 +78,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
   </TabItem>
 
   <TabItem value="arktype" label="ArkType">
-    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
     import { createWorkflow, createStep } from "@mastra/core/workflows";
     import { type } from "arktype";
 
@@ -209,6 +209,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             type: 'boolean',
             description:
               'Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
+            name: 'autoRestartActiveRuns',
+            type: 'boolean',
+            description:
+              "Whether boot-time generic recovery (Mastra.restartAllActiveWorkflowRuns()) automatically restarts this workflow's active runs. Set to false for workflows whose side effects must not be re-driven by a blanket restart, or whose recovery is owned by another mechanism. Durable agent workflows set this to false because their recovery is owned by the opt-in recovery.durableAgents: 'auto' path.",
             isOptional: true,
             defaultValue: 'true',
           },

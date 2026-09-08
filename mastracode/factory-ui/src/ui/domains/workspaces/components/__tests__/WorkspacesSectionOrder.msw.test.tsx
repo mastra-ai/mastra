@@ -74,13 +74,14 @@ function stubSidebar(
   sessions: FactoryUserSession[],
   workItems: ReturnType<typeof reviewCard>[],
   runningSessionIds: string[] = [],
+  parkedSessionIds: string[] = [],
 ) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
-      HttpResponse.json({ workItems }),
+      HttpResponse.json({ workItems, parkedSessionIds }),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
       HttpResponse.json({
@@ -108,7 +109,6 @@ function renderSection(openSessionId?: string) {
           resourceReady: false,
           sandboxReady: false,
           sandboxPreparing: false,
-          sandboxProgress: undefined,
           resourceEnabled: false,
           factorySessionState: { factoryProjectId, projectRepositoryId },
           baseUrl: TEST_BASE_URL,
@@ -165,6 +165,23 @@ describe('Workspaces sidebar order', () => {
     const { client } = renderSection();
 
     expect(await reviewRowLabels(client)).toEqual(['factory/pr-302', 'factory/pr-301']);
+  });
+
+  it('keeps a merged session up top while its agent waits on an answer', async () => {
+    const openSession = reviewSession(401, '2026-07-23T11:00:00.000Z');
+    const mergedButParked = reviewSession(402, '2026-07-23T09:00:00.000Z');
+
+    stubSidebar(
+      [openSession, mergedButParked],
+      [reviewCard(openSession, 401), reviewCard(mergedButParked, 402, '2026-07-23T23:00:00.000Z')],
+      [],
+      [mergedButParked.sessionId],
+    );
+
+    const { client } = renderSection();
+
+    expect(await reviewRowLabels(client)).toEqual(['factory/pr-402', 'factory/pr-401']);
+    expect(screen.getByRole('status', { name: /^factory\/pr-402 waiting on you$/i })).toBeInTheDocument();
   });
 
   it('leaves the open session where creation order put it', async () => {

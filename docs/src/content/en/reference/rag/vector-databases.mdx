@@ -1,6 +1,6 @@
 ---
 title: "Storing embeddings in a vector database | RAG"
-description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+description: "After generating embeddings, you need to store them in a database that supports vector similarity search."
 packages:
   - "@mastra/astra"
   - "@mastra/chroma"
@@ -58,11 +58,11 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Using VoyageAI with MongoDB</h3>
 
-    MongoDB works seamlessly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
+    MongoDB works directly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
 
     <h3>Hybrid Search (Vector + Full-Text)</h3>
 
-    MongoDB supports hybrid search that fuses vector similarity with BM25 full-text search using server-side `$rankFusion` (requires MongoDB >= 8.0; generally available from 8.1, and enabled on MongoDB Atlas 8.0.x). This is useful when you want to combine semantic and keyword-based retrieval:
+    MongoDB supports hybrid search that combines vector similarity with BM25 full-text search through server-side `$rankFusion`. It requires MongoDB 8.0 or later, is generally available from 8.1, and is enabled on MongoDB Atlas 8.0.x. Use it to combine semantic retrieval with keyword-based results:
 
     ```ts
     await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })
@@ -131,7 +131,7 @@ After generating embeddings, you need to store them in a database that supports 
 
     <h3>Using Oracle Database Vector Search</h3>
 
-    OracleDB stores embeddings in native `VECTOR` columns and metadata in Oracle JSON. Exact search is the default; HNSW and IVF indexes can be configured for tuned deployments.
+    OracleDB stores embeddings in native `VECTOR` columns and metadata in Oracle JSON. Exact search is the default. HNSW and IVF indexes can be configured for tuned deployments.
   </TabItem>
 
   <TabItem value="pinecone" label="Pinecone">
@@ -263,8 +263,8 @@ After generating embeddings, you need to store them in a database that supports 
       token: process.env.UPSTASH_TOKEN,
     })
 
-    // There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
-    // when you upsert if that namespace does not exist yet.
+    // Upstash creates indexes (known as namespaces) automatically, so no store.createIndex call is needed here
+    // when you upsert if that namespace doesn't exist yet.
     await store.upsert({
       indexName: 'myCollection', // the namespace name in Upstash
       vectors: embeddings,
@@ -455,20 +455,20 @@ Each vector database enforces specific naming conventions for indexes and collec
 
     - Start with a letter or underscore
     - Be up to 120 bytes long
-    - Contain only letters, numbers, underscores, or dots
-    - Cannot contain `$` or the null character
+    - Contain only letters, numbers, underscore characters, or dots
+    - Can't contain `$` or the null character
     - Example: `my_collection.123` is valid
-    - Example: `my-index` is not valid (contains hyphen)
-    - Example: `My$Collection` is not valid (contains `$`)
+    - Example: `my-index` isn't valid (contains hyphen)
+    - Example: `My$Collection` isn't valid (contains `$`)
   </TabItem>
 
   <TabItem value="pgVector" label="PgVector">
     Index names must:
 
     - Start with a letter or underscore
-    - Contain only letters, numbers, and underscores
+    - Contain only letters, numbers, and underscore characters
     - Example: `my_index_123` is valid
-    - Example: `my-index` is not valid (contains hyphen)
+    - Example: `my-index` isn't valid (contains hyphen)
   </TabItem>
 
   <TabItem value="oracledb" label="OracleDB">
@@ -491,7 +491,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Not use non-Latin characters or emojis
     - Have a combined length (with project ID) under 52 characters
       - Example: `my-index-123` is valid
-      - Example: `my.index` is not valid (contains dot)
+      - Example: `my.index` isn't valid (contains dot)
   </TabItem>
 
   <TabItem value="qdrant" label="Qdrant">
@@ -503,7 +503,7 @@ Each vector database enforces specific naming conventions for indexes and collec
       - Null character (`\0`)
       - Unit separator (`\u{1F}`)
     - Example: `my_collection_123` is valid
-    - Example: `my/collection` is not valid (contains slash)
+    - Example: `my/collection` isn't valid (contains slash)
   </TabItem>
 
   <TabItem value="chroma" label="Chroma">
@@ -511,11 +511,11 @@ Each vector database enforces specific naming conventions for indexes and collec
 
     - Be 3-63 characters long
     - Start and end with a letter or number
-    - Contain only letters, numbers, underscores, or hyphens
+    - Contain only letters, numbers, underscore characters, or hyphens
     - Not contain consecutive periods (..)
     - Not be a valid IPv4 address
     - Example: `my-collection-123` is valid
-    - Example: `my..collection` is not valid (consecutive periods)
+    - Example: `my..collection` isn't valid (consecutive periods)
   </TabItem>
 
   <TabItem value="astra" label="Astra">
@@ -523,18 +523,18 @@ Each vector database enforces specific naming conventions for indexes and collec
 
     - Not be empty
     - Be 48 characters or less
-    - Contain only letters, numbers, and underscores
+    - Contain only letters, numbers, and `_` characters
     - Example: `my_collection_123` is valid
-    - Example: `my-collection` is not valid (contains hyphen)
+    - Example: `my-collection` isn't valid (contains hyphen)
   </TabItem>
 
   <TabItem value="libsql" label="libSQL">
     Index names must:
 
     - Start with a letter or underscore
-    - Contain only letters, numbers, and underscores
+    - Contain only letters, numbers, and `_` characters
     - Example: `my_index_123` is valid
-    - Example: `my-index` is not valid (contains hyphen)
+    - Example: `my-index` isn't valid (contains hyphen)
   </TabItem>
 
   <TabItem value="upstash" label="Upstash">
@@ -547,7 +547,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Not start or end with special characters (\_, -, .)
     - Can be case-sensitive
     - Example: `MyNamespace123` is valid
-    - Example: `_namespace` is not valid (starts with underscore)
+    - Example: `_namespace` isn't valid (starts with underscore)
   </TabItem>
 
   <TabItem value="cloudflare" label="Cloudflare">
@@ -558,19 +558,19 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Contain only lowercase ASCII letters, numbers, and dashes
     - Use dashes instead of spaces
     - Example: `my-index-123` is valid
-    - Example: `My_Index` is not valid (uppercase and underscore)
+    - Example: `My_Index` isn't valid (uppercase and underscore)
   </TabItem>
 
   <TabItem value="opensearch" label="OpenSearch">
     Index names must:
 
     - Use only lowercase letters
-    - Not begin with underscores or hyphens
+    - Not begin with underscore characters or hyphens
     - Not contain spaces, commas
     - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
     - Example: `my-index-123` is valid
-    - Example: `My_Index` is not valid (contains uppercase letters)
-    - Example: `_myindex` is not valid (begins with underscore)
+    - Example: `My_Index` isn't valid (contains uppercase letters)
+    - Example: `_myindex` isn't valid (begins with underscore)
   </TabItem>
 
   <TabItem value="elasticsearch" label="Elasticsearch">
@@ -578,29 +578,29 @@ Each vector database enforces specific naming conventions for indexes and collec
 
     - Use only lowercase letters
     - Not exceed 255 bytes (counting multi-byte characters)
-    - Not begin with underscores, hyphens, or plus signs
+    - Not begin with underscore characters, hyphens, or plus signs
     - Not contain spaces, commas
     - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
     - Not be "." or ".."
     - Not start with "." (deprecated except for system/hidden indices)
     - Example: `my-index-123` is valid
-    - Example: `My_Index` is not valid (contains uppercase letters)
-    - Example: `_myindex` is not valid (begins with underscore)
-    - Example: `.myindex` is not valid (begins with dot, deprecated)
+    - Example: `My_Index` isn't valid (contains uppercase letters)
+    - Example: `_myindex` isn't valid (begins with underscore)
+    - Example: `.myindex` isn't valid (begins with dot, deprecated)
   </TabItem>
 
   <TabItem value="s3vectors" label="S3 Vectors">
     Index names must:
 
     - Be unique within the same vector bucket
-    - Be 3–63 characters long
+    - Be between 3 and 63 characters long
     - Use only lowercase letters (`a–z`), numbers (`0–9`), hyphens (`-`), and dots (`.`)
     - Begin and end with a letter or number
     - Example: `my-index.123` is valid
-    - Example: `my_index` is not valid (contains underscore)
-    - Example: `-myindex` is not valid (begins with hyphen)
-    - Example: `myindex-` is not valid (ends with hyphen)
-    - Example: `MyIndex` is not valid (contains uppercase letters)
+    - Example: `my_index` isn't valid (contains underscore)
+    - Example: `-myindex` isn't valid (begins with hyphen)
+    - Example: `myindex-` isn't valid (ends with hyphen)
+    - Example: `MyIndex` isn't valid (contains uppercase letters)
   </TabItem>
 </Tabs>
 

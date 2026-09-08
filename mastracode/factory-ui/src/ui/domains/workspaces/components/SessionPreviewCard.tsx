@@ -7,7 +7,7 @@ import type { ReactNode, RefObject } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { SessionRowStatus } from './SessionNavRow';
+import type { SessionRowStatus } from '../services/sessionStatus';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
 
 export interface SessionPreviewDetails {
@@ -23,7 +23,7 @@ export interface SessionPreviewDetails {
 function getStatusLabel(status: SessionRowStatus | undefined) {
   if (status === 'initializing') return 'Initializing';
   if (status === 'working') return 'Agent working';
-  if (status === 'ready') return 'Ready';
+  if (status === 'ready') return 'Waiting on you';
   return undefined;
 }
 

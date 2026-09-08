@@ -8,6 +8,10 @@ npm create factory
 
 It clones the public [`softwarefactory-template`](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes Git. Run `npm create factory -- --help` for options.
 
+Optional Mastra platform setup writes provisioned credentials and resource identifiers to `.env`, enabling cloud sandboxes even when Factory runs locally.
+
+Pass `--no-platform` to skip platform provisioning. This leaves the template `.env` unchanged.
+
 ## Development
 
 This package owns prompts, template cloning, package-manager detection, optional Mastra platform setup, dependency installation, and Git initialization.

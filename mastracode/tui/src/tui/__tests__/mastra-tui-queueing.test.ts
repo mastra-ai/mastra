@@ -939,12 +939,15 @@ describe('syncInitialThreadState', () => {
         getGoal: vi.fn(() => null),
         loadFromThreadMetadata: vi.fn(),
       },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
 
     await syncInitialThreadState(state);
 
     expect(state.currentThreadTitle).toBe('PR triage');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - PR triage');
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
     expect(state.session.sendMessage).not.toHaveBeenCalled();
@@ -980,6 +983,8 @@ describe('syncInitialThreadState', () => {
         getGoal: vi.fn(() => durableGoal),
         loadFromThreadMetadata: vi.fn(),
       },
+      options: { appName: 'Mastra Code' },
+      ui: { terminal: { setTitle: vi.fn() } },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
 

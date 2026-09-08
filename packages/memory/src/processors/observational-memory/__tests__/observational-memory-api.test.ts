@@ -909,6 +909,68 @@ describe('buffer()', () => {
     expect(result.buffered).toBe(true);
   });
 
+  it('retries a transient database connection timeout while persisting buffered observations', async () => {
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
+    const messages = createBulkMessages(5, threadId);
+    const updateBufferedObservations = storage.updateBufferedObservations.bind(storage);
+    const updateSpy = vi.spyOn(storage, 'updateBufferedObservations').mockImplementationOnce(async input => {
+      await updateBufferedObservations(input);
+      throw new Error('Connection terminated due to connection timeout');
+    });
+
+    const result = await om.buffer({ threadId, messages });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(updateSpy).toHaveBeenCalledTimes(2);
+    const status = await om.getStatus({ threadId });
+    expect(status.bufferedChunkCount).toBe(1);
+  });
+
+  it.each([true, false])('handles transient=%s indexing errors without regenerating observations', async transient => {
+    const resourceId = 'indexing-resource';
+    const error = new Error(transient ? 'Connection terminated due to connection timeout' : 'Invalid vector dimension');
+    const onIndexObservations = vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined);
+    const model = createMockObserverModel();
+    const observe = vi.spyOn(model, 'doStream');
+    const persist = vi.spyOn(storage, 'updateBufferedObservations');
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      retrieval: { vector: true },
+      onIndexObservations,
+      observation: { model, messageTokens: 500, bufferTokens: 0.2 },
+      reflection: { model: createMockReflectorModel(), observationTokens: 10000 },
+    });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Indexing',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({
+      messages: createBulkMessages(5, threadId).map(message => ({ ...message, resourceId })),
+    });
+
+    await om.buffer({ threadId, resourceId });
+    await om.waitForBuffering(threadId, resourceId, 5000);
+
+    expect(onIndexObservations).toHaveBeenCalledTimes(transient ? 2 : 1);
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenCalledTimes(1);
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.bufferedChunkCount).toBe(1);
+    expect(status.record?.isBufferingObservation).toBe(false);
+    const stored = await storage.listMessages({ threadId, perPage: false });
+    const markerTypes = stored.messages.flatMap(message => message.content.parts.map(part => part.type));
+    expect(markerTypes.includes('data-om-buffering-failed')).toBe(!transient);
+    expect(markerTypes.includes('data-om-buffering-end')).toBe(transient);
+  });
+
   it('should not buffer when no unobserved messages exist', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     // No messages in storage

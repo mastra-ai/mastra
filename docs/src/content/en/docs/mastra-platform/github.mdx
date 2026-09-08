@@ -1,6 +1,6 @@
 ---
 title: "GitHub integration | Mastra platform"
-description: Connect a GitHub repository to a Mastra platform project to deploy Studio and Server on every push.
+description: "Connect a GitHub repository to Mastra platform for push-to-deploy workflows, template projects, repository linking, and deploy status tracking."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -91,7 +91,7 @@ Templates are the fastest way to get started. The platform creates a new reposit
   </StepItem>
 
   <StepItem>
-    Select **Create project**. The platform creates the repository, writes a `.mastra-project.json` config file into it, provisions the managed databases, and triggers the initial Studio and Server deploys.
+    Select **Create project**. The platform creates the repository with a `.mastra-project.json` config file, provisions its managed databases, then triggers the initial Studio and Server deploys.
   </StepItem>
 </Steps>
 
@@ -147,7 +147,7 @@ Only one build per deploy target runs at a time. If a new push arrives while a b
 
 ### Manual GitHub deploys
 
-You can also trigger a deploy from the dashboard without pushing. Open the project, select **Deploy from GitHub**, pick the target (Studio, Server, or both) and a branch, and submit. The platform runs the deploy against the head commit of that branch and records the trigger as a **GitHub Workflow** deploy.
+You can also trigger a deploy from the dashboard without pushing. Open the project and select **Deploy from GitHub**. Choose the target (Studio, Server, or both) together with a branch, then submit. The platform runs the deploy against the head commit of that branch and records the trigger as a **GitHub Workflow** deploy.
 
 ## Track deploys
 

@@ -1,6 +1,6 @@
 ---
 title: "Environments | Mastra platform"
-description: Run the same Mastra project across production, staging, and preview environments with isolated URLs, environment variables, regions, and databases.
+description: "Create isolated Mastra platform environments for production, staging, and previews with separate URLs, variables, regions, deploy history, and databases."
 ---
 
 # Environments
@@ -33,7 +33,7 @@ mastra deploy --env staging
 mastra env create eu-preview --type preview --region eu
 ```
 
-Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Databases attached to an environment are placed near the environment's region automatically, and observability data is routed to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/regions) for the supported regions, database placement, and observability co-location. The number of environments per project depends on your plan.
+Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Attached databases are placed near the environment automatically, while observability data goes to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/regions) for supported regions and database placement, along with observability co-location. The number of environments per project depends on your plan.
 
 ## List environments
 
@@ -95,7 +95,7 @@ mastra env db create staging --kind turso --name my-project-staging-db
 
 If you'd rather share one database across every environment, attach it with `--shared` instead: `mastra env db create --kind turso --shared`.
 
-An environment can only use one database per provider. If the project already has a shared (`--shared`) database of the same provider, attaching an environment-scoped one is rejected with a variable name conflict, delete the shared database with `mastra env db delete` first. Deleting a database destroys it with the provider along with all of its data, so export anything you need to keep. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
+Each environment can use one database per provider. An existing shared (`--shared`) database from the same provider creates a variable-name conflict with an environment-scoped database. Export any data you need to keep before running `mastra env db delete`, because this command destroys the shared provider database and its data. See [Hosted databases](/docs/mastra-platform/database) for the full scoping model.
 
 ## Delete an environment
 

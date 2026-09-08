@@ -1,72 +1,284 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Subconscious knowledge write tools > keeps snapshots of all six public input schemas 1`] = `
+exports[`Subconscious knowledge write tools > keeps snapshots of all ten public input schemas 1`] = `
 {
-  "knowledge_append": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_append": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "node": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "text": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "when": {
+        "description": "RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+        "type": "string",
+      },
     },
+    "required": [
+      "node",
+      "text",
+    ],
+    "type": "object",
   },
-  "knowledge_merge_nodes": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_create": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "kind": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "nodeScope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+      "text": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "when": {
+        "description": "RFC 3339 date-time, e.g. 2026-09-15T00:00:00Z",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+        "type": "string",
+      },
     },
+    "required": [
+      "name",
+      "kind",
+      "text",
+    ],
+    "type": "object",
   },
-  "knowledge_remove": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_merge_nodes": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "sourceVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "targetId": {
+        "minLength": 1,
+        "type": "string",
+      },
     },
+    "required": [
+      "sourceId",
+      "targetId",
+      "sourceVersion",
+    ],
+    "type": "object",
   },
-  "knowledge_rescope": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_remove": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "recordId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
     },
+    "required": [
+      "recordId",
+    ],
+    "type": "object",
   },
-  "knowledge_update_node": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_rename_node": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
     },
+    "required": [
+      "node",
+      "expectedVersion",
+      "name",
+    ],
+    "type": "object",
   },
-  "knowledge_write_node_content": JsonSchemaWrapper {
-    "~standard": {
-      "jsonSchema": {
-        "input": [Function],
-        "output": [Function],
+  "knowledge_rescope": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "recordId": {
+        "minLength": 1,
+        "type": "string",
       },
-      "validate": [Function],
-      "vendor": "json-schema",
-      "version": 1,
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
     },
+    "required": [
+      "recordId",
+      "scope",
+    ],
+    "type": "object",
+  },
+  "knowledge_set_node_kind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "node",
+      "expectedVersion",
+      "kind",
+    ],
+    "type": "object",
+  },
+  "knowledge_update_node": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "node",
+      "expectedVersion",
+      "name",
+      "kind",
+    ],
+    "type": "object",
+  },
+  "knowledge_write_node_content": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "kind": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "scope": {
+        "enum": [
+          "org",
+          "resource",
+          "thread",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "content",
+    ],
+    "type": "object",
+  },
+  "knowledge_write_node_description": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "description": "One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit 400 UTF-16 code units, enforced by storage on every write; the length check on execution is authoritative. Long-form detail belongs in node content, not here. An empty string clears the description.",
+        "maxLength": 400,
+        "minLength": 0,
+        "type": "string",
+      },
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
+      "node": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "node",
+      "expectedVersion",
+      "description",
+    ],
+    "type": "object",
   },
 }
 `;

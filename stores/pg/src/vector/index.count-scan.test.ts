@@ -96,7 +96,7 @@ describe('PgVector row counts', () => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       statements.push(sql);
 
-      if (sql.includes('information_schema.columns') && sql.includes('udt_name')) {
+      if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'vector' }] };
       }
       if (sql.includes('pg_attribute') && sql.includes('atttypmod')) {
@@ -117,12 +117,51 @@ describe('PgVector row counts', () => {
     mockClient.query.mockReset();
   });
 
+  it.each(['upsert', 'query', 'updateVector', 'buildIndex'] as const)(
+    '%s works with a cold metadata cache and a single available connection',
+    async operation => {
+      const vectorStore = new PgVector(baseConfig);
+      await (vectorStore as any).cacheWarmupPromise;
+      clearIndexCaches(vectorStore);
+      statements = [];
+      let held = false;
+      let exhausted = false;
+      const connect = vi.spyOn(vectorStore.pool, 'connect').mockImplementation(async () => {
+        if (held) {
+          exhausted = true;
+          throw new Error('Connection pool exhausted');
+        }
+        held = true;
+        return mockClient;
+      });
+      mockClient.release.mockImplementation(() => {
+        held = false;
+      });
+      try {
+        if (operation === 'upsert') {
+          await vectorStore.upsert({ indexName, vectors: [[1, 2, 3]], ids: ['vector-1'] });
+        } else if (operation === 'query') {
+          await vectorStore.query({ indexName, queryVector: [1, 2, 3] });
+        } else if (operation === 'updateVector') {
+          await vectorStore.updateVector({ indexName, id: 'vector-1', update: { vector: [3, 2, 1] } });
+        } else {
+          await vectorStore.buildIndex({ indexName, metric: 'cosine', indexConfig: { type: 'flat' } });
+        }
+        expect(held).toBe(false);
+        expect(exhausted).toBe(false);
+        expect(statements.some(sql => sql.includes('pg_attribute'))).toBe(true);
+      } finally {
+        connect.mockRestore();
+      }
+    },
+  );
+
   it('does not count rows while warming the index cache on construction', async () => {
     const vectorStore = new PgVector(baseConfig);
     await (vectorStore as any).cacheWarmupPromise;
 
     // The warmup did read the catalog...
-    expect(statements.some(sql => sql.includes('information_schema.columns'))).toBe(true);
+    expect(statements.some(sql => sql.includes('pg_attribute') && sql.includes('udt_name'))).toBe(true);
     // ...but never scanned the table for a count it does not use.
     expect(statements.filter(isCountQuery)).toEqual([]);
     // And it still populated the caches it exists for.
@@ -139,7 +178,7 @@ describe('PgVector row counts', () => {
     await vectorStore.query({ indexName, queryVector: [1, 2, 3] });
 
     // The query had to look the index up for itself, and it read the catalog to do it.
-    expect(statements.some(sql => sql.includes('information_schema.columns'))).toBe(true);
+    expect(statements.some(sql => sql.includes('pg_attribute') && sql.includes('udt_name'))).toBe(true);
     expect(statements.filter(isCountQuery)).toEqual([]);
   });
 

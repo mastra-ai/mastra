@@ -173,6 +173,41 @@ describe('turn.end() idle buffering', () => {
     expect(bufferedMessages).not.toContain(contextMessage);
   });
 
+  it('should exclude om-continuation from the idle buffer window', async () => {
+    const realMessages = createMessages(2);
+    const memoryMessage = createTestMessage('Durable memory context', 'user', 'memory-1');
+    const continuationMessage = createTestMessage(
+      '<system-reminder>Continue naturally</system-reminder>',
+      'user',
+      'om-continuation',
+      new Date(0),
+    );
+    const allMessages = [...realMessages, memoryMessage, continuationMessage];
+
+    const mockOM = createMockOM({ asyncEnabled: true });
+    mockOM.getUnobservedMessages = vi.fn((messages: MastraDBMessage[]) => messages);
+    const mockMessageList = createMockMessageList(allMessages);
+
+    const turn = new ObservationTurn({
+      om: mockOM as any,
+      threadId,
+      resourceId,
+      messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
+    });
+
+    (turn as any)._started = true;
+    (turn as any)._record = mockOM._mockRecord;
+
+    await turn.end();
+
+    expect(mockMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect(mockOM.buffer).toHaveBeenCalledTimes(1);
+    const bufferedMessages = (mockOM.buffer as any).mock.calls[0][0].messages as MastraDBMessage[];
+    expect(bufferedMessages.map(m => m.id)).toEqual([...realMessages.map(m => m.id), 'memory-1']);
+  });
+
   it('should NOT trigger buffer() when bufferOnIdle is disabled', async () => {
     const messages = createMessages(5);
     const mockOM = createMockOM({ asyncEnabled: true, bufferOnIdle: false, unobservedMessages: messages });

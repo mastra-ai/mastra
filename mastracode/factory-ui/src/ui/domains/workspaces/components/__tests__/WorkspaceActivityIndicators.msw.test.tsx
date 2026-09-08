@@ -32,9 +32,6 @@ function stubWith(activeSessionIds: string[]) {
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
       HttpResponse.json(fixtures.currentSessionResponse),
     ),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/ensure`, () =>
-      HttpResponse.json(fixtures.ensureResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json(fixtures.workItemsResponse),
     ),
@@ -75,29 +72,30 @@ function renderAt(path: string, entry: string) {
 }
 
 describe('Workspace activity indicators', () => {
-  it('lights the running dot for a session with an active run', async () => {
+  it('lights the running belt for a session with an active run', async () => {
     stubWith([workSessionId]);
 
     renderSection();
 
-    const dot = await screen.findByRole('status', { name: `Agent working in ${workName}` });
+    const belt = await screen.findByRole('status', { name: `Agent working in ${workName}` });
     const actions = screen.getByRole('button', { name: `Session actions for ${workName}` });
-    // Same trailing slot: the menu takes the dot's place on hover instead of covering the label.
-    expect(dot.parentElement).toBe(actions.parentElement);
+    // Its own slot on the row box: the trailing slot collapses on hover and would take the belt with it.
+    expect(belt.parentElement).not.toBe(actions.parentElement);
+    expect(belt.closest('li')).toBe(actions.closest('li'));
   });
 
-  it('leaves a session without an active run undotted', async () => {
+  it('leaves a session without an active run unmarked', async () => {
     stubWith([]);
 
     renderSection();
 
-    // The row must exist before the absence of its dot means anything.
+    // The row must exist before the absence of its belt means anything.
     const row = (await screen.findByRole('button', { name: workName })).closest('li');
     assert(row);
     expect(within(row).queryByRole('status', { name: `Agent working in ${workName}` })).not.toBeInTheDocument();
   });
 
-  it('lights the dot on a page that has no workspace session open', async () => {
+  it('lights the belt on a page that has no workspace session open', async () => {
     stubWith([workSessionId]);
 
     renderAt('/factories/:factoryId/work', `/factories/${factoryId}/work`);

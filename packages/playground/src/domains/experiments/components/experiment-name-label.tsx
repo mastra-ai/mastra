@@ -1,28 +1,34 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 
-/** Experiment name over its short id, falling back to the short id alone when unnamed. Caller supplies the surrounding cell. */
+const LONG_DESCRIPTION = 60;
+
+/** Single truncated line with the experiment display name. Caller supplies the cell. */
 export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperiment }) {
-  const shortId = getShortId(experiment.id) ?? experiment.id;
+  return <span className="text-neutral4 block min-w-0 truncate text-left">{getExperimentDisplayName(experiment)}</span>;
+}
 
-  const label = experiment.name ? (
-    <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
-      <span className="text-neutral4 block truncate">{experiment.name}</span>
-      <span className="text-ui-sm text-neutral2 block truncate font-mono">{shortId}</span>
-    </span>
-  ) : (
-    <span className="text-neutral4 block truncate font-mono">{shortId}</span>
-  );
+/**
+ * Single truncated line with the description; long descriptions get a tooltip
+ * with the full text. Caller supplies the cell.
+ */
+export function ExperimentDescriptionLabel({ experiment }: { experiment: DatasetExperiment }) {
+  const description = experiment.description;
+  if (!description) {
+    return <span className="text-neutral2">—</span>;
+  }
 
-  if (!experiment.description) {
+  const label = <span className="text-neutral3 block min-w-0 truncate text-left">{description}</span>;
+
+  if (description.length <= LONG_DESCRIPTION) {
     return label;
   }
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>{label}</TooltipTrigger>
-      <TooltipContent>{experiment.description}</TooltipContent>
+      <TooltipContent>{description}</TooltipContent>
     </Tooltip>
   );
 }

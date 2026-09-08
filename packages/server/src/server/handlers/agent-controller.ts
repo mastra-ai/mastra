@@ -680,7 +680,15 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
-      await session.respondToToolSuspension({ toolCallId, resumeData, requestContext });
+      // A resumed tool drives the run to its next terminal or suspension boundary.
+      // Awaiting it holds this request open until the continuation finishes, which
+      // can trip the request timeout and leave CORS mutating an already-sent response.
+      ackBackgroundSessionWork({
+        work: session.respondToToolSuspension({ toolCallId, resumeData, requestContext }),
+        session,
+        mastra,
+        operation: 'respondToToolSuspension',
+      });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to controller tool suspension');

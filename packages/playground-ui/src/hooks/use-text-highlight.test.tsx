@@ -201,7 +201,7 @@ describe('useTextHighlight', () => {
     await flushMutations();
     flushFrames();
 
-    expect(highlights.set).toHaveBeenCalledTimes(1);
+    expect(harness.registrationCount()).toBe(1);
   });
 
   it('stops highlighting once unmounted', async () => {
@@ -226,6 +226,89 @@ describe('useTextHighlight', () => {
     unmount();
 
     expect(highlights.delete).toHaveBeenCalledWith('search-result');
+  });
+
+  describe('indirect regions', () => {
+    it('paints the whole text of an indirect region, term or not', () => {
+      render(
+        <Panel search="agent">
+          <p data-highlight-indirect>a span named nothing like it</p>
+        </Panel>,
+      );
+
+      expect(lastHighlightedText('search-result-indirect')).toEqual(['a span named nothing like it']);
+      expect(lastHighlightedText()).toEqual([]);
+    });
+
+    it('keeps direct regions matching on the term only', () => {
+      render(
+        <Panel search="agent">
+          <p data-highlight>searchable agent</p>
+          <p data-highlight-indirect>weather span</p>
+        </Panel>,
+      );
+
+      expect(lastHighlightedText()).toEqual(['agent']);
+      expect(lastHighlightedText('search-result-indirect')).toEqual(['weather span']);
+    });
+
+    it('paints an indirect region once when it also opted in directly', () => {
+      render(
+        <Panel search="agent">
+          <p data-highlight data-highlight-indirect>
+            agent span
+          </p>
+        </Panel>,
+      );
+
+      expect(lastHighlightedText()).toEqual([]);
+      expect(lastHighlightedText('search-result-indirect')).toEqual(['agent span']);
+    });
+
+    it('repaints a region that swaps which highlight it claims, text unchanged', async () => {
+      const Row = ({ indirect }: { indirect: boolean }) => (
+        <Panel search="agent">
+          <p data-highlight={indirect ? undefined : ''} data-highlight-indirect={indirect ? '' : undefined}>
+            agent run
+          </p>
+        </Panel>
+      );
+
+      const { rerender } = render(<Row indirect={false} />);
+      expect(lastHighlightedText()).toEqual(['agent']);
+
+      // Same text node, only the opt-in attribute moves — as when a row goes from a name
+      // match to a payload-only one while the term stays put.
+      rerender(<Row indirect />);
+      await flushMutations();
+      flushFrames();
+
+      expect(lastHighlightedText('search-result-indirect')).toEqual(['agent run']);
+      expect(lastHighlightedText()).toEqual([]);
+    });
+
+    it('clears the indirect highlight when the term gets too short', () => {
+      render(
+        <Panel search="a">
+          <p data-highlight-indirect>weather span</p>
+        </Panel>,
+      );
+
+      expect(highlights.set).not.toHaveBeenCalled();
+      expect(highlights.delete).toHaveBeenCalledWith('search-result-indirect');
+    });
+
+    it('clears the indirect highlight once unmounted', () => {
+      const { unmount } = render(
+        <Panel search="agent">
+          <p data-highlight-indirect>weather span</p>
+        </Panel>,
+      );
+
+      unmount();
+
+      expect(highlights.delete).toHaveBeenCalledWith('search-result-indirect');
+    });
   });
 
   it('highlights text nodes that are direct children of the opted-in element', async () => {

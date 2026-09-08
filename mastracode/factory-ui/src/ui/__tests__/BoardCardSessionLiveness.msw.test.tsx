@@ -11,8 +11,10 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
+import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -127,7 +129,6 @@ function stubFactoryWithBoundSession() {
       if (sessionListRequests > 1) await refetchGate.promise;
       return HttpResponse.json({ sessions });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
     http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       deleted.push(String(params.sessionId));
       sessions = sessions.filter(session => session.sessionId !== params.sessionId);
@@ -167,10 +168,126 @@ describe('Board card session liveness', () => {
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
-
-    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    // Bound but idle: no marker runs — the Open session button on the card is
+    // the advertisement, and only session-bound cards carry one.
     expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
+
+    // The details panel keeps its own way in beside the card's.
+    await user.click(screen.getByRole('button', { name: 'Details for Fix login bug' }));
+    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Open session' })).toHaveLength(2));
+  });
+
+  it('shows the initializing dot while a bound session is still materializing', async () => {
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [{ ...boundSession, materializedAt: null }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="initializing"]')).not.toBeNull());
+  });
+
+  it('lights the working dot when any bound session runs, not just the newest ref', async () => {
+    // Each role keeps its own session; a role re-run rewrites an existing key,
+    // so the running session is not necessarily the last ref on the item.
+    stubFactoryWithBoundSession();
+    const reviewSession = {
+      sessionId: 'session-2',
+      branch: 'factory/issue-1',
+      threadId: 'session-2',
+      startedBy: 'user-1',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [{ ...workItem, sessions: { ...workItemSessions, review: reviewSession } }],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+  });
+
+  it('hides Retry while the bound session is working, even for a retryable failure', async () => {
+    // A retryable failed decision would normally put Retry first on the card.
+    // While the session owns the branch, Open session is the only action.
+    stubFactoryWithBoundSession();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'failed',
+              attempts: 5,
+              failureOccurrence: 1,
+              source: null,
+              failureCode: 'repository_clone_failed',
+              canRetry: true,
+              lastError: 'Command failed with ENOENT',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: SESSION_ID }] }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    // The Retry check is only meaningful once the failed decision has loaded; otherwise
+    // it passes vacuously before the card ever had a Retry to hide.
+    await waitForMutationsIdle(client);
+    expect(within(card).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('walks idle → working → idle as a run starts and finishes', async () => {
+    const { refetchGate } = stubFactoryWithBoundSession();
+    refetchGate.resolve();
+    const active = new Set<string>();
+    server.use(
+      http.get('*/api/agent-controller/:controllerId/active-runs', () =>
+        HttpResponse.json({
+          runs: [...active].map(resourceId => ({ runId: `run-${resourceId}`, resourceId, threadId: resourceId })),
+        }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const activityKey = queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL);
+
+    const card = await screen.findByTestId('work-item-card');
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
+    expect(card.querySelector('[data-live-session-indicator]')).toBeNull();
+
+    active.add(SESSION_ID);
+    await client.invalidateQueries({ queryKey: activityKey });
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator="working"]')).not.toBeNull());
+    // A running card's one button is the way into its session; the wick is its marker, so the pill stays quiet.
+    expect(screen.getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
+
+    active.delete(SESSION_ID);
+    await client.invalidateQueries({ queryKey: activityKey });
+    // A finished run is an idle session: the wick goes dark and the button returns, unlit.
+    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).toBeNull());
+    expect(await screen.findByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
   });
 
   it('drops the session indicator as soon as its session is deleted from the sidebar', async () => {
@@ -178,8 +295,8 @@ describe('Board card session liveness', () => {
     const user = userEvent.setup();
     renderWorkBoard();
 
-    const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(card.querySelector('[data-live-session-indicator]')).not.toBeNull());
+    await screen.findByTestId('work-item-card');
+    expect(await screen.findByRole('link', { name: 'Open session' })).toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'Session actions for factory/issue-1' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
@@ -189,13 +306,9 @@ describe('Board card session liveness', () => {
 
     // The reconciling refetch is still in flight. The card must already have
     // stopped advertising a thread it can no longer open.
-    await waitFor(() =>
-      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
 
     refetchGate.resolve();
-    await waitFor(() =>
-      expect(screen.getByTestId('work-item-card').querySelector('[data-live-session-indicator]')).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open session' })).toBeNull());
   });
 });

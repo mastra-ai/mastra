@@ -77,6 +77,27 @@ export function resolveBackgroundConfig({
   return { runInBackground: enabled, timeoutMs, maxRetries };
 }
 
+/**
+ * Whether a tool is background-eligible: i.e. whether `resolveBackgroundConfig`
+ * could ever dispatch it to the background. This is the same base-enabled
+ * expression the runtime resolver uses (the LLM `_background` override is a
+ * modifier only, never a standalone opt-in — see issue #16783), so advertising
+ * paths (schema injection, system prompt) and dispatch cannot disagree.
+ */
+export function isToolBackgroundEligible({
+  toolName,
+  toolConfig,
+  agentConfig,
+}: {
+  toolName: string;
+  toolConfig?: ToolBackgroundConfig;
+  agentConfig?: AgentBackgroundConfig;
+}): boolean {
+  if (agentConfig?.disabled) return false;
+  const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
+  return agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
+}
+
 function resolveAgentToolConfig(
   toolName: string,
   agentConfig?: AgentBackgroundConfig,

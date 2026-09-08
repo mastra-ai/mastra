@@ -268,23 +268,16 @@ describe('move-doc utility functions', () => {
   test('routeToFilePath maps editable Mastra route families', () => {
     expect(routeToFilePath('/docs/agents/overview')).toBe('src/content/en/docs/agents/overview.mdx')
     expect(routeToFilePath('/reference/agents/agent')).toBe('src/content/en/reference/agents/agent.mdx')
-    expect(routeToFilePath('/guides/getting-started/quickstart')).toBe(
-      'src/content/en/guides/getting-started/quickstart.mdx',
-    )
   })
 
   test('filePathToRoute maps editable Mastra content files to routes', () => {
     expect(filePathToRoute('src/content/en/docs/agents/overview.mdx')).toBe('/docs/agents/overview')
     expect(filePathToRoute('src/content/en/reference/agents/agent.mdx')).toBe('/reference/agents/agent')
-    expect(filePathToRoute('src/content/en/guides/getting-started/quickstart.mdx')).toBe(
-      '/guides/getting-started/quickstart',
-    )
   })
 
   test('routeToSidebarId strips editable family route prefix', () => {
     expect(routeToSidebarId('/docs/agents/overview')).toBe('agents/overview')
     expect(routeToSidebarId('/reference/agents/agent')).toBe('agents/agent')
-    expect(routeToSidebarId('/guides/getting-started/quickstart')).toBe('getting-started/quickstart')
   })
 
   test('model routes are rejected because they are auto-generated', () => {

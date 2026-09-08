@@ -103,8 +103,9 @@ describe('AgentLayout tool tabs', () => {
 
     renderLayout();
 
-    expect(await screen.findByText('Chat')).not.toBeNull();
+    expect(await screen.findByText('Overview')).not.toBeNull();
     expect(screen.getByText('Traces')).not.toBeNull();
+    expect(screen.queryByText('Chat')).toBeNull();
 
     // Channels is configuration, not a tool: no tab and no platforms fetch from the tab bar.
     await waitFor(() => expect(screen.queryByText('Channels')).toBeNull());

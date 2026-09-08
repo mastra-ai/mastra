@@ -36,6 +36,16 @@ export const spanFeedbackResponse = listFeedbackResponse([
   feedbackRecord({ feedbackId: 'span-a-feedback', spanId: SPAN_ID }),
 ]);
 
+/** Trace-level record enriched with a resolved author (auth provider configured server-side). */
+export const authoredFeedbackResponse = listFeedbackResponse([
+  feedbackRecord({
+    feedbackId: 'authored',
+    feedbackType: 'comment',
+    value: 'Looks off to me',
+    author: { id: 'user-1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/marvin.png' },
+  }),
+]);
+
 export const otherSpanFeedbackResponse = listFeedbackResponse([
   feedbackRecord({ feedbackId: 'span-b-feedback', spanId: OTHER_SPAN_ID, value: 0 }),
 ]);

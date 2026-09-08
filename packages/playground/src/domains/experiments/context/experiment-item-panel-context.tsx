@@ -3,6 +3,7 @@ import type { ExperimentStatus } from '@mastra/core/storage';
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { useMatch, useNavigate } from 'react-router';
 
+import { experimentReviewQueueLink } from '@/lib/app-routing';
 import { useItemPanelKeyboardNav } from '@/lib/use-item-panel-keyboard-nav';
 
 export type ExperimentItemPanelContextValue = {
@@ -16,7 +17,7 @@ export type ExperimentItemPanelContextValue = {
   currentItemId?: string;
   openItem: (itemId: string) => void;
   close: () => void;
-  /** Close the panel and feature the result on the Reviews tab (via `?review=` search param). */
+  /** Close the panel and feature the result on the Review Queue page (via `?review=` search param). */
   openInReview: (resultId: string) => void;
   /** Undefined at the list boundaries so callers can disable navigation. */
   goToPreviousItem?: () => void;
@@ -61,7 +62,7 @@ export function ExperimentItemPanelProvider({
 
   const openInReview = useCallback(
     (resultId: string) => {
-      void navigate(`/experiments/${experimentId}?review=${encodeURIComponent(resultId)}`);
+      void navigate(experimentReviewQueueLink(experimentId, resultId));
     },
     [navigate, experimentId],
   );

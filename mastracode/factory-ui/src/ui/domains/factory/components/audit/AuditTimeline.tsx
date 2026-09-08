@@ -1,18 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { useId, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useId } from 'react';
 
-import {
-  AUDIT_CATEGORIES,
-  auditCategory,
-  auditEventTime,
-  auditRangeAround,
-  auditRangeBetween,
-  clamp,
-  type AuditTimeRange,
-} from '../../auditPresentation';
+import { AUDIT_CATEGORIES, auditCategory, auditEventTime, type AuditTimeRange } from '../../auditPresentation';
+import { AUDIT_AXIS_TICKS, auditRulerStep, auditRulerTicks } from '../../auditRuler';
 import type { AuditEvent } from '../../services/audit';
-import { AuditMobileDateRange } from './AuditMobileDateRange';
 
 type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 
@@ -20,6 +10,7 @@ interface AuditMark {
   id: string;
   at: number;
   actorType: AuditEvent['actorType'];
+  muted: boolean;
 }
 
 interface AuditLane {
@@ -27,67 +18,16 @@ interface AuditLane {
   marks: AuditMark[];
 }
 
+// Strokes carry their own width, so the box stretches to any width without
+// distorting a mark: time is the x scale, height stays a constant 6rem.
+// A lane keeps its dotted rule whether or not it holds marks: a mark is offset
+// inside its lane, so without the rule it floats between categories.
+// Both fades are userSpaceOnUse: a line has no area, and an objectBoundingBox
+// gradient over a zero-area box paints nothing at all.
 const WIDTH = 1000;
-const TRACK_START = 48;
-const TRACK_END = 988;
-const TOP = 22;
-const LANE_HEIGHT = 13;
-const BOTTOM = 38;
-const MINUTE = 60_000;
-const DAY = 86_400_000;
-const AUDIT_WINDOW = 7 * DAY;
-const RANGE_KEYS = new Set(['Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
-
-function eventBounds(events: AuditEvent[]): AuditTimeRange | undefined {
-  let from = Number.POSITIVE_INFINITY;
-  let to = Number.NEGATIVE_INFINITY;
-
-  for (const event of events) {
-    const at = auditEventTime(event);
-    if (at === undefined) continue;
-    from = Math.min(from, at);
-    to = Math.max(to, at);
-  }
-
-  if (!Number.isFinite(from) || !Number.isFinite(to)) return undefined;
-  if (from === to) return { from: from - 30 * MINUTE, to: to + 30 * MINUTE };
-  return { from, to };
-}
-
-function shiftRange(range: AuditTimeRange, delta: number, bounds: AuditTimeRange): AuditTimeRange {
-  const span = range.to - range.from;
-  const from = clamp(range.from + delta, bounds.from, bounds.to - span);
-  return { from, to: from + span };
-}
-
-function keyboardRange(
-  key: string,
-  current: AuditTimeRange | undefined,
-  bounds: AuditTimeRange,
-): AuditTimeRange | undefined {
-  if (key === 'Escape') return undefined;
-
-  const total = bounds.to - bounds.from;
-  const range = current ?? auditRangeAround((bounds.from + bounds.to) / 2, total / 3, bounds);
-  const span = range.to - range.from;
-
-  switch (key) {
-    case 'ArrowLeft':
-      return shiftRange(range, -Math.max(span * 0.1, total * 0.02), bounds);
-    case 'ArrowRight':
-      return shiftRange(range, Math.max(span * 0.1, total * 0.02), bounds);
-    case 'ArrowUp':
-      return auditRangeAround((range.from + range.to) / 2, span * 0.8, bounds);
-    case 'ArrowDown':
-      return auditRangeAround((range.from + range.to) / 2, span * 1.25, bounds);
-    case 'Home':
-      return { from: bounds.from, to: bounds.from + span };
-    case 'End':
-      return { from: bounds.to - span, to: bounds.to };
-    default:
-      return current;
-  }
-}
+const PADDING = 6;
+const LANE_HEIGHT = 14;
+const MARK_HEIGHT = 8;
 
 function markOffset(id: string): number {
   let hash = 0;
@@ -95,57 +35,18 @@ function markOffset(id: string): number {
   return hash - 3;
 }
 
-function timelineTick(at: number, span: number): string {
-  const date = new Date(at);
-  if (span > 2 * 86_400_000) return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-function rangeLabel(range: AuditTimeRange): string {
-  const from = new Date(range.from);
-  const to = new Date(range.to);
-  const sameDay = from.toDateString() === to.toDateString();
-  const fromLabel = from.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  const toLabel = to.toLocaleString(undefined, {
-    month: sameDay ? undefined : 'short',
-    day: sameDay ? undefined : 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  return `${fromLabel} – ${toLabel}`;
-}
-
-function boundaryLabel(at: number): string {
-  return new Date(at).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export function AuditTimeline({
   events,
+  bounds,
   range,
-  onRangeChange,
 }: {
   events: AuditEvent[];
+  bounds: AuditTimeRange;
   range: AuditTimeRange | undefined;
-  onRangeChange: (range: AuditTimeRange | undefined) => void;
 }) {
-  const anchor = useRef<number | undefined>(undefined);
-  const [dragRange, setDragRange] = useState<AuditTimeRange>();
-  const selectionGradientId = useId().replace(/:/g, '');
-  const selectionShadowId = useId().replace(/:/g, '');
-  const instructionsId = useId().replace(/:/g, '');
-  const now = Date.now();
-  const bounds = eventBounds(events) ?? { from: now - AUDIT_WINDOW, to: now };
-
+  const gradientId = useId().replace(/:/g, '');
+  const gridGradientId = `${gradientId}-grid`;
+  const laneGradientId = `${gradientId}-lane`;
   const lanes: AuditLane[] = AUDIT_CATEGORIES.map(category => ({ category, marks: [] }));
   const lanesByNamespace = new Map(lanes.map(lane => [lane.category.namespace, lane]));
   for (const event of events) {
@@ -156,209 +57,100 @@ export function AuditTimeline({
       id: event.id,
       at,
       actorType: event.actorType,
+      muted: range !== undefined && (at < range.from || at > range.to),
     });
   }
-  const height = TOP + lanes.length * LANE_HEIGHT + BOTTOM;
-  const plotWidth = TRACK_END - TRACK_START;
+  const height = PADDING * 2 + lanes.length * LANE_HEIGHT;
   const span = bounds.to - bounds.from;
-  const xAt = (at: number) => TRACK_START + ((at - bounds.from) / span) * plotWidth;
-  const selection = dragRange ?? range ?? bounds;
-  const hasActiveSelection = dragRange !== undefined || range !== undefined;
-  const selectionFromX = xAt(selection.from);
-  const selectionToX = xAt(selection.to);
-  const selectionWidth = Math.max(1, selectionToX - selectionFromX);
-  const selectionTop = TOP - 7;
-  const selectionBottom = height - BOTTOM + 8;
-  const labelsAreTight = selectionToX - selectionFromX < 190;
-  const resetButtonCenterX = clamp((selectionFromX + selectionToX) / 2, TRACK_START + 32, TRACK_END - 32);
-  const selectionLabel = rangeLabel(selection);
-
-  const pointerTime = (event: ReactPointerEvent<SVGSVGElement>) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    if (box.width === 0) return bounds.from;
-    const x = ((event.clientX - box.left) / box.width) * WIDTH;
-    return bounds.from + ((clamp(x, TRACK_START, TRACK_END) - TRACK_START) / plotWidth) * span;
-  };
-
-  const settlePointer = (event: ReactPointerEvent<SVGSVGElement>) => {
-    const start = anchor.current;
-    if (start === undefined) return;
-    const next = auditRangeBetween(start, pointerTime(event), bounds);
-    anchor.current = undefined;
-    setDragRange(undefined);
-    onRangeChange(next);
-  };
+  const xAt = (at: number) => ((at - bounds.from) / span) * WIDTH;
 
   return (
-    <>
-      <AuditMobileDateRange bounds={bounds} range={range} onRangeChange={onRangeChange} />
-      <div className="max-w-full overflow-visible lg:overflow-x-auto lg:overscroll-x-contain">
-        <div className="relative min-w-0 lg:min-w-[45rem]">
-          <svg
-            viewBox={`0 0 ${WIDTH} ${height}`}
-            role="slider"
-            aria-label="Audit time range"
-            aria-describedby={instructionsId}
-            aria-orientation="horizontal"
-            aria-valuemin={bounds.from}
-            aria-valuemax={bounds.to}
-            aria-valuenow={(selection.from + selection.to) / 2}
-            aria-valuetext={selectionLabel}
-            tabIndex={0}
-            className="group/timeline block h-auto w-full cursor-default touch-pan-y overflow-visible rounded-md outline-none select-none lg:cursor-crosshair"
-            onKeyDown={event => {
-              if (!RANGE_KEYS.has(event.key)) return;
-              const next = keyboardRange(event.key, range, bounds);
-              if (next === undefined && event.key !== 'Escape') return;
-              event.preventDefault();
-              onRangeChange(next);
-            }}
-            onPointerDown={event => {
-              if (event.pointerType === 'touch' || event.button !== 0) return;
-              event.preventDefault();
-              event.currentTarget.focus();
-              const at = pointerTime(event);
-              anchor.current = at;
-              setDragRange(auditRangeBetween(at, at, bounds));
-              event.currentTarget.setPointerCapture(event.pointerId);
-            }}
-            onPointerMove={event => {
-              const start = anchor.current;
-              if (start !== undefined) setDragRange(auditRangeBetween(start, pointerTime(event), bounds));
-            }}
-            onPointerUp={settlePointer}
-            onPointerCancel={() => {
-              anchor.current = undefined;
-              setDragRange(undefined);
-            }}
-          >
-            <title id={instructionsId}>
-              Drag to select a time range. Arrow keys move it; up and down change its width; Escape resets it.
-            </title>
-            <defs>
-              <linearGradient id={selectionGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="var(--neutral6)" stopOpacity={0.09} />
-                <stop offset="55%" stopColor="var(--neutral6)" stopOpacity={0.05} />
-                <stop offset="100%" stopColor="var(--neutral6)" stopOpacity={0.025} />
-              </linearGradient>
-              <filter
-                id={selectionShadowId}
-                x="-8%"
-                y="-12%"
-                width="116%"
-                height="124%"
-                colorInterpolationFilters="sRGB"
-              >
-                <feComponentTransfer in="SourceAlpha" result="inverseAlpha">
-                  <feFuncA type="table" tableValues="1 0" />
-                </feComponentTransfer>
-                <feGaussianBlur in="inverseAlpha" stdDeviation={2.5} result="blurredInverse" />
-                <feOffset in="blurredInverse" dy={1.5} result="offsetBlur" />
-                <feFlood floodColor="white" floodOpacity={0.16} result="highlightColor" />
-                <feComposite in="highlightColor" in2="offsetBlur" operator="in" result="innerHighlight" />
-                <feComposite in="innerHighlight" in2="SourceAlpha" operator="in" result="clippedHighlight" />
-                <feComposite in="clippedHighlight" in2="SourceGraphic" operator="over" />
-              </filter>
-            </defs>
-            {[0, 0.25, 0.5, 0.75, 1].map(position => {
-              const at = bounds.from + span * position;
-              const x = TRACK_START + plotWidth * position;
-              return (
-                <g
-                  key={position}
-                  className={position === 0 || position === 0.5 || position === 1 ? undefined : 'hidden lg:block'}
-                >
-                  <line x1={x} y1={TOP - 7} x2={x} y2={height - BOTTOM} className="stroke-border1" />
-                  <text x={x} y={11} textAnchor="middle" className="fill-neutral2 text-[20px] lg:text-[9px]">
-                    {timelineTick(at, span)}
-                  </text>
-                </g>
-              );
-            })}
+    <svg
+      viewBox={`0 0 ${WIDTH} ${height}`}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label="Audit events over time"
+      className="block h-24 w-full select-none"
+    >
+      <defs>
+        <linearGradient id={gridGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={0} y2={height}>
+          <stop offset="0%" stopColor="var(--border2)" stopOpacity={0} />
+          <stop offset="28%" stopColor="var(--border2)" stopOpacity={1} />
+          <stop offset="72%" stopColor="var(--border2)" stopOpacity={1} />
+          <stop offset="100%" stopColor="var(--border2)" stopOpacity={0} />
+        </linearGradient>
 
-            {lanes.map((lane, index) => {
-              const y = TOP + index * LANE_HEIGHT + LANE_HEIGHT / 2;
-              return (
-                <g key={lane.category.namespace}>
-                  {lane.marks.map(mark => (
-                    <rect
-                      key={mark.id}
-                      x={xAt(mark.at) - 1}
-                      y={y - 4 + markOffset(mark.id)}
-                      width={2}
-                      height={8}
-                      rx={1}
-                      opacity={mark.actorType === 'agent' ? 1 : 0.65}
-                      className={lane.category.fillClass}
-                    />
-                  ))}
-                </g>
-              );
-            })}
+        <linearGradient id={laneGradientId} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={WIDTH} y2={0}>
+          <stop offset="0%" stopColor="var(--border2)" stopOpacity={0} />
+          <stop offset="18%" stopColor="var(--border2)" stopOpacity={1} />
+          <stop offset="82%" stopColor="var(--border2)" stopOpacity={1} />
+          <stop offset="100%" stopColor="var(--border2)" stopOpacity={0} />
+        </linearGradient>
+      </defs>
 
-            {hasActiveSelection ? (
-              <>
-                <rect
-                  x={selectionFromX}
-                  y={selectionTop}
-                  width={selectionWidth}
-                  height={selectionBottom - selectionTop}
-                  rx={7}
-                  fill={`url(#${selectionGradientId})`}
-                  filter={`url(#${selectionShadowId})`}
-                />
-                <text
-                  x={selectionFromX + 6}
-                  y={selectionBottom + (labelsAreTight ? 12 : 14)}
-                  textAnchor="start"
-                  className="fill-neutral3 text-[18px] opacity-50 lg:text-[9px]"
-                >
-                  {boundaryLabel(selection.from)}
-                </text>
-                <text
-                  x={selectionToX - 6}
-                  y={selectionBottom + (labelsAreTight ? 24 : 14)}
-                  textAnchor="end"
-                  className="fill-neutral3 text-[18px] opacity-50 lg:text-[9px]"
-                >
-                  {boundaryLabel(selection.to)}
-                </text>
-              </>
-            ) : null}
-            <rect
-              x={hasActiveSelection ? selectionFromX : TRACK_START}
-              y={selectionTop}
-              width={hasActiveSelection ? selectionWidth : plotWidth}
-              height={selectionBottom - selectionTop}
-              rx={7}
-              fill={`url(#${selectionGradientId})`}
-              className="pointer-events-none opacity-0 transition-opacity group-focus-visible/timeline:opacity-45 motion-reduce:transition-none"
-            />
+      {auditRulerTicks(bounds, auditRulerStep(span, AUDIT_AXIS_TICKS)).map(at => (
+        <line
+          key={at}
+          x1={xAt(at)}
+          y1={0}
+          x2={xAt(at)}
+          y2={height}
+          vectorEffect="non-scaling-stroke"
+          stroke={`url(#${gridGradientId})`}
+        />
+      ))}
+
+      {lanes.map((lane, index) => {
+        const y = PADDING + index * LANE_HEIGHT + LANE_HEIGHT / 2;
+        return (
+          <g key={lane.category.namespace} className={lane.category.strokeClass}>
             <line
-              x1={TRACK_END}
-              y1={TOP - 6}
-              x2={TRACK_END}
-              y2={height - BOTTOM + 6}
-              className="stroke-positive1 opacity-60"
+              x1={0}
+              y1={y}
+              x2={WIDTH}
+              y2={y}
+              strokeWidth={1.5}
+              strokeDasharray="1 5"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              stroke={`url(#${laneGradientId})`}
             />
-          </svg>
-          {range && !dragRange ? (
-            <Button
-              type="button"
-              variant="default"
-              size="xs"
-              onClick={() => onRangeChange(undefined)}
-              className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
-              style={{
-                left: `${(resetButtonCenterX / WIDTH) * 100}%`,
-                top: `${(selectionTop / height) * 100}%`,
-              }}
-            >
-              Reset
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </>
+
+            {lane.marks.map(mark => {
+              const center = y + markOffset(mark.id);
+              return (
+                <line
+                  key={mark.id}
+                  x1={xAt(mark.at)}
+                  y1={center - MARK_HEIGHT / 2}
+                  x2={xAt(mark.at)}
+                  y2={center + MARK_HEIGHT / 2}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                  opacity={(mark.actorType === 'agent' ? 1 : 0.65) * (mark.muted ? 0.16 : 1)}
+                />
+              );
+            })}
+          </g>
+        );
+      })}
+
+      {range
+        ? [range.from, range.to].map(at => (
+            <line
+              key={at}
+              x1={xAt(at)}
+              y1={PADDING / 2}
+              x2={xAt(at)}
+              y2={height - PADDING / 2}
+              strokeDasharray="2 3"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              className="stroke-accent3/60"
+            />
+          ))
+        : null}
+    </svg>
   );
 }

@@ -1,6 +1,6 @@
 ---
 title: "Reference: SentryExporter | Observability"
-description: Sentry AI monitoring exporter for Tracing
+description: "Configure SentryExporter to send Mastra traces to Sentry for AI monitoring and analysis through OpenTelemetry-compatible semantic conventions."
 packages:
   - "@mastra/sentry"
   - "@mastra/observability"
@@ -14,7 +14,7 @@ Sends Tracing data to Sentry for AI tracing and monitoring using OpenTelemetry s
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new SentryExporter(config: SentryExporterConfig)
 ```
 
@@ -78,7 +78,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -86,7 +86,7 @@ Exports a tracing event to Sentry. Handles SPAN\_STARTED, SPAN\_UPDATED, and SPA
 
 ### flush
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -94,7 +94,7 @@ Force flushes any pending spans to Sentry without shutting down the exporter. Wa
 
 ### shutdown
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

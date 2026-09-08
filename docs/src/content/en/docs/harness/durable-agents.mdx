@@ -1,9 +1,9 @@
 ---
-title: "Durable agents | Long-running agents"
-description: "Learn how to wrap agents with durable execution so streams survive disconnects, process restarts, and long-running turns."
+title: 'Durable agents | Long-running agents'
+description: 'Wrap Mastra agents in durable execution so streams and long-running turns survive client disconnects and process restarts across supported runtimes.'
 packages:
-  - "@mastra/core"
-  - "@mastra/inngest"
+  - '@mastra/core'
+  - '@mastra/inngest'
 ---
 
 # Durable agents
@@ -78,7 +78,7 @@ A durable agent adds three layers on top of a regular agent:
 
 1. **Workflow execution**: `stream()` serializes the messages and options into a workflow input, then triggers the agentic loop inside a durable workflow. The workflow runs the same loop as `Agent.stream()` but each step can be memoized and replayed.
 
-1. **PubSub streaming**: As the loop runs, chunks are published to a PubSub topic keyed by the run ID. The caller subscribes to this topic and pipes chunks into a `ReadableStream`. If the caller disconnects and reconnects, missed chunks are replayed from the cache.
+1. **PubSub streaming**: The loop publishes chunks to a PubSub topic keyed by the run ID. The caller subscribes to that topic and pipes the chunks into a `ReadableStream`, while the cache replays any chunks missed during a disconnect.
 
 1. **Cache layer**: An optional cache (in-memory by default, Redis or another backend in production) stores published events so that a late subscriber can catch up.
 
@@ -197,6 +197,17 @@ export const durableAgent = createDurableAgent({
 
 `createInngestAgent()` doesn't enable caching by default. Pass a `cache` option or register the agent with a `Mastra` instance that has a `serverCache` configured to enable resumable streams.
 
+For cached topics, each published event is recorded in the cache before it's delivered live, so publish latency is bounded by the round-trip to the cache. If the cache write fails, the event is still delivered live but can't be replayed. `@mastra/redis` and `@mastra/valkey` record each event in a single round-trip using a Lua script. `@mastra/redis` falls back to separate commands when the client has no `evalScript` or when Redis Cluster rejects the multi-key script. Per-run workflow watch events (`workflow.events.v2.*`) are never cached. If the cache is remote (for example, in another region) and you don't need to resume a topic, use `shouldCache` to publish that topic straight through:
+
+```typescript title="src/mastra/agents/durable-hot-topics.ts" {5}
+export const durableAgent = createDurableAgent({
+  agent,
+  cache,
+  // Skip the replay cache for the per-chunk stream topic; other topics stay resumable.
+  shouldCache: topic => !topic.startsWith('agent.stream.'),
+})
+```
+
 ## Streaming with background tasks
 
 Durable agents support the same [`untilIdle`](/reference/streaming/agents/stream) option as regular agents. When `untilIdle` is set, `stream()` keeps the connection open across background-task continuations until the agent is idle:
@@ -252,6 +263,8 @@ await durableAgent.resume(runId, { approved: true })
 ## Crash recovery
 
 If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. For orderly shutdowns such as rolling deploys, the generated server can also drain in-flight turns before exiting. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys). On the next server start you can re-drive these orphaned runs so they pick up where they left off.
+
+Durable agent runs are excluded from the generic boot-time restart of active workflow runs. The only automatic recovery path for durable agent runs is `recovery.durableAgents: 'auto'`, which holds a recovery lease and registers thread runtimes before re-driving each run.
 
 ### Automatic recovery
 

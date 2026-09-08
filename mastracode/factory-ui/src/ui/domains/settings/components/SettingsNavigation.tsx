@@ -93,7 +93,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
-        searchText: 'repositories source control git branches remotes code worktrees setup github',
+        searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
       },
       {
         id: 'intake',

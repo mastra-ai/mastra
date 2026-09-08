@@ -1,9 +1,11 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { listFactorySkills } from '../skills/catalog.js';
 import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -124,12 +126,19 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     if (!connection || connection.factoryProjectId !== address.resourceId) {
       return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
     }
-    const worktree = await storage.worktrees.findByPath({
+    // The scope must be the live workdir of a session the viewer can see under
+    // this repository. The live memoized sandbox entry is the only truth for
+    // workdirs (persisted columns are observability); no running/memoized
+    // sandbox at that path means no grant (fail closed).
+    const sessions = await storage.sessions.list({
       projectRepositoryId: address.projectRepositoryId,
-      userId: tenant.userId,
-      worktreePath: address.scope,
+      viewerUserId: tenant.userId,
     });
-    return worktree
+    const scopeIsLiveSessionWorkdir = sessions.some(row => {
+      const liveWorkdir = peekSessionSandbox(row.id)?.workdir;
+      return liveWorkdir !== undefined && liveWorkdir === address.scope;
+    });
+    return scopeIsLiveSessionWorkdir
       ? { allowed: true }
       : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
   }
@@ -169,9 +178,12 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       try {
         const resolved = await resolveSkillInvocation(controller, body);
         if (dispatch) {
-          void resolved.session.sendMessage({ content: resolved.message }).catch((error: unknown) => {
-            console.error('Workspace skill dispatch failed after acceptance', error);
-          });
+          const requestContext = c.get('requestContext' as never) as RequestContext | undefined;
+          void resolved.session
+            .sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) })
+            .catch((error: unknown) => {
+              console.error('Workspace skill dispatch failed after acceptance', error);
+            });
         }
         return c.json({ ok: true, skill: resolved.skillName, message: resolved.message });
       } catch (error) {

@@ -7,25 +7,19 @@ import { useState } from 'react';
 import { useAuditEvents, useAuditPortalLink } from '../../hooks/useAuditEvents';
 import { AuditLogList } from '../domains/factory/components/audit/AuditLogList';
 import { AuditCategoryFilter } from '../domains/factory/components/audit/AuditCategoryFilter';
+import { AuditRangePicker } from '../domains/factory/components/audit/AuditRangePicker';
 import { AuditTimeline } from '../domains/factory/components/audit/AuditTimeline';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import {
   AUDIT_CATEGORIES,
   auditActionsForCategories,
+  auditEventBounds,
+  auditRangeLabel,
   eventInAuditRange,
   type AuditNamespace,
   type AuditTimeRange,
 } from '../domains/factory/auditPresentation';
 import { SkeletonRows } from '../ui/SkeletonRows';
-
-function AuditEmptyTitle({ children }: { children: string }) {
-  return (
-    <span className="flex items-center gap-2">
-      <ScrollText className="text-icon3 size-4" aria-hidden />
-      {children}
-    </span>
-  );
-}
 
 function AuditLogEmptyState({
   hasCategoryFilter,
@@ -38,44 +32,38 @@ function AuditLogEmptyState({
   onClearCategories: () => void;
   onClearRange: () => void;
 }) {
-  if (range) {
-    return (
-      <EmptyState
-        className="min-h-48"
-        as="h2"
-        iconSlot={null}
-        titleSlot={<AuditEmptyTitle>No events in this range</AuditEmptyTitle>}
-        actionSlot={
-          <Button variant="outline" size="sm" onClick={onClearRange}>
-            Show full range
-          </Button>
+  const state = range
+    ? {
+        title: 'No events in this window',
+        description: 'Widen the range or reset it to see everything that is loaded.',
+        reset: { label: 'Show full range', onClick: onClearRange },
+      }
+    : hasCategoryFilter
+      ? {
+          title: 'No events in these categories',
+          description: 'Nothing has been recorded yet for the categories you picked.',
+          reset: { label: 'Show all events', onClick: onClearCategories },
         }
-      />
-    );
-  }
-
-  if (hasCategoryFilter) {
-    return (
-      <EmptyState
-        className="min-h-48"
-        as="h2"
-        iconSlot={null}
-        titleSlot={<AuditEmptyTitle>No matching audit events</AuditEmptyTitle>}
-        actionSlot={
-          <Button variant="outline" size="sm" onClick={onClearCategories}>
-            Show all events
-          </Button>
-        }
-      />
-    );
-  }
+      : {
+          title: 'No audit events yet',
+          description: 'Work items, runs, worktrees and agent activity land here as they happen.',
+          reset: undefined,
+        };
 
   return (
     <EmptyState
       className="min-h-48"
       as="h2"
-      iconSlot={null}
-      titleSlot={<AuditEmptyTitle>No audit events yet</AuditEmptyTitle>}
+      iconSlot={<ScrollText className="text-icon3 size-5" aria-hidden />}
+      titleSlot={state.title}
+      descriptionSlot={state.description}
+      actionSlot={
+        state.reset ? (
+          <Button variant="outline" size="sm" onClick={state.reset.onClick}>
+            {state.reset.label}
+          </Button>
+        ) : undefined
+      }
     />
   );
 }
@@ -92,6 +80,9 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
   const actions = auditActionsForCategories(selectedCategories);
   const filterKey = selectedCategories.size === 0 ? 'all' : [...selectedCategories].toSorted().join(',');
   const eventsQuery = useAuditEvents(factoryProjectId, filterKey, actions);
+  // The axis spans everything loaded, not the current filter: categories are compared by
+  // toggling them, and a scale that rescales under each toggle makes marks impossible to place.
+  const historyQuery = useAuditEvents(factoryProjectId, 'all', undefined);
   const portalQuery = useAuditPortalLink(true);
 
   const toggleCategory = (category: AuditNamespace) => {
@@ -119,6 +110,8 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
     for (const [actorId, actor] of Object.entries(page.actors)) actorNames.set(actorId, actor.name);
   }
   const visibleEvents = selectedRange ? events.filter(event => eventInAuditRange(event, selectedRange)) : events;
+  const history = historyQuery.data?.pages.flatMap(page => page.events) ?? [];
+  const bounds = auditEventBounds([...events, ...history]);
   const portalUrl = portalQuery.data;
 
   return (
@@ -141,10 +134,22 @@ function AuditContent({ factoryProjectId }: { factoryProjectId: string | undefin
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <AuditTimeline events={events} range={selectedRange} onRangeChange={setSelectedRange} />
+        {bounds ? (
+          <AuditRangePicker bounds={bounds} range={selectedRange} onRangeChange={setSelectedRange}>
+            <AuditTimeline events={events} bounds={bounds} range={selectedRange} />
+          </AuditRangePicker>
+        ) : (
+          <p className="text-ui-xs text-neutral2 flex h-28 items-center justify-center">Nothing recorded yet</p>
+        )}
         <AuditCategoryFilter
           selectedCategories={selectedCategories}
-          countLabel={selectedRange ? `${visibleEvents.length} of ${events.length} loaded` : `${events.length} loaded`}
+          countLabel={
+            events.length === 0
+              ? undefined
+              : selectedRange
+                ? `${auditRangeLabel(selectedRange)} · ${visibleEvents.length} of ${events.length} loaded`
+                : `${events.length} loaded`
+          }
           onToggleCategory={toggleCategory}
           onClearCategories={clearCategories}
         />

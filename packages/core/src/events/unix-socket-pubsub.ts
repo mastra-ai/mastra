@@ -20,6 +20,13 @@ type ServerFrame = { type: 'event'; topic: string; event: Event } | { type: 'sub
 
 type UnixSocketPubSubOptions = {
   maxRemoteClientQueuedBytes?: number;
+  /**
+   * Maximum size in bytes of a single inbound newline-delimited frame,
+   * including a partial frame that has not been terminated yet. A peer that
+   * exceeds it has its socket destroyed so one connection cannot grow process
+   * memory without bound.
+   */
+  maxInboundFrameBytes?: number;
 };
 
 type BrokerClient = {
@@ -35,6 +42,8 @@ type SubscribeWaiter = {
 };
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
+const NEWLINE_BYTE = 0x0a;
 
 /**
  * Max number of times a local subscriber callback may be redelivered after a
@@ -124,22 +133,70 @@ function nextTick(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
-function readFrames(socket: net.Socket, onFrame: (frame: any) => void) {
-  let buffer = '';
-  socket.setEncoding('utf8');
-  socket.on('data', chunk => {
-    buffer += chunk;
-    while (true) {
-      const newlineIndex = buffer.indexOf('\n');
-      if (newlineIndex === -1) break;
-      const line = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-      if (!line.trim()) continue;
+function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameBytes: number) {
+  // Accumulate raw bytes and only decode complete lines so byte accounting is
+  // exact and multi-byte UTF-8 sequences split across chunks stay intact.
+  //
+  // Partial frames are copied into a single growable buffer rather than kept as
+  // a list of chunk slices: each retained slice pins its whole underlying slab
+  // plus per-object overhead, so a peer sending an unterminated frame in many
+  // tiny writes could otherwise consume far more memory than `maxFrameBytes`.
+  let pending: Buffer | null = null;
+  let pendingBytes = 0;
+
+  const appendPending = (bytes: Buffer) => {
+    const needed = pendingBytes + bytes.length;
+    if (!pending || pending.length < needed) {
+      const capacity = Math.min(maxFrameBytes, Math.max(needed, pending ? pending.length * 2 : 4096));
+      const grown = Buffer.allocUnsafe(capacity);
+      if (pending) pending.copy(grown, 0, 0, pendingBytes);
+      pending = grown;
+    }
+    bytes.copy(pending, pendingBytes);
+    pendingBytes = needed;
+  };
+
+  socket.on('data', (chunk: Buffer) => {
+    if (socket.destroyed) return;
+
+    let offset = 0;
+    while (offset < chunk.length) {
+      // Only scan the newly received bytes; earlier chunks were already scanned.
+      const newlineIndex = chunk.indexOf(NEWLINE_BYTE, offset);
+      if (newlineIndex === -1) {
+        const rest = chunk.subarray(offset);
+        if (pendingBytes + rest.length > maxFrameBytes) {
+          pending = null;
+          pendingBytes = 0;
+          socket.destroy();
+          return;
+        }
+        appendPending(rest);
+        return;
+      }
+
+      const tail = chunk.subarray(offset, newlineIndex);
+      offset = newlineIndex + 1;
+      const lineBytes = pendingBytes + tail.length;
+      if (lineBytes > maxFrameBytes) {
+        pending = null;
+        pendingBytes = 0;
+        socket.destroy();
+        return;
+      }
+
+      const line = pending ? Buffer.concat([pending.subarray(0, pendingBytes), tail], lineBytes) : tail;
+      pending = null;
+      pendingBytes = 0;
+
+      const text = line.toString('utf8');
+      if (!text.trim()) continue;
       try {
-        onFrame(decode(JSON.parse(line)));
+        onFrame(decode(JSON.parse(text)));
       } catch {
         // Ignore malformed frames. The transport is local IPC and callers can retry.
       }
+      if (socket.destroyed) return;
     }
   });
 }
@@ -157,11 +214,18 @@ export class UnixSocketPubSub extends PubSub {
   #pendingWrites = new Set<Promise<void>>();
   #recovering?: Promise<void>;
   #maxRemoteClientQueuedBytes: number;
+  #maxInboundFrameBytes: number;
 
   constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
     this.socketPath = socketPath;
     this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
+
+    const maxInboundFrameBytes = options.maxInboundFrameBytes ?? DEFAULT_MAX_INBOUND_FRAME_BYTES;
+    if (!Number.isFinite(maxInboundFrameBytes) || maxInboundFrameBytes <= 0) {
+      throw new Error('UnixSocketPubSub maxInboundFrameBytes must be a positive finite number');
+    }
+    this.#maxInboundFrameBytes = maxInboundFrameBytes;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -379,7 +443,7 @@ export class UnixSocketPubSub extends PubSub {
         socket.off('error', onError);
         this.#clientSocket = socket;
         this.#isBroker = false;
-        readFrames(socket, frame => this.#handleServerFrame(frame));
+        readFrames(socket, frame => this.#handleServerFrame(frame), this.#maxInboundFrameBytes);
         // NOTE: keep this exact message in sync with the transient-error
         // classifier in #sendToBroker (search for 'broker connection closed').
         socket.on('close', () =>
@@ -540,17 +604,21 @@ export class UnixSocketPubSub extends PubSub {
       queuedBytes: 0,
     };
     this.#brokerClients.set(socket, client);
-    readFrames(socket, frame => {
-      const clientFrame = frame as ClientFrame;
-      if (clientFrame.type === 'subscribe') {
-        client.subscriptions.add(clientFrame.topic);
-        this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
-      } else if (clientFrame.type === 'unsubscribe') {
-        client.subscriptions.delete(clientFrame.topic);
-      } else if (clientFrame.type === 'publish') {
-        void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
-      }
-    });
+    readFrames(
+      socket,
+      frame => {
+        const clientFrame = frame as ClientFrame;
+        if (clientFrame.type === 'subscribe') {
+          client.subscriptions.add(clientFrame.topic);
+          this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
+        } else if (clientFrame.type === 'unsubscribe') {
+          client.subscriptions.delete(clientFrame.topic);
+        } else if (clientFrame.type === 'publish') {
+          void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
+        }
+      },
+      this.#maxInboundFrameBytes,
+    );
     socket.on('close', () => this.#removeBrokerClient(client));
     socket.on('error', () => this.#removeBrokerClient(client));
   }

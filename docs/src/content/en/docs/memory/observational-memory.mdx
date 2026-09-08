@@ -1,6 +1,6 @@
 ---
 title: 'Observational Memory | Memory'
-description: "Learn how Observational Memory keeps your agent's context window small while preserving long-term memory across conversations."
+description: "Configure Mastra Observational Memory to compress long conversations into durable observations while preserving context across threads and sessions."
 packages:
   - '@mastra/core'
   - '@mastra/memory'
@@ -40,7 +40,7 @@ export const agent = new Agent({
 <Inject>
   **For AI agents:** Using Observational Memory requires a storage provider! You either need to set it on the Mastra instance at `src/mastra/index.ts` or pass it to the Agent constructor.
 
-  The following script creates a local LibSQL database, enables Observational Memory, and uses one resource and thread across two agent calls:
+  The following script creates a local LibSQL database and enables Observational Memory before using one resource and thread across two agent calls:
 
   ```typescript title="src/observational-memory.ts"
   import { Agent } from '@mastra/core/agent'
@@ -231,11 +231,11 @@ When message history tokens exceed a threshold (default: 30,000), the Observer c
 
 OM uses fast local token estimation for this thresholding work. Text is estimated with `tokenx`, while image parts use provider-aware heuristics so multimodal conversations still trigger observation at the right time. The same applies to image-like `file` parts when a transport normalizes an uploaded image as a file instead of an image part. For example, OpenAI image detail settings can materially change when OM decides to observe.
 
-The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
+The Observer can also see attachments in the history it reviews. For readability, OM keeps placeholders such as `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript while forwarding the actual attachments beside the text. When possible, image-like `file` parts become image inputs for the Observer. Other attachments remain file parts and use normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
 
 ### Extractors
 
-Use extractors when you want OM to persist specific values alongside observations. Built-in values such as **current task**, **suggested response**, and **thread title** use the same extraction pipeline as custom values.
+Use extractors when you want OM to persist specific values alongside observations. Built-in values use the same extraction pipeline as custom values. They include **current task** and **suggested response**, along with **thread title**.
 
 The following example extracts a compact user profile from observations:
 
@@ -397,7 +397,7 @@ new Agent({
 })
 ```
 
-You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle. Alternatively, set `observeAttachments: 'auto'` to let Mastra decide from the provider capabilities registry: attachments are forwarded when the Observer model supports multimodal input and dropped otherwise, falling back to `true` when no capability data is available for the model.
+You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle. Alternatively, set `observeAttachments: 'auto'` so Mastra consults the provider capabilities registry. It forwards attachments when the Observer model supports multimodal input and drops them otherwise. If capability data is unavailable for the model, the setting falls back to `true`.
 
 ```md
 Date: 2026-01-15
@@ -443,7 +443,7 @@ With [`shareTokenBudget`](/reference/memory/observational-memory#shared-token-bu
 
 ### Retrieval mode
 
-Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
+Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. The agent can call a `recall` tool to recover source details compressed by the summary, including exact wording and tool output as well as chronology.
 
 #### Browsing only
 
@@ -739,7 +739,7 @@ When message tokens reach the `messageTokens` threshold, buffered chunks activat
 
 Buffered observations also include continuation hints, a suggested next response and the current task, so the main agent maintains conversational continuity after activation shrinks the context window.
 
-If the agent produces messages faster than the Observer can process them, the `blockAfter` safety threshold lets activation overshoot the retention target instead of activating fewer chunks. It never activates more chunks than are needed to reach that target, and with the default settings it changes nothing. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
+When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
 Reflection works similarly, the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
@@ -749,7 +749,7 @@ Reflection works similarly, the Reflector runs in the background when observatio
 | - | - | - |
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens`. With the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
-| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`: at `1.2`, the threshold is 36k tokens (1.2 × 30k). Above it, activation may overshoot the retention target instead of activating fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`) and must be greater than `messageTokens`. |
+| `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`. For example, `1.2` creates a threshold of 36k tokens (1.2 × 30k), above which activation may overshoot the retention target rather than use fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`) and must be greater than `messageTokens`. |
 | `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
@@ -809,7 +809,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering isn't supported with `scope: 'resource'`. It's automatically disabled in resource scope.
+Resource scope automatically disables async buffering.
 
 :::
 

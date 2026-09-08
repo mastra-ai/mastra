@@ -50,7 +50,7 @@ export const MessageText = ({ text, metadata, externalLinkTarget, streaming }: M
             <Icon>
               <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
             </Icon>
-            <Badge variant="info" icon={<CheckCircleIcon />}>
+            <Badge variant="blue" icon={<CheckCircleIcon />}>
               {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
             </Badge>
           </button>

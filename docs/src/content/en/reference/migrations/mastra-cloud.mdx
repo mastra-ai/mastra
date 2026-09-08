@@ -1,6 +1,6 @@
 ---
 title: "Migrate from Mastra Cloud | Migration Guide"
-description: Learn how to migrate from Mastra Cloud to the Mastra platform
+description: "The Mastra platform replaces Mastra Cloud with separate Studio and Server products, CLI-driven deploys, and a new observability system."
 packages:
   - "mastra"
   - "@mastra/core"
@@ -56,7 +56,7 @@ The Mastra platform replaces Mastra Cloud with separate Studio and Server produc
 
 ## Replace Mastra Cloud Store with a hosted database
 
-Mastra Cloud provided a managed libSQL database, backed by [Turso](https://turso.tech). The Mastra platform doesn't host a database for you, so you need to point your storage at an externally hosted instance.
+Unlike Mastra Cloud, which provided a managed libSQL database backed by [Turso](https://turso.tech), the Mastra platform doesn't host a database for you. Point your storage at an externally hosted instance.
 
 If you were already using a hosted database ("bring your own"), keep the existing database configuration. Ensure the connection string is set as an environment variable in the dashboard rather than hardcoded.
 
@@ -76,7 +76,7 @@ Once the download completes, convert the dump into a SQLite database file:
 sqlite3 mydb.db < ~/Downloads/mastra-cloud-dump.sql
 ```
 
-You now have a portable `mydb.db` file you can inspect locally, back up, or use as the source for the new database in the steps that follow.
+You now have a portable `mydb.db` file that you can inspect locally or back up before using it as the source for the new database in the following steps.
 
 #### Option B: Export via the Turso CLI
 
@@ -86,19 +86,19 @@ If you prefer to work from the command line, or need to script the export, you c
   <StepItem>
     Retrieve your Cloud Store credentials from the dashboard.
 
-    Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Env Variables**. For Cloud Store–backed projects, two variables are injected alongside your own:
+    Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Env Variables**. For projects backed by Cloud Store, two variables are injected alongside your own:
 
     - `MASTRA_STORAGE_URL`: A libSQL connection string (e.g. `libsql://<db-name>-<org>.turso.io`).
     - `MASTRA_STORAGE_AUTH_TOKEN`: A read-capable auth token scoped to that database.
 
-    Each row supports the standard environment variable actions — show/hide via the eye toggle, Edit, Delete, and Copy Value. Use **Copy Value** to grab both values for the dump command below.
+    Each row supports the standard environment variable actions: show or hide via the eye toggle, Edit, Delete, and Copy Value. Use **Copy Value** to grab both values for the dump command below.
 
     :::note
     These variables only appear for projects that were provisioned with Cloud Store. If you brought your own database to Mastra Cloud, you already have these credentials and can skip ahead to [Point your Mastra app at the new database](#point-your-mastra-app-at-the-new-database).
     :::
 
     :::note
-    If the variables are missing, the values do not decrypt, or the Turso CLI rejects the token, email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Include the project name/ID. Support can also run the dump on your behalf if CLI access is blocked on your network.
+    If the variables are missing, the values don't decrypt, or the Turso CLI rejects the token, email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Include the project name/ID. Support can also run the dump on your behalf if CLI access is blocked on your network.
     :::
   </StepItem>
 
@@ -119,7 +119,7 @@ If you prefer to work from the command line, or need to script the export, you c
   <StepItem>
     Export the database to a SQL dump.
 
-    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file. If you copied the URL from the dashboard, swap the `libsql://` scheme for `https://` — the Turso CLI expects the HTTPS form when passing the URL with an auth token.
+    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file. If you copied the URL from the dashboard, swap the `libsql://` scheme for `https://` because the Turso CLI expects the HTTPS form when passing the URL with an auth token.
 
     ```bash
     export MASTRA_STORAGE_URL="https://<db-name>-<org>.turso.io"
@@ -129,7 +129,7 @@ If you prefer to work from the command line, or need to script the export, you c
     ```
 
     :::warning
-    Embedding the auth token in the connection string is less secure than Turso's recommended pattern — the full URL (with token) can end up in shell history, process listings, and terminal logs. Turso officially recommends running `turso auth login` and then dumping by database name only: `turso db shell <database-name> ".dump" > mastra-cloud-dump.sql`. That flow requires the database to live in a Turso account you own, which is not the case for Cloud Store, so the env-var example above is provided as an alternative for this one-time export. If you prefer to avoid token interpolation entirely, ask support to run the dump on your behalf and send you the resulting SQL file.
+    Embedding the auth token in the connection string is less secure than Turso's recommended pattern because the full URL, including the token, can appear in command history and in process or terminal output. Turso recommends running `turso auth login` and dumping by database name only: `turso db shell <database-name> ".dump" > mastra-cloud-dump.sql`. That flow requires the database to belong to a Turso account you own, which isn't true for Cloud Store, so the environment-variable example above provides an alternative for this one-time export. To avoid token interpolation entirely, ask support to run the dump and send you the resulting SQL file.
     :::
 
     The resulting `mastra-cloud-dump.sql` contains the full schema and data: thread and message history, workflow snapshots, traces, and eval scores. Store it somewhere safe before continuing.
@@ -148,7 +148,7 @@ The dump is a standard SQL file and can be loaded into any libSQL-compatible dat
     turso auth login
     ```
 
-    If you do not have a Turso account, the CLI will prompt you to create one. See [Turso pricing](https://turso.tech/pricing) for plan details.
+    If you don't have a Turso account, the CLI will prompt you to create one. See [Turso pricing](https://turso.tech/pricing) for plan details.
   </StepItem>
 
   <StepItem>
@@ -158,7 +158,7 @@ The dump is a standard SQL file and can be loaded into any libSQL-compatible dat
     turso db create mastra-migrated --from-dump ./mastra-cloud-dump.sql
     ```
 
-    `--from-dump` restores a local SQLite/libSQL dump at create time, which is faster and safer than piping statements through `turso db shell` after the fact. Pick a region close to where your Mastra Server runs to minimize latency — list available regions with `turso db locations` and pass `--group <group-name>` if you manage multiple groups.
+    `--from-dump` restores a local SQLite/libSQL dump at create time, which is faster and safer than piping statements through `turso db shell` after the fact. Pick a region close to where your Mastra Server runs to minimize latency. List available regions with `turso db locations` and pass `--group <group-name>` if you manage multiple groups.
 
     For multi-gigabyte dumps, add `--wait` so the CLI blocks until the database is fully available.
   </StepItem>

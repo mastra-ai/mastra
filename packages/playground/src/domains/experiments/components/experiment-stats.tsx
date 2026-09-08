@@ -14,7 +14,7 @@ type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
 const statusIconMap: Record<RunStatus, { icon: React.ReactNode; label: string }> = {
   pending: { icon: <ClockIcon className="text-warning1 size-4" />, label: 'Pending' },
   running: { icon: <Spinner size="sm" />, label: 'Running' },
-  completed: { icon: <CircleCheckIcon className="text-accent1 size-4" />, label: 'Completed' },
+  completed: { icon: <CircleCheckIcon className="text-neutral3 size-4" />, label: 'Completed' },
   failed: { icon: <CircleXIcon className="text-error size-4" />, label: 'Failed' },
 };
 
@@ -59,10 +59,10 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
           Total: <b>{experiment.totalItems}</b>
         </span>
         <span>
-          Succeeded: <b>{experiment.succeededCount}</b>
+          Processed: <b>{experiment.succeededCount}</b>
         </span>
         <span>
-          Failed: <b>{experiment.failedCount}</b>
+          Errored: <b>{experiment.failedCount}</b>
         </span>
         {(status === 'pending' || status === 'running') && (
           <span>

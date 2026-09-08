@@ -30,8 +30,8 @@ const paths: Record<string, (...args: string[]) => string> = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId, toolId) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId, skillName) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId, threadId) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: agentId => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId, threadId) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: agentId => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: id => `/workflows/${id}`,
   schedulesLink: () => '/schedules',
@@ -67,6 +67,7 @@ const paths: Record<string, (...args: string[]) => string> = {
   experimentLink: id => `/experiments/${id}`,
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.
 export const stubLinkPaths = paths as LinkComponentProviderProps['paths'];
 
 /** Wraps children in a `LinkComponentProvider` backed by {@link StubLink}. */

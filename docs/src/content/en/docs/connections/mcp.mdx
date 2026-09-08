@@ -1,6 +1,6 @@
 ---
 title: "MCP | Connections"
-description: Connect Mastra agents to external MCP servers and expose Mastra tools through MCPServer. You can also build interactive MCP Apps for Studio.
+description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, and build interactive MCP Apps for Studio."
 packages:
   - "@mastra/mcp"
 ---
@@ -136,7 +136,7 @@ Treat tool annotations from servers you don't control as untrusted hints. Visit 
 MCP servers run code and return content on your agent's behalf, so configure them with the same care as any other external dependency:
 
 - **Stdio subprocess environment**: subprocesses inherit only the MCP SDK's curated environment whitelist (for example `PATH` and `HOME` on POSIX), not the full parent environment. Set `inheritDefaultEnv: false` on a server to pass only the variables you list in `env`.
-- **Outbound host restriction**: when HTTP server URLs come from untrusted configuration, set `allowedHosts` to restrict which hosts the client will contact. On the default fetch path this also blocks redirect hops before they're sent; a custom `fetch` gets its final response URL validated after the request runs, so it must enforce redirect policy itself when preventing outbound contact is required.
+- **Outbound host restriction**: Set `allowedHosts` when HTTP server URLs come from untrusted configuration to restrict the hosts that the client can contact. The default fetch path also blocks redirect hops before sending them. A custom `fetch` is validated against its final response URL only after the request, so it must enforce its own redirect policy when outbound contact must be prevented.
 - **Tool response trust**: tool results are untrusted model input. Use [input and output processors](/docs/agents/processors) to inspect or sanitize content before it reaches the model, and `requireToolApproval` to gate sensitive tools.
 
 Visit the [MCPClient security reference](/reference/tools/mcp-client#security) for enforcement details of each option.

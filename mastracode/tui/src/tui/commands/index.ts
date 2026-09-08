@@ -21,6 +21,7 @@ export { handleThreadsCommand } from './threads.js';
 export { handleThreadCommand } from './thread.js';
 export { handleThreadTagDirCommand } from './thread-tag-dir.js';
 export { handleSandboxCommand } from './sandbox.js';
+export { handleModelCommand } from './models.js';
 export { handleModelsPackCommand } from './models-pack.js';
 export { handleCustomProvidersCommand } from './custom-providers.js';
 export { handleSubagentsCommand } from './subagents.js';

@@ -16,7 +16,7 @@
     "@mastra/deployer-vercel": "link:../../../deployers/vercel",
     "@mastra/editor": "link:../../../packages/editor",
     "@mastra/memory": "link:../../../packages/memory",
-    "hono": "^4.12.8",
+    "hono": "^4.12.34",
     "zod": "^4.4.3"
   },
   "devDependencies": {

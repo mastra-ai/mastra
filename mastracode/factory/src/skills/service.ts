@@ -14,7 +14,7 @@ export interface SkillInvocationInput {
 
 export interface SkillSession {
   getWorkspace(): Workspace;
-  sendMessage(input: { content: string }): Promise<unknown>;
+  sendMessage(input: { content: string; requestContext?: RequestContext }): Promise<unknown>;
   sendNotificationSignal(
     input: {
       source: string;
@@ -83,8 +83,9 @@ export async function resolveSkillInvocation(
 export async function dispatchSkillInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
   input: SkillInvocationInput,
+  requestContext?: RequestContext,
 ): Promise<{ skillName: string; message: string }> {
   const resolved = await resolveSkillInvocation(controller, input);
-  await resolved.session.sendMessage({ content: resolved.message });
+  await resolved.session.sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) });
   return { skillName: resolved.skillName, message: resolved.message };
 }

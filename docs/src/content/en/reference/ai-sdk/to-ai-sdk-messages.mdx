@@ -1,6 +1,6 @@
 ---
 title: "Reference: toAISdkMessages() | AI SDK"
-description: API reference for toAISdkMessages(), a function to convert Mastra messages to AI SDK UI messages for AI SDK v5 or v6.
+description: "Converts messages from input formats to AI SDK UI message format. toAISdkMessages() keeps the existing AI SDK v5/default behavior."
 packages:
   - "@mastra/ai-sdk"
   - "@mastra/client-js"
@@ -16,7 +16,7 @@ Converts messages from input formats to AI SDK UI message format. `toAISdkMessag
 
 ## Usage example
 
-```typescript title="app/chat/page.tsx"
+```typescript title="app/chat/page.tsx" oxfmt:false
 import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 import { useChat } from 'ai/react'
 

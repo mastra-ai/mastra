@@ -23,6 +23,7 @@
  */
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { SpanType } from '../../observability';
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -167,6 +168,20 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   readonly id = 'skills-processor' as const;
   readonly name = 'Skills Processor';
 
+  /**
+   * Label this processor's span as skill resolution rather than an anonymous
+   * processor run: the user configured `skills`, not a processor, so the trace
+   * should name the subsystem the injection came from.
+   *
+   * This also closes a gap — a skill span was previously emitted only by the
+   * agent's dynamic skills resolver, so an agent with statically configured
+   * skills produced no skill span at all and a misconfigured skills path was
+   * invisible in traces. The inject span always reports `skillCount`.
+   */
+  readonly spanType = SpanType.SKILL_ACTION;
+  readonly spanName = 'skill:inject';
+  readonly spanAttributes = { operation: 'inject' } as const;
+
   /** Resolved skills interface */
   private readonly _skills: WorkspaceSkills | undefined;
 
@@ -279,7 +294,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Process input step - inject available skills metadata into the system
    * message.  Tools are provided by `Agent.listSkillTools()` instead.
    */
-  async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, stepNumber, requestContext, tracingContext }: ProcessInputStepArgs) {
     const skills = this._skills?.getScoped ? await this._skills.getScoped({ requestContext }) : this._skills;
 
     // Revalidate skills on first step only (not every step in the agentic loop).
@@ -298,6 +313,13 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     }
     const skillsList = await skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
+
+    // Report the catalog size on this processor's own span. `skillCount: 0`
+    // is the signal that skills are configured but nothing was discovered
+    // (e.g. a skills path that does not resolve on the workspace filesystem).
+    tracingContext?.currentSpan?.update({
+      attributes: { skillCount: skillsList?.length ?? 0, skillFormat: this._format },
+    });
 
     // Inject available skills metadata (if any skills discovered)
     if (hasSkills) {

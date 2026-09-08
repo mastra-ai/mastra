@@ -43,7 +43,8 @@ function createMockTUIState(controller: ReturnType<typeof createMockAgentControl
     allToolComponents: [],
     chatContainer: { children: [] },
     taskToolInsertIndex: 5,
-    ui: { requestRender: vi.fn() },
+    ui: { requestRender: vi.fn(), terminal: { setTitle: vi.fn() } },
+    options: { appName: 'Mastra Code' },
     projectInfo: { rootPath: '/tmp/test', gitBranch: 'main' },
     currentThreadTitle: 'Old thread',
     editor: { escapeEnabled: false },
@@ -83,6 +84,44 @@ describe('dispatchEvent thread lifecycle', () => {
     });
     state = createMockTUIState(controller);
     ectx = createMockEctx();
+  });
+
+  it('updates the active and terminal titles when a generated title arrives', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'thread-1', title: 'Generated demo title' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Generated demo title');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Generated demo title');
+    expect(ectx.updateStatusLine).toHaveBeenCalledOnce();
+  });
+
+  it('ignores generated titles from another thread', async () => {
+    await dispatchEvent(
+      { type: 'thread_title_updated', threadId: 'thread-2', title: 'Wrong thread' } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Old thread');
+    expect(state.ui.terminal.setTitle).not.toHaveBeenCalled();
+  });
+
+  it('strips terminal escape sequences and control characters from generated titles', async () => {
+    await dispatchEvent(
+      {
+        type: 'thread_title_updated',
+        threadId: 'thread-1',
+        title: 'Safe\x07\x1b]0;unsafe\x07Visible \x1b[31mRed\x1b[0m',
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.currentThreadTitle).toBe('Safe Visible Red');
+    expect(state.ui.terminal.setTitle).toHaveBeenCalledWith('Mastra Code - Safe Visible Red');
   });
 
   it('clears per-thread state on thread_changed', async () => {

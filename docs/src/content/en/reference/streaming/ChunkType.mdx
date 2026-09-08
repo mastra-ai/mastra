@@ -1,6 +1,6 @@
 ---
 title: "Reference: ChunkType | Streaming"
-description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+description: "The ChunkType type defines the mastra format of stream chunks that can be emitted during streaming responses from agents."
 packages:
   - "@mastra/core"
 ---
@@ -1030,7 +1030,7 @@ Signals the completion of a processing step.
 
 ### raw
 
-Contains raw data from the provider. Content types Mastra doesn't recognize are also emitted as `raw` chunks rather than being discarded. Raw chunks only appear when `includeRawChunks` is enabled.
+Contains raw data from the provider, including content types Mastra doesn't recognize, which are emitted as `raw` chunks rather than discarded. Raw chunks only appear when `includeRawChunks` is enabled.
 
 <PropertiesTable
   content={[

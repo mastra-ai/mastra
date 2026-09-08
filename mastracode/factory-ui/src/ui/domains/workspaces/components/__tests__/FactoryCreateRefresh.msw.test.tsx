@@ -28,7 +28,6 @@ const repo = {
   private: false,
   installationId: 7,
   installationStorageId: 'inst-7',
-  repositoryStorageId: 'repo-99',
   sandboxProvider: 'local',
   sandboxWorkdir: '/workspace/hello',
 };
@@ -72,6 +71,8 @@ beforeEach(() => {
         },
       }),
     ),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
+    http.put(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
       HttpResponse.json({
         providers: [{ provider: 'anthropic', source: 'stored', oauth: { supported: true, modes: ['paste-code'] } }],

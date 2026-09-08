@@ -1,0 +1,79 @@
+---
+title: 'Reference: dataset.updateExperiment() | Datasets'
+description: 'Use dataset.updateExperiment() to rename an experiment or change its description and metadata after it has been created.'
+packages:
+  - '@mastra/core'
+---
+
+# dataset.updateExperiment()
+
+**Added in:** `@mastra/core@1.64.0`
+
+Updates the name, description, or metadata of an existing experiment (run). Status and result counters are managed by the experiment lifecycle and can't be changed here.
+
+## Usage example
+
+```typescript
+import { Mastra } from '@mastra/core'
+
+const mastra = new Mastra({/* storage config */})
+
+const dataset = await mastra.datasets.get({ id: 'dataset-id' })
+
+const experiment = await dataset.updateExperiment({
+  experimentId: 'exp-id',
+  name: 'Baseline vs. new prompt',
+  description: 'Run after switching to the shorter system prompt',
+})
+
+console.log(experiment.name)
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to update. Must belong to this dataset.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'New display name for the experiment.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'New description for the experiment.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Replacement metadata for the experiment.',
+  },
+]}
+/>
+
+Omitted fields are left unchanged.
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<Experiment>',
+    description: 'The updated experiment record. See dataset.listExperiments() for the full shape.',
+  },
+]}
+/>
+
+## Related
+
+- [dataset.getExperiment()](/reference/datasets/getExperiment)
+- [dataset.listExperiments()](/reference/datasets/listExperiments)

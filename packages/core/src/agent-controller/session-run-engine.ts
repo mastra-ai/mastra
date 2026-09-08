@@ -1,3 +1,4 @@
+import type { Agent } from '../agent';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -10,7 +11,7 @@ import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON } from './session';
+import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY } from './session';
 import {
   addOptionalUsageField,
   describeNonSuccessFinishReason,
@@ -230,6 +231,7 @@ type StreamState = {
   toolPartById: Map<string, number>;
   /** Response ids offered by `step-start` — an id binds to at most one display message. */
   offeredResponseIds: Set<string>;
+  completedToolPrelude: boolean;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -322,6 +324,7 @@ export class SessionRunEngine {
     state.textContentById.clear();
     state.thinkingContentById.clear();
     state.toolPartById.clear();
+    state.completedToolPrelude = false;
   }
 
   createStreamState(): StreamState {
@@ -332,6 +335,7 @@ export class SessionRunEngine {
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
       offeredResponseIds: new Set<string>(),
+      completedToolPrelude: false,
     };
   }
 
@@ -486,6 +490,7 @@ export class SessionRunEngine {
     state: StreamState,
     chunk: StreamChunk,
     requestContext: RequestContext,
+    agent: Agent = this.#machinery.getAgent(),
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
@@ -501,7 +506,18 @@ export class SessionRunEngine {
         // An emitted id never changes, and an id binds to one message only.
         const messageId = getString(getPayload(chunk).messageId);
         if (!messageId || state.offeredResponseIds.has(messageId)) break;
-        if (state.offeredResponseIds.size > 0) this.finishCurrentMessageAndRotate(state);
+        // A resumed tool can finish before the first model step starts. Seal
+        // that tool-only prelude without changing its already observable id.
+        if (
+          state.offeredResponseIds.size > 0 ||
+          (state.completedToolPrelude &&
+            state.currentMessage.content.parts.every(
+              part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+            ))
+        ) {
+          this.finishCurrentMessageAndRotate(state);
+        }
+        state.completedToolPrelude = false;
         state.offeredResponseIds.add(messageId);
         if (!this.hasCurrentMessageContent(state)) {
           state.currentMessage.id = messageId;
@@ -510,6 +526,9 @@ export class SessionRunEngine {
       }
 
       case 'text-start': {
+        // A late start for an id already seeded by an orphan delta must not
+        // create a duplicate part or reset the accumulated text.
+        if (state.textContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const textIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(getString(getPayload(chunk).id) ?? '', { index: textIndex, text: '' });
@@ -518,19 +537,35 @@ export class SessionRunEngine {
       }
 
       case 'text-delta': {
-        const textState = state.textContentById.get(getString(getPayload(chunk).id) ?? '');
-        if (textState) {
-          textState.text += getString(getPayload(chunk).text) ?? '';
-          const textContent = state.currentMessage.content.parts[textState.index];
-          if (textContent && textContent.type === 'text') {
-            textContent.text = textState.text;
-          }
-          this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        const id = getString(getPayload(chunk).id) ?? '';
+        let textState = state.textContentById.get(id);
+        if (!textState) {
+          // Deltas can arrive without a seeded part — e.g. after a step-start
+          // rotation cleared the map mid-text. Seed a part instead of silently
+          // dropping the text, otherwise the folded message loses content.
+          const textIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'text', text: '' });
+          textState = { index: textIndex, text: '' };
+          state.textContentById.set(id, textState);
+          this.#session.emit({ type: 'message_start', message: state.currentMessage });
         }
+        textState.text += getString(getPayload(chunk).text) ?? '';
+        const textContent = state.currentMessage.content.parts[textState.index];
+        if (textContent && textContent.type === 'text') {
+          textContent.text = textState.text;
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'text-end': {
+        state.textContentById.delete(getString(getPayload(chunk).id) ?? '');
         break;
       }
 
       case 'reasoning-start': {
+        // Mirror text-start: a late start for an already-seeded id is a no-op.
+        if (state.thinkingContentById.has(getString(getPayload(chunk).id) ?? '')) break;
         const thinkingIndex = state.currentMessage.content.parts.length;
         state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(getString(getPayload(chunk).id) ?? '', { index: thinkingIndex, text: '' });
@@ -539,16 +574,28 @@ export class SessionRunEngine {
       }
 
       case 'reasoning-delta': {
-        const thinkingState = state.thinkingContentById.get(getString(getPayload(chunk).id) ?? '');
-        if (thinkingState) {
-          thinkingState.text += getString(getPayload(chunk).text) ?? '';
-          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
-          if (thinkingContent && thinkingContent.type === 'reasoning') {
-            thinkingContent.reasoning = thinkingState.text;
-            thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
-          }
-          this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        const id = getString(getPayload(chunk).id) ?? '';
+        let thinkingState = state.thinkingContentById.get(id);
+        if (!thinkingState) {
+          // Same tolerance as text-delta: seed the part rather than silently
+          // dropping reasoning whose start chunk never seeded the id.
+          const thinkingIndex = state.currentMessage.content.parts.length;
+          state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
+          thinkingState = { index: thinkingIndex, text: '' };
+          state.thinkingContentById.set(id, thinkingState);
         }
+        thinkingState.text += getString(getPayload(chunk).text) ?? '';
+        const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+        if (thinkingContent && thinkingContent.type === 'reasoning') {
+          thinkingContent.reasoning = thinkingState.text;
+          thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
+        }
+        this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        break;
+      }
+
+      case 'reasoning-end': {
+        state.thinkingContentById.delete(getString(getPayload(chunk).id) ?? '');
         break;
       }
 
@@ -738,6 +785,13 @@ export class SessionRunEngine {
 
         const suspRunId = this.#session.run.getRunId();
         if (suspRunId) {
+          const runScope = this.#machinery.getRunScope(suspRunId);
+          // A subscription restored for the current mode can replay this
+          // suspension after a plan→build transition. Keep the agent that first
+          // owned the run so a later resume reaches its original snapshot.
+          if (!runScope?.get(SUSPENDED_RUN_AGENT_KEY)) {
+            runScope?.set(SUSPENDED_RUN_AGENT_KEY, agent);
+          }
           this.#session.suspensions.register({
             toolCallId: suspToolCallId,
             runId: suspRunId,
@@ -782,6 +836,12 @@ export class SessionRunEngine {
       }
 
       case 'step-finish': {
+        state.completedToolPrelude =
+          state.offeredResponseIds.size === 0 &&
+          this.hasCurrentMessageContent(state) &&
+          state.currentMessage.content.parts.every(
+            part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
+          );
         const usage = getRecord(getPayload(chunk).output)?.usage;
         const usageRecord = getRecord(usage);
         if (usageRecord) {
@@ -1230,6 +1290,7 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk>): Promise<void> {
+    const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
     let bailed = false;
@@ -1258,7 +1319,7 @@ export class SessionRunEngine {
         }
 
         try {
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
+          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext, agent);
           if (
             streamResult ||
             chunk.type === 'finish' ||

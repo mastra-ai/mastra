@@ -418,4 +418,131 @@ describe('InMemoryKnowledgeStorage', () => {
     await store.removeKnowledge({ id: record.id, deletedBy: 'curator' });
     expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual(['node']);
   });
+
+  describe('node descriptions', () => {
+    it('creates nodes with and without a description', async () => {
+      const store = createStore();
+      const described = await store.createNode({
+        name: 'Atlas',
+        kind: 'project',
+        description: 'CRM migration project.',
+        scope: resource,
+      });
+      const bare = await store.createNode({ name: 'Bare', kind: 'topic', scope: resource });
+
+      expect(described.description).toBe('CRM migration project.');
+      expect((await store.getNode(described.id))?.description).toBe('CRM migration project.');
+      expect(bare.description).toBeUndefined();
+      expect((await store.getNode(bare.id))?.description).toBeUndefined();
+    });
+
+    it('updates set, preserve, and clear the description independently of content', async () => {
+      const store = createStore();
+      const node = await store.createNode({
+        name: 'Atlas',
+        kind: 'project',
+        content: 'Long-form content stays put.',
+        scope: resource,
+      });
+
+      const set = await store.updateNode({ id: node.id, version: node.version, description: 'Synopsis.' });
+      expect(set.description).toBe('Synopsis.');
+      expect(set.content).toBe('Long-form content stays put.');
+
+      const contentOnly = await store.updateNode({ id: node.id, version: set.version, content: 'New content.' });
+      expect(contentOnly.description).toBe('Synopsis.');
+      expect(contentOnly.content).toBe('New content.');
+
+      const cleared = await store.updateNode({ id: node.id, version: contentOnly.version, description: '' });
+      expect(cleared.description).toBe('');
+      expect(cleared.content).toBe('New content.');
+    });
+
+    it('rejects stale-version description updates', async () => {
+      const store = createStore();
+      const node = await store.createNode({ name: 'Atlas', kind: 'project', scope: resource });
+      await store.updateNode({ id: node.id, version: node.version, description: 'First.' });
+
+      await expect(store.updateNode({ id: node.id, version: node.version, description: 'Stale.' })).rejects.toThrow(
+        KnowledgeConflictError,
+      );
+      expect((await store.getNode(node.id))?.description).toBe('First.');
+    });
+
+    it('applies the merge matrix for descriptions', async () => {
+      const store = createStore();
+
+      // target has description => target wins
+      const t1 = await store.createNode({
+        name: 'T1',
+        kind: 'topic',
+        description: 'Target synopsis.',
+        scope: resource,
+      });
+      const s1 = await store.createNode({
+        name: 'S1',
+        kind: 'topic',
+        description: 'Source synopsis.',
+        scope: resource,
+      });
+      const m1 = await store.mergeNodes({ sourceId: s1.id, targetId: t1.id, sourceVersion: s1.version });
+      expect(m1.description).toBe('Target synopsis.');
+      expect(m1.version).toBe(t1.version);
+
+      // target absent + source present => adopt source's, bump target version
+      const t2 = await store.createNode({ name: 'T2', kind: 'topic', scope: resource });
+      const s2 = await store.createNode({ name: 'S2', kind: 'topic', description: 'Only synopsis.', scope: resource });
+      const outboxBefore = (await store.listSemanticOutbox()).length;
+      const m2 = await store.mergeNodes({ sourceId: s2.id, targetId: t2.id, sourceVersion: s2.version });
+      expect(m2.description).toBe('Only synopsis.');
+      expect(m2.version).toBe(t2.version + 1);
+      expect((await store.getNode(t2.id))?.description).toBe('Only synopsis.');
+      const mergeEntries = (await store.listSemanticOutbox()).slice(outboxBefore);
+      expect(mergeEntries.some(entry => entry.documentId.includes(t2.id) && entry.operation === 'upsert')).toBe(true);
+
+      // both absent => stays absent
+      const t3 = await store.createNode({ name: 'T3', kind: 'topic', scope: resource });
+      const s3 = await store.createNode({ name: 'S3', kind: 'topic', scope: resource });
+      const m3 = await store.mergeNodes({ sourceId: s3.id, targetId: t3.id, sourceVersion: s3.version });
+      expect(m3.description).toBeUndefined();
+      expect(m3.version).toBe(t3.version);
+
+      // target explicitly cleared ('') => the clear wins; source synopsis is not resurrected
+      const t4Seed = await store.createNode({ name: 'T4', kind: 'topic', description: 'Stale.', scope: resource });
+      const t4 = await store.updateNode({ id: t4Seed.id, version: t4Seed.version, description: '' });
+      const s4 = await store.createNode({ name: 'S4', kind: 'topic', description: 'Resurrected.', scope: resource });
+      const m4 = await store.mergeNodes({ sourceId: s4.id, targetId: t4.id, sourceVersion: s4.version });
+      expect(m4.description).toBe('');
+      expect(m4.version).toBe(t4.version);
+    });
+
+    it('matches descriptions in lexical search and includes them in result text when present', async () => {
+      const store = createStore();
+      const described = await store.createNode({
+        name: 'Atlas',
+        kind: 'project',
+        content: 'Runbook body.',
+        description: 'Zephyr-class synopsis.',
+        scope: resource,
+      });
+      await store.createNode({ name: 'Bareword', kind: 'topic', content: 'plain body', scope: resource });
+
+      const byDescription = await store.search({ query: 'zephyr', scope: resource });
+      expect(byDescription).toEqual([
+        expect.objectContaining({ id: described.id, text: 'Atlas\nZephyr-class synopsis.\nRunbook body.' }),
+      ]);
+
+      // description-less result text is byte-identical to the pre-description format
+      const bareResult = (await store.search({ query: 'bareword', scope: resource }))[0]!;
+      expect(bareResult.text).toBe('Bareword\nplain body');
+    });
+
+    it('round-trips old nodes without a description as undefined', async () => {
+      const store = createStore();
+      const node = await store.createNode({ name: 'Legacy', kind: 'topic', content: 'body', scope: resource });
+      const updated = await store.updateNode({ id: node.id, version: node.version, content: 'body 2' });
+      expect(updated.description).toBeUndefined();
+      expect((await store.getNode(node.id))?.description).toBeUndefined();
+    });
+  });
 });

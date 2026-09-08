@@ -20,7 +20,7 @@ export interface CreateUserSessionVariables {
   baseBranch?: string;
 }
 
-/** Create or reuse a Factory session. Its workspace is materialized by AgentController on session creation. */
+/** Create or reuse a Factory session. Creating one persists identity; the workspace is materialized when the session's sandbox first starts. */
 export function useCreateUserSessionMutation() {
   const { baseUrl } = useApiConfig();
   return useMutation({

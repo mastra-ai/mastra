@@ -297,7 +297,7 @@ Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
+- Optionally use cwd to override the working directory. Commands run from the sandbox's configured workingDirectory (or the provider default) if omitted.`;
 
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({

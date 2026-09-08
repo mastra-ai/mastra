@@ -12,9 +12,8 @@ import type { WorkerDeps } from '../worker';
  * for due schedules, computes next fire times, and publishes
  * workflow.start events. Does not consume events — only produces them.
  *
- * This is the **single** scheduler code path. The Mastra constructor
- * adds the worker to the default workers list (guarded by
- * `#shouldEnableScheduler()`), and `startWorkers()` initializes it.
+ * This is the **single** scheduler code path. `Mastra.startWorkers()` adds it
+ * when scheduling work exists or the scheduler is explicitly enabled.
  */
 export class SchedulerWorker extends MastraWorker {
   readonly name = 'scheduler';

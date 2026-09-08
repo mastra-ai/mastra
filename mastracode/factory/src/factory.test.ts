@@ -9,21 +9,22 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
-import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
+import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { getFactoryWorkspace } from './workspace.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -62,6 +63,20 @@ const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
 vi.mock('@mastra/code-sdk', () => ({
   prepareAgentControllerMount: (config: Record<string, unknown>) => prepareMock(config),
 }));
+
+const projectRouteOptions = vi.hoisted(
+  () => [] as Array<ConstructorParameters<typeof projectRoutesModule.ProjectRoutes>[0]>,
+);
+vi.mock('./routes/projects', async importOriginal => {
+  const actual = await importOriginal<typeof projectRoutesModule>();
+  class TrackedProjectRoutes extends actual.ProjectRoutes {
+    constructor(options: ConstructorParameters<typeof actual.ProjectRoutes>[0]) {
+      super(options);
+      projectRouteOptions.push(options);
+    }
+  }
+  return { ...actual, ProjectRoutes: TrackedProjectRoutes };
+});
 
 // Track what the factory actually wires as the terminal-stage hook: the
 // cleanup must be constructed by production code (not just by its own unit
@@ -209,6 +224,17 @@ describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
+
+  it('rejects duplicate installed board ids at construction time', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).toThrow("board id 'work' is reserved for a built-in board");
+  });
 });
 
 describe('MastraFactory.prepare', () => {
@@ -254,8 +280,8 @@ describe('MastraFactory.prepare', () => {
     const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
-    expect(blockingCalls).toHaveLength(2);
-    const blockingCall = blockingCalls[0];
+    expect(blockingCalls).toHaveLength(3);
+    const blockingCall = blockingCalls[1];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -316,11 +342,10 @@ describe('MastraFactory.prepare', () => {
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
   });
 
-  it('constructs an enabled sandbox fleet from the configured machine', async () => {
-    const sandbox = new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' });
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: sandbox } });
-    expect(ctx.fleet.enabled).toBe(true);
-    expect(ctx.fleet.provider).toBe('local');
+  it('passes the sandbox callback through to integrations', async () => {
+    const create = () => ({ id: 'sb-cb' }) as never;
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
+    expect(ctx.sandbox).toBe(create);
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -334,32 +359,25 @@ describe('MastraFactory.prepare', () => {
     expect(transitionServiceOptions[0]!.onTerminalStage).toBe(terminalCleanups[0]);
   });
 
-  it('threads conservative versioned Factory rules when the slot is omitted', async () => {
+  it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
-    const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
-    expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
-    expect(rules?.work.triage?.issue?.onEnter).toBeTypeOf('function');
-    expect(rules?.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
-    expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules?.github.issueOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
-    expect(rules?.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
+    expect(assembleFactoryApiRoutesSpy.mock.calls[0]![0].configVersion).toBe(DEFAULT_FACTORY_CONFIG_VERSION);
   });
 
-  it('threads explicitly configured Factory rules without composing handler leaves', async () => {
-    const onResult = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'customer-policy-3',
-      overrides: { tools: { submit_plan: { onResult } } },
-    });
-    const prepared = await prepareFactory({ storage: fakeStorage(), rules });
+  it('threads an explicitly configured config version', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), configVersion: 'customer-policy-3' });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
-    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
-    const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
-    expect(threaded).toBe(rules);
-    expect(threaded.tools.submit_plan?.onResult).toBe(onResult);
+    expect(assembleFactoryApiRoutesSpy.mock.calls[0]![0].configVersion).toBe('customer-policy-3');
+  });
+
+  it('rejects an invalid config version at construction', () => {
+    expect(() => new MastraFactory({ storage: fakeStorage(), configVersion: '' })).toThrow();
+  });
+
+  it('rejects the removed rules option with a migration hint', () => {
+    expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
@@ -392,70 +410,55 @@ describe('MastraFactory.prepare', () => {
       'filesystem',
       'source-control',
       'channel-identity',
+      'work-item-comments',
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
 
-  it('disables the sandbox fleet when the slot is omitted', async () => {
+  it('passes no sandbox callback when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
-    expect(ctx.fleet.enabled).toBe(false);
-    expect(ctx.fleet.provider).toBe('none');
+    expect(ctx.sandbox).toBeUndefined();
   });
 
-  it('rejects a sandbox that does not implement clone()', async () => {
-    const uncloneable = {
-      id: 'sb-1',
-      name: 'Uncloneable',
-      provider: 'custom',
-    } as unknown as WorkspaceSandbox;
-    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox: { machine: uncloneable } });
-    await expect(factory.prepare()).rejects.toThrow(/does not implement clone\(\)/);
+  it('boots with a sandbox callback without provisioning anything', async () => {
+    const create = vi.fn(() => new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }));
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox: create });
+    await factory.prepare();
+    // Boot validation is shape-only — the callback must never be probed.
+    expect(create).not.toHaveBeenCalled();
   });
 
-  it("defaults the workdir base to the machine's workingDirectory, else /workspace", async () => {
-    const local = await prepareIntegrationContext({
+  it('tells an old options-object sandbox config what to write instead', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
       storage: fakeStorage(),
-      sandbox: { machine: new LocalSandbox({ workingDirectory: '/srv/checkouts/' }) },
+      // The pre-callback shape (MastraFactorySandboxConfig): a template
+      // machine the fleet cloned per repo, plus checkout base and pool cap.
+      sandbox: { machine: {}, workdir: '/workspace', maxSandboxes: 4 } as unknown as () => never,
     });
-    expect(local.fleet.computeWorkdir('acme/api')).toBe('/srv/checkouts/acme/api');
-
-    prepareMock.mockClear();
-
-    const remote = {
-      id: 'sb-2',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: { machine: remote } });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/workspace/acme/api');
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    // Names the new shape and shows the replacement, so an existing host can
+    // fix its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' is now a callback/);
+    expect(error.message).toMatch(/FactorySandboxContext/);
+    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    // The old options had three different fates, and a host reading this
+    // message needs all three: none of them is "pass it to the provider"
+    // unchanged.
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).toMatch(/'workdir' is gone/);
+    expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
+    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
   });
 
-  it("keeps LocalSandbox checkouts under its host root even when workdir is '/workspace'", async () => {
-    const ctx = await prepareIntegrationContext({
+  it('rejects a sandbox config that is neither a callback nor an object', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
       storage: fakeStorage(),
-      sandbox: {
-        machine: new LocalSandbox({ workingDirectory: '/tmp/mc-factory-test' }),
-        workdir: '/workspace',
-        maxSandboxes: 5,
-      },
+      sandbox: 'e2b' as unknown as () => never,
     });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/tmp/mc-factory-test/acme/api');
-    expect(ctx.fleet.maxSandboxes).toBe(5);
-  });
-
-  it('honors an explicit workdir override for remote sandboxes', async () => {
-    const remote = {
-      id: 'sb-3',
-      name: 'Remote',
-      provider: 'railway',
-      clone: () => remote,
-    } as unknown as WorkspaceSandbox;
-    const ctx = await prepareIntegrationContext({
-      storage: fakeStorage(),
-      sandbox: { machine: remote, workdir: '/custom/base/' },
-    });
-    expect(ctx.fleet.computeWorkdir('acme/api')).toBe('/custom/base/acme/api');
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
@@ -486,10 +489,9 @@ describe('MastraFactory.prepare', () => {
     expect(config.disableSettingsOmSeed).toBe(true);
   });
 
-  it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
+  it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
-    expect(config.workspace).not.toBe(getFactoryWorkspace);
   });
 
   it('omits vector when no instance is configured', async () => {
@@ -856,6 +858,43 @@ describe('MastraFactory.prepare integrations', () => {
     await expect(factory.prepare()).rejects.toThrow(/duplicate integration id 'custom'/);
   });
 
+  it('sanitizes an invalid GitHub default branch when resolving a selected repository', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const sourceControlStorage = {
+      installations: { get: vi.fn(async () => installation) },
+      repositories: {
+        upsert: vi.fn(async ({ input }: { input: { defaultBranch: string } }) => input),
+      },
+    };
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage,
+      listInstallationRepos: vi.fn(async () => [
+        {
+          id: 456,
+          fullName: 'acme/api',
+          name: 'api',
+          owner: 'acme',
+          defaultBranch: 'invalid branch',
+          private: false,
+        },
+      ]),
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const repository = await resolveRepository?.({
+      integrationId: 'github',
+      orgId: 'org-1',
+      installationId: installation.id,
+      externalId: '456',
+      slug: 'acme/api',
+    });
+
+    expect(repository?.defaultBranch).toBe('main');
+  });
+
   it('initializes version-control capabilities with integration-scoped storage', async () => {
     const initialize = vi.fn();
     const custom = fakeIntegration({
@@ -972,7 +1011,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([worker]);
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1015,7 +1054,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args).not.toHaveProperty('workers');
+    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
   });
 
   /**

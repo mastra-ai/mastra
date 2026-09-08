@@ -1,6 +1,6 @@
 ---
 title: "Reference: DeepEvalExporter | Observability"
-description: Confident AI exporter for Tracing
+description: "Configure DeepEvalExporter from @mastra/deepeval to send Mastra traces to Confident AI for evaluations and observability with the DeepEval SDK."
 packages:
   - "@mastra/deepeval"
 ---
@@ -15,7 +15,7 @@ See [Confident AI exporter](/integrations/observability/confident-ai) for setup 
 
 ## Constructor
 
-```typescript prettier:false
+```typescript oxfmt:false
 new DeepEvalExporter(config?: DeepEvalExporterConfig)
 ```
 
@@ -168,7 +168,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ### `exportTracingEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
@@ -176,7 +176,7 @@ Exports a tracing event to Confident AI. Builds the trace tree from the Mastra s
 
 ### `flush`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -184,7 +184,7 @@ Waits for any in-flight trace posts to settle without shutting down the exporter
 
 ### `shutdown`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

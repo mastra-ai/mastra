@@ -1,4 +1,4 @@
-import type { DatasetRecord } from '@mastra/client-js';
+import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useForm } from 'react-hook-form';
@@ -29,6 +29,30 @@ const datasets = [
   makeDataset('ds-3', 'Dataset Three'),
 ];
 
+const completedExperiment: DatasetExperiment = {
+  id: 'exp-1',
+  datasetId: 'ds-1',
+  datasetVersion: 1,
+  agentVersion: null,
+  targetType: 'agent',
+  targetId: 'chef-agent',
+  provenance: null,
+  runnerAttestation: null,
+  experimentSetId: null,
+  comparisonId: null,
+  variantId: null,
+  trialIndex: 0,
+  status: 'completed',
+  totalItems: 3,
+  succeededCount: 3,
+  failedCount: 0,
+  skippedCount: 0,
+  startedAt: new Date('2026-08-25T10:00:00.000Z'),
+  completedAt: new Date('2026-08-25T10:05:00.000Z'),
+  createdAt: new Date('2026-08-25T10:00:00.000Z'),
+  updatedAt: new Date('2026-08-25T10:05:00.000Z'),
+};
+
 function Harness() {
   const form = useForm<AgentFormValues>({
     defaultValues: {
@@ -50,14 +74,18 @@ function Harness() {
   );
 }
 
-const setupHandlers = () => {
+const setupHandlers = (experiments: DatasetExperiment[] = []) => {
   server.use(
     http.get('*/api/datasets', () =>
       HttpResponse.json({ datasets, pagination: { total: 3, page: 0, perPage: 100, hasMore: false } }),
     ),
-    http.get('*/api/datasets/:datasetId/experiments', () =>
-      HttpResponse.json({ experiments: [], pagination: { total: 0, page: 0, perPage: 100, hasMore: false } }),
-    ),
+    http.get('*/api/datasets/:datasetId/experiments', ({ params }) => {
+      const datasetExperiments = params.datasetId === 'ds-1' ? experiments : [];
+      return HttpResponse.json({
+        experiments: datasetExperiments,
+        pagination: { total: datasetExperiments.length, page: 0, perPage: 100, hasMore: false },
+      });
+    }),
     http.get('*/api/scores/scorers', () => HttpResponse.json({})),
   );
 };
@@ -72,7 +100,17 @@ const renderDatasetsTab = async () => {
   return utils;
 };
 
-describe('AgentPlaygroundEvaluate keyboard navigation', () => {
+describe('AgentPlaygroundEvaluate', () => {
+  describe('when a completed experiment is available', () => {
+    it('shows its status as a readable label', async () => {
+      setupHandlers([completedExperiment]);
+      renderWithProviders(<Harness />, { router: true });
+
+      await waitFor(() => expect(screen.getByText('Run completed')).toBeTruthy());
+      expect(screen.queryByText('completed')).toBeNull();
+    });
+  });
+
   describe('when the datasets tab renders rows', () => {
     it('applies a roving tabindex across dataset rows', async () => {
       await renderDatasetsTab();

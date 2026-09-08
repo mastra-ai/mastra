@@ -43,7 +43,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               {isCopied ? (
                 <Check className="text-neutral3 h-4 w-4 shrink-0" />
               ) : (
-                <CopyIcon className="text-neutral3 h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover/agent-title:opacity-100 group-focus-visible/agent-title:opacity-100" />
+                <CopyIcon className="text-neutral3 h-4 w-4 shrink-0" />
               )}
             </button>
           </TooltipTrigger>

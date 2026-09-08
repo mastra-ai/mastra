@@ -47,69 +47,13 @@ beforeEach(() => {
 describe('Session favicon tracks the session lifecycle', () => {
   describe('when the session prepare stepper is showing', () => {
     it('shows the purple initializing indicator', async () => {
-      const session = stubPreparingSession({ ensurePending: true });
+      const session = stubPreparingSession();
       const { client } = renderThread();
 
       await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
       expect(faviconHref()).toBe('/favicon-session-initializing.svg');
 
-      session.finishEnsure();
       session.finishWorkspace();
-      await waitForMutationsIdle(client);
-    });
-  });
-
-  describe('when messages land before the sandbox warm-up finishes', () => {
-    it('keeps the stepper and the initializing indicator until the warm-up finishes', async () => {
-      const session = stubPreparingSession({ ensurePending: true });
-      const { client } = renderThread();
-
-      session.finishWorkspace();
-      await waitFor(() => expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument());
-
-      // Give the (empty) messages query time to resolve — the stepper must
-      // survive it instead of vanishing on step 1/3, and the favicon must not
-      // claim the session is ready while the sandbox is still provisioning.
-      await new Promise(resolve => setTimeout(resolve, 50));
-      expect(screen.getByTestId('session-prepare-steps')).toBeInTheDocument();
-      expect(screen.queryByTestId('thread-body')).not.toBeInTheDocument();
-      expect(faviconHref()).toBe('/favicon-session-initializing.svg');
-
-      session.finishEnsure();
-      await waitForMutationsIdle(client);
-      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
-      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
-    });
-  });
-
-  describe('when a run has already finished but the warm-up is still running', () => {
-    it('shows the blue awaiting indicator — awaiting wins over a background warm-up', async () => {
-      const session = stubPreparingSession({ ensurePending: true });
-      // The thread has transcript content (a finished run), so the idle agent
-      // state is meaningful — the come-back cue must not be masked by /ensure.
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/threads/:threadId/messages`, () =>
-          HttpResponse.json({
-            messages: [
-              {
-                id: 'msg-1',
-                role: 'assistant',
-                createdAt: new Date('2026-08-19T12:00:00Z').toISOString(),
-                content: { format: 2, parts: [{ type: 'text', text: 'All done — review when ready.' }] },
-              },
-            ],
-          }),
-        ),
-      );
-      const { client } = renderThread();
-
-      session.finishWorkspace();
-      await waitFor(() => expect(screen.getByTestId('thread-body')).toBeInTheDocument());
-
-      // /ensure is still pending, but the run already finished.
-      await waitFor(() => expect(faviconHref()).toBe('/favicon-session-awaiting.svg'));
-
-      session.finishEnsure();
       await waitForMutationsIdle(client);
     });
   });

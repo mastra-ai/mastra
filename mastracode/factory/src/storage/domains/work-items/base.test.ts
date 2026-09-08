@@ -6,7 +6,13 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyStageTransition, isAgentActor, WorkItemRelationError, WorkItemsStorage } from './base.js';
+import {
+  applyStageTransition,
+  factoryDecisionAttentionIdentity,
+  isAgentActor,
+  WorkItemRelationError,
+  WorkItemsStorage,
+} from './base.js';
 import type { WorkItemStageEntry } from './base.js';
 
 const input = {
@@ -115,7 +121,7 @@ describe('WorkItemsStorage', () => {
         destinationStage: 'intake',
         actorId: 'triage-agent',
         ingress: { identity, triggerType: 'agent', transitionId: identity },
-        ruleSetVersion: 'rules-v1',
+        configVersion: 'rules-v1',
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
@@ -163,7 +169,7 @@ describe('WorkItemsStorage', () => {
         ...scope,
         workItemId: null,
         ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
-        ruleSetVersion: 'v1',
+        configVersion: 'v1',
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -431,6 +437,100 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
+  it('never supersedes failed decisions at boot until the host says which phases are terminal', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input: { ...input, stages: ['done'] } });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'legacy-1', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'legacy-1' }],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimable decision');
+    await storage.failDeferredDecision({
+      ...scope,
+      id: claimed.id,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'boom',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    await storage.repairLegacyAttentionState();
+    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('failed');
+
+    storage.useTerminalPhasePredicate(item => item.stages[0] === 'done');
+    await storage.repairLegacyAttentionState();
+    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('superseded');
+  });
+
+  it('pages each status on its own newest-first keyset', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input });
+    const parkedIds: string[] = [];
+    for (const [index, at] of ['2030-01-01T00:00:00.000Z', '2030-01-01T00:05:00.000Z'].entries()) {
+      const now = new Date(at);
+      const current = await storage.get({ orgId: 'org1', id: created.item.id });
+      await storage.commitRuleEvaluation({
+        ...scope,
+        workItemId: created.item.id,
+        ingress: { identity: `park-${index}`, triggerType: 'test' },
+        configVersion: 'rules-v1',
+        expectedRevision: current?.revision ?? created.item.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [
+          { type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: `park-${index}` },
+        ],
+        causalChain: [],
+        now,
+      });
+      const [claimed] = await storage.claimDeferredDecisions({
+        ownerId: 'worker-1',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 1,
+      });
+      if (!claimed) throw new Error('Expected a claimable decision');
+      const proposed = await storage.proposeDeferredDecision({ ...scope, id: claimed.id, ownerId: 'worker-1' }, now);
+      if (!proposed) throw new Error('Expected a proposed decision');
+      parkedIds.push(proposed.id);
+    }
+
+    const page = await storage.listDecisionPageByStatus({ ...scope, status: 'proposed', limit: 1 });
+    expect(page).toMatchObject({ hasMore: true });
+    expect(page.decisions.map(decision => decision.id)).toEqual([parkedIds[1]]);
+
+    const next = await storage.listDecisionPageByStatus({
+      ...scope,
+      status: 'proposed',
+      before: { occurredAt: page.decisions[0]!.updatedAt, id: page.decisions[0]!.id },
+      limit: 5,
+    });
+    expect(next.decisions.map(decision => decision.id)).toEqual([parkedIds[0]]);
+    await expect(storage.listDecisionPageByStatus({ ...scope, status: 'failed', limit: 5 })).resolves.toMatchObject({
+      decisions: [],
+      hasMore: false,
+    });
+  });
+
   it('treats a concurrently deleted attention receipt as stale', async () => {
     const backend = new LibSQLFactoryStorage({ id: 'attention-receipt-race-test', url: ':memory:' });
     const storage = backend.registerDomain(new WorkItemsStorage());
@@ -442,7 +542,7 @@ describe('WorkItemsStorage', () => {
       ...scope,
       workItemId: created.item.id,
       ingress: { identity: 'receipt-race', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -479,8 +579,7 @@ describe('WorkItemsStorage', () => {
     await storage.setAttentionReceipt({
       ...scope,
       userId: 'u',
-      decisionId: failed.id,
-      failureOccurrence: failed.failureOccurrence,
+      identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
       action: 'read',
       now,
     });
@@ -493,8 +592,7 @@ describe('WorkItemsStorage', () => {
       storage.setAttentionReceipt({
         ...scope,
         userId: 'u',
-        decisionId: failed.id,
-        failureOccurrence: failed.failureOccurrence,
+        identity: factoryDecisionAttentionIdentity(failed.id, failed.failureOccurrence),
         action: 'archive',
         now,
       }),
@@ -595,5 +693,94 @@ describe('isAgentActor', () => {
     [undefined, false],
   ] as const)('isAgentActor(%j) → %s', (actor, expected) => {
     expect(isAgentActor(actor)).toBe(expected);
+  });
+});
+
+describe('getBySource', () => {
+  const slackThread = { integrationId: 'slack', type: 'slack-thread', externalId: 'slack:C-1:1700.42' };
+
+  it('resolves the card a platform thread created without knowing its tenant', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: slackThread },
+    });
+
+    expect((await storage.getBySource(slackThread))?.id).toBe(created.item.id);
+  });
+
+  it('resolves to nothing for a source no card was born from', async () => {
+    const storage = await makeStorage();
+    await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
+  });
+
+  it('keeps two workspaces that issued the same thread id apart', async () => {
+    const storage = await makeStorage();
+    const theirs = { ...slackThread, workspaceId: 'T-them' };
+    const ours = { ...slackThread, workspaceId: 'T-us' };
+    await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: theirs },
+    });
+    const mine = await storage.upsert({
+      orgId: 'org2',
+      userId: 'u',
+      factoryProjectId: 'p2',
+      input: { ...input, externalSource: ours },
+    });
+
+    expect((await storage.getBySource(ours))?.id).toBe(mine.item.id);
+  });
+
+  it('resolves canonical sources within the requested organization and project', async () => {
+    const storage = await makeStorage();
+    for (const orgId of ['org1', 'org2']) {
+      for (const factoryProjectId of orgId === 'org1' ? ['p1', 'p2'] : ['p3', 'p4']) {
+        const created = await storage.upsert({
+          orgId,
+          userId: 'u',
+          factoryProjectId,
+          input: { ...input, externalSource: slackThread },
+        });
+        expect(await storage.getByProjectSource({ orgId, factoryProjectId, source: slackThread })).toEqual(
+          created.item,
+        );
+      }
+    }
+    const found = await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'p1', source: slackThread });
+    expect(found).toMatchObject({ orgId: 'org1', factoryProjectId: 'p1' });
+    expect(
+      await storage.getByProjectSource({ orgId: 'org1', factoryProjectId: 'missing', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({ orgId: 'missing', factoryProjectId: 'p1', source: slackThread }),
+    ).toBeNull();
+    expect(
+      await storage.getByProjectSource({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        source: { ...slackThread, integrationId: 'other' },
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses to guess when two projects hold the same source', async () => {
+    const storage = await makeStorage();
+    for (const factoryProjectId of ['p1', 'p2']) {
+      await storage.upsert({
+        orgId: 'org1',
+        userId: 'u',
+        factoryProjectId,
+        input: { ...input, externalSource: slackThread },
+      });
+    }
+
+    expect(await storage.getBySource(slackThread)).toBeNull();
   });
 });

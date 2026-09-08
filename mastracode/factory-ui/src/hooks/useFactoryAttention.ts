@@ -2,25 +2,45 @@ import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } fr
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
+import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
+  attentionKindsIn,
   fetchFactoryAttention,
   markAllFactoryAttentionRead,
   updateFactoryAttentionReceipt,
 } from '../ui/domains/factory/services/attention';
 import type {
+  FactoryAttentionGroup,
   FactoryAttentionItem,
   FactoryAttentionReceiptAction,
   FactoryAttentionView,
 } from '../ui/domains/factory/services/attention';
 
-export function useFactoryAttention(factoryProjectId: string | undefined, view: FactoryAttentionView, limit: number) {
+/** The badge's standing safety net, and the page's fallback while its stream is down. */
+export const ATTENTION_POLL_MS = 5_000;
+
+/** How deep a preview reaches before the inbox page takes over. Shared, so the sidebar and the Overview share one cached query. */
+export const ATTENTION_PREVIEW_LIMIT = 25;
+
+export function useFactoryAttention(
+  factoryProjectId: string | undefined,
+  view: FactoryAttentionView,
+  limit: number,
+  group?: FactoryAttentionGroup,
+) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit),
+    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, group),
     queryFn: factoryProjectId
-      ? ({ signal }) => fetchFactoryAttention(baseUrl, factoryProjectId, { view, limit, signal })
+      ? ({ signal }) =>
+          fetchFactoryAttention(baseUrl, factoryProjectId, {
+            view,
+            limit,
+            signal,
+            ...(group ? { kinds: attentionKindsIn(group) } : {}),
+          })
       : skipToken,
-    refetchInterval: 5_000,
+    refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,
   });
 }
@@ -31,6 +51,7 @@ export function useFactoryAttentionHistory(
   search: string,
 ) {
   const { baseUrl } = useApiConfig();
+  const connected = useFeedEventsConnected();
   const initialPageParam: string | undefined = undefined;
   const queryFn = factoryProjectId
     ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
@@ -41,6 +62,9 @@ export function useFactoryAttentionHistory(
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,
+    // The stream announces every attention change; the poll only bridges
+    // the window where no stream is up.
+    refetchInterval: connected ? false : ATTENTION_POLL_MS,
     staleTime: 2_000,
   });
 }
@@ -52,7 +76,7 @@ export function useFactoryAttentionReceiptAction(
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (item: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'>) => {
+    mutationFn: (item: FactoryAttentionItem) => {
       if (!factoryProjectId) throw new Error('Factory project is required');
       return updateFactoryAttentionReceipt(baseUrl, factoryProjectId, item, action);
     },

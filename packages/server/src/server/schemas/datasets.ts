@@ -340,6 +340,14 @@ export const updateItemBodySchema = z.object({
   source: datasetItemSourceSchema,
 });
 
+export const updateExperimentBodySchema = z
+  .object({
+    name: z.string().optional().describe('New name of the experiment'),
+    description: z.string().optional().describe('New description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Replacement metadata for the experiment'),
+  })
+  .strict();
+
 export const triggerExperimentBodySchema = z.object({
   start: z
     .boolean()
@@ -474,12 +482,12 @@ export const datasetItemResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  source: datasetItemSourceSchema,
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  source: datasetItemSourceSchema.nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -707,10 +715,11 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
-  toolMocks: toolMocksSchema,
-  unmockedToolPolicy: unmockedToolPolicySchema,
-  scorerIds: z.array(z.string()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  toolMocks: toolMocksSchema.nullable(),
+  unmockedToolPolicy: unmockedToolPolicySchema.nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
+  requestContext: z.record(z.string(), z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),

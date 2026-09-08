@@ -5,7 +5,8 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K3",
-    "thinkingmachines/Inkling"
+    "thinkingmachines/Inkling",
+    "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "LiquidAI/LFM2-24B-A2B",
@@ -42,7 +43,9 @@
     "thinkingmachines/Inkling",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ],
   "structuredOutput": [
     "MiniMaxAI/MiniMax-M2.7",
@@ -62,6 +65,8 @@
     "thinkingmachines/Inkling",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
   ]
 }

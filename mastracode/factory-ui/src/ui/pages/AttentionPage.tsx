@@ -5,17 +5,21 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Archive, Inbox, Mail } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
-import {
-  useFactoryAttentionHistory,
-  useFactoryAttentionReceiptAction,
-  useMarkAllFactoryAttentionRead,
-} from '../../hooks/useFactoryAttention';
-import { useFactoryDecisionAction } from '../../hooks/useFactoryDecisions';
-import { AttentionItemRow } from '../domains/factory/components/AttentionItemRow';
+import { useFactoryAttentionHistory, useMarkAllFactoryAttentionRead } from '../../hooks/useFactoryAttention';
+import { dayHeading, groupByDay } from '../domains/factory/activity';
+import { AttentionItemRow, KindIcon } from '../domains/factory/components/AttentionItemRow';
+import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
+import { DayHeading, RailRow, RAIL_LIST } from '../domains/factory/components/Timeline';
+import { useAttentionItemActions } from '../domains/factory/components/useAttentionItemActions';
 import { DocumentFactoryPageShell } from '../domains/factory/components/FactoryPageShell';
-import type { FactoryAttentionItem, FactoryAttentionView } from '../domains/factory/services/attention';
+import { attentionCountsIn, attentionGroupOf } from '../domains/factory/services/attention';
+import type {
+  FactoryAttentionGroup,
+  FactoryAttentionItem,
+  FactoryAttentionView,
+} from '../domains/factory/services/attention';
 import { SkeletonRows } from '../ui/SkeletonRows';
 
 const VIEWS: Array<{ value: FactoryAttentionView; label: string; icon: typeof Inbox }> = [
@@ -24,16 +28,53 @@ const VIEWS: Array<{ value: FactoryAttentionView; label: string; icon: typeof In
   { value: 'archived', label: 'Archived', icon: Archive },
 ];
 
+/** What needs a person leads the page; what waits on their say-so and what they merely follow sit under it. */
+const SECTIONS_BELOW: Array<{ group: FactoryAttentionGroup; heading: string; headingId: string }> = [
+  { group: 'queue', heading: 'Waiting for approval', headingId: 'attention-queue-heading' },
+  { group: 'activity', heading: 'Activity', headingId: 'attention-activity-heading' },
+];
+
 function attentionView(value: string | null): FactoryAttentionView {
   return value === 'unread' || value === 'archived' ? value : 'open';
 }
 
-function sameItem(a: Pick<FactoryAttentionItem, 'decisionId' | 'occurrence'> | undefined, b: FactoryAttentionItem) {
-  return a?.decisionId === b.decisionId && a.occurrence === b.occurrence;
-}
+/**
+ * The inbox as a timeline: what landed, cut by day, each item hung off the mark
+ * of what it is. Same rail as the Activity page — the two read as one surface,
+ * and the silence between two days is as much of the story as the rows.
+ */
+function AttentionRail({
+  factoryId,
+  items,
+  rowProps,
+}: {
+  factoryId: string;
+  items: FactoryAttentionItem[];
+  rowProps: (item: FactoryAttentionItem) => Omit<Parameters<typeof AttentionItemRow>[0], 'factoryId'>;
+}) {
+  const nowMs = Date.now();
+  const dated = items.map(item => ({ item, at: Date.parse(item.occurredAt) }));
 
-function showReceiptError(error: unknown, fallback: string): void {
-  toast.error(error instanceof Error ? error.message : fallback);
+  return (
+    <div className="flex flex-col gap-8">
+      {groupByDay(dated).map(day => (
+        <section key={day.dayMs} className="flex flex-col gap-5">
+          <DayHeading>{dayHeading(day.dayMs, nowMs)}</DayHeading>
+          <ul className={RAIL_LIST}>
+            {day.items.map((entry, index) => (
+              <RailRow
+                key={entry.item.key}
+                mark={<KindIcon kind={entry.item.kind} />}
+                connected={index < day.items.length - 1}
+              >
+                <AttentionItemRow factoryId={factoryId} {...rowProps(entry.item)} />
+              </RailRow>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 export function AttentionPage() {
@@ -46,26 +87,27 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
   const view = attentionView(searchParams.get('view'));
   const normalizedSearch = useDeferredValue(search.trim());
   const attention = useFactoryAttentionHistory(factoryId, view, normalizedSearch);
-  const retryDecision = useFactoryDecisionAction(factoryId, 'retry');
-  const readItem = useFactoryAttentionReceiptAction(factoryId, 'read');
-  const archiveItem = useFactoryAttentionReceiptAction(factoryId, 'archive');
-  const restoreItem = useFactoryAttentionReceiptAction(factoryId, 'restore');
+  const rowProps = useAttentionItemActions(factoryId);
   const markAllRead = useMarkAllFactoryAttentionRead(factoryId);
   const pages = attention.data?.pages ?? [];
   const summary = pages[0];
   const items = pages.flatMap(page => page.items);
-  const showApprovalQueue = view === 'open' && !normalizedSearch && (summary?.approvalCount ?? 0) > 0;
+  const itemsIn = (group: FactoryAttentionGroup) => items.filter(item => attentionGroupOf(item.kind) === group);
+  const unreadIn = (group: FactoryAttentionGroup) =>
+    summary && view !== 'archived' ? attentionCountsIn(summary.kinds, group).unread : 0;
+  const unreadCount = unreadIn('attention') + unreadIn('queue') + unreadIn('activity');
+  const interrupting = itemsIn('attention');
 
   return (
-    <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 pb-12" aria-labelledby="attention-heading">
+    <section className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-16" aria-labelledby="attention-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 id="attention-heading" className="text-ui-lg text-icon6 m-0 font-semibold">
             Needs attention
           </h1>
-          <p className="text-ui-sm text-icon3 mt-1 mb-0">Factory work that needs a decision or recovery.</p>
+          <p className="text-ui-sm text-icon3 mt-1 mb-0">Mentions, failures, and work waiting on you.</p>
         </div>
-        {!normalizedSearch && view !== 'archived' && summary && summary.unreadCount > 0 ? (
+        {!normalizedSearch && view !== 'archived' && unreadCount > 0 ? (
           <Button
             type="button"
             variant="outline"
@@ -115,87 +157,49 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
             Try again
           </Button>
         </Notice>
-      ) : items.length === 0 && !showApprovalQueue ? (
+      ) : items.length === 0 ? (
         <div className="text-ui-sm text-icon2 flex min-h-40 items-center justify-center text-center">
           {attention.hasNextPage
-            ? 'Older failures remain. Load more to continue.'
+            ? 'Loading older items…'
             : search
               ? 'No attention items match your search.'
               : `No ${view} attention items.`}
         </div>
       ) : (
-        <ul className="border-border1 divide-border1 divide-y overflow-hidden rounded-xl border">
-          {showApprovalQueue && summary ? (
-            <li>
-              <Link
-                to={`/factories/${factoryId}/rules?group=proposed`}
-                className="hover:bg-surface3 flex items-center justify-between gap-4 px-4 py-3"
-              >
-                <span>
-                  <span className="text-ui-sm text-icon6 block font-medium">
-                    {summary.approvalCount} items waiting for approval
-                  </span>
-                  <span className="text-ui-xs text-icon3 mt-0.5 block">
-                    Review the approval queue before Factory starts them.
-                  </span>
-                </span>
-                <span className="text-ui-sm text-icon4 shrink-0">Open approvals</span>
-              </Link>
-            </li>
+        <>
+          {interrupting.length > 0 ? (
+            <AttentionRail factoryId={factoryId} items={interrupting} rowProps={rowProps} />
           ) : null}
-          {items.map(item => (
-            <li key={item.key}>
-              <AttentionItemRow
-                factoryId={factoryId}
-                item={item}
-                retrying={retryDecision.isPending && retryDecision.variables === item.decisionId}
-                updatingReceipt={
-                  (readItem.isPending && sameItem(readItem.variables, item)) ||
-                  (archiveItem.isPending && sameItem(archiveItem.variables, item)) ||
-                  (restoreItem.isPending && sameItem(restoreItem.variables, item))
-                }
-                onRetry={
-                  item.canRetry
-                    ? () =>
-                        retryDecision.mutate(item.decisionId, {
-                          onError: error =>
-                            toast.error(error instanceof Error ? error.message : 'Unable to retry automation'),
-                        })
-                    : undefined
-                }
-                onRead={() =>
-                  readItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to mark attention item as read'),
-                  })
-                }
-                onArchive={() =>
-                  archiveItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to archive attention item'),
-                  })
-                }
-                onRestore={() =>
-                  restoreItem.mutate(item, {
-                    onError: error => showReceiptError(error, 'Unable to restore attention item'),
-                  })
-                }
-              />
-            </li>
-          ))}
-        </ul>
+
+          {SECTIONS_BELOW.map(section => {
+            const sectionItems = itemsIn(section.group);
+            if (sectionItems.length === 0) return null;
+            const unread = unreadIn(section.group);
+            return (
+              <section key={section.group} aria-labelledby={section.headingId} className="flex flex-col gap-4">
+                <span className="flex items-center gap-2">
+                  <h2 id={section.headingId} className="text-ui-sm text-icon3 m-0 font-medium">
+                    {section.heading}
+                  </h2>
+                  {unread > 0 ? (
+                    <span className="bg-surface4 text-ui-xs text-icon3 min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none font-medium tabular-nums">
+                      {unread}
+                    </span>
+                  ) : null}
+                </span>
+                <AttentionRail factoryId={factoryId} items={sectionItems} rowProps={rowProps} />
+              </section>
+            );
+          })}
+        </>
       )}
 
-      {attention.hasNextPage ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="self-center"
-          disabled={attention.isFetchingNextPage}
-          onClick={() => void attention.fetchNextPage()}
-        >
-          {attention.isFetchingNextPage ? 'Loading…' : 'Load more'}
-        </Button>
-      ) : null}
+      <LoadMoreSentinel
+        hasNextPage={attention.hasNextPage}
+        isFetchingNextPage={attention.isFetchingNextPage}
+        onLoadMore={() => void attention.fetchNextPage()}
+        label="Load more attention items"
+      />
     </section>
   );
 }

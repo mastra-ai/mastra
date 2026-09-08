@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 
 import { MastraEditor } from '../index';
@@ -396,5 +397,151 @@ describe('EditorAgentNamespace.applyStoredOverrides fails closed when editor exc
 
     const result = await editor.agent.applyStoredOverrides(codeAgent, { status: 'published' });
     expect(result).toBe(codeAgent);
+  });
+});
+
+describe('EditorAgentNamespace.applyStoredOverrides instruction envelope preservation (providerOptions)', () => {
+  const CACHE_OPTIONS = { anthropic: { cacheControl: { type: 'ephemeral' } } };
+
+  async function setupWithInstructions(
+    codeInstructions: ConstructorParameters<typeof Agent>[0]['instructions'],
+    storedInstructions: unknown,
+  ) {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'cached-agent',
+      name: 'Cached Agent',
+      instructions: codeInstructions,
+      model: 'anthropic/claude-sonnet-4-5',
+    });
+    new Mastra({ storage, editor, agents: { 'cached-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'cached-agent',
+        name: 'Cached Agent',
+        instructions: storedInstructions,
+        model: { provider: 'anthropic', name: 'claude-sonnet-4-5' },
+      },
+    });
+
+    return { editor, codeAgent };
+  }
+
+  it('keeps providerOptions from a structured code message when a stored string overrides the text', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(
+      { role: 'system', content: 'Code wording.', providerOptions: CACHE_OPTIONS },
+      'Edited wording from Studio.',
+    );
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toEqual({
+      role: 'system',
+      content: 'Edited wording from Studio.',
+      providerOptions: CACHE_OPTIONS,
+    });
+  });
+
+  it('keeps providerOptions when the stored override uses instruction blocks', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(
+      { role: 'system', content: 'Code wording.', providerOptions: CACHE_OPTIONS },
+      [
+        { type: 'text', content: 'Edited block one.' },
+        { type: 'text', content: 'Edited block two.' },
+      ],
+    );
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toEqual({
+      role: 'system',
+      content: 'Edited block one.\n\nEdited block two.',
+      providerOptions: CACHE_OPTIONS,
+    });
+  });
+
+  it('keeps the last message envelope when code instructions are an array of system messages', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(
+      [
+        { role: 'system', content: 'First code message.' },
+        { role: 'system', content: 'Second code message.', providerOptions: CACHE_OPTIONS },
+      ],
+      'Edited wording from Studio.',
+    );
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toEqual({
+      role: 'system',
+      content: 'Edited wording from Studio.',
+      providerOptions: CACHE_OPTIONS,
+    });
+  });
+
+  it('merges the envelope at request time when code instructions are dynamic', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(
+      ({ requestContext }) => ({
+        role: 'system' as const,
+        content: `Code wording for ${requestContext.get('tenant') ?? 'default'}.`,
+        providerOptions: CACHE_OPTIONS,
+      }),
+      'Edited wording from Studio.',
+    );
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+    expect(await result.getInstructions({ requestContext })).toEqual({
+      role: 'system',
+      content: 'Edited wording from Studio.',
+      providerOptions: CACHE_OPTIONS,
+    });
+  });
+
+  it('falls back to the stored text when dynamic code instructions throw', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(() => {
+      throw new Error('needs context this request cannot provide');
+    }, 'Edited wording from Studio.');
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Edited wording from Studio.');
+  });
+
+  it('leaves plain-string code instructions overridden as a plain string', async () => {
+    const { editor, codeAgent } = await setupWithInstructions('Code wording.', 'Edited wording from Studio.');
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Edited wording from Studio.');
+  });
+
+  it('leaves string-array code instructions overridden as a plain string', async () => {
+    const { editor, codeAgent } = await setupWithInstructions(
+      ['Code wording one.', 'Code wording two.'],
+      'Edited wording from Studio.',
+    );
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Edited wording from Studio.');
+  });
+
+  it('does not mutate the original agent instructions', async () => {
+    const codeInstructions = { role: 'system' as const, content: 'Code wording.', providerOptions: CACHE_OPTIONS };
+    const { editor, codeAgent } = await setupWithInstructions(codeInstructions, 'Edited wording from Studio.');
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(result).not.toBe(codeAgent);
+    expect(await codeAgent.getInstructions()).toEqual({
+      role: 'system',
+      content: 'Code wording.',
+      providerOptions: CACHE_OPTIONS,
+    });
   });
 });

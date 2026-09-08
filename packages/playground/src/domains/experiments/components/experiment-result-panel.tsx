@@ -1,6 +1,7 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
@@ -9,9 +10,12 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { format } from 'date-fns/format';
-import { ClipboardCheck, ExternalLinkIcon, FileCodeIcon, FileOutputIcon, TagIcon, TargetIcon } from 'lucide-react';
+import { ClipboardCheck, ExternalLinkIcon, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useMemo } from 'react';
+import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -32,6 +36,11 @@ export type ExperimentResultPanelProps = {
    * result content on the left, this slot (typically the score detail) on the right.
    */
   scorePanelSlot?: ReactNode;
+  /** When provided, tags become editable in the metadata block (add via picker, remove via badge). */
+  onTagsChange?: (tags: string[]) => void;
+  /** Known tags offered by the tag picker. */
+  tagVocabulary?: string[];
+  isUpdatingTags?: boolean;
 };
 
 export function ExperimentResultPanel({
@@ -47,6 +56,9 @@ export function ExperimentResultPanel({
   onFlagForReview,
   collapsed = false,
   scorePanelSlot,
+  onTagsChange,
+  tagVocabulary = [],
+  isUpdatingTags = false,
 }: ExperimentResultPanelProps) {
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
@@ -54,6 +66,8 @@ export function ExperimentResultPanel({
   const groundTruthStr = formatValue(result?.groundTruth);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
+  const selectedResults = useMemo(() => [result], [result]);
+  const showTagsRow = Boolean(onTagsChange) || tags.length > 0;
 
   return (
     <DataPanel collapsed={collapsed}>
@@ -74,6 +88,18 @@ export function ExperimentResultPanel({
               Trace
             </Button>
           )}
+          {canFlag && (
+            <Button size="md" variant="primary" onClick={() => onFlagForReview!(result.id)}>
+              <ClipboardCheck />
+              Flag for Review
+            </Button>
+          )}
+          {result.status === 'needs-review' && onOpenInReview && (
+            <Button size="md" variant="primary" onClick={onOpenInReview}>
+              <ExternalLinkIcon />
+              Review
+            </Button>
+          )}
           <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         </ButtonsGroup>
       </DataPanel.Header>
@@ -91,6 +117,59 @@ export function ExperimentResultPanel({
                 <DataKeysAndValues.Value>
                   {format(new Date(result.createdAt), "MMM d, yyyy 'at' h:mm a")}
                 </DataKeysAndValues.Value>
+                {result.status && (
+                  <>
+                    <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>
+                      <Badge
+                        size="xs"
+                        variant={
+                          result.status === 'needs-review'
+                            ? 'orange'
+                            : result.status === 'complete'
+                              ? 'green'
+                              : 'neutral'
+                        }
+                      >
+                        {result.status}
+                      </Badge>
+                    </DataKeysAndValues.Value>
+                  </>
+                )}
+                {showTagsRow && (
+                  <>
+                    <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {tags.map(tag => (
+                          <ComputedTag key={tag} value={tag} className={onTagsChange ? 'gap-1 pr-1' : undefined}>
+                            {tag}
+                            {onTagsChange && (
+                              <button
+                                type="button"
+                                aria-label={`Remove tag ${tag}`}
+                                disabled={isUpdatingTags}
+                                onClick={() => onTagsChange(tags.filter(t => t !== tag))}
+                                className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            )}
+                          </ComputedTag>
+                        ))}
+                        {onTagsChange && (
+                          <ExperimentResultsTagPicker
+                            appearance="inline"
+                            selectedResults={selectedResults}
+                            vocabulary={tagVocabulary}
+                            onAddTag={tag => onTagsChange([...tags, tag])}
+                            disabled={isUpdatingTags}
+                          />
+                        )}
+                      </div>
+                    </DataKeysAndValues.Value>
+                  </>
+                )}
               </DataKeysAndValues>
 
               {hasError && (
@@ -125,52 +204,6 @@ export function ExperimentResultPanel({
               )}
 
               {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
-
-              {(result.status || tags.length > 0 || canFlag) && (
-                <div className="grid gap-2">
-                  <DataPanel.SectionHeading icon={<TagIcon />} className="mb-2">
-                    Review
-                  </DataPanel.SectionHeading>
-                  {(result.status || tags.length > 0) && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {result.status && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            result.status === 'needs-review'
-                              ? 'bg-orange-500/10 text-orange-400'
-                              : result.status === 'complete'
-                                ? 'bg-accent1/10 text-accent1'
-                                : 'bg-neutral3/10 text-neutral4'
-                          }`}
-                        >
-                          {result.status}
-                        </span>
-                      )}
-                      {tags.map(tag => (
-                        <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {canFlag && (
-                    <div>
-                      <Button size="sm" onClick={() => onFlagForReview!(result.id)}>
-                        <ClipboardCheck />
-                        Flag for Review
-                      </Button>
-                    </div>
-                  )}
-                  {result.status === 'needs-review' && onOpenInReview && (
-                    <div>
-                      <Button size="sm" onClick={onOpenInReview}>
-                        <ExternalLinkIcon />
-                        Review
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="grid gap-3">

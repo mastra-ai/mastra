@@ -58,11 +58,8 @@ describe('AgentProfileToolsStep', () => {
       </Harness>,
     );
 
-    expect(screen.getByText('Selected tools:')).toBeTruthy();
-    const count = screen.getByText('2');
-    expect(count.tagName).toBe('STRONG');
-    expect(count.className).toContain('text-neutral6');
-    expect(count.parentElement?.className).toContain('rounded-full');
+    const selectedTools = screen.getByText('Selected tools:').parentElement;
+    expect(selectedTools?.textContent).toContain('Selected tools: 2');
   });
 
   it('renders the navigation footer with a top border and pt-6 spacing', () => {

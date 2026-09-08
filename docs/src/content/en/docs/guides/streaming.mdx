@@ -1,6 +1,6 @@
 ---
 title: "Streaming"
-description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+description: "Stream incremental responses from Mastra agents and workflows, consume text and structured output, handle events, and integrate with AI SDK interfaces."
 packages:
   - "@mastra/core"
   - "@mastra/ai-sdk"
@@ -12,14 +12,11 @@ Mastra supports real-time, incremental responses from agents and workflows, allo
 
 ## Getting started
 
-Mastra's streaming API adapts based on your model version:
-
-- **`.stream()`**: For V2 models, supports **AI SDK v5** and later (`LanguageModelV2`).
-- **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
+[`Agent.stream()`](/reference/streaming/agents/stream) is the standard streaming API for agents. It returns a `MastraModelOutput` that exposes `textStream` for progressive text and promises such as `text`, `steps`, and `usage` that resolve when the stream finishes.
 
 ## Streaming with agents
 
-You can pass a single string for basic prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+Pass a single string for a basic prompt. When providing multiple pieces of context, use an array of strings. An array of message objects with `role` and `content` gives you precise control over roles and conversational flow.
 
 ### Using `Agent.stream()`
 
@@ -39,7 +36,7 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 :::tip
 
-For agents that dispatch [background tasks](/docs/harness/background-tasks), use [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) to keep the stream open until those tasks complete and the agent has had a chance to respond to their results.
+For agents that dispatch [background tasks](/docs/harness/background-tasks), use `stream()` with the [`untilIdle` option](/reference/streaming/agents/stream#parameters), such as `untilIdle: true`, to keep the stream open until those tasks complete and the agent has had a chance to respond to their results. This option requires agent memory.
 
 :::
 
@@ -59,35 +56,39 @@ Here are some questions to consider:
 An agent stream provides access to these response properties:
 
 - **`stream.textStream`**: A readable stream that emits text chunks.
-- **`stream.text`**: Promise that resolves to the full text response.
-- **`stream.finishReason`**: The reason the agent stopped streaming.
-- **`stream.usage`**: Token usage information.
+- **`stream.text`**: A promise that resolves to the full text response.
+- **`stream.steps`**: A promise that resolves to the completed model steps.
+- **`stream.finishReason`**: A promise that resolves to the reason the agent stopped streaming.
+- **`stream.usage`**: A promise that resolves to token usage information.
+- **`stream.objectStream`** and **`stream.object`**: Partial and final structured output when `structuredOutput` is passed.
 
-### AI SDK v5+ Compatibility
+See the [`MastraModelOutput` reference](/reference/streaming/agents/MastraModelOutput) for the complete set of properties.
 
-AI SDK v5 (and later) uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+### AI SDK integration
 
-For integration with AI SDK v5+, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+Use `toAISdkStream()` and `toAISdkMessages()` to convert Mastra streams and stored messages to AI SDK-compatible formats. The converters default to AI SDK v5 for backward compatibility. Pass the version that matches your installed AI SDK, such as `version: 'v7'` for AI SDK v7.
 
 ```typescript
-import { toAISdkV5Stream } from '@mastra/ai-sdk'
+import { toAISdkStream } from '@mastra/ai-sdk'
 
 const testAgent = mastra.getAgent('testAgent')
-
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
-// Convert to AI SDK v5+ compatible stream
-const aiSDKStream = toAISdkV5Stream(stream, { from: 'agent' })
+const aiSDKStream = toAISdkStream(stream, {
+  from: 'agent',
+  version: 'v7',
+})
 ```
 
-For converting messages to AI SDK v5+ format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+Convert stored messages for `useChat()`'s `initialMessages` with `toAISdkMessages()`:
 
 ```typescript
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { toAISdkMessages } from '@mastra/ai-sdk/ui'
 
-const messages = [{ role: 'user', content: 'Hello' }]
-const aiSDKMessages = toAISdkV5Messages(messages)
+const initialMessages = toAISdkMessages([{ role: 'user', content: 'Hello' }], { version: 'v7' })
 ```
+
+For route handlers, see [AI SDK UI](/integrations/agentic-ui/ai-sdk-ui), which covers `handleChatStream()`, `handleWorkflowStream()`, and `handleNetworkStream()`. Pass the version that matches your installed AI SDK to these handlers too. See the [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) and [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) references for all options.
 
 ## Streaming with workflows
 
@@ -95,18 +96,18 @@ Streaming from a workflow returns a sequence of structured events describing the
 
 ### Using `Run.stream()`
 
-The `stream()` method returns a `ReadableStream` of events directly.
+The `stream()` method returns a `WorkflowRunOutput`. Its `fullStream` property is a `ReadableStream` of workflow events.
 
 ```typescript
 const run = await testWorkflow.createRun()
 
-const stream = await run.stream({
+const stream = run.stream({
   inputData: {
     value: 'initial data',
   },
 })
 
-for await (const chunk of stream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk)
 }
 ```
@@ -117,17 +118,13 @@ Visit [Run.stream()](/reference/streaming/workflows/stream) for more information
 
 The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
-```typescript prettier:false
+```typescript oxfmt:false
 {
   type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
   from: 'WORKFLOW',
   payload: {
-    stepName: 'step-1',
-    args: { value: 'initial data' },
-    stepCallId: '8e15e618-be0e-4215-a5d6-08e58c152068',
-    startedAt: 1755121710066,
-    status: 'running'
+    workflowId: 'testWorkflow'
   }
 }
 ```
@@ -146,27 +143,45 @@ Events emitted from agents or workflows represent different stages of generation
 
 ## Event types
 
-Below is a complete list of events emitted from `.stream()`.
-Depending on whether you’re streaming from an **agent** or a **workflow**, only a subset of these events will occur:
+Agent and workflow streams emit different event types during execution.
 
-- **start**: Marks the beginning of an agent or workflow run.
-- **step-start**: Indicates a workflow step has begun execution.
-- **text-delta**: Incremental text chunks as they're generated by the LLM.
-- **tool-call**: When the agent decides to use a tool, including the tool name and arguments.
-- **tool-result**: The result returned from tool execution.
-- **step-finish**: Confirms that a specific step has fully finalized, and may include metadata like the finish reason for that step.
-- **finish**: When the agent or workflow completes, including usage statistics.
+### Agent events
+
+Common agent events include:
+
+- **`start`**: The agent run begins.
+- **`text-start`**, **`text-delta`**, and **`text-end`**: The start and end events mark text generation boundaries. Delta events carry incremental text.
+- **`reasoning-start`**, **`reasoning-delta`**, and **`reasoning-end`**: The start and end events mark reasoning generation boundaries. Delta events carry incremental reasoning.
+- **`tool-call`** and **`tool-result`**: A tool is called and returns a result.
+- **`step-start`** and **`step-finish`**: A model step begins and ends.
+- **`finish`**: The agent run completes.
+
+This list isn't exhaustive. See the [`ChunkType` reference](/reference/streaming/ChunkType) for all agent chunk types and payloads.
+
+### Workflow events
+
+Workflow events include:
+
+- **`workflow-start`**: The workflow run begins.
+- **`workflow-step-start`**: A workflow step begins.
+- **`workflow-step-output`**: A step emits custom output.
+- **`workflow-step-progress`**: A step reports progress.
+- **`workflow-step-result`**: A step completes with a result.
+- **`workflow-finish`**: The workflow run completes.
+- **`workflow-paused`**, **`workflow-step-suspended`**, and **`workflow-canceled`**: The workflow run is interrupted.
+
+See the [`Run.stream()` reference](/reference/streaming/workflows/stream) for workflow event details.
 
 ## Inspecting agent streams
 
-Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
+Iterate over `stream.fullStream` with a `for await` loop to inspect all emitted event chunks.
 
 ```typescript
 const testAgent = mastra.getAgent('testAgent')
 
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
-for await (const chunk of stream) {
+for await (const chunk of stream.fullStream) {
   console.log(chunk)
 }
 ```
@@ -177,7 +192,7 @@ Visit [Agent.stream()](/reference/streaming/agents/stream) for more information.
 
 Below is an example of events that may be emitted. Each event always includes a `type` and can include additional fields like `from` and `payload`.
 
-```typescript {2,7,15} prettier:false
+```typescript {2,7,15} oxfmt:false
 {
   type: 'start',
   from: 'AGENT',
@@ -311,28 +326,32 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,7,14} prettier:false
-import { createStep } from "@mastra/core/workflows";
+```typescript {8,11,18}
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 export const testStep = createStep({
+  id: 'test-step',
+  inputSchema: z.object({ url: z.url() }),
+  outputSchema: z.object({ status: z.number() }),
   execute: async ({ inputData, writer }) => {
-    const { value } = inputData;
+    const { url } = inputData
 
-    await writer?.write({
-      type: "custom-event",
-      status: "pending"
-    });
+    await writer.write({
+      type: 'custom-event',
+      status: 'pending',
+    })
 
-    const response = await fetch(...);
+    const response = await fetch(url)
 
-    await writer?.write({
-      type: "custom-event",
-      status: "success"
-    });
+    await writer.write({
+      type: 'custom-event',
+      status: 'success',
+    })
 
     return {
-      value: ""
-    };
+      status: response.status,
+    }
   },
-});
+})
 ```

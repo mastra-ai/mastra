@@ -183,7 +183,6 @@ export class LocalSandbox extends MastraSandbox<string> {
 
   status: ProviderStatus = 'pending';
 
-  readonly workingDirectory: string;
   readonly isolation: IsolationBackend;
   declare readonly processes: LocalProcessManager;
   declare readonly mounts: MountManager;
@@ -217,6 +216,15 @@ export class LocalSandbox extends MastraSandbox<string> {
   /** Chains snapshot() calls so concurrent captures never interleave. */
   private _snapshotChain: Promise<void> = Promise.resolve();
 
+  /**
+   * The effective working directory. Narrowed to `string`: the constructor
+   * always computes a value (the option, expanded, or `<cwd>/.sandbox`), so
+   * unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
+
   constructor(options: LocalSandboxOptions = {}) {
     // Validate isolation backend before super (fail fast)
     const requestedIsolation = options.isolation ?? 'none';
@@ -233,7 +241,7 @@ export class LocalSandbox extends MastraSandbox<string> {
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
-    this.workingDirectory = expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox'));
+    this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
     this.env = options.env ?? {};
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,

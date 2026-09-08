@@ -178,6 +178,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected correlationContext?: CorrelationContext;
   /** Child spans that have started but not yet ended */
   #openChildren?: Set<BaseSpan<any>>;
+  /** The span whose open-child set currently tracks this span: the parent, or a live ancestor after promotion */
+  #openChildrenOwner?: BaseSpan<any>;
 
   /**
    * Subclasses can override to unconditionally mark the span as excluded.
@@ -224,6 +226,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const parent = options.parent;
     if (!this.isEvent && parent instanceof BaseSpan && parent.isValid) {
       (parent.#openChildren ??= new Set()).add(this);
+      this.#openChildrenOwner = parent;
     }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
@@ -305,11 +308,42 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.end(options);
   }
 
-  /** Release this span from its parent's open-child set once it has ended */
+  /** Close any still-open descendant spans without applying options to them */
+  protected endOpenDescendants(): void {
+    if (this.#openChildren) {
+      for (const child of [...this.#openChildren]) {
+        child.endTree();
+      }
+    }
+  }
+
+  /**
+   * Release this span from its parent's open-child set once it has ended.
+   * Children still open at that moment are handed to the nearest ancestor
+   * that has not ended, so a later endTree() on that ancestor can still
+   * reach them (e.g. a model span that finalizes on abort before the
+   * agent run's terminal handler closes the tree).
+   */
   protected detachFromParent(): void {
-    const parent = this.parent;
-    if (parent instanceof BaseSpan) {
-      parent.#openChildren?.delete(this);
+    const owner = this.#openChildrenOwner;
+    if (owner) {
+      owner.#openChildren?.delete(this);
+      this.#openChildrenOwner = undefined;
+    }
+    if (this.#openChildren?.size) {
+      let ancestor: AnySpan | undefined = this.parent;
+      while (ancestor instanceof BaseSpan && ancestor.endTime) {
+        ancestor = ancestor.parent;
+      }
+      if (ancestor instanceof BaseSpan) {
+        for (const child of this.#openChildren) {
+          (ancestor.#openChildren ??= new Set()).add(child);
+          child.#openChildrenOwner = ancestor;
+        }
+        this.#openChildren.clear();
+      }
+      // No live ancestor to promote to: keep tracking our own open children
+      // so a later endTree() on this span can still close them.
     }
   }
 

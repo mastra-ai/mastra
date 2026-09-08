@@ -24,6 +24,41 @@ const pool = new Pool({ connectionString });
 const createStore = () => new KnowledgePG({ pool });
 createKnowledgeStorageTests(createStore);
 
+describe('PostgreSQL knowledge legacy schema upgrade', () => {
+  it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {
+    const store = createStore();
+    await store.init();
+    // Recreate the pre-description table shape, then let init() upgrade it.
+    // Mutates the shared table; safe because vitest runs files serially (fileParallelism: false)
+    // and the shared suite's beforeEach re-runs init(), which re-adds the column.
+    await pool.query('ALTER TABLE "mastra_knowledge_nodes" DROP COLUMN IF EXISTS description');
+    const legacyId = `legacy-${Date.now()}`;
+    await pool.query(
+      `INSERT INTO "mastra_knowledge_nodes" (id,type,name,"canonicalName",kind,content,scope,"scopeKey",version,"mergedInto","createdAt","updatedAt") VALUES ($1,'node',$2,$3,'task','legacy body',$4::jsonb,$5,1,NULL,$6,$6)`,
+      [
+        legacyId,
+        `Legacy ${legacyId}`,
+        `legacy ${legacyId}`,
+        JSON.stringify(['org:legacy-upgrade']),
+        'org:legacy-upgrade',
+        new Date().toISOString(),
+      ],
+    );
+
+    const upgraded = createStore();
+    await upgraded.init();
+
+    const columns = await pool.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name='mastra_knowledge_nodes'",
+    );
+    expect(columns.rows.map(row => row.column_name)).toContain('description');
+
+    const legacy = await upgraded.getNode(legacyId);
+    expect(legacy?.description).toBeUndefined();
+    expect(legacy?.content).toBe('legacy body');
+  });
+});
+
 describe('PostgreSQL knowledge concurrency and indexes', () => {
   it('creates required indexes idempotently and exports its schema', async () => {
     const store = createStore();

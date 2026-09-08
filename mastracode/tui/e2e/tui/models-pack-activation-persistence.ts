@@ -47,7 +47,7 @@ export const modelsPackActivationPersistenceScenario = {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
-    terminal.submit('/models');
+    terminal.submit('/packs');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Models Pack E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/plan\s+→\s+models-pack-e2e\/plan-e2e/i, terminal, 8_000);

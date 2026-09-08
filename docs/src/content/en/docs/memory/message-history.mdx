@@ -1,6 +1,6 @@
 ---
 title: "Message history | Memory"
-description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
+description: "Store and retrieve recent Mastra conversation messages, configure history limits and thread titles, and query threads for chat interfaces."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -115,8 +115,8 @@ Threads and messages are created automatically when you call `agent.generate()` 
 
 You can use this history in two ways:
 
-- **Automatic inclusion**: Mastra automatically fetches recent messages and includes them in the context window. By default, the last 10 messages keep agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
-- [**Manual querying**](#querying): For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
+- **Automatic inclusion**: Mastra automatically includes recent messages in the context window. The default of 10 messages keeps agents grounded in the conversation. Adjust it with `lastMessages` when needed.
+- [**Manual querying**](#querying): For more control, query threads and messages directly with `recall()`. Use the results to choose which memories enter the context window or to render conversation history in your UI.
 
 :::tip
 
@@ -232,7 +232,7 @@ const thread = await memory.getThreadById({ threadId: 'thread-123' })
 
 ### Messages
 
-Once you have a thread, use [`recall()`](/reference/memory/recall) to retrieve its messages. It supports pagination, date filtering, and [semantic search](/docs/memory/semantic-recall).
+Once you have a thread, use [`recall()`](/reference/memory/recall) to retrieve its messages. It supports pagination and [semantic search](/docs/memory/semantic-recall), with optional date filtering.
 
 Basic recall returns all messages from a thread:
 

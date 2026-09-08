@@ -656,6 +656,42 @@ describe('trailing assistant message protection', () => {
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'reasoning', 'tool-call']);
   });
 
+  it('strips foreign reasoning from a trailing tool continuation after switching to Anthropic', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'do the thing' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: '',
+            providerOptions: {
+              openai: {
+                itemId: 'rs_123',
+                reasoningEncryptedContent: 'encrypted-reasoning',
+              },
+            },
+          },
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'doThing', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'doThing', output: { type: 'text', value: 'ok' } },
+        ],
+      },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect((result![1].content as any[]).map(p => p.type)).toEqual(['tool-call']);
+  });
+
   it('empty-signed strip skips the trailing assistant of a tool continuation', () => {
     const prompt = toolContinuationPrompt();
     // Give the historical assistant an empty signed block so the rule has

@@ -1,6 +1,6 @@
 # @mastra/turso
 
-A Mastra storage adapter for local [Turso Database](https://github.com/tursodatabase/turso) files.
+Use the Turso storage adapter to persist Mastra agents, workflows, memory, and other storage domains in a local database file.
 
 ## Installation
 
@@ -21,16 +21,14 @@ const storage = new TursoStore({
 await storage.init();
 ```
 
-The adapter supports macOS arm64, Windows x64, and glibc-based Linux on x64 and arm64. Call `getTursoDatabaseSupport()` before construction when an application needs to select a fallback on unsupported systems.
+## Documentation
 
-Experimental Turso Database features are disabled by default. Enable them explicitly when required:
+- [Turso Storage](https://mastra.ai/reference/storage/turso)
 
-```typescript
-const storage = new TursoStore({
-  id: 'multiprocess-storage',
-  path: './mastra.db',
-  experimental: ['multiprocess_wal'],
-});
-```
+## Changelog
 
-This package provides Mastra storage domains only. It does not include a vector store.
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/stores/turso/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

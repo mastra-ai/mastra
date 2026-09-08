@@ -992,6 +992,54 @@ describe('MastraClient', () => {
       );
     });
 
+    it('issues a DELETE for a dataset-scoped experiment', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteDatasetExperiment('dataset/1', 'experiment/1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset%2F1/experiments/experiment%2F1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('scopes a dataset experiment DELETE with tenancy query parameters', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteDatasetExperiment('dataset-1', 'experiment-1', {
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets/dataset-1/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('issues a top-level DELETE for an experiment with tenancy query', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await client.deleteExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/experiments/experiment-1?organizationId=org_a&projectId=proj_1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
     it('posts provenance and grouping when triggering an experiment', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
@@ -1213,6 +1261,24 @@ describe('MastraClient', () => {
       expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
 
+    it('purgeDatasetItem deletes the tenant-scoped purge endpoint', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ success: true }),
+      });
+
+      await expect(
+        client.purgeDatasetItem('ds/1', 'item/1', { organizationId: 'org/1', projectId: 'project/1' }),
+      ).resolves.toEqual({ success: true });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe(
+        'http://localhost:4111/api/datasets/ds%2F1/items/item%2F1/purge?organizationId=org%2F1&projectId=project%2F1',
+      );
+      expect(init.method).toBe('DELETE');
+    });
+
     it('addDatasetItem posts scorerIds and returns them', async () => {
       const scorerIds = ['quality', 'safety'];
       (global.fetch as any).mockResolvedValueOnce({
@@ -1268,6 +1334,29 @@ describe('MastraClient', () => {
         description,
         metadata,
       });
+    });
+
+    it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {
+      const updated = { id: 'exp-1', datasetId: 'ds-1', name: 'renamed', description: 'new desc', metadata: { k: 1 } };
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => updated,
+      });
+
+      const result = await client.updateDatasetExperiment({
+        datasetId: 'ds-1',
+        experimentId: 'exp-1',
+        name: 'renamed',
+        description: 'new desc',
+        metadata: { k: 1 },
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments/exp-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toEqual({ name: 'renamed', description: 'new desc', metadata: { k: 1 } });
+      expect(result).toEqual(updated);
     });
 
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {

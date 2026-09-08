@@ -39,10 +39,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
-          git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
+          # Fetch the complete PR ancestry so the merge base is available. A direct
+          # base-to-head diff reports base-only changes as PR deletions when the
+          # branch is behind the base branch. Keep the PR head as a blobless
+          # promisor remote so checkout can lazily retrieve PR-only test blobs.
+          git remote add pr-head "${HEAD_REPO}"
+          git config remote.pr-head.promisor true
+          git config remote.pr-head.partialclonefilter blob:none
+          git fetch --no-tags --filter=blob:none pr-head "${HEAD_SHA}"
+          merge_base="$(git merge-base "${BASE_SHA}" FETCH_HEAD)"
+          git diff --name-only --diff-filter=ACMRT "${merge_base}" FETCH_HEAD \
             | sort > /tmp/changed-files
-          git diff --no-renames --name-only --diff-filter=ACMRTD "${BASE_SHA}" FETCH_HEAD \
+          git diff --no-renames --name-only --diff-filter=ACMRTD "${merge_base}" FETCH_HEAD \
             | sort > /tmp/changed-coverage-files
 
           # Deployer changes must include monorepo E2E coverage. This rule runs
@@ -122,7 +130,11 @@ jobs:
         env:
           TURBO_CACHE: local:rw
           NODE_OPTIONS: --max-old-space-size=8192
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+        # @mastra/mcp-docs-server#build depends on mastra-docs#build, which
+        # runs `git log --name-status` across the repo. In this blobless,
+        # credential-less checkout that lazy-fetches blobs and fails. Nothing
+        # else depends on it, so leave it out of the gate build.
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" --filter "!@mastra/mcp-docs-server" build
 
       - name: Run changed tests against base
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}

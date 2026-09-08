@@ -82,8 +82,9 @@ export function FactorySkillsSection() {
 
   return (
     <SettingsSubsection
+      scope="deployment"
       title="Factory skills"
-      description="The built-in playbooks Factory agents follow when working your items. Expand a skill to read the exact instructions the agent receives."
+      description="The built-in playbooks Factory agents follow when working your items, shipped with the server and read-only. Expand a skill to read the exact instructions the agent receives."
     >
       {skillsQuery.isPending && (
         <Txt as="p" variant="ui-sm" role="status" className="text-icon3">

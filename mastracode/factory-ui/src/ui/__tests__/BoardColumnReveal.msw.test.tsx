@@ -104,7 +104,6 @@ function stubBoardEndpoints(items: object[] = workItems) {
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
 

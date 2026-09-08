@@ -1,6 +1,6 @@
 ---
 title: "Deploy | Mastra platform"
-description: Deploy your Mastra application to the Mastra platform with a single command. Build, validate, provision, and release to any environment with mastra deploy.
+description: "Deploy a Mastra application to Mastra platform with mastra deploy, including project creation, environment selection, regions, variables, and preflight checks."
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -52,18 +52,18 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     Preflight needs TURSO_DATABASE_URL for the production environment. Create a managed turso database now and attach it? (Y/n)
     ```
 
-    Accept the prompt and provisioning takes a few seconds — the database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file. Decline it, or run in a non-interactive shell (CI, `--yes`), and the CLI falls back to the previous behavior: it prints the exact command to run yourself.
+    Accept the prompt, and provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, so you don't need to copy them into an `.env` file. If you decline the prompt or use a non-interactive shell (CI, `--yes`), the CLI falls back to printing the exact command for you to run.
 
     ```bash
     mastra env db create production --kind turso
     ```
 
-    The environment slug (`production` above) matches the environment the CLI would have deployed to — this is important because `mastra env db create` requires an environment argument in non-interactive shells when the project has more than one environment.
+    The environment slug (`production` above) matches the environment the CLI would have deployed to. The `mastra env db create` command requires an environment argument in non-interactive shells when the project has more than one environment.
 
-    Preflight also catches database URLs that point at your local machine. A `.env` file with `REDIS_URL=redis://localhost:6379` works during development, but the deployed server can't reach your laptop — so the CLI warns and offers the same managed provisioning. If you decline, the deploy continues with your value as-is; if you accept, the managed database's connection variables take precedence at deploy time while your local `.env` keeps working for development.
+    Preflight also catches database URLs that point at your local machine. A `.env` file with `REDIS_URL=redis://localhost:6379` works during development, but the deployed server can't reach your laptop. The CLI therefore warns and offers the same managed provisioning. If you decline, the deploy continues with your value as-is; if you accept, the managed database's connection variables take precedence at deploy time while your local `.env` keeps working for development.
 
     :::note
-    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix. Guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
@@ -90,7 +90,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 </Steps>
 
-Each deploy replaces the running server process, which affects agent turns that are still streaming when the new version goes live. Because Mastra Platform doesn't currently provide a configurable or guaranteed termination grace period, don't rely on a raised `server.drainTimeout` for turns that may run longer than the default drain window. Use [durable agents](/docs/harness/durable-agents) with persistent storage and cache when turns must survive a deploy, or handle an interrupted stream in the client. See [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys) for the available strategies.
+Replacing the running server process during each deploy can interrupt agent turns that are still streaming when the new version goes live because Mastra Platform doesn't currently let you configure or rely on guaranteed extra time before termination. Don't rely on a raised `server.drainTimeout` for turns that may outlast the default drain window. Use [durable agents](/docs/harness/durable-agents) with persistent storage and cache when turns must survive a deploy, or handle an interrupted stream in the client. The available strategies are documented in [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys).
 
 The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/environments) commands target the same project without extra flags.
 
@@ -114,7 +114,7 @@ Pass `--region` when a deploy creates a new environment to control where it runs
 mastra deploy --env production --region eu
 ```
 
-The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions, database placement, and observability co-location.
+The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions and database placement, along with observability co-location.
 
 ## Preflight checks
 
@@ -176,7 +176,7 @@ Projects that depend on packages from a private registry install them during the
     //npm.pkg.github.com/:_authToken=${NPM_TOKEN}
     ```
 
-    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself never lands in your repository.
+    Keep the `${NPM_TOKEN}` reference literal. The package manager resolves it at install time, so the token itself is never written to your repository.
   </StepItem>
 
   <StepItem>
@@ -240,14 +240,14 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
     Check whether this project is ready for the Mastra Platform environment pipeline.
 
     1. Find the installed version of `@mastra/core` (check package.json and the
-       lockfile for the version that actually resolved, not just the range).
-    2. If it is >= 1.44.0, tell me I'm good — no further action needed.
-    3. If it is < 1.44.0:
+       lockfile for the version that actually resolved, rather than only the range).
+    2. If it's >= 1.44.0, tell me I'm good. No further action is needed.
+    3. If it's < 1.44.0:
        a. Fetch the `@mastra/core` changelog from
           https://github.com/mastra-ai/mastra/blob/main/packages/core/CHANGELOG.md
           and read every entry between my installed version and the latest release.
        b. Scan my project (agents, workflows, tools, memory, storage, deployers,
-          telemetry — anywhere `@mastra/core`, `@mastra/*`, or `mastra` is imported)
+          telemetry, anywhere `@mastra/core`, `@mastra/*`, or `mastra` is imported)
           and list every Mastra API surface I actually use.
        c. For each used API, cross-reference the changelog and produce a table of:
           API I use → breaking change → severity (breaks build / breaks runtime /
@@ -259,11 +259,11 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
           versions, then run typecheck and tests. Report anything still failing.
     4. Search my scripts, package.json, Dockerfiles, and CI config for
        `mastra server deploy` and `mastra studio deploy`. Replace each
-       occurrence with `mastra deploy` — this is the unified command required
+       occurrence with `mastra deploy`. This is the unified command required
        by the environment pipeline.
 
-    Do not restructure my CI, provision new infra, or change my environment
-    variable values — only the Mastra usage in my code and the deploy command
+    don't restructure my CI, provision new infra, or change my environment
+    variable values. Change only the Mastra usage in my code and the deploy command
     itself.
     ```
   </StepItem>
@@ -277,7 +277,7 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
     + mastra deploy
     ```
 
-    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. Any recent `mastra` CLI supports it. If yours doesn't, upgrade with `npm install -g mastra@latest`.
+    `mastra deploy` builds once and deploys both the server and the Studio UI shell for the target environment. It's supported by every recent `mastra` CLI; otherwise, upgrade with `npm install -g mastra@latest`.
   </StepItem>
 
   <StepItem>

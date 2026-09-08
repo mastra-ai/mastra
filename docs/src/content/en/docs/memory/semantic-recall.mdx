@@ -1,6 +1,6 @@
 ---
 title: "Semantic recall | Memory"
-description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+description: "Retrieve relevant messages from past Mastra conversations with semantic recall, vector search, embeddings, metadata filters, and configurable storage."
 packages:
   - "@mastra/core"
   - "@mastra/fastembed"
@@ -30,7 +30,33 @@ Semantic recall is RAG-based search that helps agents maintain context across lo
 
 It uses vector embeddings of messages for similarity search and integrates with vector stores, plus has configurable context windows around retrieved messages.
 
-![Diagram showing Mastra Memory semantic recall](/img/semantic-recall.png)
+```mermaid
+flowchart LR
+  accTitle: Semantic recall before and after an LLM request
+  accDescr: The pre-LLM pipeline embeds a user prompt and queries the vector database. The results become the semantic recall part of the context messages, which feed the context window. The post-LLM pipeline embeds all new messages and inserts them into the vector database.
+
+  subgraph pre["RAG pipeline pre-LLM"]
+    direction TB
+    prompt(( user prompt )) --> queryEmbedding([create embeddings<br/>from user prompt])
+    queryEmbedding --> query@{ shape: cyl, label: "query vector DB" }
+  end
+
+  subgraph context["context"]
+    direction BT
+    contextWindow([context window])
+    messages[context messages<br/><br/>system instruction<br/>working memory<br/><strong>semantic recall</strong><br/>conversation history<br/>new user message]
+    messages --> contextWindow
+  end
+
+  subgraph post["RAG pipeline post-LLM"]
+    direction TB
+    llm([LLM request]) --> messageEmbedding([create embeddings<br/>from all new messages])
+    messageEmbedding --> insert@{ shape: cyl, label: "insert in<br/>vector DB" }
+  end
+
+  pre -- results --> context
+  context --> post
+```
 
 When it's enabled, new messages are used to query a vector DB for semantically similar messages.
 

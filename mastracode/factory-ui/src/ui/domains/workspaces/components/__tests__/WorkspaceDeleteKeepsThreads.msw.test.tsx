@@ -49,7 +49,6 @@ function renderSection() {
           resourceReady: true,
           sandboxReady: true,
           sandboxPreparing: false,
-          sandboxProgress: undefined,
           resourceEnabled: true,
           factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
           baseUrl: TEST_BASE_URL,

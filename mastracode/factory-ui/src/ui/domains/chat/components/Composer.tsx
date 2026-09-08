@@ -18,7 +18,6 @@ import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatMessagesInitializing } from '../context/useChatMessagesInitializing';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
@@ -83,17 +82,15 @@ function toComposerSuggestionItem(suggestion: ComposerSuggestion): ComposerSugge
 }
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { kind, resourceId, sessionEnabled, sandboxPreparing, projectPath, baseUrl, factorySessionState } =
-    useChatSessionContext();
-  const messagesInitializing = useChatMessagesInitializing();
-  const chatPreparing = sandboxPreparing || messagesInitializing;
+  const { kind, resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
+  const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
   const { modes, activeModeId, isLoading: modesLoading, error: modesError, setMode } = useChatModes();
   const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
@@ -119,6 +116,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
+  // A queued kickoff echo reads as working before the session connects; steering needs the run itself.
+  const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady =
@@ -144,7 +143,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
     ? 'Give feedback on this plan…'
-    : busy && !preparingThreadId
+    : liveRun
       ? 'Steer the agent…'
       : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
@@ -336,7 +335,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       return;
     }
     if (await runComposerCommand(text)) return;
-    if (busy && !preparingThreadId) {
+    if (liveRun) {
       await steer(text);
       return;
     }
@@ -404,7 +403,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {busy && !preparingThreadId && (
+              {liveRun && (
                 <Button
                   type="button"
                   variant="outline"

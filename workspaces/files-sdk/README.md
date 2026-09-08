@@ -5,26 +5,7 @@ Unified storage filesystem provider for Mastra workspaces, powered by [FilesSDK]
 ## Installation
 
 ```bash
-npm install @mastra/files-sdk files-sdk
-```
-
-Then install the FilesSDK adapter for your storage backend:
-
-```bash
-# AWS S3 / R2 / MinIO / DigitalOcean Spaces
-npm install @aws-sdk/client-s3 @aws-sdk/s3-presigned-post @aws-sdk/s3-request-presigner
-
-# Google Cloud Storage
-npm install @google-cloud/storage google-auth-library
-
-# Azure Blob Storage
-npm install @azure/storage-blob @azure/core-auth @azure/identity
-
-# Vercel Blob
-npm install @vercel/blob
-
-# Local filesystem (dev/test)
-# No extra dependencies needed
+npm install @mastra/files-sdk
 ```
 
 ## Usage
@@ -54,54 +35,15 @@ const agent = new Agent({
 });
 ```
 
-### Switching adapters
+## Documentation
 
-The power of FilesSDK is that you can swap storage backends by changing only the adapter import:
+- [Vercel Files integration guide](https://mastra.ai/integrations/file-storage/vercel-files)
+- [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
 
-```typescript
-import { Files } from 'files-sdk';
-import { r2 } from 'files-sdk/r2';
+## Changelog
 
-const files = new Files({
-  adapter: r2({
-    accountId: process.env.R2_ACCOUNT_ID!,
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    bucket: 'my-bucket',
-  }),
-});
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/files-sdk/CHANGELOG.md) for version history and release notes.
 
-const workspace = new Workspace({
-  filesystem: new FilesSDKFilesystem({ files }),
-});
-```
+## Support
 
-### Local filesystem for development
-
-```typescript
-import { Files } from 'files-sdk';
-import { fs } from 'files-sdk/fs';
-
-const files = new Files({
-  adapter: fs({ root: './.uploads' }),
-});
-
-const workspace = new Workspace({
-  filesystem: new FilesSDKFilesystem({ files }),
-});
-```
-
-## Options
-
-| Option        | Type      | Required | Description                           |
-| ------------- | --------- | -------- | ------------------------------------- |
-| `files`       | `Files`   | Yes      | Pre-configured FilesSDK instance      |
-| `id`          | `string`  | No       | Unique filesystem ID (auto-generated) |
-| `displayName` | `string`  | No       | Human-friendly name for UI            |
-| `icon`        | `string`  | No       | Icon identifier                       |
-| `description` | `string`  | No       | Description for UI                    |
-| `readOnly`    | `boolean` | No       | Mount as read-only                    |
-
-## License
-
-Apache-2.0
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

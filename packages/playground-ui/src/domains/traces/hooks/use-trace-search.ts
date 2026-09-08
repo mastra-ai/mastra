@@ -8,6 +8,13 @@ export interface UseTraceSearchResult {
   setQuery: (query: string) => void;
   /** Rows matching the deferred query. An empty query returns the input array reference. */
   results: SearchableSpan[];
+  /**
+   * Spans that matched somewhere other than their name — in `metadata`, `attributes` or
+   * `error`. Their row shows no visible occurrence of the term, so the surface needs to say
+   * why it is there. Ancestors kept only to preserve the hierarchy are not in here: they did
+   * not match at all. Empty while the query is empty.
+   */
+  payloadOnlyMatchIds: Set<string>;
   /** True while the deferred value is behind `query` (the list is still catching up). */
   isPending: boolean;
 }
@@ -32,11 +39,21 @@ export function useTraceSearch(spans: SearchableSpan[]): UseTraceSearchResult {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
 
-  const results = useMemo(() => {
+  const { results, payloadOnlyMatchIds } = useMemo(() => {
     const term = deferredQuery.trim().toLowerCase();
-    if (!term) return spans;
-    return filterSpansKeepingAncestors(spans, span => span.searchText.includes(term));
+    if (!term) return { results: spans, payloadOnlyMatchIds: new Set<string>() };
+
+    const payloadOnly = new Set<string>();
+    const filtered = filterSpansKeepingAncestors(spans, span => {
+      if (!span.searchText.includes(term)) return false;
+      // The name is the only part of a span the timeline paints, so a match it doesn't
+      // contain came from the payload.
+      if (!span.name.toLowerCase().includes(term)) payloadOnly.add(span.spanId);
+      return true;
+    });
+
+    return { results: filtered, payloadOnlyMatchIds: payloadOnly };
   }, [spans, deferredQuery]);
 
-  return { query, setQuery, results, isPending: query !== deferredQuery };
+  return { query, setQuery, results, payloadOnlyMatchIds, isPending: query !== deferredQuery };
 }

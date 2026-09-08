@@ -21,6 +21,8 @@ export interface FactoryDecisionSummary {
   type: string;
   /** Session slot a proposed run fills, so the card can name what it starts. */
   role: string | null;
+  /** Where a linked card is synced from; `null` for effects that are not `upsertLinkedWorkItem`. */
+  source: 'github-issue' | 'github-pr' | 'linear-issue' | 'manual' | null;
   status: FactoryDecisionStatus;
   attempts: number;
   failureOccurrence: number;

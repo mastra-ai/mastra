@@ -86,6 +86,7 @@ import {
   durableCryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
+import { alternatingScorer, alwaysPassScorer } from './scorers/chef-model-v2-scorers';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
@@ -186,6 +187,10 @@ export const mastra = new Mastra({
     'detect-blockers': detectBlockersTool,
     'format-standup-digest': formatDigestTool,
     'format-standup-digest-with-escalation': formatDigestWithEscalationTool,
+  },
+  scorers: {
+    alwaysPassScorer,
+    alternatingScorer,
   },
   processors: {
     moderationProcessor,

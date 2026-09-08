@@ -1,6 +1,6 @@
 ---
 title: "Reference: Composite storage | Storage"
-description: Documentation for combining multiple storage backends in Mastra.
+description: "MastraCompositeStore can compose storage domains from different providers. Use it when you need different databases for different purposes."
 packages:
   - "@mastra/clickhouse"
   - "@mastra/core"
@@ -289,7 +289,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 
 ## Closing connections
 
-`close()` releases the connections of the stores a composite was built from: the `default` and `editor` stores, plus any domain that owns its own client. Each store is closed once, even when it backs several domains. When passed to the Mastra class, `close()` is called by `shutdown()`:
+`close()` releases connections for the stores used by a composite, including the `default` and `editor` stores and any domain with its own client. Each store closes once even if it backs several domains. When the composite is passed to the Mastra class, `shutdown()` calls `close()`:
 
 ```typescript title="src/mastra/index.ts"
 import { MastraCompositeStore } from '@mastra/core/storage'

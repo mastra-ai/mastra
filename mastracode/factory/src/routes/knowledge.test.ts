@@ -61,8 +61,9 @@ async function node(
   name: string,
   scope: KnowledgeScope,
   kind = 'concept',
+  description?: string,
 ): Promise<KnowledgeNode> {
-  return store.createNode({ name, kind, scope });
+  return store.createNode({ name, kind, scope, ...(description !== undefined ? { description } : {}) });
 }
 
 async function record(
@@ -122,6 +123,36 @@ describe('KnowledgeRoutes', () => {
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]).toMatchObject({ source: service.id, target: runbook.id, type: 'wikilink' });
     expect(body.nodes.find(node => node.id === service.id)?.recordCount).toBe(1);
+    expect(body.truncated).toBe(false);
+  });
+
+  it('projects the bounded description into graph snapshots and never leaks content', async () => {
+    const h = await createHarness();
+    const synopsis =
+      'Payments coordinates settlement and reconciliation. Repository: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory';
+    const described = await node(h.knowledge, 'Described', h.projectScope, 'service', synopsis);
+    const absent = await node(h.knowledge, 'Absent', h.projectScope);
+    const empty = await node(h.knowledge, 'Empty', h.projectScope, 'concept', '');
+    // A node with long-form content but no description must not fall back to content.
+    const contentful = await h.knowledge.createNode({
+      name: 'Contentful',
+      kind: 'doc',
+      scope: h.projectScope,
+      content: 'Long-form body that must never appear in the graph payload. '.repeat(20),
+    });
+
+    const { status, body } = await graph(h);
+    expect(status).toBe(200);
+    expect(body.nodes.find(node => node.id === described.id)?.description).toBe(synopsis);
+    expect(body.nodes.find(node => node.id === absent.id)).not.toHaveProperty('description');
+    // '' is a curator clear — projected as omitted, same as absent.
+    expect(body.nodes.find(node => node.id === empty.id)).not.toHaveProperty('description');
+    expect(body.nodes.find(node => node.id === contentful.id)).not.toHaveProperty('description');
+    for (const graphNode of body.nodes) {
+      expect(graphNode).not.toHaveProperty('content');
+    }
+    expect(body.nodes).toHaveLength(4);
+    expect(body.records).toHaveLength(0);
     expect(body.truncated).toBe(false);
   });
 

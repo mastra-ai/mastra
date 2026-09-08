@@ -1,6 +1,6 @@
 ---
 title: "Reference: OtelBridge | Observability"
-description: OpenTelemetry bridge for traces and logs
+description: "Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans."
 packages:
   - "@mastra/core"
   - "@mastra/langfuse"
@@ -30,7 +30,7 @@ new OtelBridge()
 
 ### `executeInContext`
 
-```typescript prettier:false
+```typescript oxfmt:false
 executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
 ```
 
@@ -57,7 +57,7 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 ### `executeInContextSync`
 
-```typescript prettier:false
+```typescript oxfmt:false
 executeInContextSync<T>(spanId: string, fn: () => T): T
 ```
 
@@ -84,7 +84,7 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 
 ### `onLogEvent`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async onLogEvent(event: LogEvent): Promise<void>
 ```
 
@@ -109,7 +109,7 @@ If no `LoggerProvider` is registered globally, emission is a silent no-op.
 
 ### `flush`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async flush(): Promise<void>
 ```
 
@@ -117,7 +117,7 @@ Force flushes the global OTEL tracer provider and logger provider if they suppor
 
 ### `shutdown`
 
-```typescript prettier:false
+```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 

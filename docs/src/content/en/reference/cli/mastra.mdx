@@ -1,6 +1,6 @@
 ---
 title: 'Reference: CLI commands | CLI'
-description: Documentation for the Mastra CLI to develop, build, and start your project.
+description: 'You can use the Command-Line Interface (CLI) provided by Mastra to develop, build, and start your Mastra project.'
 packages:
   - 'mastra'
 ---
@@ -365,7 +365,7 @@ The command runs `mastra build` and zips the output before uploading it to the s
 
 Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
+After confirmation, the CLI creates a missing project from the `package.json` `name` field and creates a missing target environment, defaulting to `type: staging` for anything other than `production`. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
 
 ```bash
 mastra deploy --env staging --yes
@@ -733,7 +733,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ### `mastra studio projects`
 
@@ -741,7 +741,7 @@ Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
+Creates a new project through an interactive prompt, but doesn't accept a `--name` flag. For non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead. That command creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
@@ -767,7 +767,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
+When you omit `deploy-id`, the command uses the latest deploy for the linked project and starts a diagnosis if needed, polling until the results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ## `mastra server pause`
 
@@ -1120,6 +1120,36 @@ mastra api --url https://observability.eu.mastra.ai trace list
 ```
 
 Use `--url` and `--header` when you need to override another target or its credentials.
+
+### Factory commands
+
+Use `mastra api factory` to manage Factory projects, work items, decisions, attention items, queue health, and supervisor sessions. These commands use the same JSON input, output, authentication, headers, timeout, and target resolution as other `mastra api` commands.
+
+List the Factory projects available to the current organization:
+
+```bash
+mastra api factory project list
+```
+
+Inspect the generated request schema before sending a governed work-item transition:
+
+```bash
+mastra api factory work-item transition --schema
+```
+
+Move a work item using its current revision:
+
+```bash
+mastra api factory work-item transition <project-id> <work-item-id> '{"board":"work","stage":"planning","requestId":"00000000-0000-4000-8000-000000000000","cause":"manual","expectedRevision":1}'
+```
+
+After you deploy the project with `mastra deploy`, the resulting non-secret `.mastra-project.json` lets the CLI find the hosted Factory instance, apply your Mastra CLI credentials, and select the deployed project's organization automatically. For an explicit hosted Factory `--url`, the CLI uses `MASTRA_ORG_ID` when set, then the organization selected by `mastra auth orgs switch`. An explicit `X-Mastra-Organization-Id` header takes precedence over both. Before deployment, or to target a specific local, remote, or self-hosted Factory server, pass `--url` instead:
+
+```bash
+mastra api --url http://localhost:4111 factory project list
+```
+
+Factory endpoints use their root-level `/web/factory/...` paths. `--server-api-prefix` still controls local target probing, but it isn't prepended to Factory requests.
 
 ### Flags
 

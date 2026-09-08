@@ -308,10 +308,6 @@ export class Schedules {
     }
 
     const store = await this.#getStore();
-    // Make sure the scheduler + agent-schedule worker are running. Boot-time
-    // detection covers existing rows; imperative creates after
-    // startWorkers() need to flip the request flag and lazily inject.
-    await this.#mastra.__ensureScheduleRuntimeReady();
 
     const id =
       input.id !== undefined
@@ -351,6 +347,10 @@ export class Schedules {
     };
 
     const created = await store.createSchedule(schedule);
+    // The row is durable now: wake schedulers in other processes, then make
+    // sure this process's scheduler + agent-schedule worker are running.
+    await this.#mastra.__publishSchedulerWake(created.id);
+    await this.#mastra.__ensureScheduleRuntimeReady();
     return toAgentSchedule(created)!;
   }
 
@@ -358,9 +358,6 @@ export class Schedules {
     validateCron(input.cron, input.timezone);
 
     const store = await this.#getStore();
-    // Imperative workflow schedules need the scheduler tick loop running,
-    // same as agent schedules created after startWorkers().
-    await this.#mastra.__ensureScheduleRuntimeReady();
 
     const id =
       input.id !== undefined
@@ -391,6 +388,8 @@ export class Schedules {
     };
 
     const created = await store.createSchedule(schedule);
+    await this.#mastra.__publishSchedulerWake(created.id);
+    await this.#mastra.__ensureScheduleRuntimeReady();
     return toWorkflowSchedule(created)!;
   }
 

@@ -151,7 +151,10 @@ export interface AppleContainerSandboxOptions extends Omit<MastraSandboxOptions,
   noDns?: boolean;
   /** Container labels. Mastra labels are always added. */
   labels?: Record<string, string>;
-  /** Working directory inside the container. */
+  /** Working directory inside the container.
+   * @deprecated Use `workingDirectory` (the base sandbox option) instead.
+   * When both are set, `workingDirectory` wins.
+   */
   workingDir?: string;
   /** Default command timeout in milliseconds. */
   timeout?: number;
@@ -200,7 +203,6 @@ export class AppleContainerSandbox extends MastraSandbox {
   private readonly _userLabels: Record<string, string>;
   private readonly _labels: Record<string, string>;
   private readonly _configHash: string;
-  private readonly _workingDir: string;
   private readonly _timeout: number;
   private readonly _deleteOnDestroy: boolean;
   private readonly _runner: AppleContainerCommandRunner;
@@ -209,6 +211,15 @@ export class AppleContainerSandbox extends MastraSandbox {
   private readonly _constructorOptions: AppleContainerSandboxOptions;
 
   private _containerId?: string;
+
+  /**
+   * The effective container working directory. Narrowed to `string`: the
+   * constructor always resolves a value (option, deprecated alias, or the
+   * default), so unlike the base getter this never returns `undefined`.
+   */
+  override get workingDirectory(): string {
+    return this._workingDirectory!;
+  }
 
   constructor(options: AppleContainerSandboxOptions = {}) {
     super({
@@ -244,7 +255,7 @@ export class AppleContainerSandbox extends MastraSandbox {
     this._dns = options.dns ?? [];
     this._dnsSearch = options.dnsSearch ?? [];
     this._noDns = options.noDns ?? false;
-    this._workingDir = options.workingDir ?? DEFAULT_WORKING_DIR;
+    this.setWorkingDirectory(options.workingDirectory ?? options.workingDir ?? DEFAULT_WORKING_DIR);
     this._userLabels = options.labels ?? {};
     this._configHash = hashConfig(this._runtimeConfigForHash());
     this._labels = {
@@ -376,7 +387,7 @@ export class AppleContainerSandbox extends MastraSandbox {
       'exec',
       ...env.args,
       '--workdir',
-      options.cwd ?? this._workingDir,
+      options.cwd ?? this.workingDirectory,
       this.containerId,
       'sh',
       '-lc',
@@ -441,7 +452,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   private _buildDefaultInstructions(): string {
     const parts = [
       `Apple container sandbox: commands run inside a local OCI Linux container from image ${this._image}.`,
-      `Working directory: ${this._workingDir}.`,
+      `Working directory: ${this.workingDirectory}.`,
     ];
 
     const volumeCount = Object.keys(this._volumes).length + this._mounts.length;
@@ -502,7 +513,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   }
 
   private _buildRunArgs(envArgs: string[]): string[] {
-    const args = ['run', '-d', '--name', this._containerName, '--workdir', this._workingDir];
+    const args = ['run', '-d', '--name', this._containerName, '--workdir', this.workingDirectory];
 
     args.push(...envArgs);
     for (const [hostPath, containerPath] of Object.entries(this._volumes)) {
@@ -617,7 +628,7 @@ export class AppleContainerSandbox extends MastraSandbox {
       dnsSearch: this._dnsSearch,
       noDns: this._noDns,
       labels: this._userLabels,
-      workingDir: this._workingDir,
+      workingDir: this.workingDirectory,
     };
   }
 
@@ -650,7 +661,7 @@ export class AppleContainerSandbox extends MastraSandbox {
       dnsSearch: this._dnsSearch,
       noDns: this._noDns,
       labels: this._userLabels,
-      workingDir: this._workingDir,
+      workingDir: this.workingDirectory,
       timeout: this._timeout,
       deleteOnDestroy: this._deleteOnDestroy,
     });

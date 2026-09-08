@@ -208,9 +208,6 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Install mdx2vast
-        run: npm install -g --ignore-scripts mdx2vast@0.3.1
-
       - name: Check formatting
         working-directory: ./docs
         run: pnpm format:check
@@ -224,16 +221,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(
+          # Three-dot diff compares against the merge-base so files that main
+          # moved/deleted after the branch point are not reported as "added"
+          # by a stale branch. The checkout is the PR merge ref, so also drop
+          # anything that doesn't exist there.
+          mapfile -t changed < <(
             git diff --name-only --diff-filter=ACMRT \
-              "${{ github.event.pull_request.base.sha }}" \
-              "${{ github.event.pull_request.head.sha }}" \
+              "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
               -- \
               docs/src/content/en/docs \
               docs/src/content/en/integrations \
               docs/src/content/en/reference \
               | grep '\.mdx$' || true
           )
+
+          files=()
+          for f in "${changed[@]}"; do
+            if [ -f "$f" ]; then
+              files+=("$f")
+            fi
+          done
 
           if [ "${#files[@]}" -gt 0 ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -266,15 +273,24 @@ jobs:
             -e 's#^StylesPath = styles#StylesPath = docs/styles#' \
             docs/.vale.ini > .vale-ci.ini
 
+      # vale-action pipes results through reviewdog, and every reviewdog
+      # reporter (including github-check) downloads the PR diff, which the
+      # GitHub API rejects on diffs larger than 20,000 lines. The files list
+      # is already limited to changed MDX files by the local git diff above,
+      # so run the Vale CLI directly and let its exit code gate the job.
+      - name: Install Vale
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        env:
+          VALE_VERSION: 3.19.0
+        run: |
+          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+            | tar -xz -C /usr/local/bin vale
+          vale --version
+
       - name: Lint with Vale
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: vale-cli/vale-action@85f9f7f2c5f449ac0ae5b66662961bae3f77ca6a
-        with:
-          version: 3.17.1
-          files: ${{ steps.mdx-changes.outputs.files }}
-          # The default "added" filter downloads the PR diff through the GitHub
-          # API, which rejects diffs larger than 20,000 lines. The files input is
-          # already limited to changed MDX files by the local git diff above.
-          filter_mode: nofilter
-          vale_flags: '--config=.vale-ci.ini --minAlertLevel=error'
-          fail_on_error: true
+        env:
+          CHANGED_FILES: ${{ steps.mdx-changes.outputs.files }}
+        run: |
+          mapfile -t files < <(jq -r '.[]' <<< "$CHANGED_FILES")
+          vale --config=.vale-ci.ini --minAlertLevel=error --output=line "${files[@]}"

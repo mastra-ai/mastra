@@ -1,6 +1,6 @@
 ---
 title: "Electron | Frameworks"
-description: "Get started with Mastra and Electron"
+description: "Build a tool-calling Mastra agent for an Electron desktop app, configure CSP and server routes, add AI SDK UI, and test the chat experience."
 packages:
   - '@mastra/core'
 ---
@@ -74,9 +74,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
-- `index.ts` - Mastra config, including memory
-- `tools/weather-tool.ts` - a tool to fetch weather for a given location
-- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `index.ts`: Mastra config, including memory
+- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your chat UI in the next steps.
 

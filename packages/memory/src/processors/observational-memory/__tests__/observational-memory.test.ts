@@ -2483,7 +2483,12 @@ describe('Observer Agent Helpers', () => {
 
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
-        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        observation: {
+          messageTokens: 1000,
+          bufferTokens: false,
+          model: 'test-model',
+          observeAttachments: true,
+        },
         reflection: { observationTokens: 1000 },
       });
 
@@ -5616,7 +5621,7 @@ Ask about favorite vegetarian dishes
     observerSpy.mockRestore();
   });
 
-  it('should send attachment parts to the observer alongside placeholder text', async () => {
+  it('should only send commonly supported attachment parts to the observer by default', async () => {
     let capturedPrompt: any = null;
 
     const om = new ObservationalMemory({
@@ -5632,6 +5637,14 @@ Ask about favorite vegetarian dishes
     vi.spyOn(om.observer as any, 'createAgent').mockReturnValue({
       stream: async (prompt: any) => {
         capturedPrompt = prompt;
+        const hasUnsupportedHtml = prompt.some(
+          (message: any) =>
+            Array.isArray(message.content) &&
+            message.content.some((part: any) => part.type === 'file' && part.mimeType === 'text/html'),
+        );
+        if (hasUnsupportedHtml) {
+          throw new Error("'file part media type text/html' functionality not supported");
+        }
         return {
           getFullOutput: async () => ({
             text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
@@ -5647,6 +5660,12 @@ Ask about favorite vegetarian dishes
       parts: [
         { type: 'text', text: 'Please compare these attachments.' },
         { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/report.html',
+          mimeType: 'text/html',
+          filename: 'report.html',
+        } as any,
         {
           type: 'file',
           data: 'https://example.com/specs/floorplan.pdf',
@@ -5666,7 +5685,8 @@ Ask about favorite vegetarian dishes
     expect(historyMessage).toBeDefined();
     expect(historyMessage.content[0].text).toContain('New Message History');
     expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
-    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(historyMessage.content[1].text).toContain('[File #1: report.html]');
+    expect(historyMessage.content[1].text).toContain('[File #2: floorplan.pdf]');
     expect(
       historyMessage.content.some(
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
@@ -5681,6 +5701,11 @@ Ask about favorite vegetarian dishes
           part.data === 'https://example.com/specs/floorplan.pdf',
       ),
     ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'file' && part.mimeType === 'text/html' && part.filename === 'report.html',
+      ),
+    ).toBe(false);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
@@ -6313,31 +6338,23 @@ describe('Resource Scope Observation Flow', () => {
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
-        const observerOutput = promptText.includes('Thread one')
-          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
-          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        const isStructuredExtraction = promptText.includes('thread-1-secret') || promptText.includes('thread-2-secret');
+        if (isStructuredExtraction) structuredPrompts.push(promptText);
+        const output = isStructuredExtraction
+          ? JSON.stringify({ priority: promptText.includes('thread-1-secret') ? 'alpha' : 'beta' })
+          : promptText.includes('Thread one')
+            ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+            : `<observations>\n- thread-2-secret priority beta\n</observations>`;
         return {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
             { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-delta', id: 'text-1', delta: output },
             { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
           ]),
           rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      },
-      doGenerate: async ({ prompt }: { prompt: unknown }) => {
-        const promptText = JSON.stringify(prompt);
-        structuredPrompts.push(promptText);
-        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
           warnings: [],
         };
       },
@@ -17015,6 +17032,8 @@ describe('Message ordering regressions', () => {
   async function setupOrderingScenario(opts: {
     messageTokens: number;
     bufferTokens?: number | false;
+    bufferActivation?: number;
+    seedMessages?: boolean;
     observerDelay?: number;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
@@ -17064,6 +17083,7 @@ describe('Message ordering regressions', () => {
       observation: {
         messageTokens: opts.messageTokens,
         ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+        ...(opts.bufferActivation !== undefined ? { bufferActivation: opts.bufferActivation } : {}),
       },
       reflection: { observationTokens: 200_000 },
     });
@@ -17093,7 +17113,9 @@ describe('Message ordering regressions', () => {
       type: 'text',
       createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
     }));
-    await storage.saveMessages({ messages: seedMessages });
+    if (opts.seedMessages !== false) {
+      await storage.saveMessages({ messages: seedMessages });
+    }
 
     const state: Record<string, unknown> = {};
     const capturedParts: any[] = [];
@@ -17559,6 +17581,42 @@ describe('Message ordering regressions', () => {
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
     expect(result.messages.some(m => m.id === 'seed-0')).toBe(true);
     expect(result.messages.some(m => m.id === 'seed-1')).toBe(true);
+  });
+
+  it('om-continuation stays live but is excluded from synchronous persistence', async () => {
+    // Active observations with no completed observation cursor reproduce the window where
+    // a later buffering step can synchronously persist the injected continuation.
+    const s = await setupOrderingScenario({
+      messageTokens: 1000,
+      bufferTokens: 1,
+      bufferActivation: 1,
+      seedMessages: false,
+    });
+    const record = await s.om.getOrCreateRecord(s.threadId, s.resourceId);
+    await s.storage.updateActiveObservations({
+      id: record.id,
+      observations: '* 🟡 Existing observation enables continuation context',
+      tokenCount: 8,
+      lastObservedAt: null,
+    });
+
+    const firstUserId = s.addUserMessage('Start a conversation with active observations');
+    await s.runStep(0);
+    expect(s.currentMessageList.get.all.db().map(m => m.id)).toContain('om-continuation');
+    expect((await s.getStoredMessages()).map(m => m.id)).not.toContain('om-continuation');
+
+    await s.om.waitForBuffering(s.threadId, s.resourceId, 5000);
+
+    const secondUserId = s.addUserMessage(`Continue after observational context is injected ${'word '.repeat(80)}`);
+    await s.runStep(1);
+
+    const liveIds = s.currentMessageList.get.all.db().map(m => m.id);
+    const storedIds = (await s.getStoredMessages()).map(m => m.id);
+
+    expect(liveIds).toContain('om-continuation');
+    expect(storedIds).toContain(firstUserId);
+    expect(storedIds).toContain(secondUserId);
+    expect(storedIds).not.toContain('om-continuation');
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───

@@ -155,7 +155,7 @@ describe('Plan', () => {
         <PlanHeader>
           <PlanLabel />
           <PlanHeaderActions>
-            <PlanStatus variant="success">Approved</PlanStatus>
+            <PlanStatus variant="green">Approved</PlanStatus>
           </PlanHeaderActions>
         </PlanHeader>
         <PlanBody>
@@ -176,7 +176,7 @@ describe('Plan', () => {
     );
 
     expect(screen.getByText('Approved')).toBeTruthy();
-    expect(screen.getByText('Approved').classList.contains('bg-notice-success/20')).toBe(true);
+    expect(screen.getByText('Approved').classList.contains('bg-badge-green/20')).toBe(true);
     expect(screen.getByRole('button', { name: /reject plan/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
   });
@@ -195,7 +195,7 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    expect(screen.getByText('Draft').classList.contains('bg-surface4')).toBe(true);
+    expect(screen.getByText('Draft').classList.contains('bg-neutral6/5')).toBe(true);
   });
 
   it('hints that an overflowing plan is clipped and clears the hint when expanded', () => {

@@ -41,7 +41,7 @@ const MEANINGFUL_TOOL_NAMES: ReadonlySet<string> = new Set([
   'kill_process',
 ]);
 
-function isMeaningfulToolName(name: string | undefined): boolean {
+export function isMeaningfulToolName(name: string | undefined): boolean {
   if (!name) return false;
   if (name.startsWith(`${WORKSPACE_TOOLS_PREFIX}_`)) return true;
   return MEANINGFUL_TOOL_NAMES.has(name);

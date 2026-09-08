@@ -5,8 +5,8 @@ import { MemoryPG } from './index';
 
 /**
  * Fake client that answers the three queries the message paging code can send:
- * the page query with the window count, the fallback `COUNT(*)`, and the two
- * queries of the include (semantic recall) read.
+ * the page query with the skinny scalar `COUNT(*)` subquery, the fallback `COUNT(*)`,
+ * and the two queries of the include (semantic recall) read.
  *
  * `block()` holds every `manyOrNone` result until `release()`. A test uses that
  * to look at the queries that are in flight at the same time.
@@ -38,7 +38,7 @@ class MessageQueryClient extends RecordingDbClientBase {
   override async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     this.queries.push({ query, values });
     await this.#gate;
-    if (query.includes('COUNT(*) OVER ()')) {
+    if (query.includes('AS "__total"')) {
       return this.pageRows.map(row => ({ ...row, __total: String(this.windowTotal) })) as T[];
     }
     if (query.includes('thread_id, "createdAt" FROM')) {
@@ -88,12 +88,17 @@ describe('MemoryPG message paging round-trips', () => {
 
     expect(client.queries).toHaveLength(1);
     const [pageQuery] = client.queries;
-    expect(pageQuery!.query).toContain('COUNT(*) OVER () AS "__total"');
+    // Index-backed shape: skinny scalar count subquery, indexed ORDER BY, no window, no COALESCE sort.
+    expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
+    expect(pageQuery!.query).toContain('(SELECT COUNT(*) FROM');
+    expect(pageQuery!.query).toContain('AS "__total"');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.query).not.toContain('ORDER BY COALESCE');
     expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
     expect(pageQuery!.values).toEqual(['thread-1', 10, 0]);
     expect(result.total).toBe(7);
     expect(result.messages).toHaveLength(2);
-    // The window count must not reach the caller as a message field.
+    // The count must not reach the caller as a message field.
     expect(result.messages[0]).not.toHaveProperty('__total');
   });
 
@@ -107,7 +112,11 @@ describe('MemoryPG message paging round-trips', () => {
 
     expect(client.queries).toHaveLength(1);
     const [pageQuery] = client.queries;
-    expect(pageQuery!.query).toContain('COUNT(*) OVER () AS "__total"');
+    expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
+    expect(pageQuery!.query).toContain('(SELECT COUNT(*) FROM');
+    expect(pageQuery!.query).toContain('AS "__total"');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.query).not.toContain('ORDER BY COALESCE');
     expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
     expect(pageQuery!.values).toEqual(['resource-1', 10, 0]);
     expect(result.total).toBe(7);
@@ -150,7 +159,8 @@ describe('MemoryPG message paging round-trips', () => {
     const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 2 });
 
     expect(client.queries).toHaveLength(2);
-    expect(client.queries[0]!.query).toContain('COUNT(*) OVER () AS "__total"');
+    expect(client.queries[0]!.query).toContain('AS "__total"');
+    expect(client.queries[0]!.query).not.toContain('COUNT(*) OVER ()');
     expect(client.queries[1]!.query).toContain('SELECT COUNT(*) FROM');
     expect(result.total).toBe(5);
     expect(result.messages).toEqual([]);
@@ -176,8 +186,26 @@ describe('MemoryPG message paging round-trips', () => {
     const result = await pending;
 
     expect(inFlight).toHaveLength(2);
-    expect(inFlight.some(query => query.includes('COUNT(*) OVER () AS "__total"'))).toBe(true);
+    expect(inFlight.some(query => query.includes('AS "__total"'))).toBe(true);
     expect(inFlight.some(query => query.includes('thread_id, "createdAt" FROM'))).toBe(true);
     expect(result.messages.map(message => message.id)).toEqual(['message-1', 'message-2', 'message-9']);
+  });
+
+  // Regression for #23359: the default agent recall page must be index-servable —
+  // no window count over `content`, and ORDER BY the indexed column, not COALESCE.
+  it('emits an index-servable page query for the default agent recall path', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = pageRows;
+    client.windowTotal = 2;
+    const memory = new MemoryPG({ client });
+
+    await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 0 });
+
+    expect(client.queries).toHaveLength(1);
+    const [pageQuery] = client.queries;
+    expect(pageQuery!.query).not.toContain('COUNT(*) OVER ()');
+    expect(pageQuery!.query).not.toContain('ORDER BY COALESCE');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.query).toContain('(SELECT COUNT(*) FROM');
   });
 });

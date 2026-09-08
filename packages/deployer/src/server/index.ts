@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
+import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
@@ -242,10 +243,23 @@ export async function createHonoServer(
             // Look up agent and return its browser if configured.
             // First try the runtime registry (code-defined + previously hydrated agents),
             // then fall back to the editor for stored agents (hydrates on first access).
+            // Agent-level SDK browsers live on `agent.browser`; CLI providers
+            // (e.g. @mastra/browser-viewer) live on the agent's workspace.
+            const resolveBrowser = async (agent: Agent | undefined | null) => {
+              if (!agent) return undefined;
+              if (agent.browser) return agent.browser;
+              try {
+                const workspace = await agent.getWorkspace();
+                return workspace?.browser;
+              } catch {
+                return undefined;
+              }
+            };
+
             try {
               const runtimeAgent = mastra.getAgentById(agentId);
               if (runtimeAgent) {
-                return runtimeAgent.browser;
+                return await resolveBrowser(runtimeAgent);
               }
             } catch {
               // Agent not in runtime registry — try stored agents via editor
@@ -253,7 +267,7 @@ export async function createHonoServer(
 
             try {
               const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
-              return storedAgent?.browser;
+              return await resolveBrowser(storedAgent);
             } catch {
               return undefined;
             }
