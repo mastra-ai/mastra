@@ -8,12 +8,7 @@ const loadedEnvVars = vi.hoisted(() => new Map<string, string>());
 vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
   existsSync: vi.fn().mockImplementation((path: string) => path.endsWith('index.ts')),
-  statSync: vi.fn().mockImplementation((path: string) => {
-    if (path.endsWith('index.ts')) {
-      return { isFile: () => true };
-    }
-    throw Object.assign(new Error(`ENOENT: no such file or directory, stat '${path}'`), { code: 'ENOENT' });
-  }),
+  statSync: vi.fn().mockReturnValue({ isFile: () => true }),
 }));
 
 vi.mock('execa', () => ({

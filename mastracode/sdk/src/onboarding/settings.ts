@@ -295,6 +295,8 @@ export interface GlobalSettings {
     theme: 'auto' | 'dark' | 'light';
     /** Default reasoning effort level used for all threads/models unless overridden in-session. */
     thinkingLevel: ThinkingLevelSetting;
+    /** Whether native subagents are enabled for Mastra Code TUI sessions. */
+    subagentsEnabled: boolean;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
     /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
@@ -413,6 +415,7 @@ const DEFAULTS: GlobalSettings = {
     yolo: null,
     theme: 'auto',
     thinkingLevel: 'off',
+    subagentsEnabled: false,
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
     webSearchProvider: 'auto',
@@ -512,6 +515,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    subagentsEnabled:
+      typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };

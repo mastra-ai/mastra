@@ -8,6 +8,7 @@ import {
   ArchiveRestore,
   Brain,
   Check,
+  Hourglass,
   MailOpen,
   MessageSquare,
   MessagesSquare,
@@ -33,6 +34,7 @@ const KIND = {
   'automation-failed': { glyph: TriangleAlert, label: 'failed', tone: 'text-error', badge: 'red' },
   'automation-proposed': { glyph: Sparkles, label: 'suggested', tone: 'text-warning1', badge: 'orange' },
   'supervisor-finding': { glyph: Brain, label: 'finding', tone: 'text-accent1', badge: 'blue' },
+  'agent-waiting': { glyph: Hourglass, label: 'waiting', tone: 'text-warning1', badge: 'orange' },
 } satisfies Record<
   FactoryAttentionItem['kind'],
   { glyph: typeof MessageSquare; label: string; tone: string; badge: BadgeVariant }

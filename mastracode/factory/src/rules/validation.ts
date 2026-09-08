@@ -3,7 +3,6 @@ import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
-  FactoryRules,
   FactoryRuleRejectionCode,
   WorkItemSource,
 } from './types.js';
@@ -16,7 +15,8 @@ const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
-const MAX_ROLE_LENGTH = 32;
+export const MAX_ROLE_LENGTH = 32;
+export const MAX_TOOL_NAME_LENGTH = 128;
 const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
@@ -24,7 +24,7 @@ const MAX_METADATA_JSON_LENGTH = 16_384;
 const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
-const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
@@ -132,21 +132,11 @@ function sanitizeMetadata(value: unknown): Record<string, FactoryRuleJsonValue> 
   return sanitized;
 }
 
-export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
-  if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'tools'], 'Factory rules');
-  boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
+export const DEFAULT_FACTORY_CONFIG_VERSION = 'factory-config-v1';
 
-  if (!isPlainObject(rules.tools)) throw new FactoryRuleValidationError('Factory rules.tools must be an object.');
-  for (const [toolName, leaf] of Object.entries(rules.tools)) {
-    boundedString(toolName, 'Factory tool name', 128, IDENTIFIER_RE);
-    if (!isPlainObject(leaf))
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName} must be an object.`);
-    assertExactKeys(leaf, ['onResult'], `Factory rules.tools.${toolName}`);
-    if (leaf.onResult !== undefined && typeof leaf.onResult !== 'function') {
-      throw new FactoryRuleValidationError(`Factory rules.tools.${toolName}.onResult must be a function.`);
-    }
-  }
+/** Operator-maintained provenance label stamped on transition audit and deferred-decision rows. */
+export function assertFactoryConfigVersion(value: unknown): string {
+  return boundedString(value, 'Factory configVersion', MAX_VERSION_LENGTH);
 }
 
 function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: string } {

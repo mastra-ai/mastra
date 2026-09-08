@@ -8,12 +8,9 @@
  * write tools) would apply.
  */
 
-import {
-  FACTORY_ROLE_STAGES,
-  factoryRuleStage,
-  isTerminalFactoryRuleStage,
-  NEEDS_APPROVAL_LABEL,
-} from '../rules/types.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
+import type { BoardRegistry, PhaseSemantics } from '../boards/index.js';
+import { factoryRuleStage, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -23,19 +20,14 @@ import type {
 } from '../storage/domains/work-items/base.js';
 
 export type FactoryHealthFindingKind =
-  | 'decision-failed'
   | 'decision-stuck'
   | 'start-stalled'
   | 'seat-orphaned'
   | 'seat-missing'
-  | 'proposal-waiting'
   | 'held-waiting'
   | 'label-drift';
 
 export type FactoryHealthRepair =
-  | { action: 'retry-decision'; decisionId: string }
-  | { action: 'dismiss-decision'; decisionId: string }
-  | { action: 'resolve-proposal'; decisionId: string }
   | { action: 'revoke-binding'; bindingId: string }
   | { action: 'accept-work-item'; workItemId: string }
   | { action: 'start-run'; workItemId: string; role: string }
@@ -51,8 +43,8 @@ export interface FactoryHealthFinding {
   title: string;
   /** One sentence of grounded evidence: ids, timestamps, error text. */
   evidence: string;
-  /** How long the condition has held, in ms, when it is age-based. */
-  ageMs: number | null;
+  /** ISO instant the condition began, when it is age-based. */
+  beganAt: string | null;
   suggestedRepair: FactoryHealthRepair | null;
 }
 
@@ -69,7 +61,7 @@ export interface FactoryHealthThresholds {
   expiredLeaseMs: number;
   /** A pending start this old is not "booting", it is stalled. */
   stalledStartMs: number;
-  /** Proposals and held cards older than this are worth nudging a person about. */
+  /** Held cards older than this are worth nudging a maintainer about. */
   waitingOnPersonMs: number;
 }
 
@@ -81,20 +73,15 @@ export const DEFAULT_HEALTH_THRESHOLDS: FactoryHealthThresholds = {
 };
 
 const FINDING_KINDS: FactoryHealthFindingKind[] = [
-  'decision-failed',
   'decision-stuck',
   'start-stalled',
   'seat-orphaned',
   'seat-missing',
-  'proposal-waiting',
   'held-waiting',
   'label-drift',
 ];
 
 const IN_FLIGHT_DECISION_STATUSES = new Set(['pending', 'retry', 'leased', 'proposed']);
-
-/** Working lane → the role whose seat carries a card through it. */
-const ROLE_FOR_LANE = new Map<string, string>(Object.entries(FACTORY_ROLE_STAGES).map(([role, lane]) => [lane, role]));
 
 function itemNumber(item: WorkItemRow | undefined): number | null {
   const number = item?.metadata?.number ?? item?.metadata?.githubIssueNumber ?? item?.metadata?.githubPullRequestNumber;
@@ -131,11 +118,21 @@ function stageEnteredAt(item: WorkItemRow): Date | null {
   return Number.isFinite(at) ? new Date(at) : null;
 }
 
+function beganAtMs(finding: FactoryHealthFinding): number {
+  return finding.beganAt === null ? Number.MAX_SAFE_INTEGER : Date.parse(finding.beganAt);
+}
+
 interface HealthInputs {
   items: WorkItemRow[];
   decisions: FactoryDeferredDecisionRecord[];
   bindings: FactoryRunBindingRecord[];
   pendingStarts: FactoryPendingStartRecord[];
+  /**
+   * What the item's installed board says its current phase means. Undefined when the
+   * board is not installed, the phase is undeclared, or the row spans several stages;
+   * the check then neither revokes nor starts anything on a guess.
+   */
+  phaseSemantics: (item: WorkItemRow) => PhaseSemantics | undefined;
 }
 
 /** Pure: findings from rows. Exported so tests can feed fixtures directly. */
@@ -153,17 +150,6 @@ export function computeFactoryHealth(
 
   for (const decision of inputs.decisions) {
     const base = subject(decision.workItemId);
-    if (decision.status === 'failed') {
-      findings.push({
-        kind: 'decision-failed',
-        id: `decision-failed:${decision.id}`,
-        ...base,
-        evidence: `Decision ${decision.id} (${describeDecision(decision)}) failed after ${decision.attempts} attempt(s) at ${decision.updatedAt.toISOString()}${decision.failureCode ? ` [${decision.failureCode}]` : ''}: ${truncate(decision.lastError ?? 'no error recorded')}`,
-        ageMs: now.getTime() - decision.updatedAt.getTime(),
-        suggestedRepair: { action: 'retry-decision', decisionId: decision.id },
-      });
-      continue;
-    }
     if (decision.status === 'retry' || decision.status === 'pending') {
       const overdue = now.getTime() - decision.availableAt.getTime();
       if (overdue > thresholds.stuckDecisionMs) {
@@ -172,7 +158,7 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) has been ${decision.status} since ${decision.availableAt.toISOString()} with ${decision.attempts} attempt(s) and was never leased; is the dispatcher running?`,
-          ageMs: overdue,
+          beganAt: decision.availableAt.toISOString(),
           suggestedRepair: null,
         });
       }
@@ -186,22 +172,8 @@ export function computeFactoryHealth(
           id: `decision-stuck:${decision.id}`,
           ...base,
           evidence: `Decision ${decision.id} (${describeDecision(decision)}) is still leased by ${decision.leaseOwner ?? 'unknown'} though the lease expired at ${decision.leaseExpiresAt.toISOString()}; the worker likely died mid-dispatch.`,
-          ageMs: expired,
+          beganAt: decision.leaseExpiresAt.toISOString(),
           suggestedRepair: null,
-        });
-      }
-      continue;
-    }
-    if (decision.status === 'proposed') {
-      const waiting = now.getTime() - decision.createdAt.getTime();
-      if (waiting > thresholds.waitingOnPersonMs) {
-        findings.push({
-          kind: 'proposal-waiting',
-          id: `proposal-waiting:${decision.id}`,
-          ...base,
-          evidence: `Proposed run ${decision.id} (${describeDecision(decision)}) has waited for a person since ${decision.createdAt.toISOString()}.`,
-          ageMs: waiting,
-          suggestedRepair: { action: 'resolve-proposal', decisionId: decision.id },
         });
       }
     }
@@ -219,7 +191,7 @@ export function computeFactoryHealth(
         id: `start-stalled:${start.id}`,
         ...base,
         evidence: `Pending start ${start.id}${binding ? ` for the ${binding.role} seat` : ''} is ${start.status} since ${start.createdAt.toISOString()} after ${start.attempts} attempt(s)${start.lastError ? `: ${truncate(start.lastError)}` : '.'}`,
-        ageMs: age,
+        beganAt: start.createdAt.toISOString(),
         suggestedRepair: binding ? { action: 'revoke-binding', bindingId: binding.id } : null,
       });
     }
@@ -230,7 +202,7 @@ export function computeFactoryHealth(
     if (binding.status !== 'active') continue;
     const item = itemsById.get(binding.workItemId);
     const stage = item ? factoryRuleStage(item.stages) : undefined;
-    if (!item || !stage || isTerminalFactoryRuleStage([stage])) {
+    if (!item || inputs.phaseSemantics(item)?.kind === 'terminal') {
       findings.push({
         kind: 'seat-orphaned',
         id: `seat-orphaned:${binding.id}`,
@@ -238,7 +210,7 @@ export function computeFactoryHealth(
         evidence: item
           ? `Binding ${binding.id} (${binding.role}) is still active though the card is in ${stage ?? item.stages.join('+')}.`
           : `Binding ${binding.id} (${binding.role}) is active for work item ${binding.workItemId}, which no longer exists.`,
-        ageMs: now.getTime() - binding.createdAt.getTime(),
+        beganAt: item ? (stageEnteredAt(item)?.toISOString() ?? null) : null,
         suggestedRepair: { action: 'revoke-binding', bindingId: binding.id },
       });
       continue;
@@ -253,12 +225,20 @@ export function computeFactoryHealth(
   );
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
-    if (!stage || stage === 'intake' || isTerminalFactoryRuleStage([stage])) continue;
+    const semantics = stage ? inputs.phaseSemantics(item) : undefined;
+    if (!stage || semantics?.kind !== 'working') continue;
     const base = subject(item.id);
     const enteredAt = stageEnteredAt(item);
     const inStageMs = enteredAt ? now.getTime() - enteredAt.getTime() : null;
 
-    const held = stage === 'triage' && item.triageType !== null && item.triageType !== 'bug' && !item.acceptedAt;
+    // Work's triage seat holds a classified non-bug until a maintainer accepts it. Only
+    // Work has that gate, so this is keyed on the board, not on the phase name.
+    const held =
+      boardForWorkItem(item) === 'work' &&
+      stage === 'triage' &&
+      item.triageType !== null &&
+      item.triageType !== 'bug' &&
+      !item.acceptedAt;
     if (held) {
       if (inStageMs !== null && inStageMs > thresholds.waitingOnPersonMs) {
         findings.push({
@@ -266,18 +246,18 @@ export function computeFactoryHealth(
           id: `held-waiting:${item.id}`,
           ...base,
           evidence: `Triaged as "${item.triageType}" and waiting for a maintainer's decision since ${enteredAt!.toISOString()}.`,
-          ageMs: inStageMs,
+          beganAt: enteredAt!.toISOString(),
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
     } else if (!activeSeatsByItem.has(item.id) && !inFlightByItem.has(item.id)) {
-      const role = ROLE_FOR_LANE.get(stage);
+      const role = semantics.role;
       findings.push({
         kind: 'seat-missing',
         id: `seat-missing:${item.id}`,
         ...base,
         evidence: `In ${stage} since ${enteredAt?.toISOString() ?? 'unknown'} with no active seat and no decision in flight; nothing will move it.`,
-        ageMs: inStageMs,
+        beganAt: enteredAt?.toISOString() ?? null,
         suggestedRepair: role ? { action: 'start-run', workItemId: item.id, role } : null,
       });
     }
@@ -288,13 +268,13 @@ export function computeFactoryHealth(
         id: `label-drift:${item.id}`,
         ...base,
         evidence: `Accepted at ${item.acceptedAt.toISOString()} but the last observed labels still include "${NEEDS_APPROVAL_LABEL}".`,
-        ageMs: now.getTime() - item.acceptedAt.getTime(),
+        beganAt: item.acceptedAt.toISOString(),
         suggestedRepair: { action: 'reconcile-labels', workItemId: item.id },
       });
     }
   }
 
-  findings.sort((a, b) => (b.ageMs ?? 0) - (a.ageMs ?? 0));
+  findings.sort((a, b) => beganAtMs(a) - beganAtMs(b) || a.id.localeCompare(b.id));
   const counts = Object.fromEntries(FINDING_KINDS.map(kind => [kind, 0])) as Record<FactoryHealthFindingKind, number>;
   for (const finding of findings) counts[finding.kind] += 1;
   return { checkedAt: now.toISOString(), findings, counts };
@@ -302,6 +282,7 @@ export function computeFactoryHealth(
 
 export async function runFactoryHealthCheck(
   workItems: WorkItemsStorage,
+  boards: BoardRegistry,
   scope: { orgId: string; factoryProjectId: string },
   options: { now?: Date; thresholds?: FactoryHealthThresholds } = {},
 ): Promise<FactoryHealthReport> {
@@ -312,7 +293,7 @@ export async function runFactoryHealthCheck(
     workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
   ]);
   return computeFactoryHealth(
-    { items, decisions, bindings, pendingStarts },
+    { items, decisions, bindings, pendingStarts, phaseSemantics: item => workItemPhaseSemantics(boards, item) },
     options.now ?? new Date(),
     options.thresholds,
   );
