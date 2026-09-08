@@ -34,6 +34,13 @@ export interface CreateFactoryWorkItemInput {
   actor: FactoryRuleActor;
   ingressType: 'human' | 'agent';
   input: CreateWorkItemInput;
+  /**
+   * Runs once the card exists and before it enters intake, for anything the
+   * worker must find on the card the moment the lifecycle starts (a brief on
+   * the feed). If it throws, the card is deleted again and the outcome is
+   * `rejected`: a card never enters the lifecycle without its brief.
+   */
+  beforeEntry?: (item: WorkItemRow) => Promise<unknown>;
 }
 
 export async function createFactoryWorkItem({
@@ -45,6 +52,7 @@ export async function createFactoryWorkItem({
   actor,
   ingressType,
   input,
+  beforeEntry,
 }: CreateFactoryWorkItemInput): Promise<CreateFactoryWorkItemOutcome> {
   const result = await workItems.upsert({ orgId, userId, factoryProjectId, input, reuseMode: 'non-stage' });
   let item = result.item;
@@ -53,6 +61,18 @@ export async function createFactoryWorkItem({
   if (!transitionService) {
     await workItems.delete({ orgId, id: item.id });
     return { status: 'unavailable' };
+  }
+  if (beforeEntry) {
+    try {
+      await beforeEntry(item);
+    } catch (error) {
+      await workItems.delete({ orgId, id: item.id });
+      return {
+        status: 'rejected',
+        code: 'entry_preparation_failed',
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
   const entered = await transitionService.transition({
     orgId,

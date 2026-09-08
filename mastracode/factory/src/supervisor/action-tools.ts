@@ -559,35 +559,33 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           actor: requestedBy ? { type: 'human', id: requestedBy } : { type: 'system', id: deps.actor.id },
           ingressType: requestedBy ? 'human' : 'agent',
           input: { title, stages: ['intake'] },
+          // The kickoff reads the card's feed, so the brief goes on as the
+          // card's first comment before the card enters intake: the worker
+          // can never pick up a card that has no brief yet. A failure here
+          // means no card is filed at all.
+          beforeEntry: item =>
+            deps.comments.create({
+              orgId: deps.scope.orgId,
+              factoryProjectId: deps.scope.factoryProjectId,
+              workItemId: item.id,
+              author: requestedBy ? { kind: 'user', id: requestedBy } : { kind: 'agent', id: deps.actor.id },
+              body: brief,
+            }),
         });
         if (created.status === 'unavailable') throw new Error('This factory cannot accept new work items right now.');
         if (created.status === 'rejected') {
-          throw new Error(`Intake refused the work item (${created.code}): ${created.reason}`);
+          throw new Error(
+            created.code === 'entry_preparation_failed'
+              ? `The brief could not be posted, so no work item was filed: ${created.reason}`
+              : `Intake refused the work item (${created.code}): ${created.reason}`,
+          );
         }
         const item = created.item;
-        // The kickoff reads the card's feed, so the brief reaches the worker as
-        // the card's first comment, attributed to whoever the turn acts as.
-        let briefPosted = true;
-        try {
-          await deps.comments.create({
-            orgId: deps.scope.orgId,
-            factoryProjectId: deps.scope.factoryProjectId,
-            workItemId: item.id,
-            author: requestedBy ? { kind: 'user', id: requestedBy } : { kind: 'agent', id: deps.actor.id },
-            body: brief,
-          });
-        } catch (error) {
-          briefPosted = false;
-          deps.logger?.warn('Factory supervisor could not post the brief on a new work item', {
-            workItemId: item.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
         const audited = await auditAfter(
           'audited',
           'factory.work_item.created',
           { type: 'work_item', id: item.id },
-          { title: item.title, stages: item.stages, requestedBy, briefPosted },
+          { title: item.title, stages: item.stages, requestedBy, briefPosted: true },
         );
         return {
           workItemId: item.id,
@@ -595,8 +593,7 @@ export function createFactorySupervisorActionTools(deps: SupervisorActionDepende
           stages: item.stages,
           requestedBy,
           createdBy: item.createdBy,
-          briefPosted,
-          ...(briefPosted ? {} : { briefError: 'Filed, but posting the brief failed. Add it as a comment instead.' }),
+          briefPosted: true,
           ...audited,
         };
       },

@@ -1079,7 +1079,7 @@ describe('factory_create_work_item', () => {
     expect((await seed.workItems.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).length).toBe(0);
   });
 
-  it('reports a brief that failed to post without unfiling the card', async () => {
+  it('files no card at all when the brief cannot be posted', async () => {
     const seed = await createFactoryStorageForTests();
     const tools = createFactorySupervisorActionTools({
       scope: SCOPE,
@@ -1096,10 +1096,42 @@ describe('factory_create_work_item', () => {
       now: () => NOW,
     });
 
-    const result = await execute<any>(tools.factory_create_work_item, { title: 'Card', brief: 'Brief' });
-    expect(result).toMatchObject({ briefPosted: false, briefError: expect.stringContaining('Filed') });
-    expect(await seed.workItems.getForProject('org-1', PROJECT_ID, result.workItemId)).toMatchObject({
-      stages: ['intake'],
+    await expect(execute(tools.factory_create_work_item, { title: 'Card', brief: 'Brief' })).rejects.toThrow(
+      /brief could not be posted, so no work item was filed: comments down/,
+    );
+    // No orphan card, nothing entered intake, nothing audited as created.
+    const items = await seed.workItems.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(items.filter(i => i.title === 'Card')).toEqual([]);
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID, limit: 10 });
+    expect(events.filter(e => e.action === 'factory.work_item.created')).toEqual([]);
+  });
+
+  it('posts the brief before the card enters intake', async () => {
+    const seed = await createFactoryStorageForTests();
+    const order: string[] = [];
+    const transitionService = new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems });
+    const tools = createFactorySupervisorActionTools({
+      scope: SCOPE,
+      actor: { type: 'human', id: 'user-7' },
+      workItems: seed.workItems,
+      comments: {
+        create: async input => {
+          order.push('brief');
+          return seed.comments.create(input);
+        },
+      },
+      transitionService: {
+        transition: async input => {
+          order.push('intake');
+          return transitionService.transition(input);
+        },
+      },
+      audit: seed.audit,
+      controller: noSessions,
+      now: () => NOW,
     });
+
+    await execute<any>(tools.factory_create_work_item, { title: 'Card', brief: 'Brief' });
+    expect(order).toEqual(['brief', 'intake']);
   });
 });
