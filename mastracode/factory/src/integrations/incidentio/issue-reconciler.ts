@@ -27,6 +27,7 @@ export function attachIncidentioIssueReconciler(
       incidentioStateType: issue.stateType,
       incidentioPriority: issue.priority,
       incidentioAssignee: issue.assignee,
+      incidentioDescription: 'description' in issue && typeof issue.description === 'string' ? issue.description : null,
       stateType: issue.stateType,
       priority: issue.priority,
       source: issue.source,

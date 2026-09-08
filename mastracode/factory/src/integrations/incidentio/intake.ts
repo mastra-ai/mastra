@@ -28,6 +28,10 @@ const SOURCE_IDS = [INCIDENTIO_INCIDENTS_SOURCE_ID, INCIDENTIO_FOLLOW_UPS_SOURCE
 
 type IncidentioItemReference = { type: 'incident' | 'follow-up'; id: string };
 type IncidentioPageCursor = { sourceIndex: number; provider?: string };
+interface ListedIncidentioIssue {
+  issue: IntakeIssue;
+  metadata: Record<string, unknown>;
+}
 
 export function createIncidentioIntake(config: {
   api: IncidentioApiClient;
@@ -44,29 +48,43 @@ export function createIncidentioIntake(config: {
     }
   };
 
-  const listIssues = async ({ sourceIds, labels, cursor }: ListIntakeIssuesInput) => {
+  const listIssueEntries = async ({ sourceIds, labels, cursor }: ListIntakeIssuesInput) => {
     const selectedSources = SOURCE_IDS.filter(sourceId => sourceIds.includes(sourceId));
     const decodedCursor = decodePageCursor(cursor);
-    if (decodedCursor.sourceIndex >= selectedSources.length) return { issues: [], nextCursor: null };
+    if (decodedCursor.sourceIndex >= selectedSources.length) {
+      return { entries: [] as ListedIncidentioIssue[], nextCursor: null };
+    }
 
     const sourceId = selectedSources[decodedCursor.sourceIndex]!;
-    const page =
-      sourceId === INCIDENTIO_INCIDENTS_SOURCE_ID
-        ? await config.api.listIncidents(decodedCursor.provider)
-        : await config.api.listFollowUps(decodedCursor.provider);
-    const issues = page.items
-      .map(item =>
-        sourceId === INCIDENTIO_INCIDENTS_SOURCE_ID
-          ? incidentToIntakeIssue(item as IncidentioIncident)
-          : followUpToIntakeIssue(item as IncidentioFollowUp),
-      )
-      .filter(issue => isActive(issue.stateType) && matchesLabels(issue.labels, labels));
-    const nextCursor = page.nextCursor
-      ? encodePageCursor({ sourceIndex: decodedCursor.sourceIndex, provider: page.nextCursor })
+    let entries: ListedIncidentioIssue[];
+    let providerCursor: string | null;
+    if (sourceId === INCIDENTIO_INCIDENTS_SOURCE_ID) {
+      const page = await config.api.listIncidents(decodedCursor.provider);
+      entries = page.items.map(incident => {
+        const issue = incidentToIntakeIssue(incident);
+        return { issue, metadata: incidentIntakeMetadata(incident, issue) };
+      });
+      providerCursor = page.nextCursor;
+    } else {
+      const page = await config.api.listFollowUps(decodedCursor.provider);
+      entries = page.items.map(followUp => {
+        const issue = followUpToIntakeIssue(followUp);
+        return { issue, metadata: followUpIntakeMetadata(followUp, issue) };
+      });
+      providerCursor = page.nextCursor;
+    }
+    entries = entries.filter(({ issue }) => isActive(issue.stateType) && matchesLabels(issue.labels, labels));
+    const nextCursor = providerCursor
+      ? encodePageCursor({ sourceIndex: decodedCursor.sourceIndex, provider: providerCursor })
       : decodedCursor.sourceIndex + 1 < selectedSources.length
         ? encodePageCursor({ sourceIndex: decodedCursor.sourceIndex + 1 })
         : null;
-    return { issues, nextCursor };
+    return { entries, nextCursor };
+  };
+
+  const listIssues = async (input: ListIntakeIssuesInput) => {
+    const page = await listIssueEntries(input);
+    return { issues: page.entries.map(({ issue }) => issue), nextCursor: page.nextCursor };
   };
 
   const getIssue = async ({ connection, issueId }: GetIntakeIssueInput): Promise<IntakeIssueDetail | null> => {
@@ -103,13 +121,13 @@ export function createIncidentioIntake(config: {
       { id: INCIDENTIO_FOLLOW_UPS_SOURCE_ID, name: 'Incident follow-ups', type: 'follow-up' },
     ],
     listItems: async (input: ListIntakeItemsInput): Promise<IntakeItemPage> => {
-      const page = await listIssues({
+      const page = await listIssueEntries({
         connection: config.connection,
         sourceIds: input.sourceIds,
         ...(input.cursor ? { cursor: input.cursor } : {}),
       });
       return {
-        items: page.issues.map(issue => ({
+        items: page.entries.map(({ issue, metadata }) => ({
           source: { type: 'issue', externalId: issue.id, url: issue.url },
           sourceId: issue.id.startsWith(INCIDENT_PREFIX)
             ? INCIDENTIO_INCIDENTS_SOURCE_ID
@@ -120,7 +138,7 @@ export function createIncidentioIntake(config: {
           assignee: issue.assignee,
           createdAt: issue.createdAt,
           updatedAt: issue.updatedAt,
-          metadata: { stateType: issue.stateType, priority: issue.priority, source: issue.source },
+          metadata,
         })),
         nextCursor: page.nextCursor,
       };
@@ -201,6 +219,44 @@ function followUpToIntakeIssue(followUp: IncidentioFollowUp): IntakeIssue {
     commentCount: 0,
     createdAt: followUp.created_at,
     updatedAt: followUp.updated_at,
+  };
+}
+
+function intakeMetadata(issue: IntakeIssue): Record<string, unknown> {
+  return {
+    identifier: issue.identifier,
+    autoStartCandidate: issue.stateType === 'unstarted' || issue.stateType === 'started',
+    incidentioState: issue.state,
+    incidentioStateType: issue.stateType,
+    incidentioPriority: issue.priority,
+    incidentioAssignee: issue.assignee,
+    stateType: issue.stateType,
+    priority: issue.priority,
+    source: issue.source,
+    assignee: issue.assignee,
+    assignees: issue.assignees ?? [],
+    creator: issue.author,
+    author: issue.author,
+    labels: issue.labels,
+    updatedAt: issue.updatedAt,
+  };
+}
+
+function incidentIntakeMetadata(incident: IncidentioIncident, issue: IntakeIssue): Record<string, unknown> {
+  return {
+    ...intakeMetadata(issue),
+    incidentioItemType: 'incident',
+    incidentioIncidentId: incident.id,
+    ...(incident.summary ? { incidentioDescription: incident.summary } : {}),
+  };
+}
+
+function followUpIntakeMetadata(followUp: IncidentioFollowUp, issue: IntakeIssue): Record<string, unknown> {
+  return {
+    ...intakeMetadata(issue),
+    incidentioItemType: 'follow-up',
+    incidentioIncidentId: followUp.incident_id,
+    ...(followUp.description ? { incidentioDescription: followUp.description } : {}),
   };
 }
 
