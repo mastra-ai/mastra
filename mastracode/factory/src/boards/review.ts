@@ -12,7 +12,9 @@ function sourceRef(item: FactoryRuleItemContext): string {
 /**
  * The session branch was created on the PR head over the repository's history.
  * A session reused after the PR moved still holds the old head, so the hint
- * carries the refresh.
+ * carries the refresh. It drops the shallow boundary first: a session opened
+ * before the history was fetched still has one, and `--unshallow` is fatal on
+ * the complete clone every session gets now.
  */
 function checkoutHint(item: FactoryRuleItemContext): string {
   const number = workItemNumber(item);
@@ -23,7 +25,8 @@ function checkoutHint(item: FactoryRuleItemContext): string {
       : '';
   if (number === undefined) return `Check out the PR in this worktree first.${headBranch}`;
   const sessionBranch = workItemBranch(item);
-  const refresh = `git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
+  const deepen = `git rev-parse --is-shallow-repository | grep -qx true && git fetch --unshallow --filter=blob:none origin`;
+  const refresh = `${deepen}; git fetch --filter=blob:none origin refs/pull/${number}/head && git checkout -B ${sessionBranch} FETCH_HEAD`;
   return (
     `The PR head is checked out on branch \`${sessionBranch}\` with the repository history: do not run \`gh pr checkout\`. ` +
     `If \`gh pr view ${number} --json headRefOid --jq .headRefOid\` differs from \`git rev-parse HEAD\`, refresh with \`${refresh}\`. ` +

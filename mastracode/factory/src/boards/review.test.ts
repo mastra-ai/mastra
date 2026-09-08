@@ -58,7 +58,7 @@ describe('reviewBoard', () => {
 
     expect(argumentsText).toContain('checked out on branch `factory/pr-23029`');
     expect(argumentsText).toContain(
-      'git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
+      'git rev-parse --is-shallow-repository | grep -qx true && git fetch --unshallow --filter=blob:none origin; git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
     );
   });
 });
