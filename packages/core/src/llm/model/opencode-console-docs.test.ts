@@ -102,9 +102,9 @@ describe('OpenCode Console generated documentation', () => {
       toolUsage: null,
       reasoning: null,
     });
+    expect(content).not.toContain(':::warning');
     expect(content).toContain('MissingSessionID');
     expect(content).toContain('service-account');
-    expect(content).toContain('Paid inference requires available Console credit');
     expect(content).toContain('inherited prices are omitted');
     expect(content).toContain('has not been verified');
     expect(content).toContain('catalogOnly');

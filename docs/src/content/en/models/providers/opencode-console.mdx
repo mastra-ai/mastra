@@ -7,15 +7,9 @@ description: "Browse OpenCode Console model IDs, capabilities, and context windo
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Console logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Console
 
-Use OpenCode Console models through Mastra's model router. Set `OPENCODE_CONSOLE_API_KEY` to a Console service-account API key. Console credentials are separate from OpenCode Zen and Go credentials. Paid inference requires available Console credit.
+Access 68 OpenCode Console models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_CONSOLE_API_KEY` environment variable. Console credentials are separate from OpenCode Zen and Go credentials.
 
 Learn more in the [OpenCode Console inference guide](https://opencode.ai/console/guides/inference).
-
-:::warning[Catalog availability]
-
-The 68 entries below come from the public Console catalog or a last-known fallback. Catalog membership does not guarantee standalone Mastra access or account eligibility. Some free catalog models, including `opencode-console/nemotron-3-ultra-free`, reject key-only requests with `MissingSessionID` and require an `x-session-id` header even when `OPENCODE_CONSOLE_API_KEY` is set. Paid models such as `opencode-console/glm-5.3-flash` authenticate with the service-account key and need available Console credit.
-
-:::
 
 ```bash title=".env"
 OPENCODE_CONSOLE_API_KEY=your-api-key

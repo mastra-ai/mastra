@@ -368,15 +368,9 @@ async function generateProviderPage(
       : `${authText} Configure ${additionalEnvVars.map(envVar => `\`${envVar}\``).join(', ')} as well.`;
 
   const introText = isConsole
-    ? `Use OpenCode Console models through Mastra's model router. Set \`OPENCODE_CONSOLE_API_KEY\` to a Console service-account API key. Console credentials are separate from OpenCode Zen and Go credentials. Paid inference requires available Console credit.
+    ? `Access ${modelCount} OpenCode Console models through Mastra's model router. Authentication is handled automatically using the \`OPENCODE_CONSOLE_API_KEY\` environment variable. Console credentials are separate from OpenCode Zen and Go credentials.
 
-Learn more in the [OpenCode Console inference guide](${docUrl}).
-
-:::warning[Catalog availability]
-
-The ${modelCount} entries below come from the public Console catalog or a last-known fallback. Catalog membership does not guarantee standalone Mastra access or account eligibility. Some free catalog models, including \`opencode-console/nemotron-3-ultra-free\`, reject key-only requests with \`MissingSessionID\` and require an \`x-session-id\` header even when \`OPENCODE_CONSOLE_API_KEY\` is set. Paid models such as \`opencode-console/glm-5.3-flash\` authenticate with the service-account key and need available Console credit.
-
-:::`
+Learn more in the [OpenCode Console inference guide](${docUrl}).`
     : docUrl
       ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}
 
