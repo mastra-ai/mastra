@@ -26,6 +26,7 @@ const CHUNKS: Chunk[] = [
   { type: 'text-delta', payload: { id: '1', text: 'Done.' } },
   { type: 'text-end', payload: { id: '1' } },
   { type: 'reasoning-start', payload: { id: '2', providerMetadata: { anthropic: { redactedData: 'xx' } } } },
+  { type: 'redacted-reasoning', payload: { id: '4', data: 'yy', providerMetadata: { anthropic: { redactedData: 'yy' } } } },
   { type: 'reasoning-end', payload: { id: '3' } },
 ];
 
@@ -64,7 +65,9 @@ function foldedPersisted(chunks: Chunk[]): MastraMessagePart[] {
 
 describe('the live and the persisted message agree on their spans', () => {
   it('draws the same text and reasoning parts from one chunk log', async () => {
-    expect(spanPartsOf(await foldedLive(CHUNKS))).toEqual(spanPartsOf(foldedPersisted(CHUNKS)));
+    const live = spanPartsOf(await foldedLive(CHUNKS));
+    expect(live).toHaveLength(7);
+    expect(live).toEqual(spanPartsOf(foldedPersisted(CHUNKS)));
   });
 
   it('keeps a step reusing a block id out of the earlier part', async () => {
@@ -72,6 +75,7 @@ describe('the live and the persisted message agree on their spans', () => {
     expect(reasoning.map(part => (part.type === 'reasoning' ? part.reasoning : ''))).toEqual([
       'weighing the options',
       'the file explains it',
+      '',
       '',
       '',
     ]);
