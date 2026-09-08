@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
+import { createBoardRegistry } from '../../boards/index.js';
+import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
@@ -246,7 +247,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: defaultFactoryRules({ version: 'custom-github-v2' }),
+      boards: createBoardRegistry(),
+      configVersion: 'custom-github-v2',
     });
     await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'committed' });
     await expect(service.ingest(issueClosed('custom-close', 'completed'))).resolves.toEqual({ status: 'replayed' });
@@ -255,7 +257,7 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
-    expect(commitEvaluation).toHaveBeenCalledWith(expect.objectContaining({ ruleSetVersion: 'custom-github-v2' }));
+    expect(commitEvaluation).toHaveBeenCalledWith(expect.objectContaining({ configVersion: 'custom-github-v2' }));
   });
 
   it('records disabled ingress without decisions and still evaluates unrelated events', async () => {
@@ -268,7 +270,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
@@ -291,7 +294,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
@@ -311,7 +315,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(issueClosed('delivery-closed-done', 'completed'))).resolves.toEqual({
@@ -335,7 +340,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(issueClosed('delivery-closed-np', 'not_planned'))).resolves.toEqual({
@@ -373,7 +379,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     // acme/repo#42 closing must not move the other/repo#42 card.
@@ -408,7 +415,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(issueClosed('delivery-closed-terminal'))).resolves.toEqual({ status: 'committed' });
@@ -424,7 +432,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -454,7 +463,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -487,7 +497,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -518,7 +529,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -540,7 +552,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(issueOpened('delivery-before-factory', '2000-01-01T00:00:00Z'));
@@ -554,13 +567,26 @@ describe('GithubRules', () => {
     { permission: 'write', createdAt: '2000-01-01T00:00:00Z' },
   ])('keeps noncandidate arrivals at Intake ($permission, $createdAt)', async ({ permission, createdAt }) => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
-    const rules = defaultFactoryRules({ version: 'guarded-intake' });
-    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
-    const service = new GithubRules({ github, sourceControl, integrationStorage, projects, storage: workItems, rules });
+    const configVersion = 'guarded-intake';
+    const transitionService = new FactoryTransitionService({
+      storage: workItems,
+      configVersion,
+      boards: createBoardRegistry(),
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      configVersion,
+      boards: createBoardRegistry(),
+    });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-guard',
     });
@@ -580,15 +606,20 @@ describe('GithubRules', () => {
   it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
-    const rules = defaultFactoryRules({ version: 'test-web-policy' });
-    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const configVersion = 'test-web-policy';
+    const transitionService = new FactoryTransitionService({
+      storage: workItems,
+      configVersion,
+      boards: createBoardRegistry(),
+    });
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
     const sessions = new Map<string, ReturnType<typeof makeSession>>();
@@ -664,6 +695,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
       primeCredentials,
@@ -809,7 +841,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(issueOpened('delivery-canonical-issue'));
@@ -832,19 +865,25 @@ describe('GithubRules', () => {
 
   it('materializes and starts the first Review pass when a trusted maintainer requests Factory', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    const rules = builtInFactoryRules();
+    const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -905,19 +944,25 @@ describe('GithubRules', () => {
 
   it("materializes a Review card from Factory's exact PR comment command", async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    const rules = builtInFactoryRules();
+    const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -962,7 +1007,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -1007,7 +1053,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(pullRequestComment('delivery-comment-review-unknown-identity'))).resolves.toEqual({
@@ -1041,7 +1088,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     const reviewRequested = (deliveryId: string, reviewer: string) => ({
@@ -1145,7 +1193,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(
@@ -1200,19 +1249,25 @@ describe('GithubRules', () => {
         metadata: { authorTrusted: true },
       },
     });
-    const rules = builtInFactoryRules();
+    const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1285,19 +1340,25 @@ describe('GithubRules', () => {
         metadata: { authorTrusted: true },
       },
     });
-    const rules = builtInFactoryRules();
+    const configVersion = 'factory-config-v1';
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({ storage: workItems, rules }),
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1372,7 +1433,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(pullRequest('synchronize', 'delivery-push-intake'))).resolves.toEqual({
@@ -1386,14 +1448,15 @@ describe('GithubRules', () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission, {
       issueOpened: seen,
     });
-    const rules = defaultFactoryRules({ version: 'test-1' });
+    const configVersion = 'test-1';
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
 
     await service.ingest(issueOpened(`delivery-${permission ?? 'missing'}`));
@@ -1436,7 +1499,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest({
@@ -1523,7 +1587,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest({
@@ -1589,7 +1654,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest({
@@ -1630,15 +1696,20 @@ describe('GithubRules', () => {
     // way to the message the authoring agent actually receives.
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('read');
-    const rules = builtInFactoryRules();
-    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const configVersion = 'factory-config-v1';
+    const transitionService = new FactoryTransitionService({
+      storage: workItems,
+      configVersion,
+      boards: createBoardRegistry(),
+    });
     const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
       projects,
       storage: workItems,
-      rules,
+      boards: createBoardRegistry(),
+      configVersion,
     });
 
     const notifications: Array<{ threadId: string; summary: string; priority: string }> = [];
@@ -1728,6 +1799,7 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      boards: createBoardRegistry(),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -1808,7 +1880,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest({
@@ -1877,7 +1950,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(pullRequest('opened', 'delivery-open'));
@@ -1932,7 +2006,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(pullRequest('opened', 'delivery-foreign-provenance'));
@@ -1977,7 +2052,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(pullRequest('opened', 'delivery-branch-link'));
@@ -2019,7 +2095,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(pullRequest('closed', 'delivery-merged-card', true))).resolves.toEqual({
@@ -2061,7 +2138,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
@@ -2124,7 +2202,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(pullRequest('closed', 'delivery-merged-provenance', true));
@@ -2180,7 +2259,8 @@ describe('GithubRules', () => {
       integrationStorage,
       projects,
       storage: workItems,
-      rules: builtInFactoryRules(),
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
     });
 
     await service.ingest(issueOpened('multi-tenant'));
@@ -2237,6 +2317,7 @@ describe('createGithubPullRequestReconciler', () => {
     context: Awaited<ReturnType<typeof setup>>,
     fetchPullRequest: ReturnType<typeof vi.fn>,
     fetchIssue?: ReturnType<typeof vi.fn>,
+    boards = createBoardRegistry(),
   ) {
     return createGithubPullRequestReconciler(
       {
@@ -2245,7 +2326,8 @@ describe('createGithubPullRequestReconciler', () => {
         integrationStorage: context.integrationStorage,
         projects: context.projects,
         storage: context.workItems,
-        rules: builtInFactoryRules(),
+        configVersion: 'factory-config-v1',
+        boards,
       },
       fetchPullRequest as never,
       fetchIssue as never,
@@ -2376,7 +2458,7 @@ describe('createGithubPullRequestReconciler', () => {
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
       ingress: { identity: 'settled-proposal', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2448,7 +2530,7 @@ describe('createGithubPullRequestReconciler', () => {
       factoryProjectId: context.project.id,
       workItemId: card.item.id,
       ingress: { identity: 'failed-before-settlement', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: card.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
@@ -2498,6 +2580,64 @@ describe('createGithubPullRequestReconciler', () => {
     });
   });
 
+  it('leaves failed decisions alone when no installed board declares the closed card terminal', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, {
+      number: 17,
+      stages: ['done'],
+      metadata: { author: 'pr-author', state: 'closed', draft: false, merged: true },
+    });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await context.workItems.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: context.project.id,
+      workItemId: card.item.id,
+      ingress: { identity: 'failed-on-unknown-board', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: card.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        { type: 'sendMessage', role: 'review', message: 'Notify.', idempotencyKey: 'failed-on-unknown-board' },
+      ],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await context.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a deferred decision');
+    await context.workItems.failDeferredDecision({
+      id: claimed.id,
+      orgId: claimed.orgId,
+      factoryProjectId: claimed.factoryProjectId,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'No active review session.',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+    // Review is not installed: `done` on this card has no declared meaning, so the sweep never guesses.
+    const reconcile = createReconciler(
+      context,
+      vi.fn(async () => mergedState(17)),
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()], includeDefaultBoards: false }),
+    );
+
+    await reconcile([repositoryTarget]);
+
+    expect(
+      (await context.workItems.listDeferredDecisions('org-1', context.project.id)).find(
+        decision => decision.id === claimed.id,
+      )?.status,
+    ).toBe('failed');
+  });
+
   it('keeps a failed close transition actionable until the card reaches a terminal stage', async () => {
     const context = await setup('read');
     const card = await createCard(context, { number: 17 });
@@ -2507,7 +2647,7 @@ describe('createGithubPullRequestReconciler', () => {
       integrationStorage: context.integrationStorage,
       projects: context.projects,
       storage: context.workItems,
-      rules: builtInFactoryRules(),
+      configVersion: 'factory-config-v1',
     });
     const now = new Date('2030-01-01T00:00:00.000Z');
     await rules.ingest(reconciledClosedEvent(repositoryTarget, 17, mergedState(17)));

@@ -1,5 +1,26 @@
 # @mastra/redis
 
+## 1.4.4-alpha.0
+
+### Patch Changes
+
+- Improved durable agent streaming latency when Redis is remote (issue #22477). Recording a stream event in the cache used to take four sequential Redis commands (INCR, EXPIRE, RPUSH, EXPIRE); it now runs as a single atomic Lua script, so each streamed chunk costs one Redis round-trip instead of four. The built-in ioredis, node-redis, and Upstash presets support this out of the box, and the cache falls back to the previous multi-command path if the client has no `evalScript` or Redis Cluster rejects the multi-key script (CROSSSLOT). ([#23161](https://github.com/mastra-ai/mastra/pull/23161))
+
+  Added an optional `evalScript` adapter hook so custom client libraries can run the script too:
+
+  ```ts
+  import { RedisServerCache } from '@mastra/redis';
+
+  const cache = new RedisServerCache({
+    client,
+    // (client, script, keys, args) => Promise<unknown>
+    evalScript: (client, script, keys, args) => client.eval(script, keys.length, ...keys, ...args),
+  });
+  ```
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
 ## 1.4.3
 
 ### Patch Changes

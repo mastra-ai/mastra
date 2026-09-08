@@ -12,7 +12,6 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
-import { isTerminalFactoryRuleStage } from '../../../rules/types.js';
 import type { FactoryTriageType } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
 import {
@@ -105,7 +104,7 @@ export interface CommitFactoryRuleEvaluationInput {
   factoryProjectId: string;
   workItemId: string | null;
   ingress: { identity: string; triggerType: string };
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
@@ -132,7 +131,7 @@ export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
   workItemId: string | null;
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
@@ -343,13 +342,6 @@ export interface RevokeStaleFactoryRunBindingsInput {
   now: Date;
 }
 
-/**
- * Stages in which a bound run can still act on its work item. Mirrors the
- * non-terminal subset of `FACTORY_RULE_STAGES` (rules/types.ts); bindings for
- * items outside these stages are dead weight in the reconcile walk.
- */
-const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set(['intake', 'triage', 'planning', 'execute', 'review']);
-
 export interface RevokeFactoryRunBindingsForWorkItemInput {
   orgId: string;
   factoryProjectId: string;
@@ -422,7 +414,7 @@ export interface CommitFactoryTransitionInput {
   destinationStage: string;
   actorId: string;
   ingress: { identity: string; triggerType: string; transitionId: string };
-  ruleSetVersion: string;
+  configVersion: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
@@ -1171,6 +1163,9 @@ export interface FactoryAttentionScope {
 
 export class WorkItemsStorage extends FactoryStorageDomain {
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
+  // Storage does not know boards. Until the host says which phases are terminal,
+  // no card counts as finished, so the boot sweep never supersedes on a guess.
+  #isTerminal: (item: WorkItemRow) => boolean = () => false;
 
   constructor() {
     super('work-items');
@@ -1183,6 +1178,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    */
   onAttentionChanged(listener: (scope: FactoryAttentionScope) => void): void {
     this.#attentionChanged = listener;
+  }
+
+  /**
+   * Wired once at boot, before `init()`. Tells the legacy attention sweep and
+   * the stale-binding sweep which cards sit in a phase their installed board
+   * declares terminal.
+   */
+  useTerminalPhasePredicate(isTerminal: (item: WorkItemRow) => boolean): void {
+    this.#isTerminal = isTerminal;
   }
 
   async init(): Promise<void> {
@@ -1647,7 +1651,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
             ingress_id: ingress.id,
             work_item_id: item.id,
-            rule_set_version: input.ruleSetVersion,
+            rule_set_version: input.configVersion,
             expected_revision: input.expectedRevision,
             outcome,
             code,
@@ -1788,7 +1792,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
           ingress_id: ingress.id,
           work_item_id: item?.id ?? null,
-          rule_set_version: input.ruleSetVersion,
+          rule_set_version: input.configVersion,
           expected_revision: input.expectedRevision,
           outcome,
           code,
@@ -2482,7 +2486,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         if (inspectedWorkItems.has(itemKey)) continue;
         inspectedWorkItems.add(itemKey);
         const item = await this.get({ orgId: decision.orgId, id: decision.workItemId });
-        if (!item || !isTerminalFactoryRuleStage(item.stages)) continue;
+        if (!item || !this.#isTerminal(item)) continue;
         await this.supersedeDecisionsForWorkItem({
           orgId: decision.orgId,
           factoryProjectId: decision.factoryProjectId,
@@ -2645,10 +2649,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           item = await this.get({ orgId: binding.orgId, id: binding.workItemId });
           itemCache.set(key, item);
         }
+        // Terminal-ness comes from the installed board via the host-wired
+        // predicate; an unknown board or phase is never treated as finished.
         stale =
           !item ||
           item.stages.length !== 1 ||
-          !ACTIVE_RUN_BINDING_STAGES.has(item.stages[0]!) ||
+          this.#isTerminal(item) ||
           item.factoryProjectId !== binding.factoryProjectId;
       }
       if (!stale) continue;

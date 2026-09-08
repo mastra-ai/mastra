@@ -20,7 +20,7 @@ function reviewContext(headBranch: string): FactoryStageRuleContext {
     ingress: { type: 'rule', id: 'ingress-1' },
     cause: 'test',
     causalChain: [],
-    ruleSetVersion: 'test',
+    configVersion: 'test',
     item,
     board: 'review',
     itemRevision: 1,

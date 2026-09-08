@@ -42,6 +42,22 @@ export function createLifecycleTestRegistry(handlers: BoardDefinition<string, st
   ]);
 }
 
+/** Work board with its tool-result rules replaced, for exercising the processor's tool ingress. */
+export function createToolRuleTestRegistry(tools: BoardDefinition<string, string>['tools']): BoardRegistry {
+  const board = defineBoard({
+    id: 'work',
+    title: 'Work tool-rule fixture',
+    initialPhase: 'intake',
+    phases: workBoard.phases,
+    transitionPolicy: workBoard.transitionPolicy,
+    tools: { ...tools },
+  });
+  return new Map<string, BoardDefinition<string, string>>([
+    [board.id, board],
+    [reviewBoard.id, reviewBoard],
+  ]);
+}
+
 export function createTestBoard(
   options: { id?: string; onShipped?: FactoryRuleHandler<FactoryStageRuleContext> } = {},
 ) {
@@ -50,9 +66,11 @@ export function createTestBoard(
     title: 'Release',
     initialPhase: 'queued',
     phases: {
-      queued: { title: 'Queued', next: 'shipped' },
+      queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipping', skip: 'shipped' } },
+      shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
       shipped: {
         title: 'Shipped',
+        kind: 'terminal',
         onEnter: options.onShipped ? { issue: options.onShipped } : undefined,
       },
     },

@@ -70,6 +70,7 @@ export const reviewBoard = defineBoard({
   phases: {
     intake: {
       title: 'Intake',
+      kind: 'resting',
       outcomes: {
         reviewRequested: 'review',
         merged: 'done',
@@ -79,6 +80,8 @@ export const reviewBoard = defineBoard({
     },
     review: {
       title: 'Reviewing',
+      kind: 'working',
+      role: 'review',
       outcomes: {
         parked: 'intake',
         merged: 'done',
@@ -88,10 +91,12 @@ export const reviewBoard = defineBoard({
     },
     done: {
       title: 'Done',
+      kind: 'terminal',
       outcomes: { updated: 'review' },
     },
     canceled: {
       title: 'Canceled',
+      kind: 'terminal',
       outcomes: { reviewRequested: 'review' },
     },
   },

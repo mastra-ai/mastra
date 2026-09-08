@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
 function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
@@ -122,38 +123,51 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   title: 'Work',
   initialPhase: 'intake',
   transitionPolicy: workTransitionPolicy,
+  tools: { submit_plan: { onResult: advanceApprovedPlan } },
   phases: {
     intake: {
       title: 'Intake',
+      kind: 'resting',
       outcomes: allOtherPhases,
       onEnter: { issue: onArrival(triageIssueEntry) },
     },
     triage: {
       title: 'Triage',
+      kind: 'working',
+      role: 'triage',
       outcomes: allOtherPhases,
       onEnter: { issue: triageIssueEntry, linearIssue: investigateTriagedLinearIssue },
     },
     planning: {
       title: 'Planning',
+      kind: 'working',
+      role: 'plan',
       outcomes: allOtherPhases,
       onEnter: { issue: planWorkItem, linearIssue: planWorkItem, manual: planWorkItem },
     },
     execute: {
       title: 'Building',
+      kind: 'working',
+      role: 'work',
       outcomes: allOtherPhases,
       onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, manual: buildWorkItem },
     },
     review: {
       title: 'Review',
+      // Work's Review is carried by the work seat: the builder answers review feedback on its own PR.
+      kind: 'working',
+      role: 'work',
       outcomes: allOtherPhases,
     },
     done: {
       title: 'Done',
+      kind: 'terminal',
       outcomes: allOtherPhases,
       onEnter: { issue: completeIssue },
     },
     canceled: {
       title: 'Canceled',
+      kind: 'terminal',
       outcomes: allOtherPhases,
     },
   },

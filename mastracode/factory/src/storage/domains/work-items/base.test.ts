@@ -121,7 +121,7 @@ describe('WorkItemsStorage', () => {
         destinationStage: 'intake',
         actorId: 'triage-agent',
         ingress: { identity, triggerType: 'agent', transitionId: identity },
-        ruleSetVersion: 'rules-v1',
+        configVersion: 'rules-v1',
         causalChain: [],
         evaluation: { outcome: 'accepted', decisions: [] },
         triageType,
@@ -169,7 +169,7 @@ describe('WorkItemsStorage', () => {
         ...scope,
         workItemId: null,
         ingress: { identity: 'linear:issue:ENG-1:1', triggerType: 'issue.observed' },
-        ruleSetVersion: 'v1',
+        configVersion: 'v1',
         expectedRevision: null,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -437,6 +437,49 @@ describe('WorkItemsStorage', () => {
     expect((await storage.get({ orgId: 'org1', id: child.item.id }))?.parentWorkItemId).toBeNull();
   });
 
+  it('never supersedes failed decisions at boot until the host says which phases are terminal', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const created = await storage.upsert({ ...scope, userId: 'u', input: { ...input, stages: ['done'] } });
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: created.item.id,
+      ingress: { identity: 'legacy-1', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: created.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'legacy-1' }],
+      causalChain: [],
+      now,
+    });
+    const [claimed] = await storage.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+    if (!claimed) throw new Error('Expected a claimable decision');
+    await storage.failDeferredDecision({
+      ...scope,
+      id: claimed.id,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'boom',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    await storage.repairLegacyAttentionState();
+    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('failed');
+
+    storage.useTerminalPhasePredicate(item => item.stages[0] === 'done');
+    await storage.repairLegacyAttentionState();
+    expect((await storage.listDeferredDecisions('org1', 'p1'))[0]?.status).toBe('superseded');
+  });
+
   it('pages each status on its own newest-first keyset', async () => {
     const storage = await makeStorage();
     const scope = { orgId: 'org1', factoryProjectId: 'p1' };
@@ -449,7 +492,7 @@ describe('WorkItemsStorage', () => {
         ...scope,
         workItemId: created.item.id,
         ingress: { identity: `park-${index}`, triggerType: 'test' },
-        ruleSetVersion: 'rules-v1',
+        configVersion: 'rules-v1',
         expectedRevision: current?.revision ?? created.item.revision,
         actor: { type: 'system', id: 'rules' },
         outcome: { status: 'accepted' },
@@ -499,7 +542,7 @@ describe('WorkItemsStorage', () => {
       ...scope,
       workItemId: created.item.id,
       ingress: { identity: 'receipt-race', triggerType: 'test' },
-      ruleSetVersion: 'rules-v1',
+      configVersion: 'rules-v1',
       expectedRevision: created.item.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },
