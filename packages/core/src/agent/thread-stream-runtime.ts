@@ -2785,9 +2785,10 @@ export class AgentThreadStreamRuntime {
       throw new Error('cancelQueuedMessages requires exactly one of signalIds or queueOwnerId');
     }
     const matches = (pending: PendingIdleSignal<any>) =>
-      hasSignalIds
+      pending.agent === agent &&
+      (hasSignalIds
         ? (target as { signalIds: string[] }).signalIds.includes(pending.signal.id)
-        : pending.agent === agent && pending.queueOwnerId === (target as { queueOwnerId: string }).queueOwnerId;
+        : pending.queueOwnerId === (target as { queueOwnerId: string }).queueOwnerId);
     const cancelledSignalIds: string[] = [];
     const queue = state.pendingIdleSignalsByThread.get(key);
     if (queue) {
