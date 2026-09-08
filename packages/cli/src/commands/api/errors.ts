@@ -7,7 +7,8 @@ export type ApiErrorCode =
   | 'REQUEST_TIMEOUT'
   | 'HTTP_ERROR'
   | 'SCHEMA_UNAVAILABLE'
-  | 'PLATFORM_RESOLUTION_FAILED';
+  | 'PLATFORM_RESOLUTION_FAILED'
+  | 'PLATFORM_INVALID_RESPONSE';
 
 export class ApiCliError extends Error {
   constructor(

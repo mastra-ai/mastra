@@ -27,6 +27,7 @@ import { registerEnvDbCommands } from './commands/db/index.js';
 import { unifiedDeployAction } from './commands/deploy/index.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
+import { registerExperimentsCommand } from './commands/experiments/command.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -101,6 +102,7 @@ program
   .action(initProject);
 
 registerApiCommand(program);
+registerExperimentsCommand(program);
 
 program
   .command('lint')
