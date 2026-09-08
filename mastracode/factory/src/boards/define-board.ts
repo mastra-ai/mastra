@@ -4,13 +4,7 @@ import type {
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '../rules/types.js';
-import {
-  BOARD_IDENTIFIER_RE,
-  IDENTIFIER_RE,
-  MAX_BOARD_IDENTIFIER_LENGTH,
-  MAX_ROLE_LENGTH,
-  MAX_TOOL_NAME_LENGTH,
-} from '../rules/validation.js';
+import { IDENTIFIER_RE, isBoardIdentifier, MAX_ROLE_LENGTH, MAX_TOOL_NAME_LENGTH } from '../rules/validation.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
@@ -101,12 +95,7 @@ export class BoardDefinitionError extends Error {
 const PHASE_KINDS: ReadonlySet<string> = new Set<BoardPhaseKind>(['resting', 'working', 'terminal']);
 
 function validateBoardIdentifier(value: unknown, label: string): void {
-  if (
-    typeof value !== 'string' ||
-    value.length > MAX_BOARD_IDENTIFIER_LENGTH ||
-    value !== value.trim() ||
-    !BOARD_IDENTIFIER_RE.test(value)
-  ) {
+  if (!isBoardIdentifier(value)) {
     throw new BoardDefinitionError(`${label} must be a valid board identifier.`);
   }
 }

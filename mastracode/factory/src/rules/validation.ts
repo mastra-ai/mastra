@@ -25,8 +25,8 @@ const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
-export const BOARD_IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['github-issue', 'github-pr', 'linear-issue', 'manual'];
@@ -72,13 +72,12 @@ function boundedString(value: unknown, label: string, max: number, pattern?: Reg
   return normalized;
 }
 
+export function isBoardIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_BOARD_IDENTIFIER_LENGTH && BOARD_IDENTIFIER_RE.test(value);
+}
+
 function boardIdentifier(value: unknown, label: string): string {
-  if (
-    typeof value !== 'string' ||
-    value.length > MAX_BOARD_IDENTIFIER_LENGTH ||
-    value !== value.trim() ||
-    !BOARD_IDENTIFIER_RE.test(value)
-  ) {
+  if (!isBoardIdentifier(value)) {
     throw new FactoryRuleValidationError(`${label} is invalid.`);
   }
   return value;
