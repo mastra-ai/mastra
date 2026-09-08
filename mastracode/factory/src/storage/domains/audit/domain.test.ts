@@ -356,6 +356,10 @@ describe('AuditDomain', () => {
       limit: 25,
     });
 
+    const unknown = await app.request(`/web/factory/projects/${project.id}/audit?namespaces=worktree`);
+    expect(unknown.status).toBe(400);
+    expect(list).toHaveBeenCalledTimes(1);
+
     await app.request(`/web/factory/projects/${project.id}/audit?limit=lots`);
     expect(list.mock.calls[1]?.[0].limit).toBeUndefined();
   });

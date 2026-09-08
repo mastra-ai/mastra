@@ -93,13 +93,15 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
+/** The actions a `namespaces=` query names: none when it names only unknown ones, `undefined` when it names nothing. */
 function actionsInRequestedNamespaces(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
-  const namespaces = raw
-    .split(',')
-    .map(namespace => namespace.trim())
-    .filter(isAuditNamespace);
-  return namespaces.length > 0 ? auditActionsInNamespaces(namespaces) : undefined;
+  return auditActionsInNamespaces(
+    raw
+      .split(',')
+      .map(namespace => namespace.trim())
+      .filter(isAuditNamespace),
+  );
 }
 
 function parseActorIdsParam(raw: string | undefined): string[] {
@@ -332,10 +334,13 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
           const project = await this.#projects.get({ orgId: tenant.orgId, id: projectId });
           if (!project) return c.json({ error: 'Project not found' }, 404);
 
+          const actions = actionsInRequestedNamespaces(c.req.query('namespaces'));
+          if (actions?.length === 0) return c.json({ error: 'unknown_namespaces' }, 400);
+
           const page = await this.list({
             orgId: tenant.orgId,
             factoryProjectId: projectId,
-            actions: actionsInRequestedNamespaces(c.req.query('namespaces')),
+            actions,
             actorId: c.req.query('actor') || undefined,
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
