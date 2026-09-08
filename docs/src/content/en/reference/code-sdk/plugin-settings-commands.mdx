@@ -7,9 +7,9 @@ packages:
 
 # Plugin settings commands
 
-The optional `settingsCommands` property on `defineMastraCodePlugin()` declares settings forms for an interactive host. Unlike Markdown slash commands, these definitions aren't prompts sent to a model. The SDK defines and validates the form; the host supplies the interface and command registration.
+The optional `settingsCommands` property on `defineMastraCodePlugin()` declares settings forms for an interactive host. Unlike Markdown slash commands, these definitions aren't prompts sent to a model. The SDK defines and validates the form. The host supplies the interface and command registration.
 
-SDK, Factory, and headless sessions don't become interactive subscribers just because a Session exists. A host must supply the interactive-binding capability. This API doesn't start timers, create threads, or persist settings automatically.
+An existing Session doesn't make an SDK, Factory, or headless consumer an interactive subscriber. The host must supply the interactive-binding capability. Thread creation and timers are outside this API, and plugins handle their own persistence.
 
 ## Usage example
 
@@ -88,7 +88,7 @@ Every field has a nonempty `label` and optional `description`. Its `type` is `bo
 
 `PluginSettingsContext` contains read-only `session`, `sessionId`, `resourceId`, `threadId`, and `signal` properties. A form retains the binding from when it opened, not whichever thread happens to be active when a callback finishes.
 
-The host aborts the binding signal before a thread/session transition or teardown. Reloading plugins invalidates settings forms from the previous generation, even when a provider's version hasn't changed. The SDK checks cancellation around asynchronous resolution and validation and before calling `save`. A callback that awaits external work must also check `context.signal` before its own persistent write. Cancellation cannot undo a write already committed.
+The host aborts the binding signal before a thread/session transition or teardown. Reloading plugins invalidates settings forms from the previous generation, even when a provider's version hasn't changed. The SDK checks cancellation around asynchronous resolution and validation and before calling `save`. A callback that awaits external work must also check `context.signal` before its own persistent write. Cancellation can't undo a write already committed.
 
 Invalid definitions produce settings diagnostics without disabling unrelated tools or providers. At combined registration, the host passes all built-in and Markdown command names to `PluginManager.getPluginSettingsCommands()`. Native names that collide with those names or with another native contribution are excluded, with diagnostics identifying the plugin and name. The host must display those diagnostics and dispatch only the returned contributions.
 
@@ -97,16 +97,16 @@ Invalid definitions produce settings diagnostics without disabling unrelated too
 The optional runtime methods are:
 
 - `getInteractiveBinding()`: returns the current interactive binding, or `undefined`.
-- `onInteractiveBindingChange(listener)`: synchronously delivers the current binding, including `undefined`, then subsequent transitions. Returns an unsubscribe function.
+- `onInteractiveBindingChange(listener)`: calls the listener synchronously with the current binding or `undefined`. Later transitions trigger further calls. Returns an unsubscribe function.
 
-The SDK's `createInteractiveBindingHost()` helper in `@mastra/code-sdk/plugins/interactive-binding` supplies those methods and a host-only `publish()` method. Publishing replaces and aborts the old binding. Listener exceptions are passed to the supplied error reporter. Publications iterate a snapshot, respect removed listeners, and coalesce reentrant publications before continuing with the newest generation. A provider can subscribe before the first Session exists; it must unsubscribe when stopped. No scheduling or background work is implied by subscription.
+The SDK's `createInteractiveBindingHost()` helper in `@mastra/code-sdk/plugins/interactive-binding` supplies those methods and a host-only `publish()` method. Publishing replaces and aborts the old binding. Listener exceptions are passed to the supplied error reporter. Publication uses a listener snapshot but skips listeners removed during delivery. Reentrant publications are coalesced so delivery continues with the newest generation. A provider can subscribe before the first Session exists. When stopped, it must unsubscribe. No scheduling or background work is implied by subscription.
 
 ## Profile-local data directory
 
-Plugin context includes read-only `dataDir`, distinct from the installation directory `pluginDir`. It is derived from the loader's `homeDir`, `configDir`, and encoded logical plugin ID:
+Plugin context includes read-only `dataDir`, distinct from the installation directory `pluginDir`. It's derived from the loader's `homeDir`, `configDir`, and encoded logical plugin ID:
 
 ```text
 <home>/<configDir>/plugin-data/<encoded-plugin-id>/
 ```
 
-The same ID shares this directory across project/global installations and versions. Different profiles don't share it. Path traversal IDs are rejected. Computing the path doesn't create directories. The plugin owns directory creation, permissions, record validation, persistence, and cleanup. Don't assume data follows a cloned thread or a different machine.
+Within a profile, project/global installations and versions of the same plugin ID share this directory. The loader rejects path traversal IDs without creating any directories. The plugin owns directory creation, permissions, record validation, persistence, and cleanup. Don't assume data follows a cloned thread or a different machine.
