@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
+import { isSystemReminderSignalType } from '../../../../memory/system-reminders';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
@@ -48,7 +49,7 @@ export function createDurableSignalDrainStep() {
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         for (const pendingSignal of pendingSignals) {
           const signalForTranscript = drainList.addSignal(pendingSignal);
-          if (pubsub) {
+          if (pubsub && !isSystemReminderSignalType(signalForTranscript.type)) {
             await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
           }
         }

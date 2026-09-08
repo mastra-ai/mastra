@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry } from '../boards/test-utils.js';
-import { defaultFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -51,7 +50,7 @@ async function queueFailedPlan(storage: WorkItemsStorage, number: number) {
   });
   const transitions = new FactoryTransitionService({
     storage,
-    rules: defaultFactoryRules({ version: 'rules-v1' }),
+    configVersion: 'rules-v1',
     boards,
   });
   const result = await transitions.transition({

@@ -15,6 +15,7 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type {
   AnySpan,
@@ -1316,7 +1317,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const initialSignalEchoes =
           readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
         for (const initialSignal of initialSignalEchoes) {
-          safeEnqueue(controller, initialSignal.toDataPart());
+          if (!isSystemReminderSignalType(initialSignal.type)) {
+            safeEnqueue(controller, initialSignal.toDataPart());
+          }
         }
 
         const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
@@ -1332,7 +1335,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
           for (const preRunSignal of preRunSignals) {
             const signalForTranscript = messageList.addSignal(preRunSignal);
-            safeEnqueue(controller, signalForTranscript.toDataPart());
+            if (!isSystemReminderSignalType(signalForTranscript.type)) {
+              safeEnqueue(controller, signalForTranscript.toDataPart());
+            }
           }
         }
 

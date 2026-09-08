@@ -28,7 +28,6 @@ import type { BoardRegistry } from '../boards/index.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
-import type { FactoryRules } from '../rules/types.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
@@ -128,12 +127,13 @@ export interface IntegrationContext {
     channelIdentity: ChannelIdentityStorage;
   };
   /**
-   * Factory rule runtime available when the work-item domain is ready.
+   * Factory runtime available when the work-item domain is ready.
    * Integrations attach their own provider event rules to their ingress
    * surfaces instead of relying on provider-specific services in the host.
    */
-  rules?: {
-    config: FactoryRules;
+  runtime?: {
+    /** Operator-maintained provenance label stamped on audit rows. */
+    configVersion: string;
     workItems: WorkItemsStorage;
     /** Installed boards, so integrations read phase semantics instead of matching names. */
     boards: BoardRegistry;

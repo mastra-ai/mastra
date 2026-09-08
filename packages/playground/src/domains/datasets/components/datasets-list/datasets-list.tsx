@@ -8,6 +8,7 @@ import {
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
@@ -108,9 +109,7 @@ export function DatasetsList({
                 {tags.length > 0 ? (
                   <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
                     {tags.slice(0, 2).map(tag => (
-                      <Badge key={tag} size="xs" className="shrink-0">
-                        {tag}
-                      </Badge>
+                      <ComputedTag key={tag} value={tag} className="shrink-0" />
                     ))}
                     {tags.length > 2 && <span className="text-neutral2 shrink-0 text-[10px]">+{tags.length - 2}</span>}
                   </div>

@@ -65,7 +65,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
-  transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
+  transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
@@ -830,7 +830,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               metadata: {
                 transitionId: result.transitionId,
                 ingressType: parsed.ingress.type,
-                ruleSetVersion: transitionService.ruleSetVersion,
+                configVersion: transitionService.configVersion,
                 ...(result.status === 'accepted'
                   ? { to: result.stage, revision: result.revision }
                   : { code: result.code, reason: result.reason }),

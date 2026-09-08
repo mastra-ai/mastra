@@ -857,6 +857,52 @@ describe('CachingPubSub', () => {
       // listPush should NOT be called when increment failed (avoids duplicate index-0 entries)
       expect(listPushSpy).not.toHaveBeenCalled();
     });
+
+    it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
+      const topic = 'single-roundtrip-topic';
+      const cache = new InMemoryServerCache();
+      const indexedSpy = vi.spyOn(cache, 'listPushIndexed');
+
+      const pubsub = new CachingPubSub(innerPubsub, cache);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { a: 1 } });
+
+      expect(indexedSpy).toHaveBeenCalledTimes(1);
+      expect(indexedSpy).toHaveBeenCalledWith(
+        `pubsub:${topic}`,
+        `pubsub:${topic}:counter`,
+        expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
+      );
+      // The value handed to the cache must not carry a pre-assigned index
+      expect(indexedSpy.mock.calls[0]![2]).not.toHaveProperty('index');
+
+      // Live event carries the index the cache assigned
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ index: 0 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached).toHaveLength(1);
+      expect((cached[0] as any).index).toBe(0);
+    });
+
+    it('delivers live without an index when listPushIndexed fails', async () => {
+      const topic = 'indexed-fail-topic';
+      const cache = new InMemoryServerCache();
+      cache.listPushIndexed = async () => {
+        throw new Error('atomic write failed');
+      };
+      const pubsub = new CachingPubSub(innerPubsub, cache);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+    });
   });
 
   describe('steady-state dedup after replay', () => {

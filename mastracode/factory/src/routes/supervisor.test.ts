@@ -6,7 +6,6 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -34,7 +33,7 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       workItems: seed.workItems,
       comments: seed.comments,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
+      transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
       liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
     }).routes(),
   );
@@ -61,7 +60,7 @@ async function seedFailure(workItem: WorkItemRow, now: Date) {
     factoryProjectId: PROJECT_ID,
     workItemId: workItem.id,
     ingress: { identity: `supervisor-failure-${now.getTime()}`, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))?.revision ?? workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },

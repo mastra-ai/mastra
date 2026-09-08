@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { defineBoard } from './define-board.js';
 import { createBoardRegistry } from './registry.js';
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
+import { boardForWorkItem, resolveBoardToolRule, resolvePhaseSemantics, workItemPhaseSemantics } from './semantics.js';
 import { createTestBoard } from './test-utils.js';
 
 describe('boardForWorkItem', () => {
@@ -81,6 +81,32 @@ describe('workItemPhaseSemantics', () => {
   it('is undefined for multi-stage rows', () => {
     expect(
       workItemPhaseSemantics(boards, { board: 'work', externalSource: null, stages: ['review', 'done'] }),
+    ).toBeUndefined();
+  });
+});
+
+describe('resolveBoardToolRule', () => {
+  it('resolves only from the installed board that declares the tool', () => {
+    const onResult = () => undefined;
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      tools: { ship_it: { onResult } },
+    });
+    const boards = createBoardRegistry({ boards: [release] });
+    expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
+    expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
+    expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
+    expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();
+    expect(resolveBoardToolRule(boards, 'work', 'ship_it')).toBeUndefined();
+    expect(resolveBoardToolRule(boards, 'missing', 'ship_it')).toBeUndefined();
+    expect(
+      resolveBoardToolRule(createBoardRegistry({ boards: [], includeDefaultBoards: false }), 'work', 'submit_plan'),
     ).toBeUndefined();
   });
 });
