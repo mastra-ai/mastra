@@ -87,6 +87,9 @@ describe('PgVector disableInit', () => {
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
       return { rows: [] };
     });
     mockClient.release.mockReset();

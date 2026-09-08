@@ -96,6 +96,9 @@ describe('PgVector row counts', () => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       statements.push(sql);
 
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
       if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'vector' }] };
       }

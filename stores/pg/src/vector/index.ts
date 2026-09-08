@@ -498,6 +498,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'`,
     );
 
+    const state = await this.getNamespaceSchemaState(tableName, client);
+    if (!state.composite_index) {
+      const namespaceIndexName = await this.getNamespaceIndexName(parsedIndexName);
+      await client.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
+      );
+    }
+
     const legacyConstraints = await client.query<{ conname: string }>(
       `SELECT c.conname
        FROM pg_constraint c
@@ -511,11 +519,89 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const parsedConstraintName = parseSqlIdentifier(conname, 'constraint name');
       await client.query(`ALTER TABLE ${tableName} DROP CONSTRAINT "${parsedConstraintName}"`);
     }
+  }
 
-    const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
-    await client.query(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "${namespaceIndexName}" ON ${tableName} (namespace, vector_id)`,
+  private async getNamespaceIndexName(parsedIndexName: string): Promise<string> {
+    const fullName = `${parsedIndexName}_namespace_vector_id_idx`;
+    if (fullName.length <= 63) {
+      return fullName;
+    }
+    const hasher = await this.hasher;
+    const suffix = `_ns_${hasher.h32(parsedIndexName).toString(16)}_idx`;
+    return `${parsedIndexName.slice(0, 63 - suffix.length)}${suffix}`;
+  }
+
+  private async getNamespaceSchemaState(tableName: string, client: pg.PoolClient) {
+    const result = await client.query<{
+      vector_id: boolean;
+      namespace: boolean;
+      composite_index: boolean;
+      legacy_constraint: boolean;
+    }>(
+      `SELECT
+         EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass($1)
+           AND attname = 'vector_id' AND attnum > 0 AND NOT attisdropped) AS vector_id,
+         EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass($1)
+           AND attname = 'namespace' AND attnum > 0 AND NOT attisdropped) AS namespace,
+         EXISTS (
+           SELECT 1 FROM pg_index i
+           WHERE i.indrelid = to_regclass($1)
+             AND i.indisunique AND i.indisvalid AND i.indisready AND i.indimmediate
+             AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indnkeyatts = 2
+             AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+                  FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, position)
+                  JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+                  WHERE k.position <= i.indnkeyatts) = ARRAY['namespace', 'vector_id']
+         ) AS composite_index,
+         EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = to_regclass($1)
+           AND contype = 'u' AND pg_get_constraintdef(oid) = 'UNIQUE (vector_id)') AS legacy_constraint`,
+      [tableName],
     );
+    return result.rows[0]!;
+  }
+
+  private async reconcileNamespace(indexName: string, client: pg.PoolClient): Promise<boolean> {
+    const { tableName } = this.getTableName(indexName);
+    await client.query('BEGIN');
+    try {
+      // Resolve aliases (explicit schema and search_path) to the same cross-process lock.
+      await client.query('SELECT pg_advisory_xact_lock(1936876916, to_regclass($1)::oid::int)', [tableName]);
+      const state = await this.getNamespaceSchemaState(tableName, client);
+      if (!state.vector_id) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+      if (!state.namespace || !state.composite_index || state.legacy_constraint) {
+        if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+          throw new MastraError({
+            id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            text:
+              `Vector index "${indexName}" requires namespace migration and schema changes are disabled. ` +
+              `Call createIndex({ indexName: "${indexName}", dimension }) with init enabled, ` +
+              `or apply the namespace migration SQL from the @mastra/pg changelog.`,
+            details: { indexName },
+          });
+        }
+        await this.ensureNamespaceSchema(indexName, client);
+        const migrated = await this.getNamespaceSchemaState(tableName, client);
+        if (!migrated.namespace || !migrated.composite_index || migrated.legacy_constraint) {
+          throw new MastraError({
+            id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.USER,
+            text: `Vector index "${indexName}" requires a valid unique (namespace, vector_id) index. Resolve conflicting index names and retry the namespace migration.`,
+            details: { indexName },
+          });
+        }
+      }
+      await client.query('COMMIT');
+      return true;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
   }
 
   /**
@@ -537,69 +623,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
         const client = await this.pool.connect();
         try {
-          const { tableName, parsedIndexName } = this.getTableName(indexName);
-          const namespaceIndexName = parseSqlIdentifier(`${parsedIndexName}_namespace_vector_id_idx`, 'index name');
-
-          // Reconcile inside a single transaction under a database-scoped advisory lock so the
-          // migration is atomic across PgVector instances/processes. Without this, a second process
-          // could observe the `namespace` column after another process' `ADD COLUMN` commits but
-          // before its `CREATE UNIQUE INDEX` commits, mark the index ready, and run an upsert whose
-          // `ON CONFLICT (namespace, vector_id)` target does not yet exist.
-          await client.query('BEGIN');
-          try {
-            await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`mastra:pg:namespace:${tableName}`]);
-
-            const columns = await client.query<{ attname: string }>(
-              `SELECT attname
-               FROM pg_attribute
-               WHERE attrelid = to_regclass($1)
-                 AND attname IN ('vector_id', 'namespace')
-                 AND attnum > 0
-                 AND NOT attisdropped`,
-              [tableName],
-            );
-            const names = new Set(columns.rows.map(row => row.attname));
-            if (!names.has('vector_id')) {
-              // Not a vector table (or missing) - let the caller's own query surface the error.
-              await client.query('ROLLBACK');
-              return;
-            }
-
-            const compositeIndex = await client.query(
-              `SELECT 1
-               FROM pg_index i
-               JOIN pg_class c ON c.oid = i.indexrelid
-               WHERE i.indrelid = to_regclass($1)
-                 AND c.relname = $2`,
-              [tableName, namespaceIndexName],
-            );
-
-            // Only mark ready once both the column and its composite unique index exist. This also
-            // heals partial migrations left by older versions that committed each DDL separately.
-            const ready = names.has('namespace') && (compositeIndex.rowCount ?? 0) > 0;
-            if (!ready) {
-              if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
-                throw new MastraError({
-                  id: createVectorErrorId('PG', 'ENSURE_NAMESPACE', 'MIGRATION_REQUIRED'),
-                  domain: ErrorDomain.MASTRA_VECTOR,
-                  category: ErrorCategory.USER,
-                  text:
-                    `Vector index "${indexName}" predates namespace support and schema changes are disabled. ` +
-                    `Call createIndex({ indexName: "${indexName}", dimension }) with init enabled, ` +
-                    `or apply the namespace migration SQL from the @mastra/pg changelog.`,
-                  details: { indexName },
-                });
-              }
-              await this.ensureNamespaceSchema(indexName, client);
-            }
-
-            await client.query('COMMIT');
-          } catch (error) {
-            await client.query('ROLLBACK');
-            throw error;
+          if (await this.reconcileNamespace(indexName, client)) {
+            this.namespaceReadyIndexes.add(indexName);
+          } else {
+            // Missing/non-vector tables must be checked again after external provisioning.
+            this.namespaceReadyCache.delete(indexName);
           }
-
-          this.namespaceReadyIndexes.add(indexName);
         } finally {
           client.release();
         }
@@ -1240,9 +1269,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             namespace VARCHAR(255) NOT NULL DEFAULT '${DEFAULT_NAMESPACE}'
           );
         `);
-          await this.ensureNamespaceSchema(indexName, client);
+          if (await this.reconcileNamespace(indexName, client)) {
+            this.namespaceReadyIndexes.add(indexName);
+          }
           this.createdIndexes.set(indexName, indexCacheKey);
-          this.namespaceReadyIndexes.add(indexName);
           this.indexVectorTypes.set(indexName, vectorType);
 
           if (buildIndex) {

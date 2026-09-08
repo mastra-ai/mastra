@@ -83,6 +83,9 @@ describe('PgVector schema-aware vector type handling', () => {
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
 
       if (sql.includes('information_schema.schemata')) {
         return { rows: [{ exists: true }] };
@@ -138,6 +141,9 @@ describe('PgVector halfvec version detection after custom schema install', () =>
     mockClient.query.mockImplementation(async (text: any) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
 
       // Schema check
       if (sql.includes('information_schema.schemata')) {
@@ -215,6 +221,9 @@ describe('PgVector custom schema sets search_path before index creation and quer
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
 
       // Schema check
       if (sql.includes('information_schema.schemata')) {
@@ -421,6 +430,9 @@ describe('PgVector buildIndex uses correct operator class for halfvec', () => {
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
 
       // Extension detection - return public schema with version 0.8.0
       if (sql.includes('FROM pg_extension e')) {
@@ -507,6 +519,9 @@ describe('PgVector catalog lookups resolve through search_path when schemaName i
     mockClient.query.mockImplementation(async (text: any, values?: any[]) => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       queryHistory.push({ text: sql, values });
+      if (sql.includes('AS composite_index')) {
+        return { rows: [{ vector_id: true, namespace: true, composite_index: true, legacy_constraint: false }] };
+      }
 
       if (sql.includes('information_schema.schemata')) {
         return { rows: [{ exists: true }] };
