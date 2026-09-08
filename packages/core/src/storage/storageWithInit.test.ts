@@ -30,6 +30,27 @@ describe('augmentWithInit', () => {
     expect(knowledgeInitSpy).toHaveBeenCalledOnce();
   });
 
+  it('shares initialization and retries across wrappers and explicit Knowledge activation', async () => {
+    const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
+    const storage = new MastraCompositeStore({ id: 'shared-activation', domains: { knowledge } });
+    const init = vi.spyOn(storage, 'init').mockRejectedValueOnce(new Error('temporary startup failure'));
+    const knowledgeInit = vi.spyOn(knowledge, 'init');
+    const first = augmentWithInit(storage);
+    const second = augmentWithInit(storage);
+
+    await expect(Promise.all([first.getStore('knowledge'), second.initKnowledge()])).rejects.toThrow(
+      'temporary startup failure',
+    );
+    expect(init).toHaveBeenCalledTimes(1);
+    expect(knowledgeInit).not.toHaveBeenCalled();
+
+    await Promise.all([first.getStore('knowledge'), second.initKnowledge()]);
+    await storage.initKnowledge();
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(knowledgeInit).toHaveBeenCalledTimes(1);
+    expect(first).toBe(second);
+  });
+
   it('retains the original storage identity across augmentation', () => {
     const storage = new MastraCompositeStore({ id: 'source' });
     const augmented = augmentWithInit(storage);

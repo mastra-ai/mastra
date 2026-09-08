@@ -114,7 +114,7 @@ import type {
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue, SqliteResultSet as ResultSet } from '../../db/client';
-import { withClientWriteLock } from '../../db/write-lock';
+import { withClientReadLock, withClientWriteLock } from '../../db/write-lock';
 
 const loadKnowledgeCore = createKnowledgeCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
@@ -361,16 +361,21 @@ const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
 export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #rawClient: Client;
   readonly #rawDb: LibSQLDB;
+  readonly #reader: Executor;
+  #isMemory = false;
   #initError?: Error;
   readonly #schemaAccess = new AsyncLocalStorage<true>();
 
   // A failed schema check latches: every operation rethrows it until init() or dangerouslyReset() succeeds.
-  get #client(): Client {
+  #assertSchemaUsable(): void {
     if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
+  }
+  get #client(): Client {
+    this.#assertSchemaUsable();
     return this.#rawClient;
   }
   get #db(): LibSQLDB {
-    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
+    this.#assertSchemaUsable();
     return this.#rawDb;
   }
 
@@ -379,6 +384,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const storageIsolationKey = config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, client);
     super({ storageIsolationKey });
     this.#rawClient = client;
+    this.#reader = {
+      execute: statement => {
+        this.#assertSchemaUsable();
+        return this.#isMemory ? withClientReadLock(client, () => client.execute(statement)) : client.execute(statement);
+      },
+    };
     this.#rawDb = new LibSQLDB({
       client,
       maxRetries: config.maxRetries,
@@ -408,6 +419,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async #init(): Promise<void> {
     await loadKnowledgeCore();
+    if (this.#client.protocol === 'file') {
+      const databases = await this.#reader.execute('PRAGMA database_list');
+      this.#isMemory = databases.rows.some(row => row.name === 'main' && row.file === '');
+    }
     await this.#transaction(tx => this.#initializeSchema(tx));
   }
 
@@ -634,7 +649,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   override async getAccessEpoch(): Promise<number> {
-    const result = await this.#client.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+    const result = await this.#reader.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
     return Number(result.rows[0]?.epoch ?? 0);
   }
 
@@ -642,7 +657,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: { scopeNodeId?: string; includeDeleted?: boolean } = {},
   ): Promise<KnowledgeScopeGrant[]> {
     const scopeFilter = input.scopeNodeId;
-    const result = await this.#client.execute(
+    const result = await this.#reader.execute(
       input.includeDeleted
         ? scopeFilter
           ? {
@@ -870,23 +885,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getNode(id: string): Promise<KnowledgeNode | null> {
-    return this.#getNode(this.#client, id);
+    return this.#getNode(this.#reader, id);
   }
 
   async getNodeIncludingDeleted(id: string): Promise<KnowledgeNode | null> {
-    return this.#getNodeIncludingDeleted(this.#client, id);
+    return this.#getNodeIncludingDeleted(this.#reader, id);
   }
 
   async getNodeScopeIds(nodeId: string): Promise<KnowledgeScopeIds> {
-    return this.#getNodeScopeIds(this.#client, nodeId);
+    return this.#getNodeScopeIds(this.#reader, nodeId);
   }
 
   async getNodeByName(input: { name: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeNode | null> {
-    return this.#getNodeByName(this.#client, input.name, canonicalizeKnowledgeScopeIds(input.scopeIds));
+    return this.#getNodeByName(this.#reader, input.name, canonicalizeKnowledgeScopeIds(input.scopeIds));
   }
 
   async resolveNode(input: { name: string; scopeIds: KnowledgeScopeIds }): Promise<KnowledgeNode | null> {
-    return this.#resolveNode(this.#client, input.name, canonicalizeKnowledgeScopeIds(input.scopeIds));
+    return this.#resolveNode(this.#reader, input.name, canonicalizeKnowledgeScopeIds(input.scopeIds));
   }
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
@@ -927,7 +942,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
     }
     args.push(input.limit ?? 100);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE ${clauses.join(' AND ')} ORDER BY n.updatedAt DESC, n.name ASC, n.id ASC LIMIT ?`,
       args,
     });
@@ -1178,7 +1193,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getRecord(input: { id: string; includeDeleted?: boolean }): Promise<KnowledgeRecord | null> {
-    return this.#getRecord(this.#client, input.id, input.includeDeleted ?? false);
+    return this.#getRecord(this.#reader, input.id, input.includeDeleted ?? false);
   }
 
   async getVisibleRecord(input: {
@@ -1186,12 +1201,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     scopeIds: KnowledgeScopeIds;
     includeDeleted?: boolean;
   }): Promise<KnowledgeRecord | null> {
-    const record = await this.#getRecord(this.#client, input.id, input.includeDeleted ?? false);
-    return record && (await this.#isRecordVisible(this.#client, record, input.scopeIds)) ? record : null;
+    const record = await this.#getRecord(this.#reader, input.id, input.includeDeleted ?? false);
+    return record && (await this.#isRecordVisible(this.#reader, record, input.scopeIds)) ? record : null;
   }
 
   async getRecordScopeIds(recordId: string): Promise<KnowledgeScopeIds> {
-    return this.#getRecordScopeIds(this.#client, recordId);
+    return this.#getRecordScopeIds(this.#reader, recordId);
   }
 
   async listRecords(input: QueryKnowledgeRecordsInput): Promise<QueryKnowledgeRecordsOutput> {
@@ -1215,14 +1230,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push('id > ?');
       args.push(input.after);
     }
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT *,json(metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY id ASC`,
       args,
     });
     const records: KnowledgeRecord[] = [];
     for (const row of result.rows) {
       const record = parseKnowledge(row);
-      if (await this.#isRecordVisible(this.#client, record, scopeIds)) records.push(record);
+      if (await this.#isRecordVisible(this.#reader, record, scopeIds)) records.push(record);
     }
     const limit = input.limit ?? 100;
     return {
@@ -1341,7 +1356,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (!query || scopeIds.length === 0) return [];
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
     const pattern = `%${escapeLikePattern(query)}%`;
-    const nodes = await this.#client.execute({
+    const nodes = await this.#reader.execute({
       sql: `SELECT n.*,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE n.deletedAt IS NULL AND ${visibleNodeSql(scopeIds)} AND (lower(n.name) LIKE ? ESCAPE '=' OR lower(coalesce(n.kind,'')) LIKE ? ESCAPE '=' OR lower(coalesce(json(n.metadata),'')) LIKE ? ESCAPE '=') ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
       args: [...scopeIds, pattern, pattern, pattern, limit],
     });
@@ -1354,12 +1369,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         recordId: node.id,
         name: node.name,
         text: node.name,
-        scopeIds: await this.#getNodeScopeIds(this.#client, node.id),
+        scopeIds: await this.#getNodeScopeIds(this.#reader, node.id),
       });
     }
     if (results.length >= limit) return results;
     const visibleRecord = visibleRecordSql(scopeIds);
-    const records = await this.#client.execute({
+    const records = await this.#reader.execute({
       sql: `SELECT r.*,json(r.metadata) AS metadataJson,p.name AS parent_name FROM "${TABLE_KNOWLEDGE_RECORDS}" r JOIN "${TABLE_KNOWLEDGE_NODES}" p ON p.id=r.nodeId WHERE r.deletedAt IS NULL AND lower(r.text) LIKE ? ESCAPE '=' AND ${visibleRecord.sql} ORDER BY r.id DESC LIMIT ?`,
       args: [pattern, ...visibleRecord.args, limit - results.length],
     });
@@ -1371,7 +1386,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         recordId: record.nodeId,
         name: String(row.parent_name),
         text: record.text,
-        scopeIds: await this.#getRecordScopeIds(this.#client, record.id),
+        scopeIds: await this.#getRecordScopeIds(this.#reader, record.id),
       });
     }
     return results;
@@ -1398,7 +1413,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getScopeAddress(address: string): Promise<KnowledgeScopeAddress | null> {
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE a.address=? AND n.isScope=1 AND n.deletedAt IS NULL`,
       args: [address],
     });
@@ -1408,7 +1423,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   async listScopeAddresses(input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
     const limit = Math.max(1, Math.min(input.limit ?? 100, 1000));
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT a.address,a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.scopeNodeId WHERE n.isScope=1 AND n.deletedAt IS NULL AND (? IS NULL OR a.address>?) ORDER BY a.address ASC LIMIT ?`,
       args: [input.after ?? null, input.after ?? null, limit],
     });
@@ -1416,7 +1431,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT a.source,a.address,a.nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.nodeId WHERE a.source=? AND a.address=? AND n.deletedAt IS NULL`,
       args: [input.source, input.address],
     });
@@ -1425,7 +1440,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async listNodeAddresses(input: { source: string }): Promise<KnowledgeNodeAddress[]> {
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT a.source,a.address,a.nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a.nodeId WHERE a.source=? AND n.deletedAt IS NULL ORDER BY a.address ASC`,
       args: [input.source],
     });
@@ -1654,7 +1669,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     key: string;
   }): Promise<KnowledgeImportState | null> {
     const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
       args: importStateKey(normalized),
     });
@@ -1947,7 +1962,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getImportRun(id: string): Promise<KnowledgeImportRun | null> {
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
       args: [id],
     });
@@ -1990,7 +2005,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     const limit = input.limit ?? 100;
     args.push(limit + 1);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY queuedAt DESC,id DESC LIMIT ?`,
       args,
     });
@@ -2106,7 +2121,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async getProposal(id: string): Promise<KnowledgeProposal | null> {
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=?`,
       args: [id],
     });
@@ -2122,7 +2137,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (scopeIds.length === 0) return null;
     const args: InValue[] = [input.id];
     const visibility = this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE id=? AND ${visibility}`,
       args,
     });
@@ -2155,7 +2170,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     clauses.push(this.#proposalVisibilityPredicate(scopeIds, input.approvalScopeIds, args));
     args.push(limit + 1);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT * FROM "${TABLE_KNOWLEDGE_PROPOSALS}" WHERE ${clauses.join(' AND ')} ORDER BY createdAt DESC,id DESC LIMIT ?`,
       args,
     });
@@ -2576,7 +2591,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     args.push(limit);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT activity.*,json(activity.details) AS detailsJson FROM "${TABLE_KNOWLEDGE_ACTIVITY}" activity WHERE ${clauses.join(' AND ')} ORDER BY activity.id DESC LIMIT ?`,
       args,
     });
@@ -2624,7 +2639,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 100);
     args.push(limit);
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT *,json(scopeIds) AS scopeIdsJson FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}"${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY createdAt ASC,id ASC LIMIT ?`,
       args,
     });
@@ -3123,14 +3138,14 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push('r.id < ?');
       args.push(input.after);
     }
-    const result = await this.#client.execute({
+    const result = await this.#reader.execute({
       sql: `SELECT r.*,json(r.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_RECORDS}" r WHERE ${clauses.join(' AND ')} ORDER BY r.id DESC`,
       args,
     });
     const visible: KnowledgeRecord[] = [];
     for (const row of result.rows) {
       const record = parseKnowledge(row);
-      if (await this.#isRecordVisible(this.#client, record, scopeIds)) visible.push(record);
+      if (await this.#isRecordVisible(this.#reader, record, scopeIds)) visible.push(record);
     }
     const limit = input.limit ?? 100;
     return {
