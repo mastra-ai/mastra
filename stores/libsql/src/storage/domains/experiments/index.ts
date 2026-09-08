@@ -606,7 +606,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           attempt: input.attempt ?? 0,
           traceId: input.traceId ?? null,
           status: input.status ?? null,
-          tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
+          tags: input.tags ?? null,
           toolMockReport: input.toolMockReport ?? null,
           createdAt: nowIso,
         },
@@ -843,6 +843,11 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push('status = ?');
         queryParams.push(args.status);
+      }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push('EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)');
+        queryParams.push(tag);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

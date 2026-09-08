@@ -19,6 +19,7 @@ import {
   paginationQuerySchema,
   tenancyQuerySchema,
   listItemsQuerySchema,
+  listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
   createDatasetBodySchema,
   updateDatasetBodySchema,
@@ -1001,7 +1002,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   path: '/datasets/:datasetId/experiments/:experimentId/results',
   responseType: 'json',
   pathParamSchema: datasetAndExperimentIdPathParams,
-  queryParamSchema: paginationQuerySchema,
+  queryParamSchema: listExperimentResultsQuerySchema,
   responseSchema: listExperimentResultsResponseSchema,
   summary: 'List experiment results',
   description: 'Returns a paginated list of results for the experiment',
@@ -1010,14 +1011,19 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { page, perPage } = params;
+      const { page, perPage, tags } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       // Validate experiment belongs to dataset
       const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
-      const result = await ds.listExperimentResults({ experimentId, page: page ?? 0, perPage: perPage ?? 10 });
+      const result = await ds.listExperimentResults({
+        experimentId,
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+        ...(tags !== undefined ? { tags } : {}),
+      });
       return {
         results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,

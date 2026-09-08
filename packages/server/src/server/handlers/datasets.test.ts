@@ -4,7 +4,11 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { listExperimentsQuerySchema, triggerExperimentBodySchema } from '../schemas/datasets';
+import {
+  listExperimentResultsQuerySchema,
+  listExperimentsQuerySchema,
+  triggerExperimentBodySchema,
+} from '../schemas/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
@@ -24,6 +28,7 @@ import {
   LIST_EXPERIMENT_RESULTS_ROUTE,
   UPDATE_DATASET_ROUTE,
   UPDATE_EXPERIMENT_ROUTE,
+  UPDATE_EXPERIMENT_RESULT_ROUTE,
   UPDATE_ITEM_ROUTE,
 } from './datasets';
 import { createTestServerContext } from './test-utils';
@@ -377,6 +382,71 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('filters listed results by tags (all must match)', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const r1 = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      const r2 = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item2.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: r1.id,
+        tags: ['a'],
+      } as any);
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: r2.id,
+        tags: ['a', 'b'],
+      } as any);
+
+      const list = async (tags?: string[]) =>
+        (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          experimentId: created.experimentId,
+          page: 0,
+          perPage: 10,
+          tags,
+        } as any)) as any;
+
+      const both = await list(['a', 'b']);
+      expect(both.results.map((r: any) => r.id)).toEqual([r2.id]);
+      expect(both.pagination.total).toBe(1);
+
+      const onlyA = await list(['a']);
+      expect(onlyA.results).toHaveLength(2);
+
+      const all = await list();
+      expect(all.results).toHaveLength(2);
+    });
+
+    it('listExperimentResultsQuerySchema coerces a single tag string into an array', () => {
+      expect(listExperimentResultsQuerySchema.parse({ tags: 'a' }).tags).toEqual(['a']);
+      expect(listExperimentResultsQuerySchema.parse({ tags: ['a', 'b'] }).tags).toEqual(['a', 'b']);
+      expect(listExperimentResultsQuerySchema.parse({}).tags).toBeUndefined();
     });
 
     it('create is idempotent on a caller-supplied id', async () => {

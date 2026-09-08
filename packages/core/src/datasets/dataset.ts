@@ -556,6 +556,7 @@ export class Dataset {
    * @param args.experimentId The experiment whose results to list.
    * @param args.traceId      Restrict to results linked to a specific trace.
    * @param args.status       Restrict to a specific per-result review status.
+   * @param args.tags         Restrict to results that have *all* of these tags.
    * @param args.filters      Multi-tenant scoping filters (organization/project).
    * @param args.page         Page number. Defaults to `0`.
    * @param args.perPage      Page size. Defaults to `20`.
@@ -564,6 +565,7 @@ export class Dataset {
     experimentId: string;
     traceId?: string;
     status?: ExperimentResultStatus;
+    tags?: string[];
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
@@ -574,6 +576,7 @@ export class Dataset {
       experimentId: args.experimentId,
       ...(args.traceId !== undefined ? { traceId: args.traceId } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.tags !== undefined ? { tags: args.tags } : {}),
       ...(args.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });

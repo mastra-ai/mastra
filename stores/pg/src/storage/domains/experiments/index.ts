@@ -930,6 +930,11 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
       }
+      // All requested tags must be present (AND semantics)
+      for (const tag of args.tags ?? []) {
+        conditions.push(`"tags" @> $${paramIndex++}::jsonb`);
+        queryParams.push(JSON.stringify([tag]));
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {

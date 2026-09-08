@@ -3134,6 +3134,8 @@ export interface ListExperimentResultsInput {
   experimentId: string;
   traceId?: string;
   status?: ExperimentResultStatus;
+  /** Return only results that have *all* of these tags. Empty/undefined disables the filter. */
+  tags?: string[];
   /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
   filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;

@@ -267,6 +267,12 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const listExperimentResultsQuerySchema = paginationQuerySchema.extend({
+  tags: z
+    .preprocess(v => (typeof v === 'string' ? [v] : v), z.array(z.string()).optional())
+    .describe('Only return results that have all of these tags'),
+});
+
 export const listExperimentsQuerySchema = paginationQuerySchema.extend({
   experimentSetId: z.string().optional(),
   comparisonId: z.string().optional(),

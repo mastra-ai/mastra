@@ -730,6 +730,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       if (args.status) {
         filter.status = args.status;
       }
+      if (args.tags?.length) {
+        filter.tags = { $all: args.tags };
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
