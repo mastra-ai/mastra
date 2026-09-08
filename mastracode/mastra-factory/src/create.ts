@@ -14,6 +14,7 @@ import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
   attachNeonDatabase,
   createServerProject,
+  ensureProductionEnvironment,
   getDatabaseConnection,
   mintOrgApiKey,
   PlatformApiError,
@@ -158,7 +159,7 @@ export async function create(args: CreateArgs): Promise<void> {
 
   // ── Git init ─────────────────────────────────────────────────────────────
   // Ensure `.env` is ignored before staging so the platform secrets we just
-  // wrote (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never enter git history.
+  // wrote (MASTRA_PLATFORM_ACCESS_TOKEN, DATABASE_URL) never enter git history.
   // Idempotent: only appends if the pattern isn't already covered.
   //
   // If we can't write `.gitignore` (permission denied, disk full, …) we must
@@ -307,7 +308,7 @@ async function runPlatformProvisioning({
     }
     envAccumulator.MASTRA_PROJECT_ID = project.id;
 
-    // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_SECRET_KEY.
+    // 4. Mint sk_ WorkOS org API key — becomes MASTRA_PLATFORM_ACCESS_TOKEN.
     //    The platform shows this secret exactly once, so we record it into
     //    the env accumulator immediately after minting.
     const keySpinner = p.spinner();
@@ -324,7 +325,22 @@ async function runPlatformProvisioning({
       keySpinner.stop('API key creation failed.');
       throw err;
     }
-    envAccumulator.MASTRA_PLATFORM_SECRET_KEY = secretKey;
+    envAccumulator.MASTRA_PLATFORM_ACCESS_TOKEN = secretKey;
+
+    const environmentSpinner = p.spinner();
+    environmentSpinner.start('Configuring production environment…');
+    try {
+      envAccumulator.MASTRA_ENVIRONMENT_ID = await ensureProductionEnvironment({
+        token,
+        orgId,
+        projectId: project.id,
+        region: projectRegion,
+      });
+      environmentSpinner.stop('Production environment ready.');
+    } catch (err) {
+      environmentSpinner.stop('Environment setup failed.');
+      throw err;
+    }
 
     // 5-7. Neon attach + poll + connection string.
     const neonSpinner = p.spinner();
@@ -404,7 +420,7 @@ function sanitizeDatabaseName(projectName: string): string {
 /**
  * Append `.env` to the scaffolded project's `.gitignore` if it isn't already
  * ignored. Runs before the initial `git add -A` so freshly-provisioned platform
- * credentials (MASTRA_PLATFORM_SECRET_KEY, DATABASE_URL) never reach the
+ * credentials (MASTRA_PLATFORM_ACCESS_TOKEN, DATABASE_URL) never reach the
  * initial commit.
  *
  * Throws if `.gitignore` cannot be written. Callers MUST treat this as fatal
