@@ -19,6 +19,20 @@ const singleData = [
   { name: 'moderation-agent', values: [400] },
 ];
 
+const statusSegments = [
+  { label: 'Completed', color: 'var(--neutral3)' },
+  { label: 'Running', color: '#facc15' },
+  { label: 'Pending', color: '#fb923c' },
+  { label: 'Failed', color: '#f87171' },
+];
+
+const statusData = [
+  { name: 'travel-questions', values: [0, 10, 0, 0] },
+  { name: 'geo-questions', values: [2, 0, 5, 0] },
+  { name: 'support-tickets', values: [0, 0, 0, 4] },
+  { name: 'billing-faq', values: [3, 0, 0, 0] },
+];
+
 const stackedData = [
   { name: 'chef-agent', values: [2800, 1400] },
   { name: 'eval-agent', values: [1900, 1200] },
@@ -57,6 +71,15 @@ export const Stacked: Story = {
   render: () => (
     <div style={{ width: '30rem', height: 300 }}>
       <HorizontalBars data={stackedData} segments={stackedSegments} maxVal={4200} fmt={fmt} />
+    </div>
+  ),
+};
+
+/** Bright fills (yellow, orange, red) render at full opacity in dark mode; the label must stay readable on them. */
+export const BrightSegments: Story = {
+  render: () => (
+    <div style={{ width: '30rem', height: 300 }}>
+      <HorizontalBars data={statusData} segments={statusSegments} maxVal={10} fmt={fmt} />
     </div>
   ),
 };

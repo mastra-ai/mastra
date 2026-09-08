@@ -344,7 +344,7 @@ describe('LinearIntegration workers', () => {
       projects: { listAll: async () => [] },
       intake: {},
     },
-    rules: { config: {}, workItems: {} },
+    runtime: { configVersion: 'test-v1', workItems: {} },
   };
 
   it('registers a standalone issue reconciler worker', () => {

@@ -1,5 +1,44 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.13
+
+### Patch Changes
+
+- Added a persisted preference for Mastra Code interfaces to opt into native subagents. ([#23335](https://github.com/mastra-ai/mastra/pull/23335))
+
+## 1.7.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`e3e847e`](https://github.com/mastra-ai/mastra/commit/e3e847e32238fa52c0295f57fd04f695d400779d)]:
+  - @mastra/pg@1.23.0-alpha.5
+
+## 1.7.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`f596ff6`](https://github.com/mastra-ai/mastra/commit/f596ff65378fcc7e85fb314d895a38fb2e5b7e7e), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/pg@1.23.0-alpha.4
+
+## 1.7.0-alpha.10
+
+### Patch Changes
+
+- Restore the default explore, plan, and execute subagents in Mastra Code while preserving explicit empty and custom subagent configurations. Match delegation prompt guidance to tool availability and permissions. ([#23217](https://github.com/mastra-ai/mastra/pull/23217))
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
+## 1.7.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`db7cc1c`](https://github.com/mastra-ai/mastra/commit/db7cc1c5d8cd1650c41c57590c25ab86c9e5032f), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`db7cc1c`](https://github.com/mastra-ai/mastra/commit/db7cc1c5d8cd1650c41c57590c25ab86c9e5032f), [`64db1b3`](https://github.com/mastra-ai/mastra/commit/64db1b313bdb02e063019fdcbb8d28608858ae71)]:
+  - @mastra/memory@1.28.3-alpha.3
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/pg@1.23.0-alpha.3
+
 ## 1.7.0-alpha.8
 
 ### Patch Changes

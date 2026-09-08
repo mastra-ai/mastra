@@ -4,6 +4,17 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "userMessage": "Goal: # E2E Goal Plan",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The plan goal handoff is verified.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
         "userMessage": "Create a concise goal implementation plan for the plan approval e2e test.",
         "hasToolResult": false
       },
@@ -46,6 +57,18 @@
       "streamingProfile": {
         "ttft": 200,
         "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Create a concise goal implementation plan for the plan approval e2e test.",
+        "hasToolResult": true,
+        "toolCallId": "call_plan_goal_e2e_submit"
+      },
+      "response": {
+        "content": "Resumed plan output before goal startup."
       }
     },
     {

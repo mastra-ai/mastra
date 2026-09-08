@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { workItemBranch, workItemBranchSource } from './work-item-branch.js';
+import { pullRequestNumberFromBranch, workItemBranch, workItemBranchSource } from './work-item-branch.js';
 
 describe('workItemBranchSource', () => {
   it('maps stored provenance onto the branch vocabulary', () => {
@@ -53,5 +53,15 @@ describe('workItemBranch', () => {
     expect(workItemBranch({ id, source: 'manual', metadata: null })).toBe(`factory/item-${id}`);
     expect(workItemBranch({ id, source: 'slack-thread' })).toBe(`factory/item-${id}`);
     expect(workItemBranch({ id, source: 'github-issue', metadata: {} })).toBe(`factory/item-${id}`);
+  });
+});
+
+describe('pullRequestNumberFromBranch', () => {
+  it('reads the number back from a pull request branch only', () => {
+    expect(pullRequestNumberFromBranch('factory/pr-7')).toBe(7);
+    expect(pullRequestNumberFromBranch('factory/issue-7')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('factory/pr-0')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
   });
 });

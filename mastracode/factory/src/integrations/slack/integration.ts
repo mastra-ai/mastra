@@ -164,7 +164,7 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControl: sourceControlOwner,
       memorySettings: ctx.storage.memorySettings,
-      workItems: ctx.rules?.workItems,
+      workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
       adapterOptions: {
         toolDisplay: 'hidden',

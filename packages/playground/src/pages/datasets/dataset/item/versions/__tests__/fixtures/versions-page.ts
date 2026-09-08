@@ -17,6 +17,8 @@ export const history: DatasetItemVersionResponse[] = [
     datasetVersion: 2,
     input: { q: 'newer' },
     groundTruth: null,
+    toolMocks: [{ toolName: 'weatherTool', args: {}, output: { temp: 21 } }],
+    requestContext: { locale: 'fr-FR' },
     validTo: null,
     isDeleted: false,
     createdAt: now,

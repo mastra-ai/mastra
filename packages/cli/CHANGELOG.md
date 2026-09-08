@@ -1,5 +1,62 @@
 # mastra
 
+## 1.28.0-alpha.11
+
+### Patch Changes
+
+- Fixed Studio thread history downloading every historical trace on focus. Only selected trace details refresh automatically, while history rows share the updated data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
+## 1.28.0-alpha.10
+
+### Minor Changes
+
+- Added `mastra api factory` commands for projects, work items, decisions, attention, queue health, metrics, and supervisors, including organization selection for hosted Factory requests. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```bash
+  mastra api factory project list
+  mastra api factory work-item transition --schema
+  ```
+
+### Patch Changes
+
+- Improved Studio chat performance on long threads. While the agent streams a reply, only the message being written is redrawn; every settled message keeps its rendered output instead of re-rendering on each token. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat shows a workspace edit as a diff of removed and added lines, and a written file as its code, instead of the raw tool arguments. The live reply now reserves room below the message that started it only while the run is going, and never for the first turn of a thread. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat now uses the shared chat shell. The composer docks inside the single scroll container, the transcript fades under it as it scrolls past, attachment previews sit in flow above the input, and the jump-to-latest button floats centred above the composer. On narrow screens the thread page fits the window without a stray scroll, the transcript starts right under the header, and a menu button in the header opens the thread list. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat folds three or more consecutive plain tool calls into one group row that names the running step and counts progress, instead of stacking a badge per call. Calls that wait on the reader (approvals, questions, plans, app results) stay as their own rows. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/deployer@1.65.0-alpha.10
+
+## 1.28.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+  - @mastra/deployer@1.65.0-alpha.9
+
+## 1.28.0-alpha.8
+
+### Patch Changes
+
+- Reject failed CLI environment updates with the original read, validation, or write error after logging it, so callers can detect when configuration was not persisted. ([#23215](https://github.com/mastra-ai/mastra/pull/23215))
+
+- Improved the trace view of a thread in Studio. The thread page now exposes a single **Show traces** toggle (the slide-in traces panel is gone), long traces are clamped to the height of their message with a **Show more** / **Show less** control, the row currently in view is emphasised as you scroll, opening a tool call highlights the spans behind it (the **Highlight spans** button remains for text-only messages), and **View full thread** from a trace lands you on that trace's row. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- Include optional Mastra dependencies in build, dev, and lint package inventories, giving optional declarations precedence when dependency sections overlap. ([#23211](https://github.com/mastra-ai/mastra/pull/23211))
+
+- Use the nearest ancestor lockfile when suggesting peer dependency repair commands so nested workspace applications receive guidance for the correct package manager. ([#23208](https://github.com/mastra-ai/mastra/pull/23208))
+
+- Skip directories and invalid paths during CLI entry discovery so a later valid source file can be selected, while preserving file symlink support and existing missing-entry behavior. ([#23212](https://github.com/mastra-ai/mastra/pull/23212))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/deployer@1.65.0-alpha.8
+
 ## 1.28.0-alpha.7
 
 ### Patch Changes

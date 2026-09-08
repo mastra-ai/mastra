@@ -1,5 +1,51 @@
 # @mastra/server
 
+## 1.65.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+
+## 1.65.0-alpha.9
+
+### Patch Changes
+
+- Fixed `GET /agents/:agentId` returning a 500 for agents whose dynamic instructions, tools, model, or options resolvers throw when called without execution context (for example a model selected per session). Unresolved fields are now omitted from the response, matching the behaviour of `GET /agents`, so these agents open correctly in Studio. Fixes https://github.com/mastra-ai/mastra/issues/23126 ([#23162](https://github.com/mastra-ai/mastra/pull/23162))
+
+- Fix the `fields` query example in the `GET /api/workflows/:workflowId/runs/:runId` route description. It suggested `?fields=status,result,metadata`, which the validator rejects with a 400; `status` and metadata fields are always included and are not selectable. ([#23279](https://github.com/mastra-ai/mastra/pull/23279))
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
+## 1.65.0-alpha.8
+
+### Minor Changes
+
+- Added optional feedback author profiles using the configured authentication provider, without extra setup when user lookup is supported. Authenticated feedback writes now prefer the authenticated user ID; anonymous writes remain supported. Missing users and lookup failures never remove feedback records. ([#23201](https://github.com/mastra-ai/mastra/pull/23201))
+
+  Before, HTTP feedback lists returned only the author ID. Now clients can read the optional profile from the same response:
+
+  ```ts
+  const result = await client.listFeedback();
+  console.log(result.feedback[0]?.author?.name);
+  ```
+
+### Patch Changes
+
+- Include `requestContext` in dataset item version history responses (`GET /api/datasets/:datasetId/items/:itemId/versions` and the single version endpoint). The field was stored but stripped from the response, so it could not be compared between versions. ([#23234](https://github.com/mastra-ai/mastra/pull/23234))
+
+- Preserve arbitrary provider namespaces in agent execution `providerOptions` instead of silently stripping providers outside the built-in allowlist. Validate provider option values as JSON and update the generated client route types to match the open provider contract. ([#23221](https://github.com/mastra-ai/mastra/pull/23221))
+
+- `GET /api/system/packages` now reports `liveKitConnectionRouteEnabled`, true when the default `@mastra/livekit` connection-details route is mounted, so clients can tell whether Studio voice calls will work. ([#19496](https://github.com/mastra-ai/mastra/pull/19496))
+
+  ```ts
+  const { liveKitConnectionRouteEnabled } = await fetch('/api/system/packages').then(res => res.json());
+  ```
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
 ## 1.65.0-alpha.7
 
 ### Patch Changes

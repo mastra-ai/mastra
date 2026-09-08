@@ -1,3 +1,4 @@
+import { workItemPhaseSemantics } from '../../boards/index.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
@@ -29,12 +30,14 @@ export function attachLinearIssueReconciler(
   linear: Pick<LinearIntegration, 'intake' | 'rules'>,
   context: IntegrationContext,
 ): LinearIssueReconciler | undefined {
-  if (!context.rules || !linear.intake.resolveIntakeDispatch) return undefined;
+  if (!context.runtime || !linear.intake.resolveIntakeDispatch) return undefined;
+  const boards = context.runtime.boards;
 
   const rules = new LinearRules({
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards,
     linearRules: linear.rules,
   });
 
@@ -42,7 +45,8 @@ export function attachLinearIssueReconciler(
     integrationId: 'linear',
     intake: linear.intake,
     projects: context.storage.projects,
-    storage: context.rules.workItems,
+    storage: context.runtime.workItems,
+    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
     issueId: item => {
       const issueId = item.metadata?.linearIssueId;
       return typeof issueId === 'string' && issueId.length > 0 ? issueId : undefined;

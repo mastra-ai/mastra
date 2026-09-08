@@ -449,6 +449,8 @@ export interface ProviderToolCallAttributes extends AIBaseAttributes {
  * MCP Tool Call attributes
  */
 export interface MCPToolCallAttributes extends AIBaseAttributes {
+  /** Tool category, e.g. 'tool', 'function' */
+  toolType?: string;
   /** MCP server identifier */
   mcpServer: string;
   /** MCP server version */

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../events/pubsub';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
@@ -432,7 +433,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
               for (const pendingSignal of pendingSignals) {
                 const signalForTranscript = drainList.addSignal(pendingSignal);
-                await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+                if (!isSystemReminderSignalType(signalForTranscript.type)) {
+                  await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+                }
               }
 
               state.messageListState = drainList.serialize();

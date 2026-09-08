@@ -1,5 +1,196 @@
 # @mastra/playground-ui
 
+## 53.0.0-alpha.12
+
+### Minor Changes
+
+- Added a `variant="new"` to `Dialog` with Factory-style spacing, an `intent="destructive"` option, a `pending` state that blocks dismissal, and `DialogCancel` and `DialogAction` footer buttons, including a configurable press-and-hold confirmation. The new variant's `DialogBody` always scrolls inside a bounded, fading area so long copy needs no special handling. The default variant and `AlertDialog` are unchanged. ([#23110](https://github.com/mastra-ai/mastra/pull/23110))
+
+  ```tsx
+  import {
+    Dialog,
+    DialogAction,
+    DialogBody,
+    DialogCancel,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+  } from '@mastra/playground-ui/components/Dialog';
+
+  <Dialog variant="new" intent="destructive" open={open} onOpenChange={setOpen} pending={isDeleting}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Delete workspace?</DialogTitle>
+      </DialogHeader>
+      <DialogBody>
+        <DialogDescription>Uncommitted changes will be lost.</DialogDescription>
+      </DialogBody>
+      <DialogFooter>
+        <DialogCancel>Cancel</DialogCancel>
+        <DialogAction confirmation="hold" holdSeconds={2} onConfirm={deleteWorkspace}>
+          Hold to delete
+        </DialogAction>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>;
+  ```
+
+  The caller closes the dialog after the action succeeds.
+
+  Also added `IntegrationDialog`, a searchable integration picker built on the new dialog variant with a fixed search field and a fading scroll list. Items carry an id, name, optional logo, an optional `badge` shown next to the name, and optional `meta` text shown muted on the right. Consumers own any vendor mapping, such as turning an auth type into a label.
+
+  ```tsx
+  import { IntegrationDialog } from '@mastra/playground-ui/components/IntegrationDialog';
+
+  <IntegrationDialog
+    open={open}
+    onOpenChange={setOpen}
+    title="Add connection"
+    description="Choose an integration to authorize."
+    items={[
+      { id: 'notion', name: 'Notion', logo: <img src={notionLogo} alt="" />, meta: 'OAuth' },
+      { id: 'render-mcp', name: 'Render', badge: 'MCP', meta: 'OAuth' },
+    ]}
+    onSelect={item => startConnect(item.id)}
+  >
+    <IntegrationDialog.Trigger render={<Button>Add connection</Button>} />
+  </IntegrationDialog>;
+  ```
+
+### Patch Changes
+
+- Fixed incomplete traces and subtraces after an agent resumes or more spans arrive. Selected details refresh on reopening, returning to Studio, or reconnecting, without periodic polling. Downloading a trace also updates its displayed data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
+## 53.0.0-alpha.11
+
+### Patch Changes
+
+- `ChatShell.Column` accepts a `ref`, and the shell's track is now the positioning context for overlays that must span the scrolled height, such as a sticky thread rail. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+  ```tsx
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  <ChatShell.Column ref={columnRef}>
+    <ThreadRail scrollerRef={columnRef} />
+    {messages}
+  </ChatShell.Column>;
+  ```
+
+- Added the shared chat pieces both transcripts draw from. `ChatShell.Turn` reserves the reply room for a live turn, `groupTurns` folds a message list into turns, and `ai/tool-call` gains `ToolCallEdit` (an edit as removed and added lines, a written file as code), `ToolCallCommand`, `ToolCallGroup`, `toolEdit`, `stripAnsi` and `stripSerializedAnsi`. `Code` now exposes its `useHighlight` hook and `tokenStyle`, and `languageForPath` resolves a highlight language from a file path. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+  ```tsx
+  const turns = groupTurns(messages, { key: message => message.id, opensTurn: message => message.role === 'user' });
+
+  turns.map((turn, index) => (
+    <ChatShell.Turn key={turn.key} opensTurn={turn.opensTurn} holdsRoom={turn === turns.at(-1) && running && index > 0}>
+      {turn.entries.map(renderMessage)}
+    </ChatShell.Turn>
+  ));
+
+  const edit = toolEdit(toolName, args);
+  edit ? <ToolCallEdit edit={edit} /> : <ToolCallMono copyText={argsText}>{argsText}</ToolCallMono>;
+  ```
+
+- Fixed unreadable row labels in `HorizontalBars` when a bar has a bright fill in dark mode. The label now uses a dark tone over yellow, orange, red and green fills, so dataset names in the Studio "Experiments by Dataset" and "Review Pipeline" cards are readable again. ([#23326](https://github.com/mastra-ai/mastra/pull/23326))
+
+- Added `groupConsecutive`, `TOOL_GROUP_MIN` and `isTaskTool` to `components/ai/tool-call`. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+  `groupConsecutive` cuts a list into runs of consecutive items that belong together and keys each run by its first member, so a chat can collapse a burst of tool calls into a single `ToolCallGroup` row instead of one row per call. Runs shorter than `TOOL_GROUP_MIN` (3) are left alone; pass `min` to change that.
+
+  ```tsx
+  import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
+  import type { MessageFactoryPart, ToolInvocationPart } from '@mastra/react';
+
+  const isToolCall = (part: MessageFactoryPart): part is ToolInvocationPart => part.type === 'tool-invocation';
+
+  const toolGroups = (parts: readonly MessageFactoryPart[]) =>
+    groupConsecutive(parts, { key: part => part.toolInvocation.toolCallId, joins: isToolCall });
+
+  // byFirstKey.get(id) -> the run to draw as one group row
+  // memberKeys.has(id) -> already drawn inside a group row
+  ```
+
+  `isTaskTool` names the tools that belong in a docked task list rather than in the transcript, so a chat can hide them consistently.
+
+  ```tsx
+  import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+  isTaskTool('task_update'); // true
+  ```
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/client-js@1.44.0-alpha.10
+  - @mastra/react@1.4.11-alpha.10
+
+## 53.0.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+  - @mastra/client-js@1.44.0-alpha.9
+  - @mastra/react@1.4.11-alpha.9
+
+## 53.0.0-alpha.9
+
+### Patch Changes
+
+- Added an `onInputValueChange` callback to the `Combobox` component so consumers can react to the search text (for example to offer a "Create ..." option built from what the user typed). ([#23225](https://github.com/mastra-ai/mastra/pull/23225))
+
+- Trace filters on the traces page now save automatically as you change them and are restored on your next visit; the explicit **Save filters** action is gone. Custom absolute date ranges are not persisted since they would go stale. Faded spans in the light theme are now tuned separately from the dark theme so they stay legible while highlighted spans still stand out. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- - `CodeDiff` renders a GitHub-style split diff: removed lines red on the left, added lines green on the right, with line numbers and expandable collapsed regions. ([#23234](https://github.com/mastra-ai/mastra/pull/23234))
+  - `DataCodeSection` accepts an optional `diff={{ against, side }}` prop that highlights the lines differing from another document (red for side `a`, green for side `b`) without changing the section layout.
+
+  ```tsx
+  // Left column shows the older document: differing lines are red
+  <DataCodeSection title="Input" codeStr={olderJson} diff={{ against: newerJson, side: 'a' }} />
+  // Right column shows the newer document: differing lines are green
+  <DataCodeSection title="Input" codeStr={newerJson} diff={{ against: olderJson, side: 'b' }} />
+  ```
+
+- Added an inline tag editor on the dataset detail page. Existing tags show as removable badges under the actions row, and an "Add tag" combobox lists all tags used across datasets or lets you create a new one by typing its name. Changes are saved immediately. ([#23225](https://github.com/mastra-ai/mastra/pull/23225))
+
+- Updated dependencies [[`99c97ab`](https://github.com/mastra-ai/mastra/commit/99c97ab439900ac3930badc1fa80e2cea7826563), [`db7cc1c`](https://github.com/mastra-ai/mastra/commit/db7cc1c5d8cd1650c41c57590c25ab86c9e5032f), [`52ff00e`](https://github.com/mastra-ai/mastra/commit/52ff00e937c0af1a18eddfd35bbb79e7d398d8a9), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`473a2dd`](https://github.com/mastra-ai/mastra/commit/473a2dd9a372898dd053b419fa1d95943fc88ce2), [`7aca62a`](https://github.com/mastra-ai/mastra/commit/7aca62a98a1a04593ff7f20d917a1ec34891f031), [`64db1b3`](https://github.com/mastra-ai/mastra/commit/64db1b313bdb02e063019fdcbb8d28608858ae71)]:
+  - @mastra/client-js@1.44.0-alpha.8
+  - @mastra/memory@1.28.3-alpha.3
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/react@1.4.11-alpha.8
+
+## 53.0.0-alpha.8
+
+### Minor Changes
+
+- Added a `thread` variant to the `Comment` component, plus `CommentQuote`, `CommentEditor` and `CommentArrival` parts, so a dense comment feed (avatar gutter, grouped rows, quoted replies, inline editing, hover actions) can be built from the design system instead of hand-rolled per app. ([#23052](https://github.com/mastra-ai/mastra/pull/23052))
+
+  ```tsx
+  <Comment variant="thread">
+    <CommentItem continued={sameAuthorAsAbove} highlighted={isLinkedComment}>
+      <CommentItemAvatar>{sameAuthorAsAbove ? null : <Avatar name={author} />}</CommentItemAvatar>
+      <CommentItemContent>
+        <CommentItemHeader>
+          <CommentItemAuthor>{author}</CommentItemAuthor>
+          <CommentItemTimestamp dateTime={occurredAt}>{relative}</CommentItemTimestamp>
+        </CommentItemHeader>
+        <CommentQuote authorName={replyTo.authorName} quote={replyTo.quote} />
+        <CommentItemBody>{body}</CommentItemBody>
+      </CommentItemContent>
+      <CommentItemActions>{/* revealed on row hover */}</CommentItemActions>
+    </CommentItem>
+  </Comment>
+  ```
+
+  `CommentEditor` owns only the draft: pass `isPending` and `error` from the mutation that saves it, and close it from that mutation's success. While `isPending` the textarea is read-only and both buttons are disabled.
+
+  The existing `default` and `embed` variants are unchanged.
+
+### Patch Changes
+
+- Fixed inconsistent empty-state icons and centering in Studio and Agent Builder. ([#23200](https://github.com/mastra-ai/mastra/pull/23200))
+
 ## 53.0.0-alpha.7
 
 ### Patch Changes
