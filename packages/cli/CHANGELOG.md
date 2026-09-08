@@ -1,5 +1,36 @@
 # mastra
 
+## 1.28.0-alpha.11
+
+### Patch Changes
+
+- Fixed Studio thread history downloading every historical trace on focus. Only selected trace details refresh automatically, while history rows share the updated data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
+## 1.28.0-alpha.10
+
+### Minor Changes
+
+- Added `mastra api factory` commands for projects, work items, decisions, attention, queue health, metrics, and supervisors, including organization selection for hosted Factory requests. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```bash
+  mastra api factory project list
+  mastra api factory work-item transition --schema
+  ```
+
+### Patch Changes
+
+- Improved Studio chat performance on long threads. While the agent streams a reply, only the message being written is redrawn; every settled message keeps its rendered output instead of re-rendering on each token. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat shows a workspace edit as a diff of removed and added lines, and a written file as its code, instead of the raw tool arguments. The live reply now reserves room below the message that started it only while the run is going, and never for the first turn of a thread. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat now uses the shared chat shell. The composer docks inside the single scroll container, the transcript fades under it as it scrolls past, attachment previews sit in flow above the input, and the jump-to-latest button floats centred above the composer. On narrow screens the thread page fits the window without a stray scroll, the transcript starts right under the header, and a menu button in the header opens the thread list. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat folds three or more consecutive plain tool calls into one group row that names the running step and counts progress, instead of stacking a badge per call. Calls that wait on the reader (approvals, questions, plans, app results) stay as their own rows. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/deployer@1.65.0-alpha.10
+
 ## 1.28.0-alpha.9
 
 ### Patch Changes

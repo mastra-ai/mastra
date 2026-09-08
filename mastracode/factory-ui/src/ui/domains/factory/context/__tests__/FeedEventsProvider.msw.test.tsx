@@ -4,6 +4,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { attentionKindSummaries } from '../../../../../../e2e/ui/attention';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -47,14 +48,7 @@ function countComments(count: () => void) {
 function countAttention(count: () => void) {
   return http.get(ATTENTION_URL, () => {
     count();
-    return HttpResponse.json({
-      items: [],
-      openCount: 0,
-      badgeCount: 0,
-      unreadCount: 0,
-      activityUnreadCount: 0,
-      hasMore: false,
-    });
+    return HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false });
   });
 }
 

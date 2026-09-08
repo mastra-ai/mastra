@@ -1,5 +1,16 @@
 # @mastra/ai-sdk
 
+## 1.10.2-alpha.0
+
+### Patch Changes
+
+- Fixed `toModelOutput` only applying to the first turn when `useChat` holds the conversation history. Tool result metadata now reaches the browser, so the compact projection is what comes back on the next request instead of the full raw tool output. This stops raw tool output from inflating later prompts for apps that do not use Mastra Memory. ([#23290](https://github.com/mastra-ai/mastra/pull/23290))
+
+  Fixes [#22012](https://github.com/mastra-ai/mastra/issues/22012)
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+
 ## 1.10.1
 
 ### Patch Changes

@@ -1,5 +1,26 @@
 # @mastra/code-sdk
 
+## 1.7.0-alpha.13
+
+### Patch Changes
+
+- Added a persisted preference for Mastra Code interfaces to opt into native subagents. ([#23335](https://github.com/mastra-ai/mastra/pull/23335))
+
+## 1.7.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`e3e847e`](https://github.com/mastra-ai/mastra/commit/e3e847e32238fa52c0295f57fd04f695d400779d)]:
+  - @mastra/pg@1.23.0-alpha.5
+
+## 1.7.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`f596ff6`](https://github.com/mastra-ai/mastra/commit/f596ff65378fcc7e85fb314d895a38fb2e5b7e7e), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/pg@1.23.0-alpha.4
+
 ## 1.7.0-alpha.10
 
 ### Patch Changes

@@ -44,7 +44,7 @@ export interface FactoryMentionAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
-/** The lower tier: the discussion on an item someone took part in moved on. */
+/** The discussion on an item someone took part in moved on. */
 export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
   kind: 'activity';
   workItemId: string;
@@ -58,18 +58,29 @@ export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionI
   findingKey: string;
   findingTitle: string;
   evidence: string;
-  ageMs: number | null;
+  beganAt: string | null;
   suggestedRepair: FactoryHealthRepair | null;
 }
 
+/** A run parked on a plan or a question: the item lives exactly as long as the answer is owed. */
+export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBase {
+  kind: 'agent-waiting';
+  workItemId: string;
+  sessionId: string;
+  threadId: string;
+  role: string;
+  toolName: string;
+}
+
 export type FactoryAttentionItem =
+  | FactoryAgentWaitingAttentionItem
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
   | FactoryActivityAttentionItem
   | FactorySupervisorFindingAttentionItem;
 
-/** Automated attention items have no author; comment-driven tiers carry the person who wrote the comment. */
+/** Automated attention items have no author; comment-driven kinds carry the person who wrote the comment. */
 export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
   return item.kind === 'mention' || item.kind === 'activity' ? item.authorName : undefined;
 }
@@ -85,21 +96,83 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
       return item.decisionId;
     case 'supervisor-finding':
       return item.findingKey;
+    case 'agent-waiting':
+      return item.sessionId;
   }
 }
 
+export type FactoryAttentionKind = FactoryAttentionItem['kind'];
+
+/** Who an item is for: a person it interrupts, a queue a person releases, or a discussion they follow. */
+export type FactoryAttentionGroup = 'attention' | 'queue' | 'activity';
+
+const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGroup> = {
+  'automation-failed': 'attention',
+  'supervisor-finding': 'attention',
+  'agent-waiting': 'attention',
+  mention: 'attention',
+  'automation-proposed': 'queue',
+  activity: 'activity',
+};
+const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND) as FactoryAttentionKind[];
+
+export function attentionGroupOf(kind: FactoryAttentionKind): FactoryAttentionGroup {
+  return ATTENTION_GROUP_OF_KIND[kind];
+}
+
+export function attentionKindsIn(group: FactoryAttentionGroup): FactoryAttentionKind[] {
+  return ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === group);
+}
+
+export interface FactoryAttentionLatest {
+  key: string;
+  at: string;
+  unread: boolean;
+}
+
+export interface FactoryAttentionKindSummary {
+  open: number;
+  unread: number;
+  latest: FactoryAttentionLatest | null;
+}
+
+export type FactoryAttentionKindSummaries = Record<FactoryAttentionKind, FactoryAttentionKindSummary>;
+
 export interface FactoryAttentionResponse {
   items: FactoryAttentionItem[];
-  openCount: number;
-  badgeCount: number;
-  unreadCount: number;
-  /** Counted apart: the activity tier never reaches the sidebar badge. */
-  activityUnreadCount: number;
+  kinds: FactoryAttentionKindSummaries;
   hasMore: boolean;
-  latestOccurrenceKey: string | null;
-  latestOccurrenceAt: string | null;
-  latestOccurrenceUnread: boolean;
   nextCursor?: string;
+}
+
+export function attentionCountsIn(
+  kinds: FactoryAttentionKindSummaries,
+  group: FactoryAttentionGroup,
+): { open: number; unread: number } {
+  let open = 0;
+  let unread = 0;
+  for (const kind of attentionKindsIn(group)) {
+    open += kinds[kind].open;
+    unread += kinds[kind].unread;
+  }
+  return { open, unread };
+}
+
+export function latestUnreadOrNewestIn(
+  kinds: FactoryAttentionKindSummaries,
+  group: FactoryAttentionGroup,
+): FactoryAttentionLatest | null {
+  const latests = attentionKindsIn(group).flatMap(kind => kinds[kind].latest ?? []);
+  const unread = latests.filter(latest => latest.unread);
+  return newestOf(unread.length > 0 ? unread : latests);
+}
+
+function newestOf(latests: FactoryAttentionLatest[]): FactoryAttentionLatest | null {
+  let newest: FactoryAttentionLatest | null = null;
+  for (const latest of latests) {
+    if (!newest || Date.parse(latest.at) > Date.parse(newest.at)) newest = latest;
+  }
+  return newest;
 }
 
 export function factoryAttentionTargetPath(factoryId: string, target: FactoryAttentionTarget): string {
@@ -113,14 +186,12 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
   return `/factories/${factoryId}/rules`;
 }
 
-export type FactoryAttentionTier = 'badge' | 'activity';
-
 export function fetchFactoryAttention(
   baseUrl: string,
   factoryProjectId: string,
   options: {
     view: FactoryAttentionView;
-    tier?: FactoryAttentionTier;
+    kinds?: FactoryAttentionKind[];
     before?: string;
     limit?: number;
     search?: string;
@@ -128,7 +199,7 @@ export function fetchFactoryAttention(
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
-  if (options.tier) query.set('tier', options.tier);
+  for (const kind of options.kinds ?? []) query.append('kind', kind);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   if (options.search) query.set('search', options.search);

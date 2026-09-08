@@ -74,9 +74,9 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "before",
+      "kind",
       "limit",
       "search",
-      "tier",
       "view"
     ],
     "bodyParams": [],
@@ -172,8 +172,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasQuery": false,
     "hasBody": false,
     "responseShape": {
-      "kind": "object-property",
-      "listProperty": "workItems"
+      "kind": "single"
     }
   },
   "PATCH /web/factory/projects/:id": {
@@ -580,14 +579,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "archived"
           ]
         },
-        "tier": {
-          "default": "all",
-          "type": "string",
-          "enum": [
-            "all",
-            "badge",
-            "activity"
-          ]
+        "kind": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "automation-failed",
+              "automation-proposed",
+              "mention",
+              "activity",
+              "supervisor-finding",
+              "agent-waiting"
+            ]
+          }
         },
         "before": {
           "type": "string"
@@ -614,40 +618,69 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "additionalProperties": {}
           }
         },
-        "openCount": {
-          "type": "number"
-        },
-        "badgeCount": {
-          "type": "number"
-        },
-        "unreadCount": {
-          "type": "number"
-        },
-        "activityUnreadCount": {
-          "type": "number"
-        },
-        "latestOccurrenceKey": {
-          "anyOf": [
-            {
-              "type": "string"
+        "kinds": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "automation-failed",
+              "automation-proposed",
+              "mention",
+              "activity",
+              "supervisor-finding",
+              "agent-waiting"
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "open": {
+                "type": "number"
+              },
+              "unread": {
+                "type": "number"
+              },
+              "latest": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "string"
+                      },
+                      "unread": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "at",
+                      "unread"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
             },
-            {
-              "type": "null"
-            }
+            "required": [
+              "open",
+              "unread",
+              "latest"
+            ]
+          },
+          "required": [
+            "automation-failed",
+            "automation-proposed",
+            "mention",
+            "activity",
+            "supervisor-finding",
+            "agent-waiting"
           ]
-        },
-        "latestOccurrenceAt": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "latestOccurrenceUnread": {
-          "type": "boolean"
         },
         "hasMore": {
           "type": "boolean"
@@ -658,13 +691,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "items",
-        "openCount",
-        "badgeCount",
-        "unreadCount",
-        "activityUnreadCount",
-        "latestOccurrenceKey",
-        "latestOccurrenceAt",
-        "latestOccurrenceUnread",
+        "kinds",
         "hasMore"
       ]
     }
@@ -877,11 +904,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "items": {
             "type": "string"
           }
+        },
+        "parkedSessionIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "workItems",
-        "runningSessionIds"
+        "runningSessionIds",
+        "parkedSessionIds"
       ]
     }
   },
@@ -1207,7 +1241,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding"
+            "supervisor-finding",
+            "agent-waiting"
           ]
         },
         "__schema2": {
@@ -1274,7 +1309,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding"
+            "supervisor-finding",
+            "agent-waiting"
           ]
         },
         "__schema2": {
@@ -1341,7 +1377,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "automation-proposed",
             "mention",
             "activity",
-            "supervisor-finding"
+            "supervisor-finding",
+            "agent-waiting"
           ]
         },
         "__schema2": {

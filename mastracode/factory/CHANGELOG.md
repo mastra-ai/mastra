@@ -1,5 +1,79 @@
 # @mastra/factory
 
+## 0.13.0-alpha.16
+
+### Patch Changes
+
+- Updated dependencies [[`b7b6ce0`](https://github.com/mastra-ai/mastra/commit/b7b6ce0d9a84e4322e1314bcdf07db81485d6ba2)]:
+  - @mastra/code-sdk@1.7.0-alpha.13
+
+## 0.13.0-alpha.15
+
+### Patch Changes
+
+- The attention inbox now reports counts and the newest item per kind, and the UI decides what interrupts a person. Runs waiting for approval leave the sidebar badge and the notification sound; the sidebar popover lists them under an "Approvals" tab beside "Needs you" and "Activity", each tab carrying its unread count, and the inbox page files them under "Waiting for approval", above "Activity". ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+  Breaking for callers of `GET /web/factory/projects/:id/attention`:
+
+  - the `tier` query is gone; ask for the kinds you want with a repeatable `kind` query, or omit it for every kind
+  - `openCount`, `badgeCount`, `unreadCount` and the three `latestOccurrence*` fields are gone; read `kinds[kind].open`, `kinds[kind].unread` and `kinds[kind].latest` instead. `kinds` always covers every kind, whatever `kind` filter the items use
+
+  Before:
+
+  ```ts
+  const inbox = await fetch(`${base}/attention?tier=badge`).then(r => r.json());
+  inbox.badgeCount; // unread across the badge kinds
+  inbox.latestOccurrenceAt; // newest badge item
+  ```
+
+  After:
+
+  ```ts
+  const query = new URLSearchParams([
+    ['kind', 'mention'],
+    ['kind', 'automation-failed'],
+  ]);
+  const inbox = await fetch(`${base}/attention?${query}`).then(r => r.json());
+  inbox.items; // mentions and failed automations only
+  inbox.kinds.mention.unread + inbox.kinds['automation-failed'].unread; // the badge number
+  inbox.kinds.mention.latest?.at; // newest mention, or null
+  ```
+
+- Fixed supervisor findings refreshing the Attention inbox on every health tick. A finding now keeps the moment its condition began, so a tick that finds nothing new writes nothing, and the inbox orders findings by when they opened. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+- A Factory run parked on a plan or a question now shows up in Needs attention as an "agent waiting" item that opens the thread, and leaves the inbox by itself once someone answers. The card's wick and the sidebar row read "Waiting on you" meanwhile. Before, the dispatcher recorded the pause as a failed automation with a retry button that could do nothing, and the row stayed after the answer. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+- Fixed the Factory dispatcher starting a duplicate run while a skill run longer than ten minutes was still working. A run the run registry still shows in flight is left alone. A run older than six hours is failed as overdue, so a hung run no longer holds its slot forever. ([#23274](https://github.com/mastra-ai/mastra/pull/23274))
+
+- Updated dependencies:
+  - @mastra/code-sdk@1.7.0-alpha.12
+
+## 0.13.0-alpha.14
+
+### Patch Changes
+
+- Factory transcript file diffs now use the same colors as code blocks, and tool cards and folded tool groups keep their look while sharing their parts with Studio. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Pull request review sessions now start on the PR head in seconds. The session branch comes from a blob-less fetch of the repository history, so `git log` and `git blame` work in the review while past file contents load on demand. ([#23261](https://github.com/mastra-ai/mastra/pull/23261))
+
+- Added Factory API support for automation clients to inspect and operate projects, work items, decisions, attention, health, metrics, and supervisor state. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```ts
+  import { MastraFactory, type MastraFactoryConfig } from '@mastra/factory';
+
+  export function createFactory(storage: MastraFactoryConfig['storage']) {
+    return new MastraFactory({ storage });
+  }
+  ```
+
+- The sidebar stage chip next to the Mastra logo now reads Beta instead of Alpha. ([#23331](https://github.com/mastra-ai/mastra/pull/23331))
+
+- Improved the chat transcript: a run of three or more tool calls now folds into a single row while the reply is still being written, instead of only once it is finished. The folded row names the step that is running and counts progress, and opens onto the individual calls. Calls that need something from you, such as a question, a plan or an approval, stay on their own row. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/code-sdk@1.7.0-alpha.11
+
 ## 0.13.0-alpha.13
 
 ### Minor Changes
