@@ -15,7 +15,7 @@ async function setup() {
     boards: createBoardRegistry(),
     transitionService,
     messageAuthor: { id: 'user-1', name: 'Caleb Barnes', avatarUrl: 'https://example.com/avatar.png' },
-    email: 'caleb@example.com',
+    authUser: { email: 'caleb@example.com' },
   };
   return { ...seed, deps, transitionService };
 }
@@ -37,7 +37,7 @@ describe('factory_create_work_item', () => {
     const transition = vi.spyOn(transitionService, 'transition');
     const create = vi.spyOn(comments, 'create');
     const result = await execute(target);
-    expect(result).toMatchObject({ requestedBy: 'user-1', stages: ['intake'], briefPosted: true });
+    expect(result).toMatchObject({ requestedBy: 'user-1', stage: 'intake', briefCommentId: expect.any(String) });
     const item = await workItems.getForProject(scope.orgId, scope.factoryProjectId, result.workItemId);
     expect(item).toMatchObject({ createdBy: 'user-1' });
     expect(create.mock.invocationCallOrder[0]).toBeLessThan(transition.mock.invocationCallOrder[0]!);
@@ -53,7 +53,7 @@ describe('factory_create_work_item', () => {
       action: 'factory.work_item.created',
       actorId: 'user-1',
       actorType: 'human',
-      metadata: { cause: 'supervisor', requestedBy: 'user-1', briefPosted: true },
+      metadata: { cause: 'supervisor', requestedBy: 'user-1', briefCommentId: page.comments[0].id },
     });
   });
 
@@ -65,7 +65,22 @@ describe('factory_create_work_item', () => {
     );
   });
 
-  it.each(['comment', 'rejection', 'unavailable'] as const)(
+  it('falls back to the authenticated name and avatar when the message author is absent', async () => {
+    const { deps, comments } = await setup();
+    const result = await execute(
+      tool({
+        ...deps,
+        messageAuthor: undefined,
+        authUser: { name: 'Auth Person', avatarUrl: 'https://example.com/auth.png' },
+      }),
+    );
+    expect((await comments.list({ ...scope, workItemId: result.workItemId })).comments[0]?.author).toMatchObject({
+      displayName: 'Auth Person',
+      avatarUrl: 'https://example.com/auth.png',
+    });
+  });
+
+  it.each(['comment', 'rejection', 'unavailable', 'transition', 'reload', 'missing-row', 'audit'] as const)(
     'leaves no card, comment or audit on %s failure',
     async failure => {
       const { deps, workItems, comments, audit, transitionService } = await setup();
@@ -83,6 +98,11 @@ describe('factory_create_work_item', () => {
           code: 'invalid_stage',
           reason: 'Entry rejected',
         });
+      if (failure === 'transition')
+        vi.spyOn(transitionService, 'transition').mockRejectedValue(new Error('Transition failed'));
+      if (failure === 'reload') vi.spyOn(workItems, 'getForProject').mockRejectedValue(new Error('Reload failed'));
+      if (failure === 'missing-row') vi.spyOn(workItems, 'getForProject').mockResolvedValue(null);
+      if (failure === 'audit') vi.spyOn(audit, 'record').mockRejectedValue(new Error('Audit failed'));
       await expect(
         execute(tool({ ...deps, transitionService: failure === 'unavailable' ? undefined : transitionService })),
       ).rejects.toThrow();

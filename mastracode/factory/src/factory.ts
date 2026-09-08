@@ -835,7 +835,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           messageAuthor: requestContext?.get(MASTRA_MESSAGE_AUTHOR_KEY),
-                          email: getFactoryAuthUserFromContext(requestContext)?.email,
+                          authUser: getFactoryAuthUserFromContext(requestContext) ?? {},
                           boards: this.#boards,
                           workItems: workItemsStorage,
                           comments: workItemCommentsStorage,
