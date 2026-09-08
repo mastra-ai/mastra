@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/index.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -342,7 +341,7 @@ describe('prepareFactoryRuleBinding', () => {
     });
     const transitions = new FactoryTransitionService({
       storage: seeded.workItems,
-      rules: builtInFactoryRules(),
+      configVersion: 'factory-config-v1',
     });
     await transitions.transition({
       orgId: 'org-1',

@@ -104,7 +104,7 @@ export interface CommitFactoryRuleEvaluationInput {
   factoryProjectId: string;
   workItemId: string | null;
   ingress: { identity: string; triggerType: string };
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   actor: Record<string, unknown> | null;
   outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string };
@@ -131,7 +131,7 @@ export interface FactoryRuleEvaluationRecord {
   id: string;
   ingressId: string;
   workItemId: string | null;
-  ruleSetVersion: string;
+  configVersion: string;
   expectedRevision: number | null;
   outcome: 'accepted' | 'rejected';
   code: string | null;
@@ -414,7 +414,7 @@ export interface CommitFactoryTransitionInput {
   destinationStage: string;
   actorId: string;
   ingress: { identity: string; triggerType: string; transitionId: string };
-  ruleSetVersion: string;
+  configVersion: string;
   causalChain: Array<{ ingressId: string; decisionType: string }>;
   evaluation:
     | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
@@ -1651,7 +1651,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
             ingress_id: ingress.id,
             work_item_id: item.id,
-            rule_set_version: input.ruleSetVersion,
+            rule_set_version: input.configVersion,
             expected_revision: input.expectedRevision,
             outcome,
             code,
@@ -1792,7 +1792,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const evaluation = await ops.insertOne<GovernanceDbRow>('factory_rule_evaluations', {
           ingress_id: ingress.id,
           work_item_id: item?.id ?? null,
-          rule_set_version: input.ruleSetVersion,
+          rule_set_version: input.configVersion,
           expected_revision: input.expectedRevision,
           outcome,
           code,

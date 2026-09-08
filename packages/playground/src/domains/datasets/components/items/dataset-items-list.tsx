@@ -4,7 +4,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
-import { CircleSlashIcon, Plus, Upload, FileJson } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon, FileJson, Plus, Upload } from 'lucide-react';
 
 export interface DatasetItemsListProps {
   items: DatasetItem[];
@@ -217,30 +217,46 @@ interface EmptyDatasetItemListProps {
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
-    <div className="flex h-full items-center justify-center py-12">
+    <div className="flex flex-1 items-center justify-center">
       <EmptyState
-        iconSlot={<CircleSlashIcon className="text-neutral3 h-8 w-8" />}
+        iconSlot={<CircleSlashIcon />}
         titleSlot="No items yet"
-        descriptionSlot="Add items to this dataset to use them in experiment runs."
+        descriptionSlot={
+          <>
+            Add items to this dataset to use them <br />
+            in experiment runs.
+          </>
+        }
         actionSlot={
-          <ButtonsGroup>
-            <Button onClick={onAddClick} size="md">
-              <Plus />
-              Add Single Item
+          <div className="flex flex-col items-center gap-2">
+            <ButtonsGroup>
+              <Button variant="primary" onClick={onAddClick}>
+                <Plus />
+                Add Item
+              </Button>
+              {onImportClick && (
+                <Button onClick={onImportClick}>
+                  <Upload />
+                  Import CSV
+                </Button>
+              )}
+              {onImportJsonClick && (
+                <Button onClick={onImportJsonClick}>
+                  <FileJson />
+                  Import JSON
+                </Button>
+              )}
+            </ButtonsGroup>
+            <Button
+              variant="ghost"
+              as="a"
+              href="https://mastra.ai/docs/evals/datasets"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Datasets Documentation <ExternalLinkIcon />
             </Button>
-            {onImportClick && (
-              <Button onClick={onImportClick} size="md">
-                <Upload />
-                Import CSV
-              </Button>
-            )}
-            {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} size="md">
-                <FileJson />
-                Import JSON
-              </Button>
-            )}
-          </ButtonsGroup>
+          </div>
         }
       />
     </div>

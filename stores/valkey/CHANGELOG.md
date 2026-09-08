@@ -1,5 +1,14 @@
 # @mastra/valkey
 
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- Improved durable agent streaming latency when Valkey is remote (issue #22477). Recording a stream event in the cache now runs as a single atomic Lua script instead of four sequential commands, so each streamed chunk costs one round-trip. ([#23161](https://github.com/mastra-ai/mastra/pull/23161))
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
 ## 0.2.1
 
 ### Patch Changes

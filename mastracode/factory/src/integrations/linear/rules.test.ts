@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { builtInFactoryRules } from '../../rules/defaults.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
@@ -31,7 +30,7 @@ async function setup(overrides?: LinearRuleOverrides) {
   const service = new LinearRules({
     projects: seeded.projects,
     storage: seeded.workItems,
-    rules: builtInFactoryRules(),
+    configVersion: 'factory-config-v1',
     linearRules: resolveLinearRules(overrides),
   });
   return { project, service, workItems: seeded.workItems };
@@ -60,7 +59,7 @@ describe('LinearRules', () => {
     });
     expect(commit).toHaveBeenCalledWith(
       expect.objectContaining({
-        ruleSetVersion: builtInFactoryRules().version,
+        configVersion: 'factory-config-v1',
         ingress: { identity: `linear:${issue.id}:${issue.updatedAt}`, triggerType: 'linear.issueObserved' },
       }),
     );

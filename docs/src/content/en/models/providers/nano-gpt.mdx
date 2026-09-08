@@ -1486,6 +1486,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
+    "model": "nano-gpt/deepseek/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.1562,
+    "outputCost": 0.3124
+  },
+  {
     "model": "nano-gpt/Doctor-Shotgun/MS3.2-24B-Magnum-Diamond",
     "imageInput": false,
     "audioInput": false,
@@ -6094,6 +6106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.7
   },
   {
+    "model": "nano-gpt/TEE/qwen3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 8192,
+    "inputCost": 0.11,
+    "outputCost": 0.45
+  },
+  {
     "model": "nano-gpt/TEE/qwen3.5-27b",
     "imageInput": true,
     "audioInput": false,
@@ -6682,30 +6706,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "nano-gpt/yi-large",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 4096,
-    "inputCost": 3.196,
-    "outputCost": 3.196
-  },
-  {
-    "model": "nano-gpt/yi-medium-200k",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 4096,
-    "inputCost": 2.499,
-    "outputCost": 2.499
-  },
-  {
     "model": "nano-gpt/z-ai/glm-4.5",
     "imageInput": false,
     "audioInput": false,
@@ -7098,8 +7098,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 32768,
-    "inputCost": 0.35,
-    "outputCost": 1.4
+    "inputCost": 0.25,
+    "outputCost": 1
   },
   {
     "model": "nano-gpt/z-ai/glm-5.3:thinking",

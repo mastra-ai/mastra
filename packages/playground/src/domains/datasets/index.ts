@@ -16,7 +16,6 @@ export * from './utils/csv-validation';
 export * from './utils/json-cell-parser';
 
 // JSON import utilities
-export * from './hooks/use-json-parser';
 export * from './utils/json-validation';
 
 // Selection and export utilities
