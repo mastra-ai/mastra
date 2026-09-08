@@ -1,4 +1,5 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
@@ -41,6 +42,7 @@ export function ExperimentResultsList({
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
+  const hasStatusColumn = columns.some(col => col.name === 'status');
   const hasInputColumn = columns.some(col => col.name === 'input');
   const hasTagsColumn = columns.some(col => col.name === 'tags');
 
@@ -100,6 +102,18 @@ export function ExperimentResultsList({
                     </Tooltip>
                   )}
                 </DataList.Cell>
+
+                {hasStatusColumn && (
+                  <DataList.Cell className="flex items-center" data-testid={`result-status-${result.id}`}>
+                    {result.status ? (
+                      <Badge size="xs" variant={statusBadgeVariant(result.status)}>
+                        {result.status}
+                      </Badge>
+                    ) : (
+                      <span className="text-neutral2">—</span>
+                    )}
+                  </DataList.Cell>
+                )}
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
@@ -171,6 +185,12 @@ export function ExperimentResultsList({
       )}
     </DataList>
   );
+}
+
+function statusBadgeVariant(status: NonNullable<DatasetExperimentResult['status']>) {
+  if (status === 'needs-review') return 'orange';
+  if (status === 'complete') return 'green';
+  return 'neutral';
 }
 
 /** Format unknown value for display */

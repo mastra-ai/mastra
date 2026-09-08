@@ -540,7 +540,7 @@ describe('experiment item sub-route', () => {
       const dialog = await screen.findByRole('dialog');
       await waitFor(() => expect(dialog.textContent).toContain('third question'));
 
-      fireEvent.click(await screen.findByRole('button', { name: /review/i }));
+      fireEvent.click(await within(dialog).findByRole('button', { name: /review/i }));
 
       await waitFor(() => {
         expect(router.state.location.pathname).toBe('/experiments/review-queue');
