@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultFactoryRules } from './defaults.js';
 import {
-  assertFactoryRules,
+  assertFactoryConfigVersion,
   FactoryRuleValidationError,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,
@@ -236,27 +235,10 @@ describe('Factory rule validation', () => {
     ).toThrow(/unique idempotency keys/i);
   });
 
-  it('rejects unknown rule keys and non-handler leaves at boot', () => {
-    const rules = defaultFactoryRules({ version: 'validation-v1' });
-    expect(() => assertFactoryRules({ ...rules, actions: {} })).toThrow(/unsupported field/i);
-    expect(() =>
-      assertFactoryRules({
-        ...rules,
-        tools: { submit_plan: { onResult: 'not-a-function' } },
-      }),
-    ).toThrow(/must be a function/i);
-    expect(() =>
-      assertFactoryRules({
-        ...rules,
-        github: { madeUpEvent: { onEvent: () => undefined } },
-      }),
-    ).toThrow(/unsupported field/i);
-    expect(() => assertFactoryRules({ ...rules, github: undefined })).toThrow(/unsupported field/i);
-    expect(() =>
-      assertFactoryRules({
-        ...rules,
-        linear: { madeUpEvent: { onEvent: () => undefined } },
-      }),
-    ).toThrow(/unsupported field/i);
+  it('validates the config version label', () => {
+    expect(assertFactoryConfigVersion('deploy-7')).toBe('deploy-7');
+    expect(() => assertFactoryConfigVersion('')).toThrow();
+    expect(() => assertFactoryConfigVersion('x'.repeat(300))).toThrow();
+    expect(() => assertFactoryConfigVersion(7)).toThrow();
   });
 });

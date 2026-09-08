@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { createTerminalStageCleanup } from './terminal-cleanup.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -127,19 +126,8 @@ describe('createTerminalStageCleanup', () => {
   it('supersedes the runs still parked on the item, since a finished item cannot answer them', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
-    const rules = defaultFactoryRules({
-      version: 'rules-v1',
-      overrides: {
-        work: {
-          execute: {
-            issue: {
-              onEnter: () => ({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'p-1' }),
-            },
-          },
-        },
-      },
-    });
-    await new FactoryTransitionService({ storage, rules }).transition({
+    const configVersion = 'rules-v1';
+    await new FactoryTransitionService({ storage, configVersion }).transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: prepared.item.id,
@@ -172,19 +160,8 @@ describe('createTerminalStageCleanup', () => {
   it('supersedes failed skill runs when their item becomes terminal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepareBinding(storage);
-    const rules = defaultFactoryRules({
-      version: 'rules-v1',
-      overrides: {
-        work: {
-          execute: {
-            issue: {
-              onEnter: () => ({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'p-2' }),
-            },
-          },
-        },
-      },
-    });
-    await new FactoryTransitionService({ storage, rules }).transition({
+    const configVersion = 'rules-v1';
+    await new FactoryTransitionService({ storage, configVersion }).transition({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: prepared.item.id,

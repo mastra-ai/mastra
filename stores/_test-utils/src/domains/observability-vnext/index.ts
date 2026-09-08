@@ -3,7 +3,12 @@ export * from './trace-query';
 import { coreFeatures } from '@mastra/core/features';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
-import type { CreateSpanRecord, ObservabilityStorage, TraceQueryRequest } from '@mastra/core/storage';
+import type {
+  CreateFeedbackRecord,
+  CreateSpanRecord,
+  ObservabilityStorage,
+  TraceQueryRequest,
+} from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
 import {
@@ -3695,25 +3700,71 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(reviewed.feedback.map(fb => fb.feedbackId)).toEqual(['feedback-review-filter-2']);
       });
 
-      it('updates reviewStatus and returns the updated record', async () => {
-        await storage.createFeedback({
-          feedback: { ...baseFeedback, feedbackId: 'feedback-review-update', traceId: 'trace-review-update' },
-        });
+      it.each([0, 'Corrected answer'])(
+        'preserves all feedback fields when updating reviewStatus (value: %j)',
+        async value => {
+          const feedback = {
+            feedbackId: 'feedback-review-update',
+            timestamp: new Date('2026-01-01T12:34:56.789Z'),
+            traceId: 'trace-review-update',
+            spanId: 'span-review-update',
+            experimentId: 'experiment-review-update',
+            entityType: EntityType.TOOL,
+            entityId: 'tool-id',
+            entityName: 'Tool',
+            entityVersionId: 'tool-version',
+            parentEntityType: EntityType.AGENT,
+            parentEntityId: 'agent-id',
+            parentEntityName: 'Agent',
+            parentEntityVersionId: 'agent-version',
+            rootEntityType: EntityType.WORKFLOW_RUN,
+            rootEntityId: 'workflow-id',
+            rootEntityName: 'Workflow',
+            rootEntityVersionId: 'workflow-version',
+            userId: 'reviewer-id',
+            organizationId: 'organization-id',
+            resourceId: 'resource-id',
+            runId: 'run-id',
+            sessionId: 'session-id',
+            threadId: 'thread-id',
+            requestId: 'request-id',
+            environment: 'test',
+            executionSource: 'api',
+            serviceName: 'feedback-service',
+            feedbackUserId: 'reviewer-id',
+            sourceId: 'dataset-item-id',
+            feedbackSource: 'reviewer',
+            feedbackType: 'correction',
+            value,
+            comment: 'Preserve this comment when marking the feedback reviewed.',
+            tags: ['quality', 'review'],
+            metadata: { reviewer: { team: 'quality' }, confidence: 0, approved: false },
+            scope: { tenant: 'tenant-id', groups: ['reviewers', 'editors'] },
+            reviewStatus: 'needs-review',
+          } satisfies Omit<Required<CreateFeedbackRecord>, 'source'>;
 
-        const updated = await storage.updateFeedbackReviewStatus({
-          feedbackId: 'feedback-review-update',
-          reviewStatus: 'reviewed',
-        });
-        expect(updated.feedbackId).toBe('feedback-review-update');
-        expect(updated.reviewStatus).toBe('reviewed');
+          await storage.createFeedback({
+            feedback: structuredClone(feedback),
+          });
 
-        // Append-only stores (ClickHouse) implement the update as a replacement
-        // row; the read side must still expose a single, latest version.
-        const result = await storage.listFeedback({ filters: { traceId: 'trace-review-update' } });
-        expect(result.feedback).toHaveLength(1);
-        expect(result.pagination?.total).toBe(1);
-        expect(result.feedback[0]!.reviewStatus).toBe('reviewed');
-      });
+          // Compare against the input so a lossy read mapper cannot hide missing fields.
+          const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(before.feedback).toMatchObject([feedback]);
+
+          const updated = await storage.updateFeedbackReviewStatus({
+            feedbackId: feedback.feedbackId,
+            reviewStatus: 'reviewed',
+          });
+          const expected = { ...feedback, reviewStatus: 'reviewed' };
+          expect(updated).toMatchObject(expected);
+
+          // Append-only stores (ClickHouse) implement the update as a replacement
+          // row; the read side must still expose a single, latest version.
+          const result = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
+          expect(result.feedback).toMatchObject([expected]);
+          expect(result.pagination?.total).toBe(1);
+        },
+      );
 
       it('throws when updating reviewStatus of a missing feedback record', async () => {
         await expect(

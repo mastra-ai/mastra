@@ -16,10 +16,10 @@ import type { FactoryIntegration, IntegrationContext } from './integrations/base
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
-import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
+import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -359,31 +359,25 @@ describe('MastraFactory.prepare', () => {
     expect(transitionServiceOptions[0]!.onTerminalStage).toBe(terminalCleanups[0]);
   });
 
-  it('threads conservative versioned Factory rules when the slot is omitted', async () => {
+  it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
     expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
-    const rules = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
-    expect(rules?.version).toBe(DEFAULT_FACTORY_RULE_VERSION);
-    expect(rules).not.toHaveProperty('work');
-    expect(rules).not.toHaveProperty('review');
-    expect(rules?.tools.submit_plan?.onResult).toBeTypeOf('function');
-    expect(rules).not.toHaveProperty('github');
-    expect(rules).not.toHaveProperty('linear');
+    expect(assembleFactoryApiRoutesSpy.mock.calls[0]![0].configVersion).toBe(DEFAULT_FACTORY_CONFIG_VERSION);
   });
 
-  it('threads explicitly configured Factory rules without composing handler leaves', async () => {
-    const onResult = vi.fn(() => undefined);
-    const rules = defaultFactoryRules({
-      version: 'customer-policy-3',
-      overrides: { tools: { submit_plan: { onResult } } },
-    });
-    const prepared = await prepareFactory({ storage: fakeStorage(), rules });
+  it('threads an explicitly configured config version', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), configVersion: 'customer-policy-3' });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
-    expect(assembleFactoryApiRoutesSpy).toHaveBeenCalledOnce();
-    const threaded = assembleFactoryApiRoutesSpy.mock.calls[0]![0].rules;
-    expect(threaded).toBe(rules);
-    expect(threaded.tools.submit_plan?.onResult).toBe(onResult);
+    expect(assembleFactoryApiRoutesSpy.mock.calls[0]![0].configVersion).toBe('customer-policy-3');
+  });
+
+  it('rejects an invalid config version at construction', () => {
+    expect(() => new MastraFactory({ storage: fakeStorage(), configVersion: '' })).toThrow();
+  });
+
+  it('rejects the removed rules option with a migration hint', () => {
+    expect(() => new MastraFactory({ storage: fakeStorage(), rules: {} } as never)).toThrow(/configVersion/);
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
