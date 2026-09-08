@@ -19,6 +19,7 @@ import {
 } from './config.js';
 import type { ExternalMcpDiscoveryOptions } from './config.js';
 import { loadDisabledServers, loadGlobalDisableState, saveDisabledServers, saveGlobalDisableState } from './state.js';
+import { withMcpResultTruncation } from './truncate.js';
 import type {
   McpConfig,
   McpHttpOAuthConfig,
@@ -391,7 +392,7 @@ export function createMcpManager(
       // Flatten toolsets into the namespaced tools map (serverName_toolName)
       for (const [serverName, serverTools] of Object.entries(typedToolsets)) {
         for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-          tools[`${serverName}_${toolName}`] = toolConfig;
+          tools[`${serverName}_${toolName}`] = withMcpResultTruncation(toolConfig);
         }
       }
 
@@ -513,7 +514,7 @@ export function createMcpManager(
       } else if (serverTools && Object.keys(serverTools).length > 0) {
         const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
         for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-          tools[`${name}_${toolName}`] = toolConfig;
+          tools[`${name}_${toolName}`] = withMcpResultTruncation(toolConfig);
         }
         const status: McpServerStatus = {
           name,
