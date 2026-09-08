@@ -35,7 +35,7 @@ await dataset.purgeItem({ itemId: 'item-id' })
 
 ## Behavior
 
-Purging replaces the item's content fields in existing history rows and deletion tombstones with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked by `itemId`. Experiment-result writes submitted after the purge are stored with redacted content. Later `updateItem()` calls reject with the `DATASET_ITEM_PURGED` error.
+Purging replaces the item's content fields in existing history rows and deletion tombstones with redacted values and adds a purge marker to its metadata. The same fields, along with tags and comments, are scrubbed from experiment results linked to this dataset item. Experiment-result writes submitted after the purge are stored with redacted content. Later `updateItem()` calls reject with the `DATASET_ITEM_PURGED` error.
 
 Don't run purge concurrently with dataset item updates or deletions. A write that read the item before purge started can commit a stale revision after the purge completes.
 
