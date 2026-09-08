@@ -287,6 +287,7 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.run.setRunId({ runId: 'run-1' });
 
     let settled = false;
     const message = session.sendMessage({ content: 'start a fresh run' }).then(() => {
@@ -296,7 +297,7 @@ describe('AgentController signal messages', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
 
-    session.emit({ type: 'agent_end', reason: 'complete' });
+    await session.finishAgentRun('complete');
     await message;
     expect(settled).toBe(true);
   });
@@ -311,6 +312,11 @@ describe('AgentController signal messages', () => {
     });
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.run.setRunId({ runId: 'run-1' });
+    agent.queueMessage.mockReturnValueOnce({
+      accepted: Promise.resolve({ action: 'wake', runId: 'run-1' }),
+      signal: { id: 'signal-1', type: 'user' },
+    });
 
     let settled = false;
     const queued = session.queueMessage({ content: 'start immediately while idle' }).then(() => {
@@ -323,7 +329,7 @@ describe('AgentController signal messages', () => {
       expect.objectContaining({ ifIdle: expect.objectContaining({ streamOptions: expect.anything() }) }),
     );
 
-    session.emit({ type: 'agent_end', reason: 'complete' });
+    await session.finishAgentRun('complete');
     await queued;
     expect(settled).toBe(true);
   });
