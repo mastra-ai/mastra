@@ -80,7 +80,7 @@ import type {
   SearchKnowledgeResult,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
-import { MongoServerError } from 'mongodb';
+import { MongoServerError, ObjectId } from 'mongodb';
 import type { ClientSession, Collection, Document, Filter } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
@@ -249,21 +249,37 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       );
     }
     const schema = await this.#collection(TABLE_KNOWLEDGE_SCHEMA);
-    const existingCollections = await Promise.all(
-      KnowledgeMongoDB.MANAGED_COLLECTIONS.map(async name => ({
-        name,
-        count: await (await this.#collection(name)).estimatedDocumentCount(),
-      })),
+    const existingCollections = (await this.#connector.listCollectionNames()).filter(name =>
+      name.startsWith('mastra_knowledge_'),
     );
-    const populated = existingCollections.filter(collection => collection.count > 0);
     const marker = await schema.findOne({ id: 'canonical' });
-    if (populated.length > 0 && !marker) {
+    // Empty collections can still carry incompatible unique indexes. Without a
+    // marker they are not a fresh schema, and must not be adopted or modified.
+    if (existingCollections.length > 0 && !marker) {
       throw new KnowledgeSchemaError('MongoDB Knowledge schema is incomplete or incompatible.');
+    }
+    const managedCollections = new Set<string>(KnowledgeMongoDB.MANAGED_COLLECTIONS);
+    if (
+      marker &&
+      (existingCollections.length !== managedCollections.size ||
+        existingCollections.some(name => !managedCollections.has(name)))
+    ) {
+      throw new KnowledgeSchemaError('MongoDB Knowledge schema has missing or unrecognized collections.');
     }
     if (marker && Number(marker.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
       throw new KnowledgeSchemaError(
         `MongoDB Knowledge schema version mismatch: expected ${KNOWLEDGE_STORAGE_SCHEMA_VERSION}, received ${String(marker.version)}.`,
       );
+    }
+
+    for (const name of KnowledgeMongoDB.MANAGED_COLLECTIONS) {
+      if (!existingCollections.includes(name)) {
+        try {
+          await this.#connector.createCollection(name);
+        } catch (error) {
+          if (!(error instanceof MongoServerError && error.code === 48)) throw error;
+        }
+      }
     }
 
     if (!this.#skipDefaultIndexes) {
@@ -276,14 +292,20 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
       const collection = await this.#collection(index.collection);
       await collection.createIndex(index.keys, index.options);
     }
+    // Stable singleton identity also prevents concurrent upsert duplicates without optional indexes.
+    const singletonId = new ObjectId('000000000000000000000000');
+    const accessState = await this.#collection(TABLE_KNOWLEDGE_ACCESS_STATE);
+    const existingState = await accessState.findOne({ id: 'global' });
+    await accessState.updateOne(
+      { _id: existingState?._id ?? singletonId },
+      { $setOnInsert: { id: 'global', epoch: 0 } },
+      { upsert: true },
+    );
     await schema.updateOne(
-      { id: 'canonical' },
+      { _id: marker?._id ?? singletonId },
       { $setOnInsert: { id: 'canonical', version: KNOWLEDGE_STORAGE_SCHEMA_VERSION } },
       { upsert: true },
     );
-    await (
-      await this.#collection(TABLE_KNOWLEDGE_ACCESS_STATE)
-    ).updateOne({ id: 'global' }, { $setOnInsert: { id: 'global', epoch: 0 } }, { upsert: true });
   }
 
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {

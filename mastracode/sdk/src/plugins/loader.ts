@@ -17,6 +17,7 @@ import type {
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
+import { assertHostPluginRuntime } from './package-link.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
@@ -158,6 +159,7 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
     );
   }
 
+  assertHostPluginRuntime(entryPath);
   const url = pathToFileURL(entryPath);
   const stat = fs.statSync(entryPath, { bigint: true });
   url.searchParams.set('mtimeNs', stat.mtimeNs.toString());

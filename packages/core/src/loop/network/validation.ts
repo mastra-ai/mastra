@@ -340,6 +340,8 @@ export async function runCompletionScorers(
         } else {
           results.push(outcome!.result);
         }
+      } else {
+        results.push(...raceResult);
       }
     } else {
       for (const scorer of scorers) {
@@ -370,7 +372,11 @@ export async function runCompletionScorers(
       }
     }
   } finally {
+<<<<<<< HEAD
     clearTimeout(timeoutHandle);
+=======
+    clearTimeout(timeoutId);
+>>>>>>> b943a28d001 (feat(knowledge): prove Shipyard maintenance and safe activation)
   }
 
   const complete =

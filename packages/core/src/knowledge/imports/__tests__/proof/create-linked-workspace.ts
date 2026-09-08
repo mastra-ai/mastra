@@ -14,6 +14,9 @@ await mkdir(dirname(output), { recursive: true });
 await mkdir(output);
 await cp(template, output, { recursive: true });
 await rename(join(output, 'src/calendar.ts.template'), join(output, 'src/calendar.ts'));
+for (const file of ['shipyard.ts', 'shipyard-importer.ts', 'shipyard-github-source.ts', 'shipyard-maintenance.ts']) {
+  await cp(join(root, 'mastracode/factory/src/knowledge', file), join(output, 'src', file));
+}
 
 const packagePath = join(output, 'package.json');
 const packageJson = (await readFile(packagePath, 'utf8'))
@@ -21,6 +24,7 @@ const packageJson = (await readFile(packagePath, 'utf8'))
   .replace('__LIBSQL_PATH__', join(root, 'stores/libsql'))
   .replace('__MEMORY_PATH__', join(root, 'packages/memory'))
   .replace('__PG_PATH__', join(root, 'stores/pg'))
-  .replace('__TSX_PATH__', join(root, 'node_modules/tsx'));
+  .replace('__TSX_PATH__', join(root, 'node_modules/tsx'))
+  .replace('__ZOD_PATH__', join(root, 'node_modules/zod'));
 await writeFile(packagePath, packageJson, 'utf8');
 console.log(`Materialized Knowledge import proof workspace at ${output}`);
