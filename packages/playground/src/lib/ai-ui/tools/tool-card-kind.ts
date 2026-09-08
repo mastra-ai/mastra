@@ -29,7 +29,6 @@ export type ToolCardKind =
 
 export interface ToolCardContext {
   metadata?: MessageMetadata;
-  readOnly?: boolean;
   mcpAppTools?: Record<string, unknown>;
 }
 
@@ -84,11 +83,12 @@ export function toolInteraction(
 
 export function toolCardKind(
   { toolName, toolCallId, input, output }: ToolPartFields,
-  { metadata, readOnly = false, mcpAppTools }: ToolCardContext,
+  { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
   if (toolName === 'updateWorkingMemory' || isTaskTool(toolName)) return 'hidden';
-  if (toolName === 'ask_user' && !readOnly) return 'ask_user';
+  // A question read back in history draws as a plain badge, but it is still a question: never folded away.
+  if (toolName === 'ask_user') return 'ask_user';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||

@@ -378,6 +378,26 @@ describe('MessageRow', () => {
 
       expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
     });
+
+    // A thread read back without its suspend payload draws the question as a plain badge. It is still
+    // a question, so it breaks the run rather than folding away with the calls around it.
+    it('keeps a question out of the fold even where nothing is left to answer', () => {
+      const { container } = render(
+        <MessageRow
+          readOnly
+          message={withCalls([
+            toolCall('call-1'),
+            toolCall('ask-1', 'ask_user'),
+            toolCall('call-2'),
+            toolCall('call-3'),
+          ])}
+        />,
+        { wrapper: Providers },
+      );
+
+      expect(screen.queryByRole('group', { name: /Tool group/ })).toBeNull();
+      expect(container.querySelectorAll('[data-testid="tool-badge"]')).toHaveLength(4);
+    });
   });
 
   it('routes an OM observation tool into the observation marker badge', () => {

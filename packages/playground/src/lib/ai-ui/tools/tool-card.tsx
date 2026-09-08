@@ -78,7 +78,7 @@ export const ToolCardInner = ({
   );
   useWorkflowStream(output);
 
-  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, readOnly, mcpAppTools });
+  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, mcpAppTools });
   const { approval: toolApprovalMetadata, suspended: suspendedToolMetadata } = toolInteraction(
     metadata,
     toolName,
@@ -104,7 +104,10 @@ export const ToolCardInner = ({
       );
     }
     case 'ask_user':
-      return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+      if (!readOnly) {
+        return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+      }
+      break;
     case 'submit_plan':
       if (chatAgent) {
         return (

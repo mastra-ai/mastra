@@ -238,10 +238,7 @@ export const MessageRow = memo(function MessageRow({
   const shownParts = isProse(parts, metadata) ? revealed : parts;
   const revealing = shownParts !== parts;
 
-  const toolContext = useMemo<ToolCardContext>(
-    () => ({ metadata, readOnly, mcpAppTools }),
-    [metadata, readOnly, mcpAppTools],
-  );
+  const toolContext = useMemo<ToolCardContext>(() => ({ metadata, mcpAppTools }), [metadata, mcpAppTools]);
   const toolGroups = useMemo(() => collectToolGroups(shownParts, toolContext), [shownParts, toolContext]);
 
   const sharedRenderers = useMemo<MessageRenderers>(() => {
