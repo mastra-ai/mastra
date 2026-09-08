@@ -137,9 +137,15 @@ describe('observeAgentGitAction', () => {
     expect(recorded).toHaveLength(0);
   });
 
-  it('ignores a URL printed by a command that ran after the create', async () => {
-    await observe(toolCall(`gh pr create --dry-run --fill; printf '%s\\n' ${PR_URL}`, { output: `${PR_URL}\n` }));
-    expect(recorded).toHaveLength(0);
+  it('records a create whose body is written as a heredoc', async () => {
+    await observe(
+      toolCall(`gh pr create --title "Audit" --body "$(cat <<'EOF'\ngit push origin main\nEOF\n)"`, {
+        output: `${PR_URL}\n`,
+      }),
+    );
+
+    expect(recorded.map(r => r.action)).toEqual(['factory.agent.pr_opened']);
+    expect(recorded[0].metadata.url).toBe(PR_URL);
   });
 
   it('ignores gh pr subcommands other than create', async () => {

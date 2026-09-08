@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
-import type { AuditActorProfileInput, AuditActorType } from '../storage/domains/audit/base.js';
+import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -49,6 +49,8 @@ export interface FactoryTransitionRequest {
   expectedRevision: number;
   actor: FactoryRuleActor;
   actorProfile?: AuditActorProfileInput;
+  /** Where a browser request came from; rules and agents carry none. */
+  context?: AuditContext;
   ingress: { type: 'human' | 'agent' | 'toolResult' | 'github' | 'rule'; identity: string; transitionId?: string };
   cause: string;
   causalChain?: readonly FactoryRuleCausalEntry[];
@@ -284,6 +286,7 @@ export class FactoryTransitionService {
         factoryProjectId: request.factoryProjectId,
         ...auditActorOf(request.actor),
         actorProfile: request.actorProfile,
+        ...(request.context ? { context: request.context } : {}),
         action,
         targets: [{ type: 'work_item', id: item?.id ?? request.workItemId, ...(item ? { name: item.title } : {}) }],
         metadata: {

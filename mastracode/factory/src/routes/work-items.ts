@@ -11,7 +11,6 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { getFactoryAuthUser } from '../auth.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
@@ -24,7 +23,7 @@ import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
-import { auditActorProfile } from '../storage/domains/audit/base.js';
+import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -511,7 +510,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 stage: board.initialPhase,
                 expectedRevision: item.revision,
                 actor: { type: 'human', id: resolved.userId },
-                actorProfile: auditActorProfile(getFactoryAuthUser(loose(c))),
+                ...auditRequestOrigin(loose(c)),
                 ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
                 cause: 'work_item_created',
                 initialEntry: true,
@@ -575,7 +574,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
             workItemId,
             actor: { type: 'human', id: resolved.userId },
-            actorProfile: auditActorProfile(getFactoryAuthUser(loose(c))),
+            ...auditRequestOrigin(loose(c)),
             ingress: {
               ...parsed.ingress,
               identity: `human:${resolved.userId}:${parsed.ingress.identity}`,
@@ -600,7 +599,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
           input.defaultModelId = resolved.defaultModelId ?? undefined;
-          input.actorProfile = auditActorProfile(getFactoryAuthUser(loose(c)));
+          Object.assign(input, auditRequestOrigin(loose(c)));
           await workItems.ensureReady();
           let prepared: FactoryStartPreparedResult;
           try {

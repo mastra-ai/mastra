@@ -129,6 +129,14 @@ export function auditRequestContext(c: Context): AuditContext {
   };
 }
 
+/** Who a browser request is and where it came from: the pair every funnel row carries. */
+export function auditRequestOrigin(c: Context): {
+  actorProfile: AuditActorProfileInput | undefined;
+  context: AuditContext;
+} {
+  return { actorProfile: auditActorProfile(getFactoryAuthUser(c)), context: auditRequestContext(c) };
+}
+
 /** Factory-owned audit behavior backed by the audit storage domain. */
 export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   readonly #auth: RouteAuth;

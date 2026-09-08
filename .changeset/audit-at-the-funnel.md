@@ -7,10 +7,11 @@ The audit trail now records every stage move, run start and run end, whoever cau
 What lands in the trail now:
 
 - `factory.work_item.stage_moved` and `factory.work_item.transition_rejected` for every accepted or rejected transition, under the real actor: the person, `agent:<binding>` (also when the dispatcher carries an agent's approval), `github:<login>`, or actor type `system` for a rule. A re-entry onto the stage a card already holds is recorded with `reenter: true`.
-- `factory.run.started` for every kickoff that is not a replay, including the ones the rule dispatcher starts on its own
+- `factory.run.started` for every kickoff that reaches an agent, including the ones the rule dispatcher starts on its own. A kickoff that failed before the hand-off records its start when the retry succeeds, not twice
 - `factory.run.ended`, a new action, once per kickoff: the first turn that ends without suspending closes the run with its `reason`, `bindingId`, `role`, `startedBy` and `agentName`
 - `factory.agent.pr_opened`, a new action, when an agent's `gh pr create` prints the pull request it opened; the row targets that pull request by URL, and a preview, a browser hand-off or a failed create records nothing
 - supervisor tool writes now go through the audit domain, so they reach the WorkOS mirror like every other row
+- rows a person causes from the board carry that request's `location` and `userAgent`, so the WorkOS mirror stops exporting them as `unknown`
 
 Filing a session onto a role is audited as `factory.work_item.updated` with `fields: ['sessions']`, no longer as a run start.
 

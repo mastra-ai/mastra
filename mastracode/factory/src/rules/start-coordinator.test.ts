@@ -544,6 +544,34 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('restores the marker and the run-start row when a kickoff is retried after the marker write failed', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { controller, session } = makeController();
+    let markerWrites = 0;
+    session.thread.setSetting.mockImplementation(async ({ key }: { key: string }) => {
+      if (key === FACTORY_OPEN_RUN_SETTING && markerWrites++ === 0) throw new Error('setting write failed');
+    });
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+      undefined,
+      seed.audit,
+    );
+    const input = startRequest();
+
+    await expect(coordinator.prepare(input)).rejects.toThrow('setting write failed');
+    const retried = await coordinator.prepare(input);
+
+    expect(retried).toMatchObject({ replayed: true, kickoffStatus: 'sent' });
+    expect(markerWrites).toBe(2);
+    expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events.map(e => e.action)).toEqual(
+      ['factory.run.started'],
+    );
+  });
+
   it('never sends a kickoff when the binding transaction fails', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     vi.spyOn(storage, 'prepareRunStart').mockRejectedValueOnce(new Error('commit failed'));

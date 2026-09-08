@@ -7,6 +7,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import { executableCommand, runsPullRequestCreate } from '../../../session/shell-commands.js';
 import type { AuditAgentEmitter } from './domain.js';
 
 type FactorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
@@ -22,36 +23,8 @@ interface ToolObserverContext {
 /** Match command-start positions while ignoring command text embedded in heredoc bodies. */
 const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
-const GH_PR_CREATE_RE = /^\s*gh\s+pr\s+create(?:\s|$)/;
 /** `gh pr create` prints the new pull request URL alone on the last line, and nothing else does. */
 const CREATED_PULL_REQUEST_URL_RE = /^https:\/\/\S+\/pull\/\d+$/;
-
-function stripHeredocBodies(command: string): string {
-  const lines = command.split('\n');
-  const executableLines: string[] = [];
-  let delimiter: string | undefined;
-
-  for (const line of lines) {
-    if (delimiter) {
-      if (line.trim() === delimiter) delimiter = undefined;
-      continue;
-    }
-    executableLines.push(line);
-    const heredoc = line.match(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/);
-    delimiter = heredoc?.[2];
-  }
-
-  return executableLines.join('\n');
-}
-
-/** Only the command a chain ends on can have printed the last line of the output. */
-function endsWithPullRequestCreate(command: string): boolean {
-  const lastCommand = command
-    .split(/;|&&|\|\||\n/)
-    .filter(segment => segment.trim() !== '')
-    .at(-1);
-  return lastCommand !== undefined && GH_PR_CREATE_RE.test(lastCommand);
-}
 
 /**
  * The pull request `gh pr create` actually opened, or nothing. A command that
@@ -88,7 +61,7 @@ export async function observeAgentGitAction({
     if (toolContext.toolName !== 'execute_command' || toolContext.error) return;
     const rawCommand = (toolContext.input as { command?: unknown } | undefined)?.command;
     if (typeof rawCommand !== 'string') return;
-    const command = stripHeredocBodies(rawCommand);
+    const command = executableCommand(rawCommand);
 
     const controller = toolContext.context.get('controller') as
       | AgentControllerRequestContext<FactorySessionState>
@@ -111,7 +84,7 @@ export async function observeAgentGitAction({
       });
     }
 
-    const pullRequestUrl = endsWithPullRequestCreate(command) ? createdPullRequestUrl(toolContext.output) : undefined;
+    const pullRequestUrl = runsPullRequestCreate(rawCommand) ? createdPullRequestUrl(toolContext.output) : undefined;
     if (pullRequestUrl) {
       await audit.emitAgent({
         requestContext: toolContext.context,

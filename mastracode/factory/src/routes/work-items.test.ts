@@ -30,6 +30,7 @@ const auditRecorder: AuditRecorder = {
       factoryProjectId: input.factoryProjectId,
       targets: input.targets,
       metadata: input.metadata,
+      context: input.context,
     });
     return null;
   },
@@ -588,6 +589,38 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
       expect.objectContaining({
         action: 'factory.work_item.stage_moved',
         metadata: expect.objectContaining({ ingressType: 'human', configVersion: 'factory-config-v1' }),
+      }),
+    );
+  });
+
+  it('stamps the browser request onto the row a move leaves behind', async () => {
+    const item = await createItem();
+    auditRecorded = [];
+
+    const res = await buildApp(orgUser).request(
+      `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'user-agent': 'Mozilla/5.0 (factory board)',
+          'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+        },
+        body: JSON.stringify({
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: item.revision,
+          requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+          cause: 'board_drag',
+        }),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(auditRecorded).toContainEqual(
+      expect.objectContaining({
+        action: 'factory.work_item.stage_moved',
+        context: { location: '203.0.113.7', userAgent: 'Mozilla/5.0 (factory board)' },
       }),
     );
   });

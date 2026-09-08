@@ -135,9 +135,12 @@ export function auditMetadataPreview(event: AuditEvent): string {
   return details.join(' · ');
 }
 
+/** What the factory itself is called wherever it acts as an actor. */
+export const SYSTEM_ACTOR_NAME = 'Factory';
+
 export function auditActorLabel(event: AuditEvent, actorName: string | undefined): string {
   if (event.actorType === 'human') return actorName ?? event.actorId;
-  if (event.actorType === 'system') return 'Factory';
+  if (event.actorType === 'system') return SYSTEM_ACTOR_NAME;
   const agentName = event.metadata.agentName;
   return typeof agentName === 'string' ? agentName : (actorName ?? 'Agent');
 }

@@ -6,6 +6,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { History } from 'lucide-react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
+import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
@@ -50,7 +51,7 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
   }
-  if (event.actorType === 'system') return { id: event.actorId, name: 'Factory' };
+  if (event.actorType === 'system') return { id: event.actorId, name: SYSTEM_ACTOR_NAME };
   return actors[event.actorId];
 }
 

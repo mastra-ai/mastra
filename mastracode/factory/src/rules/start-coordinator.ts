@@ -5,7 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
 import { FACTORY_OPEN_RUN_SETTING } from '../session/run-end-capture.js';
-import type { AuditActorProfileInput } from '../storage/domains/audit/base.js';
+import type { AuditActorProfileInput, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -22,6 +22,8 @@ export interface FactoryStartRequest {
   /** Who is starting the run, for the trail; `userId` owns the session and its credentials. */
   actor: FactoryRuleActor;
   actorProfile?: AuditActorProfileInput;
+  /** Where a browser request came from; rule-driven kickoffs carry none. */
+  context?: AuditContext;
   threadTitle: string;
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
@@ -219,8 +221,10 @@ export class FactoryStartCoordinator {
     }
 
     // The marker opens the run, so it lands after the transition that could
-    // reject and before the kickoff row goes terminal and stops being retried.
-    if (!prepared.replayed) {
+    // reject and before the kickoff row goes terminal. A replay of a row that
+    // never reached `sent` is a retry of that kickoff, not a duplicate of it.
+    const handedOff = prepared.pendingStart.status === 'sent';
+    if (!handedOff) {
       await session.thread.setSetting({
         key: FACTORY_OPEN_RUN_SETTING,
         value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
@@ -228,7 +232,7 @@ export class FactoryStartCoordinator {
     }
     await storage.markPendingStart(prepared.binding.id, 'sent');
     prepared.pendingStart.status = 'sent';
-    if (!prepared.replayed) {
+    if (!handedOff) {
       await this.#recordRunStart(request, {
         item: prepared.item,
         bindingId: prepared.binding.id,
@@ -269,6 +273,7 @@ export class FactoryStartCoordinator {
         factoryProjectId: request.factoryProjectId,
         ...auditActorOf(request.actor),
         actorProfile: request.actorProfile,
+        ...(request.context ? { context: request.context } : {}),
         action: 'factory.run.started',
         targets: [{ type: 'work_item', id: item.id, name: item.title }],
         metadata: { role: request.workItem.role, ...metadata },
