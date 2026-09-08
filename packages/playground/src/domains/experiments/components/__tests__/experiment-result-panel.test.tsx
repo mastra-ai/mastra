@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
-import { expectComputedTag } from '@/test/computed-tag';
+import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
   id: 'res-1',
@@ -74,6 +74,12 @@ describe('ExperimentResultPanel metadata', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove tag alpha' }));
 
       expect(onTagsChange).toHaveBeenCalledWith([]);
+    });
+
+    it('renders the remove action in the tag foreground color', () => {
+      renderPanel(result);
+
+      expectInheritsTagForeground(screen.getByRole('button', { name: 'Remove tag alpha' }));
     });
 
     it('adds an existing tag from the picker', async () => {

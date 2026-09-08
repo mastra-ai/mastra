@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewItem } from '../review-item-card';
 import type { ReviewItemPanelProps } from '../review-item-panel';
 import { ReviewItemPanel } from '../review-item-panel';
-import { expectComputedTag } from '@/test/computed-tag';
+import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
 
 const baseItem: ReviewItem = {
   id: 'item-1',
@@ -67,6 +67,12 @@ describe('ReviewItemPanel', () => {
       renderPanel({ item: { ...baseItem, tags: ['alpha'] } });
 
       expectComputedTag(screen.getByRole('button', { name: 'Remove tag alpha' }).parentElement, 'alpha');
+    });
+
+    it('renders the remove action in the tag foreground color', () => {
+      renderPanel({ item: { ...baseItem, tags: ['alpha'] } });
+
+      expectInheritsTagForeground(screen.getByRole('button', { name: 'Remove tag alpha' }));
     });
   });
 });

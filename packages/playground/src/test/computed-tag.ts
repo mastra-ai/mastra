@@ -17,3 +17,11 @@ export function expectComputedTag(element: HTMLElement | null, value: string) {
   expect(tag.style.backgroundColor).toBe(probe.style.backgroundColor);
   expect(tag.style.color).toBe(probe.style.color);
 }
+
+/**
+ * Asserts that a remove button inside a `ComputedTag` inherits the tag foreground color
+ * (no own `text-*` color utility) instead of overriding it with a neutral color.
+ */
+export function expectInheritsTagForeground(button: HTMLElement) {
+  expect(button.className).not.toMatch(/(^|\s)(hover:)?text-(neutral|accent)\d/);
+}

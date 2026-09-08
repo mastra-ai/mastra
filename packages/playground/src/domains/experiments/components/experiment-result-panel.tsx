@@ -150,7 +150,7 @@ export function ExperimentResultPanel({
                                 aria-label={`Remove tag ${tag}`}
                                 disabled={isUpdatingTags}
                                 onClick={() => onTagsChange(tags.filter(t => t !== tag))}
-                                className="text-neutral3 hover:text-neutral6 rounded-sm disabled:opacity-50"
+                                className="rounded-sm hover:opacity-70 disabled:opacity-50"
                               >
                                 <X className="size-3" />
                               </button>
