@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -181,6 +182,103 @@ describe('DurableAgent output processor lifecycle', () => {
     const toolResultChunks = chunks.filter((c: any) => c.type === 'tool-result');
     expect(toolResultChunks.length).toBe(1);
     expect(toolResultChunks[0]?.payload?.result).toEqual({ temp: 999 });
+  });
+
+  it('dispatches processToolResult once per tool call across suspend and resume', async () => {
+    const processToolResult = vi.fn(async () => {});
+    const outputProcessor = {
+      id: 'approval-counting-processor',
+      name: 'Approval Counting Processor',
+      processToolResult,
+    };
+
+    let modelCall = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        modelCall++;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream<any>(
+            modelCall === 1
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'tc-approve-1',
+                    toolName: 'getWeather',
+                    input: '{"city":"NYC"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'resp-2', modelId: 'mock', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                ],
+          ),
+        };
+      },
+    });
+
+    const weatherTool = createTool({
+      id: 'getWeather',
+      description: 'Get weather',
+      inputSchema: z.object({ city: z.string() }),
+      requireApproval: true,
+      execute: async () => ({ temp: 72 }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'approval-lifecycle-agent',
+      name: 'Approval Lifecycle Agent',
+      instructions: 'You are a helpful agent.',
+      model: model as LanguageModelV2,
+      tools: { getWeather: weatherTool },
+      memory: new MockMemory(),
+      outputProcessors: [outputProcessor as any],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'approval-lifecycle-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+    const memory = { thread: 'approval-lifecycle-thread', resource: 'approval-lifecycle-resource' };
+
+    const result = await durableAgent.stream('What is the weather in NYC?', { memory });
+    let sawApproval = false;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
+    }
+    expect(sawApproval).toBe(true);
+    expect(processToolResult).not.toHaveBeenCalled();
+
+    const resumed = await durableAgent.approveToolCall({ runId: result.runId, memory });
+    const resumedChunks = await drain(resumed.fullStream);
+
+    // The tool-call step ran once before the approval suspend and once after
+    // resume, but the tool result must be processed and emitted exactly once.
+    expect(processToolResult).toHaveBeenCalledTimes(1);
+    expect(processToolResult.mock.calls[0]?.[0]).toMatchObject({ toolCallId: 'tc-approve-1', toolName: 'getWeather' });
+    const toolResultChunks = resumedChunks.filter((c: any) => c.type === 'tool-result');
+    expect(toolResultChunks.length).toBe(1);
+    expect(toolResultChunks[0]?.payload?.toolCallId).toBe('tc-approve-1');
   });
 
   it('retries the model call when processOutputStep requests a retry', async () => {
@@ -369,12 +467,108 @@ describe('DurableAgent output processor lifecycle', () => {
     expect(seenRetryCounts).toEqual([0, 1]);
   });
 
+  it('carries the processor retry count across tool-call iterations', async () => {
+    const callCount = { value: 0 };
+    const seenRetryCounts: number[] = [];
+
+    // Call 1: text (rejected, retry). Call 2: tool call (accepted). Call 3: text
+    // on the next iteration (rejected again). With maxProcessorRetries: 1 the
+    // budget was spent on call 1, so call 3 must be a terminal tripwire rather
+    // than a fourth model call.
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        const n = ++callCount.value;
+        const body: any[] =
+          n === 2
+            ? [
+                {
+                  type: 'tool-call',
+                  id: 'tc-1',
+                  toolCallType: 'function',
+                  toolCallId: 'tc-1',
+                  toolName: 'getWeather',
+                  args: JSON.stringify({ city: 'NYC' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: `attempt-${n}` },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'resp-' + n, modelId: 'mock', timestamp: new Date(0) },
+            ...body,
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const rejectTextProcessor = {
+      id: 'reject-text-processor',
+      name: 'Reject Text Processor',
+      processOutputStep: vi.fn(async ({ abort, retryCount, text }: any) => {
+        seenRetryCounts.push(retryCount);
+        if (text) {
+          abort('not good enough', { retry: true });
+        }
+      }),
+    };
+
+    const weatherTool = createTool({
+      id: 'getWeather',
+      description: 'Get weather',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => ({ temp: 72 }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'retry-carry-agent',
+      name: 'Retry Carry Agent',
+      instructions: 'You are a helpful agent.',
+      model: model as unknown as LanguageModelV2,
+      tools: { getWeather: weatherTool },
+      outputProcessors: [rejectTextProcessor as any],
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'retry-carry-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const result = await durableAgent.stream('What is the weather in NYC?', {
+      maxProcessorRetries: 1,
+      maxSteps: 5,
+    });
+
+    const chunks = await drain(result.fullStream);
+
+    expect(callCount.value).toBe(3);
+    // The count survives the tool-call iteration: the third call sees 1, not 0.
+    expect(seenRetryCounts).toEqual([0, 1, 1]);
+    const tripwireChunks = chunks.filter((c: any) => c.type === 'tripwire');
+    expect(tripwireChunks.length).toBe(1);
+    expect(chunks[chunks.length - 1]?.type).toBe('finish');
+  });
+
   it('reaches finish after a terminal tripwire and keeps the tripwire recorded', async () => {
     const tripwireProcessor = {
       id: 'blocking-processor',
       name: 'Blocking Processor',
       processOutputStep: vi.fn(async ({ abort }: any) => {
-        abort('blocked content', {});
+        abort('blocked content', { metadata: { k: 1 } });
       }),
     };
 
@@ -406,5 +600,13 @@ describe('DurableAgent output processor lifecycle', () => {
     expect(steps.some(step => step.tripwire?.reason === 'blocked content')).toBe(true);
     const last = chunks[chunks.length - 1];
     expect(last.type).toBe('finish');
+    // The finish chunk must not overwrite the full tripwire with the generic
+    // fallback: reason, metadata and processorId survive on the result.
+    expect(result.output.tripwire).toEqual({
+      reason: 'blocked content',
+      retry: undefined,
+      metadata: { k: 1 },
+      processorId: 'blocking-processor',
+    });
   });
 });

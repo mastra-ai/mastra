@@ -96,6 +96,10 @@ const durableLLMInputSchema = z.object({
   modelSpanData: z.any().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
+  // Output-processor retries already spent on this run. Carried across
+  // iterations so an accepted retry followed by tool calls cannot restart the
+  // count and exceed maxProcessorRetries on the next model call.
+  processorRetryCount: z.number().optional(),
 });
 
 /**
@@ -303,7 +307,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // 4. Execute with model fallback - try each model in the list with retries
       let lastError: Error | undefined;
-      let processorRetryCount = 0;
+      let processorRetryCount = typedInput.processorRetryCount ?? 0;
       const maxProcessorRetries =
         typedInput.options?.maxProcessorRetries ??
         (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
@@ -1827,6 +1831,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 request,
               },
               state: typedInput.state,
+              processorRetryCount,
               // Pass span data so tool calls can be children of model_step
               modelSpanData: hasToolCalls ? modelSpan?.exportSpan?.() : undefined,
               stepSpanData,

@@ -276,6 +276,8 @@ export interface DurableAgenticWorkflowInput {
   modelSpanData?: unknown;
   /** Starting step index for continuation across iterations */
   stepIndex?: number;
+  /** Output-processor retries already spent on this run, carried across iterations */
+  processorRetryCount?: number;
   /**
    * JSON-safe snapshot of `requestContext.entries()` from the call site.
    * Threaded through workflow input so durable steps (e.g. `is-task-complete`

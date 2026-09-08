@@ -984,12 +984,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const outputSteps = chunk.payload.output?.steps;
                 const lastStep = outputSteps?.[outputSteps?.length - 1];
                 const stepTripwire = lastStep?.tripwire;
-                self.#tripwire = {
-                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
-                  retry: stepTripwire?.retry,
-                  metadata: stepTripwire?.metadata,
-                  processorId: stepTripwire?.processorId,
-                };
+                if (stepTripwire) {
+                  self.#tripwire = {
+                    reason: stepTripwire.reason || 'Processor tripwire triggered',
+                    retry: stepTripwire.retry,
+                    metadata: stepTripwire.metadata,
+                    processorId: stepTripwire.processorId,
+                  };
+                } else if (!self.#tripwire) {
+                  // Durable finish chunks carry accumulated step records without
+                  // tripwire data; the tripwire chunk that preceded them already
+                  // set #tripwire, so only fall back when nothing recorded it.
+                  self.#tripwire = { reason: 'Processor tripwire triggered' };
+                }
               }
 
               // Add structured output to the latest assistant message metadata
@@ -1135,18 +1142,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const hasToolStep = self.#bufferedSteps.some(
                     step => step.toolCalls.length > 0 || step.toolResults.length > 0,
                   );
-                  // A tripwired step (e.g. a processor-retry boundary in the durable
-                  // agent, where one MastraModelOutput spans every attempt) must not
-                  // contribute its text: mirror the FullOutput resolution below,
-                  // which joins step texts and lets tripped steps return ''.
-                  const hasTrippedStep = self.#bufferedSteps.some(step => step.tripwire);
                   this.resolvePromises({
                     text:
-                      hasToolStep && !self.#wasSuspended && lastStep
-                        ? lastStep.text
-                        : hasTrippedStep
-                          ? self.#bufferedSteps.map(step => step.text || '').join('')
-                          : self.#bufferedText.join(''),
+                      hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#getFilteredBufferedText(),
                     finishReason: self.#finishReason,
                   });
                 }
@@ -1216,7 +1214,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
                   providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
-                  text: self.#bufferedText.join(''),
+                  // Same filtered text the output.text promise resolves with, so
+                  // onFinish never receives a rejected retry attempt's content.
+                  text: self.#getFilteredBufferedText(),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
@@ -1914,6 +1914,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       this.#emitter.once('finish', done);
       this.#emitter.once('settled', done);
     });
+  }
+
+  /**
+   * Aggregate stream text, minus any tripwired step (a processor-retry
+   * boundary in the durable agent, where one MastraModelOutput spans every
+   * attempt). Tripped steps carry '' as their text, so joining step texts
+   * drops the rejected attempt; without a tripped step the raw buffer is used.
+   */
+  #getFilteredBufferedText(): string {
+    return this.#bufferedSteps.some(step => step.tripwire)
+      ? this.#bufferedSteps.map(step => step.text || '').join('')
+      : this.#bufferedText.join('');
   }
 
   #getTotalUsage(): LanguageModelUsage {
