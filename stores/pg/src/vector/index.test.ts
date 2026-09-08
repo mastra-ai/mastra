@@ -596,12 +596,20 @@ describe('PgVector', () => {
           setup.release();
         }
 
-        await expect(
-          lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['legacy-id'] }),
-        ).rejects.toMatchObject({
-          id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED',
-          message: expect.stringContaining('Resolve conflicting index names'),
-        });
+        const operations = [
+          () => lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } }),
+          () => lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 }),
+          () => lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['legacy-id'] }),
+          () => lazyVectorDB.deleteVector({ indexName: lazyIndex, id: 'legacy-id' }),
+        ];
+
+        for (const operation of operations) {
+          await expect(operation()).rejects.toMatchObject({
+            id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED',
+            category: 'USER',
+            message: expect.stringContaining('Resolve conflicting index names'),
+          });
+        }
       });
     });
 
