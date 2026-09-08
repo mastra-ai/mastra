@@ -591,6 +591,7 @@ export class Memory extends MastraMemory {
       vectorSearchString,
       includeSystemReminders,
       filter,
+      includeTotal,
     } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     const semanticRecallEnabled = Boolean(config.semanticRecall);
@@ -736,6 +737,7 @@ export class Memory extends MastraMemory {
         page,
         orderBy: effectiveOrderBy,
         filter,
+        includeTotal,
         ...(filteredVectorResults?.length
           ? {
               include: filteredVectorResults.map(r => ({
@@ -1847,6 +1849,7 @@ ${workingMemory}`;
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+          includeTotal: false,
         });
         messages = result.messages.reverse(); // DESC → chronological order
       }
@@ -2435,6 +2438,7 @@ Notes:
         resourceId,
         perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
         page,
+        includeTotal: false,
       });
       if (batch.length === 0) break;
 

@@ -113,6 +113,14 @@ type StorageListMessagesOptions = {
     metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
+  /**
+   * When false, skip counting every matching row. `total` is then the size of
+   * the returned page (`offset + messages.length`), not the thread. `hasMore`
+   * is still accurate (Postgres peeks one extra row). Defaults to true.
+   * MessageHistory on the agent path passes false because it only consumes
+   * `messages`.
+   */
+  includeTotal?: boolean;
 };
 
 /**

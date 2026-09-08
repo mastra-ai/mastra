@@ -38,15 +38,18 @@ class MessageQueryClient extends RecordingDbClientBase {
   override async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     this.queries.push({ query, values });
     await this.#gate;
-    if (query.includes('AS "__total"')) {
-      return this.pageRows.map(row => ({ ...row, __total: String(this.windowTotal) })) as T[];
-    }
     if (query.includes('thread_id, "createdAt" FROM')) {
       return this.includeRows.map(row => ({
         id: row.id,
         thread_id: row.threadId,
         createdAt: row.createdAt,
       })) as T[];
+    }
+    if (query.includes('AS "__total"')) {
+      return this.pageRows.map(row => ({ ...row, __total: String(this.windowTotal) })) as T[];
+    }
+    if (query.includes('thread_id IN') || query.includes('"resourceId" =')) {
+      return this.pageRows as T[];
     }
     return this.includeRows as T[];
   }
@@ -207,5 +210,39 @@ describe('MemoryPG message paging round-trips', () => {
     expect(pageQuery!.query).not.toContain('ORDER BY COALESCE');
     expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
     expect(pageQuery!.query).toContain('(SELECT COUNT(*) FROM');
+  });
+
+  it('skips the count when includeTotal is false', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = pageRows;
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 0, includeTotal: false });
+
+    expect(client.queries).toHaveLength(1);
+    const [pageQuery] = client.queries;
+    expect(pageQuery!.query).not.toContain('COUNT(*)');
+    expect(pageQuery!.query).not.toContain('__total');
+    expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.values).toEqual(['thread-1', 11, 0]);
+    expect(result.messages).toHaveLength(2);
+    expect(result.total).toBe(2);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('sets hasMore from a peeked extra row when includeTotal is false', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = [
+      createRow('message-1', '2025-01-01T00:00:00.000Z'),
+      createRow('message-2', '2025-01-01T00:00:01.000Z'),
+    ];
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 1, page: 0, includeTotal: false });
+
+    expect(client.queries[0]!.values).toEqual(['thread-1', 2, 0]);
+    expect(result.messages).toHaveLength(1);
+    expect(result.hasMore).toBe(true);
   });
 });
