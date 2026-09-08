@@ -478,7 +478,7 @@ describe('checkoutSessionBranch', () => {
     ).resolves.toBeUndefined();
 
     expect(sandbox.calls).toContain(
-      "git -C '/workspace/repo' fetch --unshallow --filter=blob:none origin 'main' && git -C '/workspace/repo' fetch origin refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
+      "git -C '/workspace/repo' fetch --unshallow --filter=blob:none origin 'main' && git -C '/workspace/repo' fetch --filter=blob:none origin refs/pull/42/head && git -C '/workspace/repo' checkout -b 'factory/pr-42' FETCH_HEAD",
     );
     expect(sandbox.calls).toContain("git -C '/workspace/repo' config credential.helper '!gh auth git-credential'");
   });

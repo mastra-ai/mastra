@@ -382,7 +382,7 @@ function startPointFetchCommands(
   const git = `git -C ${shellQuote(workdir)}`;
   if (pullRequestNumber === undefined) return `${git} fetch origin ${shellQuote(baseBranch)}`;
   const unshallow = shallowClone ? '--unshallow ' : '';
-  return `${git} fetch ${unshallow}--filter=blob:none origin ${shellQuote(baseBranch)} && ${git} fetch origin refs/pull/${pullRequestNumber}/head`;
+  return `${git} fetch ${unshallow}--filter=blob:none origin ${shellQuote(baseBranch)} && ${git} fetch --filter=blob:none origin refs/pull/${pullRequestNumber}/head`;
 }
 
 /** Check out a session's branch inside its isolated repository clone. */
