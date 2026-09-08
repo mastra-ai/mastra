@@ -1,3 +1,4 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
@@ -6,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../..';
 import { Subconscious } from '../subconscious';
+import { createReminderAgent } from '../subconscious/remind-agent';
 import { REMIND_MESSAGE_METADATA_KEY } from '../subconscious/remind-protocol';
 import { createAskMemoryTool, createReplyToMemoryQuestionTool } from '../subconscious/remind-questions';
 
@@ -93,6 +95,60 @@ function questionMessage(replyId: string): MastraDBMessage {
 describe('Subconscious reminder questions', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('authorizes a reply after OM persists the question between tool steps', async () => {
+    const parentAgent = createParentAgent();
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => {
+        calls++;
+        return {
+          finishReason: calls < 3 ? 'tool-calls' : 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+          content:
+            calls < 3
+              ? [
+                  {
+                    type: 'tool-call',
+                    toolCallId: `call-${calls}`,
+                    toolName: calls === 1 ? 'lookup' : 'reply_to_memory_question',
+                    input: JSON.stringify(
+                      calls === 1 ? {} : { replyId: 'reply-1', answer: 'Use Atlas.', moreComing: false },
+                    ),
+                  },
+                ]
+              : [{ type: 'text', text: 'Done.' }],
+        };
+      },
+    });
+    const memory = new Memory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: { model, observation: { messageTokens: 100000, bufferTokens: false } } },
+    });
+    const reply = createReplyToMemoryQuestionTool({ parentAgent, parentThreadId, resourceId });
+    const execute = vi.spyOn(reply, 'execute');
+    const reminder = createReminderAgent({
+      model,
+      memory,
+      scope: [resourceId],
+      threadId: questionMessage('reply-1').threadId!,
+      resourceId,
+      parentThreadId,
+      fallbackSendSignal: vi.fn(),
+      additionalTools: {
+        lookup: { id: 'lookup', description: 'Look up the decision', execute: async () => 'Use Atlas.' },
+        reply_to_memory_question: reply,
+      },
+    });
+    await reminder.generate([questionMessage('reply-1')], {
+      memory: { thread: questionMessage('reply-1').threadId!, resource: resourceId },
+      maxSteps: 3,
+    });
+    expect(calls).toBe(3);
+    expect(execute).toHaveResolvedWith(expect.objectContaining({ delivered: true, replyId: 'reply-1' }));
+    expect(parentAgent.sendSignal).toHaveBeenCalled();
   });
 
   it('exposes ask_memory only when Subconscious tools are enabled', () => {

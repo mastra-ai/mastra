@@ -239,6 +239,25 @@ export function createReminderAgent(options: {
       ...options.additionalTools,
       send_reminder: sendReminder,
     },
+    inputProcessors: options.additionalTools?.reply_to_memory_question
+      ? [
+          {
+            id: 'remind-question-context',
+            processInputStep: ({ messageList, tools }) => {
+              const replyTool = options.additionalTools!.reply_to_memory_question!;
+              const contextualReply: typeof replyTool = {
+                ...replyTool,
+                execute: async (input, context) =>
+                  replyTool.execute?.(input, {
+                    ...context,
+                    agent: context.agent ? { ...context.agent, messages: messageList.get.all.aiV5.model() } : undefined,
+                  }),
+              };
+              return { tools: { ...tools, reply_to_memory_question: contextualReply } };
+            },
+          },
+        ]
+      : undefined,
     outputProcessors,
     maxProcessorRetries: outputProcessors ? 1 : undefined,
   });
