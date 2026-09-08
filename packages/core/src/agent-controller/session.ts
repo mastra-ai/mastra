@@ -2958,6 +2958,33 @@ export class Session<TState = unknown> {
     this.emit(event);
   }
 
+  /** Await the terminal event for a specific accepted agent run. */
+  private async waitForAcceptedRunCompletion<OUTPUT>(
+    accepted: Promise<SendAgentSignalAccepted<OUTPUT>>,
+  ): Promise<void> {
+    const completedRunIds = new Set<string>();
+    let runId: string | undefined;
+    let resolveCompletion!: () => void;
+    const completion = new Promise<void>(resolve => {
+      resolveCompletion = resolve;
+    });
+    const unsubscribe = this.onBeforeAgentEnd(() => {
+      const endingRunId = this.run.getRunId();
+      if (!endingRunId) return;
+      completedRunIds.add(endingRunId);
+      if (endingRunId === runId) resolveCompletion();
+    });
+
+    try {
+      const result = await accepted;
+      runId = 'runId' in result ? result.runId : undefined;
+      if (!runId || completedRunIds.has(runId)) return;
+      await completion;
+    } finally {
+      unsubscribe();
+    }
+  }
+
   /**
    * Emit an event on this session. Delegates to this session's bus, which folds
    * the event into the canonical display state, dispatches to this session's
@@ -3557,63 +3584,38 @@ export class Session<TState = unknown> {
     const submittedWhileWorking =
       submittedIsRunning || (submittedAbortRequested && Boolean(submittedRunId || submittedActiveRunId));
 
-    let resolveAgentEnd: (() => void) | undefined;
-    const agentEnd = new Promise<void>(resolve => {
-      resolveAgentEnd = resolve;
-    });
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.subscribe(event => {
-          if (event.type === 'agent_end') {
-            resolveAgentEnd?.();
-          }
-        });
-
-    try {
-      if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
-        this.approval.respond({
-          decision: 'decline',
-          declineContext: {
-            reason: 'interrupted_by_user_message',
-            message: 'The pending tool approval was declined because the user sent a new message.',
-          },
-        });
-      }
-      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
-        await this.waitForStreamIdle();
-      }
-
-      const target = await this.prepareMessageTarget({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-        includeStreamOptions: !(
-          !submittedAbortRequested &&
-          submittedRunId &&
-          submittedActiveRunId &&
-          submittedIsRunning
-        ),
+    if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
+      this.approval.respond({
+        decision: 'decline',
+        declineContext: {
+          reason: 'interrupted_by_user_message',
+          message: 'The pending tool approval was declined because the user sent a new message.',
+        },
       });
-      const result = this.machinery
-        .getAgent()
-        .sendMessage(
-          submittedWhileWorking
-            ? { contents: messageInput, attributes: { delivery: 'while-active' }, providerOptions }
-            : messageWithAuthor,
-          target,
-        );
+    }
+    if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+      await this.waitForStreamIdle();
+    }
 
-      if (wasActive) {
-        await result.accepted;
-      } else {
-        const acceptedFailure = result.accepted.then(
-          () => new Promise<void>(() => {}),
-          error => Promise.reject(error),
-        );
-        await Promise.race([agentEnd, acceptedFailure]);
-      }
-    } finally {
-      unsubscribeAgentEnd?.();
+    const target = await this.prepareMessageTarget({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+      includeStreamOptions: !(!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning),
+    });
+    const result = this.machinery
+      .getAgent()
+      .sendMessage(
+        submittedWhileWorking
+          ? { contents: messageInput, attributes: { delivery: 'while-active' }, providerOptions }
+          : messageWithAuthor,
+        target,
+      );
+
+    if (wasActive) {
+      await result.accepted;
+    } else {
+      await this.waitForAcceptedRunCompletion(result.accepted);
     }
   }
 
@@ -3635,41 +3637,21 @@ export class Session<TState = unknown> {
     requestContext?: RequestContext;
   }): Promise<void> {
     const wasActive = this.stream.isActive();
-    let resolveAgentEnd: (() => void) | undefined;
-    const agentEnd = new Promise<void>(resolve => {
-      resolveAgentEnd = resolve;
+    const target = await this.prepareMessageTarget({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
     });
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.subscribe(event => {
-          if (event.type === 'agent_end') {
-            resolveAgentEnd?.();
-          }
-        });
+    const messageInput = this.createMessageInput({ content, files });
+    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+    const result = this.machinery
+      .getAgent()
+      .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
 
-    try {
-      const target = await this.prepareMessageTarget({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-      });
-      const messageInput = this.createMessageInput({ content, files });
-      const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
-      const result = this.machinery
-        .getAgent()
-        .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
-
-      if (wasActive) {
-        await result.accepted;
-      } else {
-        const acceptedFailure = result.accepted.then(
-          () => new Promise<void>(() => {}),
-          error => Promise.reject(error),
-        );
-        await Promise.race([agentEnd, acceptedFailure]);
-      }
-    } finally {
-      unsubscribeAgentEnd?.();
+    if (wasActive) {
+      await result.accepted;
+    } else {
+      await this.waitForAcceptedRunCompletion(result.accepted);
     }
   }
 
