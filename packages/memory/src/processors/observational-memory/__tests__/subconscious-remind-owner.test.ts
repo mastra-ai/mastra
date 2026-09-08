@@ -1,9 +1,10 @@
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../..';
 import { applyExtractorHooks } from '../extracted-values';
@@ -227,6 +228,30 @@ async function runScenario(knowledgeResourceId: string | undefined, completionGa
 }
 
 describe('Subconscious remind thread ownership', () => {
+  const pendingWakeOutputs: Promise<unknown>[] = [];
+  const sendMessage = Agent.prototype.sendMessage;
+
+  beforeEach(() => {
+    vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, ...args) {
+      const delivery = sendMessage.apply(this, args);
+      pendingWakeOutputs.push(
+        delivery.accepted.then(accepted => {
+          if (accepted.action === 'wake') return accepted.output.consumeStream();
+        }),
+      );
+      return delivery;
+    });
+  });
+
+  afterEach(async () => {
+    try {
+      await Promise.all(pendingWakeOutputs);
+    } finally {
+      pendingWakeOutputs.length = 0;
+      vi.restoreAllMocks();
+    }
+  });
+
   // Control first: the package vitest config bails after the first failure.
   it('accepts ask_memory after a passive reminder without override', async () => {
     await runScenario(undefined);
@@ -246,6 +271,7 @@ describe('Subconscious remind thread ownership', () => {
       await runScenario(PROJECT);
     } finally {
       release();
+      await Promise.all(pendingWakeOutputs);
     }
   });
 });
