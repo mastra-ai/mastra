@@ -115,16 +115,18 @@ describe('OpenAISchemaCompatLayer', () => {
             description: 'Nested filter',
             properties: {
               field: { type: 'string', description: 'SINGLE_OBJECT_SENTINEL' },
+              operator: { type: 'string' },
             },
-            required: ['field'],
+            required: ['field', 'operator'],
             additionalProperties: false,
             anyOf: [
               {
                 type: 'object',
                 properties: {
-                  field: { type: 'string', description: 'SINGLE_OBJECT_SENTINEL' },
+                  operator: { type: 'string' },
+                  field: { description: 'SINGLE_OBJECT_SENTINEL', type: 'string' },
                 },
-                required: ['field'],
+                required: ['operator', 'field'],
                 additionalProperties: false,
               },
               { type: 'null' },
@@ -143,11 +145,14 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(filter.description).toBe('Nested filter');
 
       const objectBranch = filter.anyOf.find((b: any) => b.type === 'object');
-      expect(objectBranch.properties.field).toEqual({
-        type: 'string',
-        description: 'SINGLE_OBJECT_SENTINEL',
+      expect(objectBranch.properties).toEqual({
+        field: {
+          type: 'string',
+          description: 'SINGLE_OBJECT_SENTINEL',
+        },
+        operator: { type: 'string' },
       });
-      expect(objectBranch.required).toEqual(['field']);
+      expect(objectBranch.required).toEqual(['field', 'operator']);
       expect(objectBranch.additionalProperties).toBe(false);
       expect(filter.anyOf.find((b: any) => b.type === 'null')).toEqual({ type: 'null' });
       expect(JSON.stringify(filter).split('SINGLE_OBJECT_SENTINEL').length - 1).toBe(1);
@@ -272,6 +277,179 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(stringBranch).toEqual({ type: 'string' });
     });
 
+    it('preserves meaningful constraints for nullable multi-type properties', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          unionValue: {
+            type: ['object', 'string'],
+            properties: { kind: { const: 'x' } },
+            required: ['kind'],
+            additionalProperties: false,
+            anyOf: [
+              { type: 'string', enum: ['ok', 'blocked'] },
+              {
+                type: 'object',
+                properties: { kind: { const: 'x' } },
+                required: ['kind'],
+                additionalProperties: false,
+              },
+            ],
+          },
+          oneValue: {
+            type: ['object', 'string'],
+            properties: { kind: { const: 'x' } },
+            required: ['kind'],
+            additionalProperties: false,
+            oneOf: [
+              { type: 'string', const: 'ok' },
+              {
+                type: 'object',
+                properties: { kind: { const: 'x' } },
+                required: ['kind'],
+                additionalProperties: false,
+              },
+            ],
+          },
+          notValue: {
+            type: ['string', 'number'],
+            not: { const: 'blocked' },
+          },
+          conditionalValue: {
+            type: ['string', 'number'],
+            if: { type: 'string' },
+            then: { minLength: 2 },
+            else: { minimum: 2 },
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      for (const property of Object.values(result.properties) as any[]) {
+        expect(property.anyOf.find((branch: any) => branch.type === 'null')).toEqual({ type: 'null' });
+      }
+      for (const branch of result.properties.unionValue.anyOf.filter((branch: any) => branch.type !== 'null')) {
+        expect(branch.anyOf).toHaveLength(2);
+      }
+      for (const branch of result.properties.oneValue.anyOf.filter((branch: any) => branch.type !== 'null')) {
+        expect(branch.oneOf).toHaveLength(2);
+      }
+      for (const branch of result.properties.notValue.anyOf.filter((branch: any) => branch.type !== 'null')) {
+        expect(branch.not).toEqual(expect.any(Object));
+      }
+      for (const branch of result.properties.conditionalValue.anyOf.filter((branch: any) => branch.type !== 'null')) {
+        expect(branch.if).toEqual(expect.any(Object));
+        expect(branch.then).toEqual(expect.any(Object));
+        expect(branch.else).toEqual(expect.any(Object));
+      }
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ unionValue: null, oneValue: null, notValue: null, conditionalValue: null })).toBe(true);
+      expect(validate({ unionValue: { kind: 'x' }, oneValue: 'ok', notValue: 'ok', conditionalValue: 'ok' })).toBe(
+        true,
+      );
+      expect(validate({ unionValue: 'blocked', oneValue: { kind: 'x' }, notValue: 2, conditionalValue: 2 })).toBe(true);
+      expect(validate({ unionValue: 'invalid', oneValue: null, notValue: null, conditionalValue: null })).toBe(false);
+      expect(validate({ unionValue: null, oneValue: 'invalid', notValue: null, conditionalValue: null })).toBe(false);
+      expect(validate({ unionValue: null, oneValue: null, notValue: 'blocked', conditionalValue: null })).toBe(false);
+      expect(validate({ unionValue: null, oneValue: null, notValue: null, conditionalValue: 'x' })).toBe(false);
+      expect(validate({ unionValue: null, oneValue: null, notValue: null, conditionalValue: 1 })).toBe(false);
+    });
+
+    it('keeps semantically equal object const and enum values for nullable multi-type properties', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          value: {
+            type: ['object', 'string'],
+            const: { first: 1, second: 2 },
+            enum: [{ second: 2, first: 1 }],
+            properties: {
+              first: { type: 'number' },
+              second: { type: 'number' },
+            },
+            required: ['first', 'second'],
+            additionalProperties: false,
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      expect(result.properties.value.enum).toEqual([{ first: 1, second: 2 }, null]);
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null })).toBe(true);
+      expect(validate({ value: { second: 2, first: 1 } })).toBe(true);
+      expect(validate({ value: { first: 1, second: 3 } })).toBe(false);
+    });
+
+    it('compares const JSON values without treating nested keys as schema keywords', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          value: {
+            type: 'object',
+            properties: {
+              required: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['required'],
+            additionalProperties: false,
+            const: { required: ['first', 'second'] },
+            anyOf: [
+              {
+                type: 'object',
+                properties: {
+                  required: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['required'],
+                additionalProperties: false,
+                const: { required: ['second', 'first'] },
+              },
+              { type: 'null' },
+            ],
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const objectBranch = result.properties.value.anyOf.find((branch: any) => branch.type === 'object');
+      expect(objectBranch.anyOf).toHaveLength(2);
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ value: null })).toBe(true);
+      expect(validate({ value: { required: ['first', 'second'] } })).toBe(false);
+      expect(validate({ value: { required: ['second', 'first'] } })).toBe(false);
+    });
+
+    it('preserves meaningful constraints for nullable single-type primitive properties', () => {
+      const result = compat.processToJSONSchema({
+        type: 'object',
+        properties: {
+          choice: {
+            type: 'string',
+            anyOf: [{ const: 'a' }, { const: 'b' }],
+          },
+          excluded: {
+            type: 'string',
+            not: { const: 'blocked' },
+          },
+        },
+        required: [],
+      } as any) as Record<string, any>;
+
+      const choiceBranch = result.properties.choice.anyOf.find((branch: any) => branch.type === 'string');
+      expect(choiceBranch.anyOf).toHaveLength(2);
+      const excludedBranch = result.properties.excluded.anyOf.find((branch: any) => branch.type === 'string');
+      expect(excludedBranch.not).toEqual(expect.any(Object));
+      expect(result.properties.excluded).not.toHaveProperty('not');
+
+      const validate = new Ajv({ strict: false }).compile(result);
+      expect(validate({ choice: null, excluded: null })).toBe(true);
+      expect(validate({ choice: 'a', excluded: 'ok' })).toBe(true);
+      expect(validate({ choice: 'b', excluded: 'allowed' })).toBe(true);
+      expect(validate({ choice: 'c', excluded: null })).toBe(false);
+      expect(validate({ choice: null, excluded: 'blocked' })).toBe(false);
+    });
+
     it('handles type arrays that already include null', () => {
       const result = compat.processToJSONSchema({
         type: 'object',
@@ -346,13 +524,26 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(invalidResult).toHaveProperty('issues');
     });
 
-    it('grows linearly for nested single-type optional objects', () => {
+    it('grows linearly for reordered nested single-type optional objects', () => {
+      function reverseSchemaOrder(value: unknown): unknown {
+        if (Array.isArray(value)) return value.map(reverseSchemaOrder).reverse();
+        if (!value || typeof value !== 'object') return value;
+        return Object.fromEntries(
+          Object.entries(value)
+            .reverse()
+            .map(([key, child]) => [key, reverseSchemaOrder(child)]),
+        );
+      }
+
       function nested(depth: number): Record<string, any> {
         if (depth === 0) {
           return {
             type: 'object',
-            properties: { sentinel: { type: 'string', description: 'SINGLE_TYPE_SENTINEL' } },
-            required: ['sentinel'],
+            properties: {
+              sentinel: { type: 'string', description: 'SINGLE_TYPE_SENTINEL' },
+              sibling: { type: 'number' },
+            },
+            required: ['sentinel', 'sibling'],
             additionalProperties: false,
           };
         }
@@ -368,7 +559,7 @@ describe('OpenAISchemaCompatLayer', () => {
               anyOf: [
                 {
                   type: 'object',
-                  properties: { child: structuredClone(child) },
+                  properties: { child: reverseSchemaOrder(child) },
                   required: ['child'],
                   additionalProperties: false,
                 },

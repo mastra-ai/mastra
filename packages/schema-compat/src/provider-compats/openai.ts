@@ -32,6 +32,76 @@ const allowedStringFormats = [
   'uuid',
 ] as const;
 
+function unorderedArraysEqual(
+  left: unknown[],
+  right: unknown[],
+  itemEquals: (leftItem: unknown, rightItem: unknown) => boolean,
+): boolean {
+  if (left.length !== right.length) return false;
+
+  const matched = new Set<number>();
+  return left.every(leftItem => {
+    const matchIndex = right.findIndex((rightItem, index) => !matched.has(index) && itemEquals(leftItem, rightItem));
+    if (matchIndex === -1) return false;
+    matched.add(matchIndex);
+    return true;
+  });
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => jsonValuesEqual(value, right[index]))
+    );
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+
+  const leftEntries = Object.entries(left);
+  const rightRecord = right as Record<string, unknown>;
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) && jsonValuesEqual(value, rightRecord[key]),
+    )
+  );
+}
+
+function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boolean {
+  if (keyword === 'const' || keyword === 'default' || keyword === 'example' || keyword === 'examples') {
+    return jsonValuesEqual(left, right);
+  }
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right)) return false;
+    if (keyword === 'required' || keyword === 'type') {
+      return unorderedArraysEqual(left, right, Object.is);
+    }
+    if (keyword === 'enum') {
+      return unorderedArraysEqual(left, right, jsonValuesEqual);
+    }
+    if (keyword === 'allOf' || keyword === 'anyOf' || keyword === 'oneOf') {
+      return unorderedArraysEqual(left, right, (leftItem, rightItem) => schemaValuesEqual(leftItem, rightItem));
+    }
+    return left.length === right.length && left.every((value, index) => schemaValuesEqual(value, right[index]));
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+
+  const leftEntries = Object.entries(left);
+  const rightRecord = right as Record<string, unknown>;
+  return (
+    leftEntries.length === Object.keys(rightRecord).length &&
+    leftEntries.every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) && schemaValuesEqual(value, rightRecord[key], key),
+    )
+  );
+}
+
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
@@ -262,6 +332,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             schema.required?.push(key);
             const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
             const arrayKeywords = ['items'] as const;
+            const genericConstraintKeywords = ['const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const;
+            const branchConstraintKeywords = ['anyOf', 'oneOf', 'not', 'if', 'then', 'else'] as const;
             const typeSpecificKeywords = (type: JSONSchema7['type']) =>
               type === 'object' ? objectKeywords : type === 'array' ? arrayKeywords : [];
             const isRedundantNullableUnion = (type: JSONSchema7['type']) => {
@@ -276,10 +348,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
               return Object.entries(valueBranch).every(([keyword, value]) => {
                 if (keyword === 'type') return true;
-                return (
-                  keyword in prop &&
-                  JSON.stringify((prop as Record<string, unknown>)[keyword]) === JSON.stringify(value)
-                );
+                return keyword in prop && schemaValuesEqual((prop as Record<string, unknown>)[keyword], value, keyword);
               });
             };
 
@@ -289,13 +358,20 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 types.push('null');
               }
 
-              delete prop.anyOf;
+              const branchConstraints = {} as JSONSchema7;
+              const propRecord = prop as Record<string, unknown>;
+              const branchConstraintRecord = branchConstraints as Record<string, unknown>;
+              for (const keyword of branchConstraintKeywords) {
+                if (keyword in prop) {
+                  branchConstraintRecord[keyword] = propRecord[keyword];
+                  delete propRecord[keyword];
+                }
+              }
               delete prop.type;
 
               if ('const' in prop) {
                 const constValue = prop.const as JSONSchema7Type;
-                const enumAllowsConst =
-                  !prop.enum || prop.enum.some(value => JSON.stringify(value) === JSON.stringify(constValue));
+                const enumAllowsConst = !prop.enum || prop.enum.some(value => jsonValuesEqual(value, constValue));
                 prop.enum = enumAllowsConst ? [constValue, null] : [null];
                 delete prop.const;
               } else if (prop.enum && !prop.enum.includes(null)) {
@@ -315,7 +391,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                   }
                 }
 
-                return branch;
+                return Object.assign(branch, branchConstraints);
               });
 
               for (const keyword of [...objectKeywords, ...arrayKeywords]) {
@@ -328,7 +404,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
               if (keywords.length > 0) {
                 const branch = { type: originalType } as JSONSchema7;
                 const preserveAnyOf = prop.anyOf && !isRedundantNullableUnion(originalType) ? prop.anyOf : undefined;
-                for (const keyword of [...keywords, 'const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const) {
+                for (const keyword of [...keywords, ...genericConstraintKeywords]) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     branch[keyword] = prop[keyword];
@@ -343,17 +419,15 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 delete prop.type;
                 prop.anyOf = [branch, { type: 'null' }];
               } else {
-                const propSchema = { ...prop } as JSONSchema7;
-                delete propSchema.anyOf;
-                delete propSchema.type;
+                const propSchema = { ...prop, type: originalType } as JSONSchema7;
+                if (isRedundantNullableUnion(originalType)) {
+                  delete propSchema.anyOf;
+                }
+                for (const keyword of [...genericConstraintKeywords, 'anyOf'] as const) {
+                  delete prop[keyword];
+                }
                 delete prop.type;
-                prop.anyOf = [
-                  {
-                    ...propSchema,
-                    type: originalType,
-                  },
-                  { type: 'null' },
-                ];
+                prop.anyOf = [propSchema, { type: 'null' }];
               }
             }
           }
