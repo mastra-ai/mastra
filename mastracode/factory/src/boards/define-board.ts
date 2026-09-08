@@ -4,7 +4,13 @@ import type {
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from '../rules/types.js';
-import { IDENTIFIER_RE, MAX_ROLE_LENGTH, MAX_TOOL_NAME_LENGTH } from '../rules/validation.js';
+import {
+  BOARD_IDENTIFIER_RE,
+  IDENTIFIER_RE,
+  MAX_BOARD_IDENTIFIER_LENGTH,
+  MAX_ROLE_LENGTH,
+  MAX_TOOL_NAME_LENGTH,
+} from '../rules/validation.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
@@ -94,6 +100,17 @@ export class BoardDefinitionError extends Error {
 
 const PHASE_KINDS: ReadonlySet<string> = new Set<BoardPhaseKind>(['resting', 'working', 'terminal']);
 
+function validateBoardIdentifier(value: unknown, label: string): void {
+  if (
+    typeof value !== 'string' ||
+    value.length > MAX_BOARD_IDENTIFIER_LENGTH ||
+    value !== value.trim() ||
+    !BOARD_IDENTIFIER_RE.test(value)
+  ) {
+    throw new BoardDefinitionError(`${label} must be a valid board identifier.`);
+  }
+}
+
 function validatePhaseSemantics(phaseId: string, phase: BoardPhaseDefinition<string>): void {
   if (!PHASE_KINDS.has(phase.kind as string)) {
     throw new BoardDefinitionError(`Phase "${phaseId}" must declare kind 'resting', 'working', or 'terminal'.`);
@@ -138,6 +155,7 @@ export function defineBoard<
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
 >(config: BoardConfig<BoardId, Phases>): BoardDefinition<BoardId, keyof Phases & string> {
   type PhaseId = keyof Phases & string;
+  validateBoardIdentifier(config.id, 'Board id');
   if (config.transitionPolicy !== undefined && typeof config.transitionPolicy !== 'function') {
     throw new BoardDefinitionError('Board transitionPolicy must be a function.');
   }
@@ -147,7 +165,10 @@ export function defineBoard<
   if (!phaseIds.has(config.initialPhase)) {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" is not defined.`);
   }
-  for (const [phaseId, phase] of Object.entries(config.phases)) validatePhaseSemantics(phaseId, phase);
+  for (const [phaseId, phase] of Object.entries(config.phases)) {
+    validateBoardIdentifier(phaseId, 'Phase id');
+    validatePhaseSemantics(phaseId, phase);
+  }
   if (config.phases[config.initialPhase]!.kind !== 'resting') {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }

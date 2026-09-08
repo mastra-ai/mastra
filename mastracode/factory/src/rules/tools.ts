@@ -8,13 +8,14 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import { FACTORY_RULE_STAGES, FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
+import { FACTORY_TRIAGE_TYPES, isFactoryTriageType } from './types.js';
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_RATIONALE_LENGTH = 1_000;
 
 const transitionInputSchema = z
   .object({
-    stage: z.enum(FACTORY_RULE_STAGES),
+    stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
     expectedRevision: z.number().int().positive(),
     // Providers strip maxLength from the JSON schema and models can't count characters, so a
     // hard cap invites overshoot-retry loops at the end of every run. Accept and clamp instead.
@@ -46,7 +47,12 @@ export async function createFactoryTransitionTools(options: {
   if (!resolution) return {};
   const availableBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
   if (!availableBinding) return {};
-  const isTriage = availableBinding.role === 'triage';
+  let isTriage = false;
+  if (availableBinding.role === 'triage') {
+    const item = await options.storage.get({ orgId: availableBinding.orgId, id: availableBinding.workItemId });
+    if (!item) return {};
+    isTriage = boardForWorkItem(item) === 'work';
+  }
 
   return {
     factory_transition_work_item: createTool({
@@ -79,14 +85,20 @@ export async function createFactoryTransitionTools(options: {
         }
         const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
         if (!item) throw new Error('Bound Factory work item not found.');
+        const board = boardForWorkItem(item);
         const triageType =
-          'triageType' in input && isFactoryTriageType(input.triageType) ? input.triageType : undefined;
+          board === 'work' &&
+          binding.role === 'triage' &&
+          'triageType' in input &&
+          isFactoryTriageType(input.triageType)
+            ? input.triageType
+            : undefined;
 
         const result = await options.transitionService.transition({
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
           workItemId: binding.workItemId,
-          board: boardForWorkItem(item),
+          board,
           stage,
           expectedRevision,
           actor: { type: 'agent', bindingId: binding.id, role: binding.role },

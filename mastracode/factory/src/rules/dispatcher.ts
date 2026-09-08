@@ -5,7 +5,12 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { createBoardRegistry, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  createBoardRegistry,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { resolvePromptInvocation, resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
@@ -24,7 +29,11 @@ import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailur
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
-import { MAX_FACTORY_RULE_CAUSAL_DEPTH, validateFactoryRuleDecision } from './validation.js';
+import {
+  assertFactoryDecisionTarget,
+  MAX_FACTORY_RULE_CAUSAL_DEPTH,
+  validateFactoryRuleDecision,
+} from './validation.js';
 
 const LEASE_MS = 30_000;
 const POLL_MS = 1_000;
@@ -668,6 +677,12 @@ export class FactoryDecisionDispatcher {
     switch (decision.type) {
       case 'transition': {
         const item = await this.#requireItem(record);
+        const replay = await this.#storage.getTransitionResultByIngress(
+          record.orgId,
+          record.factoryProjectId,
+          `decision:${record.idempotencyKey}`,
+        );
+        if (!replay) assertFactoryDecisionTarget(decision, this.#boards, item.board ?? undefined);
         const result = await this.#transitionService.transition({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -931,6 +946,24 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    // A lost completion acknowledgement must not reinterpret a committed
+    // materialization against a replacement installation.
+    const existing = (
+      await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+    ).find(item => item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey);
+    if (existing) {
+      for (const suffix of ['destination', 'initial-entry']) {
+        const replay = await this.#storage.getTransitionResultByIngress(
+          record.orgId,
+          record.factoryProjectId,
+          `decision:${record.idempotencyKey}:${existing.id}:${suffix}`,
+        );
+        if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
+      }
+    }
+    assertFactoryDecisionTarget(decision, this.#boards);
+    const definition = this.#boards.get(decision.board)!;
+    const initialPhase = definition.initialPhase;
     const parentWorkItemId =
       record.workItemId ??
       (await this.#resolveLinkedWorkItemParentId?.({
@@ -947,12 +980,17 @@ export class FactoryDecisionDispatcher {
         externalSource: externalSourceForDecision(decision),
         parentWorkItemId,
         title: decision.title,
-        stages: ['intake'],
+        board: decision.board,
+        stages: [initialPhase],
         sessions: {},
         metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
       },
       reuseMode: 'preserve',
     });
+    const itemBoard = boardForWorkItem(result.item);
+    if (itemBoard !== decision.board) {
+      throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
+    }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
     // "opened") resolves the card itself as the triggering item; it is not
     // its own parent.
@@ -985,7 +1023,8 @@ export class FactoryDecisionDispatcher {
       }
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    if (!materializedByDecision && (decision.stage === 'intake' || !result.item.stages.includes('intake'))) return;
+    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
+      return;
 
     const board = decision.board;
     let expectedRevision = result.item.revision;
@@ -995,7 +1034,7 @@ export class FactoryDecisionDispatcher {
         factoryProjectId: record.factoryProjectId,
         workItemId: result.item.id,
         board,
-        stage: 'intake',
+        stage: initialPhase,
         expectedRevision,
         actor: deferredActor(record),
         ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${result.item.id}:initial-entry` },
@@ -1009,7 +1048,7 @@ export class FactoryDecisionDispatcher {
       }
       expectedRevision = initial.revision;
     }
-    if (decision.stage === 'intake') return;
+    if (decision.stage === initialPhase) return;
 
     const moved = await this.#transitionService.transition({
       orgId: record.orgId,
