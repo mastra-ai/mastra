@@ -20,7 +20,7 @@ export type ComboboxOption = {
 
 type ComboboxSharedProps = {
   options: ComboboxOption[];
-  placeholder?: string;
+  placeholder?: React.ReactNode;
   searchPlaceholder?: string;
   emptyText?: string;
   className?: string;
@@ -32,6 +32,8 @@ type ComboboxSharedProps = {
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
   error?: string;
   allowCustomValue?: boolean;
+  /** Called with the search input text as it changes (and with `''` after a single-mode selection resets it). */
+  onInputValueChange?: (value: string) => void;
 };
 
 export type ComboboxSingleProps = ComboboxSharedProps & {
@@ -79,6 +81,7 @@ export function Combobox(props: ComboboxProps) {
     container,
     error,
     allowCustomValue = false,
+    onInputValueChange,
   } = props;
   const multiple = isMultipleCombobox(props);
   const [inputValue, setInputValue] = React.useState('');
@@ -201,11 +204,15 @@ export function Combobox(props: ComboboxProps) {
         items={displayedOptions}
         value={selectedOption}
         inputValue={inputValue}
-        onInputValueChange={setInputValue}
+        onInputValueChange={value => {
+          setInputValue(value);
+          onInputValueChange?.(value);
+        }}
         onValueChange={item => {
           if (item) {
             props.onValueChange?.(item.value);
             setInputValue('');
+            onInputValueChange?.('');
           }
         }}
         disabled={disabled}

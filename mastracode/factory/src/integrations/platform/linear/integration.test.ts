@@ -1,8 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -18,7 +18,7 @@ vi.mock('./event-worker.js', () => ({
 import { PlatformLinearIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 const workspace = {
@@ -78,7 +78,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
@@ -527,11 +527,10 @@ describe('PlatformLinearIntegration', () => {
         projects: seed.projects,
         intake: seed.intake,
       },
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
       stateSigner: {},
       baseUrl: 'https://factory.example',
@@ -558,11 +557,11 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
-  it('defaults the Platform base URL and requires a platform credential', () => {
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
+  it('defaults the integrations API URL and requires a platform credential', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.mastra.ai',
+      endpointHost: 'integrations.mastra.ai',
     });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
@@ -581,7 +580,7 @@ describe('PlatformLinearIntegration', () => {
       projects: { listAll: async () => [] },
       intake: {},
     },
-    rules: { config: {}, workItems: {} },
+    runtime: { configVersion: 'test-v1', workItems: {} },
   };
 
   it('registers a single platform-linear-events worker with issue reconciliation folded in', () => {

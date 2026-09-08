@@ -14,6 +14,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function isSystemReminderSignalType(type: unknown): boolean {
+  return type === 'system-reminder' || type === 'reactive';
+}
+
 export function isSystemReminderMessage(message: MastraDBMessage): boolean {
   if (!isRecord(message.content)) {
     return false;
@@ -21,11 +25,7 @@ export function isSystemReminderMessage(message: MastraDBMessage): boolean {
 
   const metadata = message.content.metadata;
   if (message.role === 'signal') {
-    return (
-      isRecord(metadata) &&
-      isRecord(metadata.signal) &&
-      (metadata.signal.type === 'system-reminder' || metadata.signal.type === 'reactive')
-    );
+    return isRecord(metadata) && isRecord(metadata.signal) && isSystemReminderSignalType(metadata.signal.type);
   }
 
   if (message.role !== 'user') {

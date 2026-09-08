@@ -29,7 +29,7 @@ function DatasetItemPage() {
   return (
     <RouteItemOverlay label={`Dataset item ${itemId}`}>
       {item ? (
-        <div className="[&>section]:bg-surface3 flex min-h-full flex-col p-3 [&>section]:min-h-0 [&>section]:flex-1 [&>section]:rounded-lg [&>section]:shadow-lg">
+        <div className="[&>section]:bg-surface3 flex h-full min-h-0 flex-col p-3 [&>section]:min-h-0 [&>section]:flex-1 [&>section]:rounded-lg [&>section]:shadow-lg">
           <DatasetItemPanel datasetId={datasetId} item={item} items={items} onItemChange={openItem} onClose={close} />
         </div>
       ) : isLoadingItems || isFetchingItem ? (

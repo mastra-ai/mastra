@@ -29,7 +29,7 @@ describe('createBoardRegistry', () => {
       id: 'work',
       title: 'Replacement',
       initialPhase: 'start',
-      phases: { start: {} },
+      phases: { start: { title: 'Start', kind: 'resting' } },
     });
     expect(() => createBoardRegistry({ boards: [replacement] })).toThrow("board id 'work' is reserved");
     expect(() => createBoardRegistry({ boards: [replacement], includeDefaultBoards: false })).toThrow(
