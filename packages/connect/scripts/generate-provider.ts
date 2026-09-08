@@ -272,6 +272,15 @@ function extractAction(
   };
 }
 
+/**
+ * Exec bodies are normalized to a block during extraction; strip the outer
+ * braces so the vendored statements inline directly into `execute` after the
+ * request-context binding (prettier re-indents the emitted file).
+ */
+function execBodyStatements(execBody: string): string {
+  return execBody.trim().replace(/^\{/, '').replace(/\}$/, '').trim();
+}
+
 function emitActionFile(action: ExtractedAction): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
@@ -293,7 +302,7 @@ export function ${action.toolFactoryName}(proxy: PlatformProxy) {
     outputSchema: ${action.outputSchemaName},
     execute: async (input, { requestContext }): Promise<z.infer<typeof ${action.outputSchemaName}>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      return (async (): Promise<z.infer<typeof ${action.outputSchemaName}>> => ${action.execBody})();
+${execBodyStatements(action.execBody)}
     },
   });
 }
