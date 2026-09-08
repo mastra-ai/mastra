@@ -62,7 +62,18 @@ export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionI
   suggestedRepair: FactoryHealthRepair | null;
 }
 
+/** A run parked on a plan or a question: the item lives exactly as long as the answer is owed. */
+export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBase {
+  kind: 'agent-waiting';
+  workItemId: string;
+  sessionId: string;
+  threadId: string;
+  role: string;
+  toolName: string;
+}
+
 export type FactoryAttentionItem =
+  | FactoryAgentWaitingAttentionItem
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
@@ -85,6 +96,8 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
       return item.decisionId;
     case 'supervisor-finding':
       return item.findingKey;
+    case 'agent-waiting':
+      return item.sessionId;
   }
 }
 
@@ -96,6 +109,7 @@ export type FactoryAttentionGroup = 'attention' | 'queue' | 'activity';
 const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGroup> = {
   'automation-failed': 'attention',
   'supervisor-finding': 'attention',
+  'agent-waiting': 'attention',
   mention: 'attention',
   'automation-proposed': 'queue',
   activity: 'activity',

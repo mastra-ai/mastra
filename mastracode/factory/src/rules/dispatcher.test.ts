@@ -2853,7 +2853,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
-  it('fails the run loudly when plan review is on and nobody answers the plan', async () => {
+  it('leaves a plan parked for review and calls the kickoff done', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2874,25 +2874,14 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    // The pause is a designed checkpoint, not a crash — but it must be visible:
-    // the decision lands in Needs attention with its reason attached.
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
-
-    // Not just the row: the surface a person actually reads.
+    expect(record).toMatchObject({ status: 'succeeded', failureCode: null });
     const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
-    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
-    expect(await provider.counts(scope)).toMatchObject({ open: 1, unread: 1 });
-    const page = await provider.page(scope, { view: 'open', search: undefined, before: undefined, limit: 10 });
-    expect(page.entries[0]?.item).toMatchObject({
-      kind: 'automation-failed',
-      failureCode: 'plan_awaiting_approval',
-      workItemId: record?.workItemId,
-    });
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
-  it('escalates a run parked on a question nobody is there to answer', async () => {
+  it('leaves a run parked on a question to whoever reads the inbox', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -2915,7 +2904,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+    expect(record).toMatchObject({ status: 'succeeded' });
   });
 
   it('auto-approve answers plans, never questions', async () => {
@@ -2943,7 +2932,7 @@ describe('FactoryDecisionDispatcher', () => {
     // the project's behalf would be inventing the answer.
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'run_awaiting_input' });
+    expect(record).toMatchObject({ status: 'succeeded' });
 
     // And never into failing a person's pause: a person-started run parked on
     // ask_user is that person's question to answer, not a stall.
@@ -3078,7 +3067,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.respondToToolSuspension).toHaveBeenCalledTimes(3);
     const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(record).toMatchObject({ status: 'failed', failureCode: 'plan_awaiting_approval' });
+    expect(record).toMatchObject({ status: 'succeeded' });
   });
 
   it('never runs a dismissed proposal', async () => {

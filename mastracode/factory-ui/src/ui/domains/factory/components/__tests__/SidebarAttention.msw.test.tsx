@@ -452,7 +452,9 @@ describe('Sidebar attention', () => {
     expect(await screen.findByText('Nothing needs attention.')).toBeVisible();
     expect(screen.queryByText('Waiting for approval to run review')).not.toBeInTheDocument();
     expect(oscillatorStart).not.toHaveBeenCalled();
-    expect(api.listed.at(-1)).toBe('?view=open&kind=automation-failed&kind=supervisor-finding&kind=mention&limit=25');
+    expect(api.listed.at(-1)).toBe(
+      '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
+    );
   });
   it('the sidebar and the Overview preview share one attention query', async () => {
     const api = stubAttention([attentionItem()]);
@@ -483,7 +485,9 @@ describe('Sidebar attention', () => {
     await screen.findByRole('button', { name: 'Needs attention, 1 unread, 1 open' });
     expect(await screen.findByText('No active Factory binding for role work.')).toBeVisible();
     await waitForMutationsIdle(client);
-    expect(api.listed).toEqual(['?view=open&kind=automation-failed&kind=supervisor-finding&kind=mention&limit=25']);
+    expect(api.listed).toEqual([
+      '?view=open&kind=automation-failed&kind=supervisor-finding&kind=agent-waiting&kind=mention&limit=25',
+    ]);
   });
 
   it('deduplicates persisted sound claims by scope and occurrence', async () => {

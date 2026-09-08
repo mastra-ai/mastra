@@ -61,27 +61,17 @@ function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailure
   return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
 }
 
-/**
- * `await` leaves a pause alone: a person asked for this run and is reading it.
- * `escalate` fails it loudly: nobody is watching an unattended run.
- * Plans are answered separately (`approvePlans`) — a plan has an approvable
- * default, a question does not, so the two never share a policy.
- */
-type ParkedRunPolicy = 'escalate' | 'await';
-
 function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
     timeoutMs,
     approvePlans,
-    onParkedRun,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
     approvePlans: boolean;
-    onParkedRun: ParkedRunPolicy;
     onAgentEnd?: () => Promise<boolean>;
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
@@ -140,7 +130,7 @@ function watchRun(
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
-      // Exhausting the cap falls through to the escalate branch below.
+      // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
       if (approvePlans) {
         for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
           const { toolCallId } = parked;
@@ -149,19 +139,6 @@ function watchRun(
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId });
           observed = await wait();
         }
-      }
-      if (parked !== undefined && (!observed || endReason === 'suspended')) {
-        if (onParkedRun === 'await') return;
-        if (parked.toolName === 'submit_plan') {
-          throw new FactoryDispatchError(
-            'plan_awaiting_approval',
-            'Factory run wrote a plan and is waiting for it to be reviewed.',
-          );
-        }
-        throw new FactoryDispatchError(
-          'run_awaiting_input',
-          `Factory run is waiting on ${parked.toolName} for an answer.`,
-        );
       }
       if (!observed) {
         // A completed decision with no observed run end is exactly the
@@ -819,7 +796,6 @@ export class FactoryDecisionDispatcher {
         const run = watchRun(session, {
           timeoutMs: this.#skillCompletionObservationTimeoutMs,
           approvePlans: await this.#plansAreAutoApproved(record, item),
-          onParkedRun: 'escalate',
           onAgentEnd: () => this.#roleSuperseded(record, decision.role),
           label: 'Factory skill run',
           runStillActive: () =>
@@ -1241,7 +1217,6 @@ export class FactoryDecisionDispatcher {
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record, item),
-            onParkedRun: 'await',
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

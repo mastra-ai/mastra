@@ -68,8 +68,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
-  /** Materialized sessions, read to report which of the listed cards are being worked. */
-  liveSessions: Pick<LiveSessions, 'isRunning'>;
+  /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
+  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -84,15 +84,15 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
   return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
 }
 
-/** Session ids of the listed cards whose agent run is in flight. */
-function runningSessionIds(items: WorkItemRow[], liveSessions: Pick<LiveSessions, 'isRunning'>): string[] {
-  const running = new Set<string>();
+/** Session ids of the listed cards that the predicate picks, each once. */
+function sessionIdsWhere(items: WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
+  const picked = new Set<string>();
   for (const item of items) {
     for (const { sessionId } of Object.values(item.sessions)) {
-      if (liveSessions.isRunning(sessionId)) running.add(sessionId);
+      if (predicate(sessionId)) picked.add(sessionId);
     }
   }
-  return [...running];
+  return [...picked];
 }
 
 function loose(c: unknown): Context {
@@ -587,7 +587,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           return c.json({
             workItems: items.map(toWireWorkItem),
-            runningSessionIds: runningSessionIds(items, liveSessions),
+            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
           });
         },
       }),
@@ -661,6 +662,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         comments: this.deps.comments,
+        liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
