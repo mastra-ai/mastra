@@ -1,9 +1,7 @@
 /**
- * Agent-level audit event detection (Audit v1.1).
- *
- * Git actions performed by agents inside runs never touch web routes, so this
- * observer detects externally-visible git side effects and delegates recording
- * to the factory-owned audit domain.
+ * Git and GitHub actions performed by agents inside runs never touch web routes,
+ * so this observer detects their externally-visible side effects in the command
+ * and delegates recording to the factory-owned audit domain.
  */
 
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
@@ -24,6 +22,7 @@ interface ToolObserverContext {
 /** Match command-start positions while ignoring command text embedded in heredoc bodies. */
 const GIT_COMMIT_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+commit(?:\s|$)/;
 const GIT_PUSH_RE = /(?:^|\n|;|&&|\|\|)\s*git\s+push(?:\s|$)/;
+const GH_PR_CREATE_RE = /(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/;
 
 function stripHeredocBodies(command: string): string {
   const lines = command.split('\n');
@@ -52,8 +51,8 @@ function parsePushedBranch(command: string): string | undefined {
 }
 
 /**
- * Detect externally-visible git side effects in a completed tool call and
- * record `factory.agent.*` audit events for them. One command can emit
+ * Detect externally-visible git and GitHub side effects in a completed tool
+ * call and record `factory.agent.*` audit events for them. One command can emit
  * multiple events (`git commit && git push` emits both). Never throws.
  */
 export async function observeAgentGitAction({
@@ -73,14 +72,12 @@ export async function observeAgentGitAction({
       | AgentControllerRequestContext<FactorySessionState>
       | undefined;
     const worktreePath = controller?.scope;
+    const targets = worktreePath ? [{ type: 'worktree', id: worktreePath }] : [];
 
     if (GIT_COMMIT_RE.test(command)) {
       await audit.emitAgent({
         requestContext: toolContext.context,
-        input: {
-          action: 'factory.agent.commit',
-          targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-        },
+        input: { action: 'factory.agent.commit', targets },
       });
     }
 
@@ -88,11 +85,14 @@ export async function observeAgentGitAction({
       const branch = parsePushedBranch(command);
       await audit.emitAgent({
         requestContext: toolContext.context,
-        input: {
-          action: 'factory.agent.push',
-          targets: worktreePath ? [{ type: 'worktree', id: worktreePath }] : [],
-          ...(branch ? { metadata: { branch } } : {}),
-        },
+        input: { action: 'factory.agent.push', targets, ...(branch ? { metadata: { branch } } : {}) },
+      });
+    }
+
+    if (GH_PR_CREATE_RE.test(command)) {
+      await audit.emitAgent({
+        requestContext: toolContext.context,
+        input: { action: 'factory.agent.pr_opened', targets },
       });
     }
   } catch (err) {

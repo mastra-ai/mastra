@@ -7,7 +7,9 @@ import type { Context } from 'hono';
 import { getFactoryAuthUser } from '../../../auth.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../projects/base.js';
-import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile } from './base.js';
+import { auditActionsInNamespaces, isAuditNamespace } from './actions.js';
+import type { AuditAction } from './actions.js';
+import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile, auditAgentName } from './base.js';
 import type {
   AuditActorProfileInput,
   AuditContext,
@@ -20,7 +22,7 @@ import type {
 } from './base.js';
 
 export interface EmitAuditInput {
-  action: string;
+  action: AuditAction;
   factoryProjectId?: string;
   projectRepositoryId?: string;
   targets: AuditTarget[];
@@ -28,7 +30,7 @@ export interface EmitAuditInput {
 }
 
 export interface EmitAgentAuditInput {
-  action: string;
+  action: AuditAction;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
 }
@@ -41,7 +43,7 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
-/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends. */
+/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends, supervisor tools. */
 export type AuditRecorder = Pick<AuditDomain, 'record'>;
 
 /** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
@@ -88,7 +90,6 @@ export interface AuditDomainOptions {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_ACTION_FILTERS = 16;
 const MAX_ACTOR_PROFILES = 100;
 const AUTOMATION_ACTORS = new Set([
   'factory',
@@ -102,14 +103,13 @@ function loose(c: unknown): Context {
   return c as Context;
 }
 
-function parseActionsParam(raw: string | undefined): string[] | undefined {
+function actionsInRequestedNamespaces(raw: string | undefined): string[] | undefined {
   if (!raw) return undefined;
-  const actions = raw
+  const namespaces = raw
     .split(',')
-    .map(action => action.trim())
-    .filter(Boolean)
-    .slice(0, MAX_ACTION_FILTERS);
-  return actions.length > 0 ? actions : undefined;
+    .map(namespace => namespace.trim())
+    .filter(isAuditNamespace);
+  return namespaces.length > 0 ? auditActionsInNamespaces(namespaces) : undefined;
 }
 
 function isHumanActorId(actorId: string | undefined): actorId is string {
@@ -169,7 +169,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
     }
   }
 
-  async record(input: RecordAuditEventInput): Promise<AuditEventRow | null> {
+  async record(input: RecordAuditEventInput<AuditAction>): Promise<AuditEventRow | null> {
     try {
       await this.#audit.ensureReady();
       const row = await this.#audit.record(input);
@@ -252,7 +252,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
         metadata: {
           ...input.metadata,
           startedBy: userId,
-          ...(modeId ? { agentName: `${modeId} agent` } : {}),
+          ...(modeId ? { agentName: auditAgentName(modeId) } : {}),
           ...(modelId ? { modelId } : {}),
         },
         factoryProjectId: state.factoryProjectId,
@@ -342,7 +342,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
           const page = await this.list({
             orgId: tenant.orgId,
             factoryProjectId: projectId,
-            actions: parseActionsParam(c.req.query('actions')),
+            actions: actionsInRequestedNamespaces(c.req.query('namespaces')),
             actorId: c.req.query('actor') || undefined,
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),

@@ -331,7 +331,7 @@ describe('AuditDomain', () => {
     });
     mountApiRoutes(app as never, domain.routes());
     const query = new URLSearchParams({
-      actions: 'factory.work_item.created, factory.git.push,',
+      namespaces: 'run, git,worktree,',
       actor: 'user-2',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: '25',
@@ -341,7 +341,16 @@ describe('AuditDomain', () => {
     expect(list).toHaveBeenCalledWith({
       orgId: 'org-1',
       factoryProjectId: project.id,
-      actions: ['factory.work_item.created', 'factory.git.push'],
+      actions: [
+        'factory.run.started',
+        'factory.run.ended',
+        'factory.run.approved',
+        'factory.run.dismissed',
+        'factory.run.retry',
+        'factory.git.commit',
+        'factory.git.push',
+        'factory.git.pr_opened',
+      ],
       actorId: 'user-2',
       before: '2026-07-15T00:00:00.000Z_event-9',
       limit: 25,

@@ -5,6 +5,7 @@ import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryStageRules } from './resolve.js';
 import type {
@@ -118,8 +119,17 @@ function actorId(actor: FactoryRuleActor): string {
   }
 }
 
+// The dispatcher executes an agent-approved decision as a human actor so its consent carries; the trail still names the agent.
 export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorType: AuditActorType } {
-  return { actorId: actorId(actor), actorType: actor.type === 'github' ? 'human' : actor.type };
+  const id = actorId(actor);
+  switch (actor.type) {
+    case 'github':
+      return { actorId: id, actorType: 'human' };
+    case 'human':
+      return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
+    default:
+      return { actorId: id, actorType: actor.type };
+  }
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -249,12 +259,12 @@ export class FactoryTransitionService {
   ): Promise<void> {
     if (!this.#audit) return;
     const from = currentStage(item.stages);
-    if (result.status === 'accepted' && result.stage === from) return;
+    if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
     const outcome =
       result.status === 'accepted'
-        ? { action: 'factory.work_item.stage_moved', to: result.stage, revision: result.revision }
+        ? { action: 'factory.work_item.stage_moved' as const, to: result.stage, revision: result.revision }
         : {
-            action: 'factory.work_item.transition_rejected',
+            action: 'factory.work_item.transition_rejected' as const,
             to: request.stage,
             code: result.code,
             reason: result.reason,
@@ -274,6 +284,7 @@ export class FactoryTransitionService {
           cause: request.cause,
           configVersion: this.#configVersion,
           from,
+          ...(request.reenter ? { reenter: true } : {}),
           ...detail,
         },
       })

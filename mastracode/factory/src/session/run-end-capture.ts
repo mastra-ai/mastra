@@ -1,10 +1,24 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { z } from 'zod';
 
+import { auditAgentName } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+
+/** Written by the coordinator per kickoff, consumed by the first `agent_end` that is not a suspension. */
+export const FACTORY_OPEN_RUN_SETTING = 'factoryOpenRun';
+
+const factoryOpenRunSchema = z.object({ bindingId: z.string(), role: z.string(), startedBy: z.string() });
+
+export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
 
 export interface RunEndCaptureSession {
   readonly identity: { getResourceId(): string };
-  readonly thread: { getId(): string | null; getSetting(args: { key: string }): Promise<unknown> };
+  readonly thread: {
+    getId(): string | null;
+    getSetting(args: { key: string }): Promise<unknown>;
+    setSetting(args: { key: string; value: unknown }): Promise<void>;
+  };
+  readonly mode: { get(): string };
   readonly state: { get(): Readonly<{ factoryOrgId?: string; factoryProjectId?: string }> };
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
@@ -12,10 +26,13 @@ export interface RunEndCaptureSession {
 type RunEndReason = NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>;
 
 async function recordRunEnd(session: RunEndCaptureSession, audit: AuditRecorder, reason: RunEndReason): Promise<void> {
+  const openRun = factoryOpenRunSchema.safeParse(await session.thread.getSetting({ key: FACTORY_OPEN_RUN_SETTING }));
+  if (!openRun.success) return;
   const workItemId = await session.thread.getSetting({ key: 'factoryWorkItemId' });
   const { factoryOrgId, factoryProjectId } = session.state.get();
   const threadId = session.thread.getId();
   if (typeof workItemId !== 'string' || !factoryOrgId || !factoryProjectId || !threadId) return;
+  await session.thread.setSetting({ key: FACTORY_OPEN_RUN_SETTING, value: null });
   await audit.record({
     orgId: factoryOrgId,
     factoryProjectId,
@@ -23,7 +40,13 @@ async function recordRunEnd(session: RunEndCaptureSession, audit: AuditRecorder,
     actorType: 'agent',
     action: 'factory.run.ended',
     targets: [{ type: 'work_item', id: workItemId }],
-    metadata: { reason, sessionId: session.identity.getResourceId(), threadId },
+    metadata: {
+      reason,
+      ...openRun.data,
+      agentName: auditAgentName(session.mode.get()),
+      sessionId: session.identity.getResourceId(),
+      threadId,
+    },
   });
 }
 

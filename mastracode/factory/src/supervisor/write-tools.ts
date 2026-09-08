@@ -4,7 +4,8 @@ import { z } from 'zod';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
-import type { AuditStorage } from '../storage/domains/audit/base.js';
+import type { AuditAction } from '../storage/domains/audit/actions.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
 
@@ -12,7 +13,7 @@ interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
-  audit: AuditStorage;
+  audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
   signalSession?: (input: { sessionId: string; message: string; userId: string }) => Promise<unknown>;
@@ -21,7 +22,11 @@ interface SupervisorWriteDependencies {
 
 export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependencies): IntegrationTools {
   const now = deps.now ?? (() => new Date());
-  const audit = async (action: string, target: { type: string; id: string }, metadata: Record<string, unknown> = {}) =>
+  const audit = async (
+    action: AuditAction,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown> = {},
+  ) =>
     deps.audit.record({
       orgId: deps.scope.orgId,
       actorId: deps.userId,

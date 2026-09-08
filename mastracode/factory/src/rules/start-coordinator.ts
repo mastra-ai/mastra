@@ -4,6 +4,7 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '../boards/index.js';
 import { hydrateFactorySession } from '../session/factory-session.js';
+import { FACTORY_OPEN_RUN_SETTING } from '../session/run-end-capture.js';
 import type { AuditActorProfileInput } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -194,6 +195,12 @@ export class FactoryStartCoordinator {
       kickoffMessage: null,
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
+    if (!prepared.replayed) {
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUN_SETTING,
+        value: { bindingId: prepared.binding.id, role: request.workItem.role, startedBy: request.userId },
+      });
+    }
 
     let revision = prepared.item.revision;
     const destinationStage = request.destinationStage;

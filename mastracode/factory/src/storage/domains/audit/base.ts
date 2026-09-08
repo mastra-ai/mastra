@@ -7,19 +7,7 @@
  * Tenancy is org-first, like `work_items`: `actor_id` records who acted but
  * never scopes reads.
  *
- * Actions (register these in the WorkOS dashboard under Audit Logs → Events
- * for the export mirror to accept them):
- *   - factory.work_item.created / updated / deleted
- *   - factory.work_item.stage_moved / transition_rejected — every transition, any actor
- *   - factory.work_item.comment_created / comment_edited / comment_deleted / comment_mentioned
- *   - factory.work_item.labels_reconciled
- *   - factory.run.started — every prepared kickoff, browser or rule
- *   - factory.run.ended — every agent_end on a bound session, with its reason
- *   - factory.run.approved / dismissed / retry
- *   - factory.git.commit / push / pr_opened
- *   - factory.agent.commit / push / signaled
- *   - factory.intake.config_updated / binding_updated
- *   - factory.feed.touched
+ * The actions the trail holds are listed in `./actions.ts`.
  *
  * Agent events carry `actor_type = 'agent'` with `actor_id = 'agent:<threadId>'`
  * and `metadata.startedBy = <userId>` chaining accountability back to the human
@@ -49,6 +37,10 @@ export interface AuditActorProfileInput {
 }
 
 export const ACTOR_PROFILE_METADATA_KEY = '__actorProfile';
+
+export function auditAgentName(modeId: string): string {
+  return `${modeId} agent`;
+}
 
 export function auditActorProfile(
   user: { name?: string; email?: string; avatarUrl?: string } | undefined,
@@ -91,14 +83,13 @@ export interface AuditEventRow {
   occurredAt: Date;
 }
 
-export interface RecordAuditEventInput {
+export interface RecordAuditEventInput<Action extends string = string> {
   orgId: string;
   actorId: string;
   /** Who performed the action; defaults to 'human'. */
   actorType?: AuditActorType;
   actorProfile?: AuditActorProfileInput;
-  /** Dot-namespaced action, e.g. 'factory.work_item.stage_moved'. */
-  action: string;
+  action: Action;
   targets: AuditTarget[];
   metadata?: Record<string, unknown>;
   factoryProjectId?: string;

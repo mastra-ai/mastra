@@ -1616,6 +1616,54 @@ describe('audit trail', () => {
     });
   });
 
+  it('names the agent whose consent the dispatcher carries as a human actor', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'audit-test',
+      audit: seed.audit,
+    });
+
+    const moved = await service.transition({
+      ...request(item, { identity: 'decision-1' }),
+      actor: { type: 'human', id: 'agent:binding-7' },
+      ingress: { type: 'rule', identity: 'decision-1' },
+      cause: 'rule_decision',
+    });
+    expect(moved.status).toBe('accepted');
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events).toEqual([expect.objectContaining({ actorId: 'agent:binding-7', actorType: 'agent' })]);
+  });
+
+  it('records a re-entry onto the stage the card already holds', async () => {
+    const seed = await createFactoryStorageForTests();
+    const item = await createItem(seed.workItems);
+    const service = new FactoryTransitionService({
+      storage: seed.workItems,
+      configVersion: 'audit-test',
+      audit: seed.audit,
+    });
+    const moved = await service.transition(request(item, { identity: 'move-1' }));
+    assert(moved.status === 'accepted');
+
+    const reentered = await service.transition({
+      ...request(item, { identity: 'reenter-1', expectedRevision: moved.revision }),
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'reenter-1' },
+      cause: 'rule_decision',
+      reenter: true,
+    });
+    expect(reentered).toMatchObject({ status: 'accepted', stage: 'execute' });
+
+    const { events } = await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    expect(events.map(event => event.metadata)).toEqual([
+      expect.objectContaining({ from: 'execute', to: 'execute', reenter: true }),
+      expect.objectContaining({ from: 'intake', to: 'execute' }),
+    ]);
+  });
+
   it('does not call entering the stage a card already holds a move', async () => {
     const seed = await createFactoryStorageForTests();
     const item = await createItem(seed.workItems);

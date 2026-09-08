@@ -10,13 +10,6 @@ export const AUDIT_CATEGORIES = [
     label: 'Work items',
     dotClass: 'bg-accent3',
     strokeClass: 'stroke-accent3',
-    actions: [
-      'factory.work_item.created',
-      'factory.work_item.updated',
-      'factory.work_item.stage_moved',
-      'factory.work_item.deleted',
-      'factory.work_item.transition_rejected',
-    ],
   },
   {
     namespace: 'run',
@@ -24,7 +17,6 @@ export const AUDIT_CATEGORIES = [
     label: 'Runs',
     dotClass: 'bg-positive1',
     strokeClass: 'stroke-positive1',
-    actions: ['factory.run.started', 'factory.run.ended', 'factory.run.approved', 'factory.run.dismissed'],
   },
   {
     namespace: 'git',
@@ -32,7 +24,6 @@ export const AUDIT_CATEGORIES = [
     label: 'Git',
     dotClass: 'bg-(--chart-4)',
     strokeClass: 'stroke-(--chart-4)',
-    actions: ['factory.git.commit', 'factory.git.push', 'factory.git.pr_opened'],
   },
   {
     namespace: 'agent',
@@ -40,7 +31,6 @@ export const AUDIT_CATEGORIES = [
     label: 'Agent',
     dotClass: 'bg-accent6',
     strokeClass: 'stroke-accent6',
-    actions: ['factory.agent.commit', 'factory.agent.push'],
   },
   {
     namespace: 'intake',
@@ -48,7 +38,6 @@ export const AUDIT_CATEGORIES = [
     label: 'Intake',
     dotClass: 'bg-neutral2',
     strokeClass: 'stroke-neutral2',
-    actions: ['factory.intake.config_updated', 'factory.intake.binding_updated'],
   },
 ] as const;
 
@@ -110,13 +99,10 @@ export function auditEventBounds(events: AuditEvent[]): AuditTimeRange | undefin
   return { from, to };
 }
 
-export function auditActionsForCategories(selected: ReadonlySet<AuditNamespace>): string[] | undefined {
+/** The server owns which actions a namespace holds; the page only names the namespaces. */
+export function auditNamespacesForCategories(selected: ReadonlySet<AuditNamespace>): AuditNamespace[] | undefined {
   if (selected.size === 0 || selected.size === AUDIT_CATEGORIES.length) return undefined;
-  const actions: string[] = [];
-  for (const category of AUDIT_CATEGORIES) {
-    if (selected.has(category.namespace)) actions.push(...category.actions);
-  }
-  return actions;
+  return AUDIT_CATEGORIES.filter(category => selected.has(category.namespace)).map(category => category.namespace);
 }
 
 export function auditCategory(action: string) {

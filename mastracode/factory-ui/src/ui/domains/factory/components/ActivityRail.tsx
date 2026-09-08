@@ -73,6 +73,7 @@ const DEED_PHRASES: Record<string, string> = {
   'git.pr_opened': 'opened a pull request for',
   'agent.commit': 'committed to',
   'agent.push': 'pushed to',
+  'agent.pr_opened': 'opened a pull request for',
   'work_item.comment_created': 'commented:',
   'work_item.comment_edited': 'edited a comment:',
   'work_item.comment_deleted': 'deleted a comment:',

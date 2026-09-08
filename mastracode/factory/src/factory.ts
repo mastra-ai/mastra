@@ -824,7 +824,7 @@ export class MastraFactory {
                           scope: supervisorScope,
                           userId,
                           workItems: workItemsStorage,
-                          audit: auditStorage,
+                          audit: auditDomain,
                           transitionService,
                           ...(githubIntegration
                             ? {

@@ -156,6 +156,10 @@ describe('FactoryStartCoordinator', () => {
       toolName: 'factory_transition_work_item',
       policy: 'allow',
     });
+    expect(session.thread.setSetting).toHaveBeenCalledWith({
+      key: 'factoryOpenRun',
+      value: { bindingId: prepared.bindingId, role: 'work', startedBy: 'user-1' },
+    });
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({
       workosId: 'user-1',
@@ -535,7 +539,7 @@ describe('FactoryStartCoordinator', () => {
   it('replays the same durable pending kickoff and binding without dispatching or auditing it again', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const { controller, sendMessage } = makeController();
+    const { controller, sendMessage, session } = makeController();
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
@@ -554,6 +558,8 @@ describe('FactoryStartCoordinator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
     expect((await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events).toHaveLength(1);
+    const openRunWrites = session.thread.setSetting.mock.calls.filter(([setting]) => setting.key === 'factoryOpenRun');
+    expect(openRunWrites).toHaveLength(1);
   });
 
   it('revokes only the prior binding for the same item role', async () => {

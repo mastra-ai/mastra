@@ -98,6 +98,18 @@ describe('observeAgentGitAction', () => {
     expect(recorded.map(r => r.action)).toEqual(['factory.agent.commit', 'factory.agent.push']);
   });
 
+  it('records a pull request opened through gh, after the push that carried it', async () => {
+    await observe(toolCall('git push -u origin feat/audit && gh pr create --fill --base main'));
+
+    expect(recorded.map(r => r.action)).toEqual(['factory.agent.push', 'factory.agent.pr_opened']);
+    expect(recorded[1]).toMatchObject({ targets: [{ type: 'worktree', id: SCOPE }], metadata: {} });
+  });
+
+  it('ignores gh pr subcommands other than create', async () => {
+    await observe(toolCall('gh pr view 42 && gh pr checks'));
+    expect(recorded).toHaveLength(0);
+  });
+
   it('ignores git commands inside heredoc bodies', async () => {
     await observe(toolCall('cat > notes.md <<EOF\ngit push origin main\ngit commit -m "not real"\nEOF'));
     expect(recorded).toHaveLength(0);
