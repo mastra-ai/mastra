@@ -3,12 +3,14 @@ import type { PubSub } from '../../../events/pubsub';
 import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
+import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import { createStep } from '../../../workflows/workflow';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -37,7 +39,6 @@ import {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
-  createDurableSignalDrainStep,
 } from './steps';
 
 /**
@@ -155,19 +156,26 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * after a worker restart) won't have a registry entry; every
    * registry-derived field is then undefined and the loop falls back to
    * maxSteps-only continuation.
+   *
+   * Callable from both the continuation predicate (inputData = iteration
+   * state) and steps inside the iteration workflow (inputData = an
+   * intermediate execution shape without run identity); the latter falls
+   * back to init data, which inside the iteration workflow is the iteration
+   * state itself.
    */
   protected override resolveRuntime(predicateParams: any): DurableLoopRuntime {
-    const state = predicateParams.inputData as IterationState;
+    const state = (predicateParams.inputData ?? {}) as Partial<IterationState>;
     const initData = predicateParams.getInitData() as DurableAgenticWorkflowInput;
     const mastra = predicateParams.mastra as Mastra | undefined;
-    const registryEntry = globalRunRegistry.get(state.runId);
+    const runId = state.runId ?? initData.runId;
+    const registryEntry = globalRunRegistry.get(runId);
     return {
-      runId: state.runId,
-      agentId: state.agentId,
-      agentName: state.agentName,
+      runId,
+      agentId: state.agentId ?? initData.agentId,
+      agentName: state.agentName ?? initData.agentName,
       threadId: initData?.state?.threadId,
       resourceId: initData?.state?.resourceId,
-      maxSteps: state.options?.maxSteps ?? this.#maxSteps,
+      maxSteps: state.options?.maxSteps ?? initData.options?.maxSteps ?? this.#maxSteps,
       mastra,
       logger: mastra?.getLogger?.(),
       abortSignal: registryEntry?.abortSignal,
@@ -214,10 +222,54 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
   /**
    * Mirrors the non-durable `signalDrainStep` which drains signals queued
-   * during tool execution.
+   * during tool execution. Behavior lives in `drainSignalsToTranscript`
+   * (shared with the main loop, ledger L11); this override owns the
+   * serialization glue: the `MessageList` is materialized lazily from
+   * serialized state only once signals actually arrive (drain-first
+   * ordering), and re-serialized into the projected output. Signals are
+   * appended to the transcript even without a pubsub transport (`emitChunk`
+   * no-ops), matching prior behavior.
    */
   protected override signalDrainStep() {
-    return createDurableSignalDrainStep();
+    return createStep({
+      id: `${DurableStepIds.AGENTIC_EXECUTION}-signal-drain`,
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async stepParams => {
+        const execOutput = stepParams.inputData as Record<string, any>;
+        const rt = this.resolveRuntime(stepParams);
+        try {
+          let drainList: ReturnType<typeof createRunMessageList> | undefined;
+          const list = () =>
+            (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(execOutput.messageListState));
+          const outcome = await drainSignalsToTranscript({
+            drainPendingSignals: rt.drainPendingSignals,
+            rotateResponseMessageId: sealMessageId => list().rotateResponseMessageId(sealMessageId),
+            addSignal: signal => list().addSignal(signal),
+            emitChunk: chunk => this.emitChunk(rt, chunk),
+            sealMessageId: execOutput.messageId,
+            logger: rt.logger,
+          });
+          if (!outcome.drained || !drainList) return execOutput;
+          return {
+            ...execOutput,
+            messageListState: drainList.serialize(),
+            messageId: outcome.nextMessageId,
+            stepResult: {
+              ...execOutput.stepResult,
+              messageId: outcome.nextMessageId,
+              // Aligned with the main loop's signal-drain step (ledger L3).
+              reason: 'other',
+              isContinued: true,
+            },
+          };
+        } catch {
+          // Best-effort: transcript mutations are local to this step's
+          // drainList, so returning execOutput drops them cleanly.
+          return execOutput;
+        }
+      },
+    });
   }
 
   /**
@@ -493,19 +545,26 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // running. If signals are present, mark a response boundary,
       // rotate the messageId, add them to the transcript, emit them
       // to the stream, and force continuation so the LLM sees them.
+      // Behavior shared with the main-loop predicate via
+      // `drainSignalsToTranscript`; this site owns the pubsub guard (don't
+      // consume signals without a transport to emit them on) and the
+      // serialize/deserialize glue. Drain is best-effort: failures inside the
+      // core resolve to `drained: false` and the next iteration runs with the
+      // un-drained state.
       if (rt.pubsub && rt.drainPendingSignals) {
         try {
-          const pendingSignals = rt.drainPendingSignals();
-          if (pendingSignals.length > 0) {
-            const drainList = createRunMessageList({ mastra: rt.mastra }).deserialize(state.messageListState);
-            const nextMessageId = drainList.rotateResponseMessageId();
-            state.messageId = nextMessageId;
-
-            for (const pendingSignal of pendingSignals) {
-              const signalForTranscript = drainList.addSignal(pendingSignal);
-              await this.emitChunk(rt, signalForTranscript.toDataPart());
-            }
-
+          let drainList: ReturnType<typeof createRunMessageList> | undefined;
+          const list = () =>
+            (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(state.messageListState));
+          const drainOutcome = await drainSignalsToTranscript({
+            drainPendingSignals: rt.drainPendingSignals,
+            rotateResponseMessageId: () => list().rotateResponseMessageId(),
+            addSignal: signal => list().addSignal(signal),
+            emitChunk: chunk => this.emitChunk(rt, chunk),
+            logger: rt.logger,
+          });
+          if (drainOutcome.drained && drainList) {
+            state.messageId = drainOutcome.nextMessageId;
             state.messageListState = drainList.serialize();
 
             // Force continuation — the LLM must see the injected signals
@@ -515,10 +574,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             shouldContinue = true;
           }
         } catch {
-          // Signal drain is best-effort; if deserialization fails
-          // the next iteration still runs with the un-drained state.
-          // drainPendingSignals() is inside the try so signals remain
-          // queued if the drain function itself throws.
+          // serialize() is best-effort too; state keeps the pre-drain
+          // messageListState if it throws.
         }
       }
 

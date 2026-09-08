@@ -9,17 +9,18 @@ import { createEventedWorkflow, createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
+import { createStep } from '../workflows/workflow';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from './run-scope-keys';
+import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
 import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-step';
-import { createSignalDrainStep } from './workflows/agentic-execution/signal-drain-step';
 import {
   normalizeToolCallConcurrency,
   resolveToolCallConcurrency,
@@ -175,8 +176,51 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return createBackgroundTaskCheckStep<Tools, OUTPUT>({ ...this.params });
   }
 
+  /**
+   * Step ⑦ — drain signals queued while the iteration was running, seal and
+   * rotate the response message, and force continuation so the LLM sees them.
+   * Behavior lives in `drainSignalsToTranscript` (shared with the durable
+   * override and both predicates' inline drains, ledger L11); this method
+   * owns the main loop's live-`MessageList` plumbing and output projection.
+   */
   protected signalDrainStep(): LoopStep {
-    return createSignalDrainStep<Tools, OUTPUT>({ ...this.params });
+    return createStep({
+      id: 'signalDrainStep',
+      inputSchema: llmIterationOutputSchema,
+      outputSchema: llmIterationOutputSchema,
+      execute: async stepParams => {
+        const typedInput = stepParams.inputData as LLMIterationData<Tools, OUTPUT>;
+        const rt = this.resolveRuntime(stepParams);
+        const outcome = await drainSignalsToTranscript({
+          drainPendingSignals: rt.drainPendingSignals,
+          rotateResponseMessageId: sealMessageId => this.params.rotateResponseMessageId(sealMessageId),
+          addSignal: signal => this.params.messageList.addSignal(signal),
+          emitChunk: chunk => this.emitChunk(rt, chunk),
+          sealMessageId: typedInput.stepResult?.messageId ?? typedInput.messageId,
+          logger: rt.logger,
+        });
+        if (!outcome.drained) {
+          return typedInput;
+        }
+
+        const { messageList } = this.params;
+        return {
+          ...typedInput,
+          messageId: outcome.nextMessageId,
+          stepResult: {
+            ...typedInput.stepResult,
+            messageId: outcome.nextMessageId,
+            reason: 'other',
+            isContinued: true,
+          },
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
+          },
+        };
+      },
+    });
   }
 
   protected isTaskCompleteStep(): LoopStep {
@@ -346,18 +390,18 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         }
       }
 
-      const pendingSignals = rt.drainPendingSignals?.() ?? [];
-      if (pendingSignals.length > 0) {
-        const nextMessageId = rest.rotateResponseMessageId(
-          typedInputData.stepResult?.messageId ?? typedInputData.messageId,
-        );
-        typedInputData.messageId = nextMessageId;
-        for (const pendingSignal of pendingSignals) {
-          const signalForTranscript = messageList.addSignal(pendingSignal);
-          await this.emitChunk(rt, signalForTranscript.toDataPart());
-        }
+      const drainOutcome = await drainSignalsToTranscript({
+        drainPendingSignals: rt.drainPendingSignals,
+        rotateResponseMessageId: sealMessageId => rest.rotateResponseMessageId(sealMessageId),
+        addSignal: signal => messageList.addSignal(signal),
+        emitChunk: chunk => this.emitChunk(rt, chunk),
+        sealMessageId: typedInputData.stepResult?.messageId ?? typedInputData.messageId,
+        logger: rt.logger,
+      });
+      if (drainOutcome.drained) {
+        typedInputData.messageId = drainOutcome.nextMessageId;
         if (typedInputData.stepResult) {
-          typedInputData.stepResult.messageId = nextMessageId;
+          typedInputData.stepResult.messageId = drainOutcome.nextMessageId;
           typedInputData.stepResult.isContinued = true;
         }
         typedInputData.messages = {
