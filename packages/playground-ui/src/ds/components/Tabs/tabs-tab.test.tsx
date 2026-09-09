@@ -38,6 +38,7 @@ describe('Tab', () => {
       </Tabs>
     );
     const { rerender } = render(content(true));
+    expect(screen.getByText('Needs attention').closest('[role=tab]')?.textContent).toBe('Second Needs attention');
     const tab = screen.getByRole('tab', { name: 'Second Needs attention' });
     fireEvent.click(tab);
     expect(tab.getAttribute('aria-selected')).toBe('true');

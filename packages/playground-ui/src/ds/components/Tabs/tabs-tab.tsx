@@ -67,7 +67,7 @@ export const Tab = ({
             aria-hidden="true"
             className="bg-accent1/10 ring-accent1/40 pointer-events-none absolute inset-0 animate-pulse rounded-[inherit] ring-1 [animation-iteration-count:3] ring-inset motion-reduce:animate-none"
           />
-          <span className="sr-only">Needs attention</span>
+          <span className="sr-only"> Needs attention</span>
         </>
       )}
       {onClose && (
