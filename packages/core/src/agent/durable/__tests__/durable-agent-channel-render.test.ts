@@ -73,6 +73,46 @@ function replyingModel() {
   });
 }
 
+function toolThenReplyingModel() {
+  return new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      const hasToolResult = JSON.stringify(prompt).includes('tool-result-payload');
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream<any>(
+          hasToolResult
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'reply-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'reply-text' },
+                { type: 'text-delta', id: 'reply-text', delta: 'The tool answer' },
+                { type: 'text-end', id: 'reply-text' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'tool-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: 'getAnswer',
+                  input: '{}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ],
+        ),
+      };
+    },
+  });
+}
+
 /** A thread as the channel edge leaves it: the platform and external id are what the rebuild reads. */
 async function seedChannelThread(storage: InMemoryStore) {
   const memoryStore = await storage.getStore('memory');
@@ -102,15 +142,20 @@ async function untilChatReady(agent: Agent) {
 }
 
 /** Builds a plain and durable agent pair backed by a seeded channel thread. */
-async function channelBackedAgent(id: string, outputProcessors?: any[]) {
+async function channelBackedAgent(
+  id: string,
+  outputProcessors?: any[],
+  options: { model?: unknown; tools?: Record<string, unknown>; instructions?: string } = {},
+) {
   const { adapter, postMessage } = createMockAdapter();
   const storage = new InMemoryStore();
   const agent = new Agent({
     id,
     name: id,
-    instructions: 'Answer briefly.',
-    model: replyingModel() as any,
+    instructions: options.instructions ?? 'Answer briefly.',
+    model: (options.model ?? replyingModel()) as any,
     memory: new MockMemory(),
+    tools: options.tools as any,
     outputProcessors,
     channels: { adapters: { [PLATFORM]: { adapter, streaming: false } } },
   });
@@ -205,6 +250,24 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
     await drain(await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
 
     expect(postMessage).toHaveBeenCalled();
+  });
+
+  it('posts the final answer after a durable tool step', async () => {
+    const getAnswer = createTool({
+      id: 'getAnswer',
+      description: 'Returns the answer payload.',
+      inputSchema: z.object({}),
+      execute: async () => 'tool-result-payload',
+    });
+    const { durableAgent, postMessage } = await channelBackedAgent('channel-render-durable-tool', undefined, {
+      model: toolThenReplyingModel(),
+      tools: { getAnswer },
+      instructions: 'Use the tool, then answer.',
+    });
+
+    await drain(await durableAgent.stream('use the tool', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
+
+    expect(postMessage.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("passes the caller's request context to durable output processors", async () => {

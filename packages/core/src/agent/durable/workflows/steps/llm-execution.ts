@@ -1212,7 +1212,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // is added to messageList.
                 if (pubsub && rawChunk.type !== 'error') {
                   if (rawChunk.type === 'step-finish') {
-                    deferredStepFinishChunk = clientChunk;
+                    const payload = (clientChunk as any).payload;
+                    const finishReason = payload?.stepResult?.reason ?? payload?.finishReason;
+                    deferredStepFinishChunk = {
+                      ...clientChunk,
+                      payload: {
+                        ...payload,
+                        stepResult: {
+                          ...payload?.stepResult,
+                          isContinued: toolCalls.length > 0 && finishReason !== 'stop',
+                        },
+                      },
+                    };
                   } else {
                     await emitChunkEvent(pubsub, runId, clientChunk);
                   }
