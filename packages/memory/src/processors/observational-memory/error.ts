@@ -10,7 +10,7 @@ export function formatOmError(error: unknown): string {
     if (typeof value === 'string' && value.trim()) details.add(value.trim().slice(0, 2000));
   };
 
-  function visit(value: unknown, depth: number) {
+  function collectErrorDetails(value: unknown, depth: number) {
     if (depth > 5) return;
     if (!isRecord(value)) {
       if (value !== undefined) add(String(value));
@@ -35,11 +35,11 @@ export function formatOmError(error: unknown): string {
         // A non-JSON body is not safe to include in a persisted marker.
       }
     }
-    if (value.cause !== undefined) visit(value.cause, depth + 1);
-    if (value.error !== undefined) visit(value.error, depth + 1);
+    if (value.cause !== undefined) collectErrorDetails(value.cause, depth + 1);
+    if (value.error !== undefined) collectErrorDetails(value.error, depth + 1);
   }
 
-  visit(error, 0);
+  collectErrorDetails(error, 0);
   const message = [...details].join(': ') || 'Unknown error';
   return message.length > 2000 ? `${message.slice(0, 1997)}...` : message;
 }
