@@ -147,4 +147,24 @@ describe('renderTemplate', () => {
       expect(renderTemplate('{{{name}}}', { name: 'Alice' })).toBe('{Alice}');
     });
   });
+
+  describe('inherited properties', () => {
+    it('should leave an inherited member unresolved', () => {
+      expect(renderTemplate('{{constructor}}', { name: 'Alice' })).toBe('{{constructor}}');
+    });
+
+    it('should use the fallback for an inherited member', () => {
+      expect(renderTemplate("{{toString || 'none'}}", { name: 'Alice' })).toBe('none');
+    });
+
+    it('should leave an inherited member unresolved mid-path', () => {
+      expect(renderTemplate('{{user.constructor.name}}', { user: { name: 'Alice' } })).toBe(
+        '{{user.constructor.name}}',
+      );
+    });
+
+    it('should still resolve an own property that shadows a built-in', () => {
+      expect(renderTemplate('{{toString}}', { toString: 'shadowed' })).toBe('shadowed');
+    });
+  });
 });

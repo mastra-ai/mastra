@@ -21,6 +21,12 @@ function resolvePath(context: Record<string, unknown>, path: string): unknown {
     if (current === null || current === undefined || typeof current !== 'object') {
       return undefined;
     }
+    // Only resolve the context's own keys: an inherited member such as
+    // `constructor` or `toString` is not context data, and treating it as
+    // resolved would interpolate a built-in and suppress the fallback.
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+      return undefined;
+    }
     current = (current as Record<string, unknown>)[segment];
   }
 
