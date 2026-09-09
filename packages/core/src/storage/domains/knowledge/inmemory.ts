@@ -746,11 +746,13 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async setRecordScopes({
     id,
+    version,
     scopeIds,
     importRunId,
     contextScopeId,
   }: {
     id: string;
+    version: number;
     scopeIds: KnowledgeScopeIds;
     importRunId?: string;
     contextScopeId?: string;
@@ -758,6 +760,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#assertImportRunExists(importRunId);
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
+    if (record.version !== version) throw new KnowledgeConflictError(id);
     const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
     this.#assertScopeNodes(canonical);
     const oldScopeIds = this.#recordScopeIds(record.id);
