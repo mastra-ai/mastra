@@ -186,5 +186,24 @@
     "@mastra/s3": "0.6.2",
     "@mastra/vercel": "1.5.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260909-063758",
+    "cuddly-carrots-push",
+    "data-list-skeleton-minmax",
+    "experiment-page-metrics",
+    "factory-ui-open-stage-id",
+    "huge-wombats-change",
+    "om-transform-hooks",
+    "petite-kings-talk",
+    "quiet-streams-wake",
+    "review-panel-remove-action",
+    "scope-switch-disabled-reason",
+    "seven-rabbits-share",
+    "shy-apes-repeat",
+    "tidy-memory-refresh",
+    "tired-turtles-poke",
+    "twenty-pots-relate",
+    "upset-cases-retire",
+    "wide-tigers-nail"
+  ]
 }

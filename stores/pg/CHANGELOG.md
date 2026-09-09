@@ -1,5 +1,29 @@
 # @mastra/pg
 
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Added an optional `includeTotal` flag to message listing. Internal message-only memory reads now disable totals so PostgresStore skips counting all matching messages. For paginated reads, it fetches one extra row to determine `hasMore`. The flag defaults to `true`, preserving accurate totals for existing callers and Studio pagination. ([#23389](https://github.com/mastra-ai/mastra/pull/23389))
+
+  ```typescript
+  const memoryStore = await storage.getStore('memory');
+  if (!memoryStore) throw new Error('Memory storage is unavailable');
+
+  // Default: include an accurate total.
+  await memoryStore.listMessages({ threadId: 'thread-1', perPage: 20 });
+
+  // Skip the total when only messages and hasMore are needed.
+  const { messages, hasMore } = await memoryStore.listMessages({
+    threadId: 'thread-1',
+    perPage: 20,
+    includeTotal: false,
+  });
+  ```
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+
 ## 1.23.0
 
 ### Minor Changes
