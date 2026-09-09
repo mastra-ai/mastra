@@ -435,7 +435,7 @@ describe('diagnostics', () => {
       staticTokenFallback: true,
       webhookSecretConfigured: true,
       // Intake-only for now: GitLab ships no versionControl surface.
-      capabilities: { intake: true, versionControl: false },
+      capabilities: { intake: true, versionControl: true },
       gitlabRuleEvents: ['issueOpened', 'issueEdited', 'issueClosed', 'issueNoteCreated'],
     });
   });

@@ -1,21 +1,21 @@
 /**
- * `GitLabIntegration` — GitLab issues as a Factory intake source.
+ * `GitLabIntegration` — GitLab as a Factory intake and version-control source.
  *
  * Implements the system-wide `FactoryIntegration` contract (`../base.ts`):
  * the deploy entry reads the GITLAB_* env vars ONCE, constructs an instance
  * with explicit credentials, and passes it to `MastraFactory` via
  * `integrations: [...]`. No other module reads `GITLAB_*` env vars.
  *
- * SCOPE: issues in, as a first-class rule family. Webhook deliveries for
- * issues and their notes are dispatched onto work-item rules (`./rules.js`),
- * so a GitLab issue materializes, refreshes, and retires a Work card the way a
- * GitHub issue does.
+ * SCOPE — ISSUES: a first-class rule family. Webhook deliveries for issues and
+ * their notes are dispatched onto work-item rules (`./rules.js`), so a GitLab
+ * issue materializes, refreshes, and retires a Work card the way a GitHub
+ * issue does.
  *
- * It does NOT yet implement the `versionControl` capability — the factory
- * resolves its source-control owner by the literal integration id `"github"`
- * (see `factory.js`), so merge requests, branches, and clone auth cannot be
- * served from here today. The supported shape is GitLab issues in, GitHub pull
- * requests out — the same split Linear already runs under.
+ * SCOPE — MERGE REQUESTS: `versionControl` (`./version-control.js`) serves
+ * merge requests under the pull-request contract, so a GitLab project can be
+ * the codebase a Factory branches, pushes, and opens merge requests against.
+ * Operations GitLab has no analogue for (pending reviews, review dismissal)
+ * throw `UnsupportedVersionControlOperationError` rather than no-op'ing.
  *
  * CREDENTIALS: OAuth 2.0 authorization code + PKCE, stored as the org's
  * connection in the factory's generic integration storage. A static token from
@@ -52,6 +52,7 @@ import type {
   ResolvedIntakeDispatch,
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
+import type { VersionControl } from '../../capabilities/version-control.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -75,6 +76,7 @@ import {
   type GitLabTokenSet,
 } from './oauth.js';
 import { attachGitlabRules } from './rules.js';
+import { GitLabVersionControl } from './version-control.js';
 import { parseGitlabWebhook } from './webhook.js';
 
 const DEFAULT_BASE_URL = 'https://gitlab.com';
@@ -245,6 +247,9 @@ export class GitLabIntegration implements FactoryIntegration {
   /** Resolved once at construction; read by `attachGitlabRules` per delivery. */
   readonly rules: GitlabEventRules;
 
+  /** Merge requests under the pull-request contract. See `./version-control.js`. */
+  readonly versionControl: VersionControl;
+
   /** Bound once by the factory in `prepare()`, before any surface is used. */
   private storageHandle: IntegrationStorageHandle | undefined;
   private projects: FactoryProjectsStorage | undefined;
@@ -307,6 +312,13 @@ export class GitLabIntegration implements FactoryIntegration {
       createComment: input => this.createComment(input),
       updateIssue: input => this.updateIssue(input),
     };
+
+    this.versionControl = new GitLabVersionControl({
+      clientForConnection: connection => this.clientForConnection(connection),
+      clientForOrg: orgId => this.clientForOrg(orgId),
+      accessTokenForOrg: orgId => this.accessTokenForOrg(orgId),
+      baseUrl: this.baseUrl,
+    });
   }
 
   initialize(args: { storage: IntegrationStorageHandle; projects: FactoryProjectsStorage; auth: RouteAuth }): void {
@@ -423,6 +435,11 @@ export class GitLabIntegration implements FactoryIntegration {
   private async bearerForOrg(orgId: string): Promise<IntegrationConnection | null> {
     const connection = await this.resolveConnectionData(orgId);
     return connection ? { type: 'oauth', accessToken: connection.accessToken } : null;
+  }
+
+  private async accessTokenForOrg(orgId: string): Promise<string | null> {
+    const connection = await this.resolveConnectionData(orgId);
+    return connection?.accessToken ?? null;
   }
 
   // ---------------------------------------------------------------------------
@@ -990,7 +1007,7 @@ export class GitLabIntegration implements FactoryIntegration {
         .map(([event]) => event),
       storageBound: Boolean(this.storageHandle),
       projectsBound: Boolean(this.projects),
-      capabilities: { intake: true, versionControl: false },
+      capabilities: { intake: true, versionControl: true },
     };
   }
 }

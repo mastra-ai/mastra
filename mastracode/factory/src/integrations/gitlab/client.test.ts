@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { formatIssueRef, GitLabApiError, GitLabClient, parseIssueRef, parseIssueReference } from './client.js';
+import {
+  formatIssueRef,
+  formatMergeRequestRef,
+  GitLabApiError,
+  GitLabClient,
+  parseIssueRef,
+  parseIssueReference,
+  parseMergeRequestReference,
+} from './client.js';
 import type { GitLabIssue, GitLabIssueRef, GitLabNote } from './client.js';
 
 // ── fetch harness ────────────────────────────────────────────────────────
@@ -302,5 +310,131 @@ describe('setIssueState', () => {
     await client().setIssueState(ref, event);
     expect(captured[0]!.method).toBe('PUT');
     expect(captured[0]!.body).toEqual({ state_event: event });
+  });
+});
+
+describe('parseMergeRequestReference', () => {
+  it('round-trips the canonical ref', () => {
+    expect(parseMergeRequestReference(formatMergeRequestRef({ projectId: '42', iid: 7 }))).toEqual({
+      projectId: '42',
+      iid: 7,
+    });
+  });
+
+  it('reads a merge-request url', () => {
+    expect(parseMergeRequestReference('https://gitlab.com/acme/widgets/-/merge_requests/7')).toEqual({
+      projectId: 'acme%2Fwidgets',
+      iid: 7,
+    });
+  });
+
+  it("reads GitLab's own group/project!iid shorthand", () => {
+    expect(parseMergeRequestReference('acme/widgets!7')).toEqual({ projectId: 'acme%2Fwidgets', iid: 7 });
+  });
+
+  it('does not mistake the canonical ref separator for the shorthand', () => {
+    // `!` is both the ref separator and GitLab's MR sigil; a value with no
+    // slash must stay a canonical project id, not become a path.
+    expect(parseMergeRequestReference('42!7')).toEqual({ projectId: '42', iid: 7 });
+  });
+
+  it.each(['', 'acme/widgets!0', 'acme/widgets!-1', 'https://gitlab.com/acme/widgets/-/issues/7', 'nonsense'])(
+    'rejects %o',
+    value => {
+      expect(parseMergeRequestReference(value)).toBeNull();
+    },
+  );
+});
+
+describe('merge requests', () => {
+  const mrRef = { projectId: '42', iid: 7 };
+
+  it('lists open merge requests by default, paginated', async () => {
+    respond = () => json([], { headers: { 'x-next-page': '2' } });
+    const page = await client().listMergeRequests({ projectId: '42' });
+    expect(captured[0]!.url.pathname).toBe('/api/v4/projects/42/merge_requests');
+    expect(captured[0]!.url.searchParams.get('state')).toBe('opened');
+    expect(page.nextCursor).toBe('2');
+  });
+
+  it('returns null for a merge request that is absent', async () => {
+    respond = () => json({ message: '404 Not found' }, { status: 404 });
+    await expect(client().getMergeRequest(mrRef)).resolves.toBeNull();
+  });
+
+  it('propagates a non-404 failure rather than reporting absence', async () => {
+    respond = () => json({ message: 'boom' }, { status: 500 });
+    await expect(client().getMergeRequest(mrRef)).rejects.toBeInstanceOf(GitLabApiError);
+  });
+
+  it('preserves an explicit null description so a body can be cleared', async () => {
+    respond = () => json({});
+    await client().updateMergeRequest(mrRef, { description: null });
+    expect(captured[0]!.body).toEqual({ description: null });
+  });
+
+  it('omits an absent description rather than clearing it', async () => {
+    respond = () => json({});
+    await client().updateMergeRequest(mrRef, { title: 'New title' });
+    expect(captured[0]!.body).toEqual({ title: 'New title' });
+  });
+
+  it.each([405, 406, 409, 422])('reports a %i from the merge endpoint as a refusal', async status => {
+    respond = () => json({ message: 'not mergeable' }, { status });
+    const result = await client().acceptMergeRequest(mrRef);
+    expect(result.mergeRequest).toBeNull();
+    expect(result.refusal).toContain(String(status));
+  });
+
+  it('still throws when the merge endpoint fails for an infrastructure reason', async () => {
+    respond = () => json({ message: 'boom' }, { status: 500 });
+    await expect(client().acceptMergeRequest(mrRef)).rejects.toBeInstanceOf(GitLabApiError);
+  });
+
+  it('filters system notes out of merge-request discussion', async () => {
+    respond = () =>
+      json([
+        { id: 1, body: 'real', system: false, author: null, created_at: 'T1' },
+        { id: 2, body: 'assigned to @ada', system: true, author: null, created_at: 'T2' },
+      ]);
+    const page = await client().listMergeRequestNotes(mrRef);
+    expect(page.items.map(note => note.id)).toEqual([1]);
+  });
+
+  it('sends a text position when creating an anchored discussion', async () => {
+    respond = () => json({ id: 'd1', individual_note: false, notes: [] });
+    await client().createMergeRequestDiscussion(mrRef, {
+      body: 'anchored',
+      position: { baseSha: 'b', headSha: 'h', startSha: 's', newPath: 'src/app.ts', newLine: 42 },
+    });
+    expect(captured[0]!.body).toEqual({
+      body: 'anchored',
+      position: {
+        base_sha: 'b',
+        head_sha: 'h',
+        start_sha: 's',
+        position_type: 'text',
+        new_path: 'src/app.ts',
+        old_path: 'src/app.ts',
+        new_line: 42,
+      },
+    });
+  });
+
+  it('escapes a discussion id into the notes path', async () => {
+    respond = () => json({ id: 3, body: 'reply', system: false, author: null, created_at: 'T1' });
+    await client().addMergeRequestDiscussionNote(mrRef, 'abc/def', 'reply');
+    expect(captured[0]!.url.pathname).toBe('/api/v4/projects/42/merge_requests/7/discussions/abc%2Fdef/notes');
+  });
+
+  it('looks a user up by username for reviewer assignment', async () => {
+    respond = () => json([{ id: 77, username: 'grace' }]);
+    await expect(client().findUserByUsername('grace')).resolves.toEqual({ id: 77, username: 'grace' });
+    expect(captured[0]!.url.searchParams.get('username')).toBe('grace');
+  });
+
+  it('returns null when no user matches', async () => {
+    respond = () => json([]);
+    await expect(client().findUserByUsername('nobody')).resolves.toBeNull();
   });
 });

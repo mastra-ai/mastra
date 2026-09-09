@@ -232,6 +232,26 @@ export interface UpdateReviewersInput extends PullRequestRef {
   teams?: string[];
 }
 
+/**
+ * Raised when a provider has no analogue for a contract operation.
+ *
+ * The contract is shaped after GitHub, so a provider that implements it
+ * faithfully will still have gaps — GitLab, for instance, has no pending-review
+ * object to delete. Throwing this is the honest answer: a silent no-op would
+ * let a caller believe a write landed when nothing happened.
+ */
+export class UnsupportedVersionControlOperationError extends Error {
+  readonly provider: string;
+  readonly operation: string;
+
+  constructor(provider: string, operation: string, detail?: string) {
+    super(`${provider} does not support ${operation}.${detail ? ` ${detail}` : ''}`);
+    this.name = 'UnsupportedVersionControlOperationError';
+    this.provider = provider;
+    this.operation = operation;
+  }
+}
+
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;

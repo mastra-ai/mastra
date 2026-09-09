@@ -94,6 +94,108 @@ export interface GitLabNote {
   system: boolean;
   author: GitLabUser | null;
   created_at: string;
+  updated_at?: string;
+}
+
+/** A merge request is addressed per-project by `iid`, exactly like an issue. */
+export interface GitLabMergeRequestRef {
+  projectId: string;
+  iid: number;
+}
+
+/** `"42!7"` — project 42, merge request iid 7. Shares the issue ref encoding. */
+export function formatMergeRequestRef(ref: GitLabMergeRequestRef): string {
+  return formatIssueRef(ref);
+}
+
+export function parseMergeRequestRef(externalId: string): GitLabMergeRequestRef | null {
+  return parseIssueRef(externalId);
+}
+
+/**
+ * Accept a merge-request URL or `group/project!7` alongside the canonical ref.
+ * GitLab's own shorthand for a merge request is `!`, which collides with the
+ * ref separator, so `group/project!7` is only read as a path when it holds a
+ * slash — `42!7` stays a canonical ref.
+ */
+export function parseMergeRequestReference(input: string): GitLabMergeRequestRef | null {
+  const value = input.trim();
+  if (!value) return null;
+
+  const match =
+    /^https?:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/.exec(value) ?? /^([^\s!]+\/[^\s!]+)!(\d+)$/.exec(value);
+  if (match) {
+    const iid = Number(match[2]);
+    if (!Number.isSafeInteger(iid) || iid <= 0) return null;
+    return { projectId: encodeURIComponent(match[1]!), iid };
+  }
+
+  return parseMergeRequestRef(value);
+}
+
+/** GitLab's own MR lifecycle vocabulary, mapped to the capability's in `version-control.ts`. */
+export type GitLabMergeRequestState = 'opened' | 'closed' | 'merged' | 'locked';
+
+export interface GitLabMergeRequest {
+  id: number;
+  iid: number;
+  project_id: number;
+  title: string;
+  description: string | null;
+  state: GitLabMergeRequestState;
+  web_url: string;
+  references?: { full?: string };
+  author: GitLabUser | null;
+  assignees?: GitLabUser[];
+  reviewers?: GitLabUser[];
+  labels: string[];
+  draft?: boolean;
+  work_in_progress?: boolean;
+  /** `can_be_merged` | `cannot_be_merged` | `checking` | `unchecked` — `checking` is undecided, not false. */
+  merge_status?: string;
+  detailed_merge_status?: string;
+  source_branch: string;
+  target_branch: string;
+  sha: string | null;
+  merge_commit_sha: string | null;
+  squash_commit_sha?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A note's anchor in the diff. Absent on discussion notes that aren't diff-anchored. */
+export interface GitLabNotePosition {
+  base_sha?: string;
+  head_sha?: string;
+  start_sha?: string;
+  new_path?: string | null;
+  old_path?: string | null;
+  new_line?: number | null;
+  old_line?: number | null;
+  position_type?: string;
+}
+
+export interface GitLabDiscussionNote extends GitLabNote {
+  position?: GitLabNotePosition | null;
+  resolvable?: boolean;
+  resolved?: boolean;
+  type?: string | null;
+}
+
+export interface GitLabDiscussion {
+  id: string;
+  individual_note: boolean;
+  notes: GitLabDiscussionNote[];
+}
+
+export interface GitLabApprovals {
+  approved_by?: { user: GitLabUser }[];
+}
+
+export interface GitLabDiffRefs {
+  base_sha: string | null;
+  head_sha: string | null;
+  start_sha: string | null;
 }
 
 export interface GitLabPage<T> {
@@ -262,5 +364,228 @@ export class GitLabClient {
       { method: 'PUT', body: { state_event: event } },
     );
     return data;
+  }
+
+  private mrPath(ref: GitLabMergeRequestRef, suffix = ''): string {
+    return `/projects/${encodeURIComponent(ref.projectId)}/merge_requests/${ref.iid}${suffix}`;
+  }
+
+  async listMergeRequests(args: {
+    projectId: string;
+    state?: GitLabMergeRequestState | 'all';
+    cursor?: string;
+  }): Promise<GitLabPage<GitLabMergeRequest>> {
+    const { data, headers } = await this.request<GitLabMergeRequest[]>(
+      `/projects/${encodeURIComponent(args.projectId)}/merge_requests`,
+      {
+        params: {
+          state: args.state ?? 'opened',
+          per_page: this.pageSize,
+          page: this.pageParam(args.cursor),
+          order_by: 'updated_at',
+        },
+      },
+    );
+    return { items: data, nextCursor: this.nextCursor(headers) };
+  }
+
+  async getMergeRequest(ref: GitLabMergeRequestRef): Promise<GitLabMergeRequest | null> {
+    try {
+      const { data } = await this.request<GitLabMergeRequest>(this.mrPath(ref));
+      return data;
+    } catch (error) {
+      if (error instanceof GitLabApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  async createMergeRequest(args: {
+    projectId: string;
+    title: string;
+    description?: string;
+    sourceBranch: string;
+    targetBranch: string;
+    removeSourceBranch?: boolean;
+  }): Promise<GitLabMergeRequest> {
+    const { data } = await this.request<GitLabMergeRequest>(
+      `/projects/${encodeURIComponent(args.projectId)}/merge_requests`,
+      {
+        method: 'POST',
+        body: {
+          title: args.title,
+          description: args.description,
+          source_branch: args.sourceBranch,
+          target_branch: args.targetBranch,
+          remove_source_branch: args.removeSourceBranch,
+        },
+      },
+    );
+    return data;
+  }
+
+  async updateMergeRequest(
+    ref: GitLabMergeRequestRef,
+    patch: {
+      title?: string;
+      description?: string | null;
+      targetBranch?: string;
+      stateEvent?: 'close' | 'reopen';
+    },
+  ): Promise<GitLabMergeRequest> {
+    const { data } = await this.request<GitLabMergeRequest>(this.mrPath(ref), {
+      method: 'PUT',
+      body: {
+        title: patch.title,
+        // `null` clears the description, so it must survive as an explicit null.
+        ...(patch.description === undefined ? {} : { description: patch.description }),
+        target_branch: patch.targetBranch,
+        state_event: patch.stateEvent,
+      },
+    });
+    return data;
+  }
+
+  /**
+   * GitLab rejects a merge that isn't ready with 405/406/409 rather than a body
+   * flag, so those surface as a refusal the caller can report instead of an
+   * infrastructure error.
+   */
+  async acceptMergeRequest(
+    ref: GitLabMergeRequestRef,
+    args: { commitMessage?: string; squash?: boolean; squashCommitMessage?: boolean } = {},
+  ): Promise<{ mergeRequest: GitLabMergeRequest | null; refusal: string | null }> {
+    try {
+      const { data } = await this.request<GitLabMergeRequest>(this.mrPath(ref, '/merge'), {
+        method: 'PUT',
+        body: {
+          ...(args.squash ? { squash: true } : {}),
+          ...(args.commitMessage === undefined
+            ? {}
+            : args.squash
+              ? { squash_commit_message: args.commitMessage }
+              : { merge_commit_message: args.commitMessage }),
+        },
+      });
+      return { mergeRequest: data, refusal: null };
+    } catch (error) {
+      if (error instanceof GitLabApiError && [405, 406, 409, 422].includes(error.status)) {
+        return { mergeRequest: null, refusal: error.message };
+      }
+      throw error;
+    }
+  }
+
+  async listMergeRequestNotes(ref: GitLabMergeRequestRef, cursor?: string): Promise<GitLabPage<GitLabNote>> {
+    const { data, headers } = await this.request<GitLabNote[]>(this.mrPath(ref, '/notes'), {
+      params: { per_page: this.pageSize, page: this.pageParam(cursor), sort: 'asc', order_by: 'created_at' },
+    });
+    return { items: data.filter(note => !note.system), nextCursor: this.nextCursor(headers) };
+  }
+
+  async createMergeRequestNote(ref: GitLabMergeRequestRef, body: string): Promise<GitLabNote> {
+    const { data } = await this.request<GitLabNote>(this.mrPath(ref, '/notes'), { method: 'POST', body: { body } });
+    return data;
+  }
+
+  async updateMergeRequestNote(ref: GitLabMergeRequestRef, noteId: string, body: string): Promise<GitLabNote> {
+    const { data } = await this.request<GitLabNote>(this.mrPath(ref, `/notes/${encodeURIComponent(noteId)}`), {
+      method: 'PUT',
+      body: { body },
+    });
+    return data;
+  }
+
+  async deleteMergeRequestNote(ref: GitLabMergeRequestRef, noteId: string): Promise<void> {
+    await this.request<unknown>(this.mrPath(ref, `/notes/${encodeURIComponent(noteId)}`), { method: 'DELETE' });
+  }
+
+  async listMergeRequestDiscussions(
+    ref: GitLabMergeRequestRef,
+    cursor?: string,
+  ): Promise<GitLabPage<GitLabDiscussion>> {
+    const { data, headers } = await this.request<GitLabDiscussion[]>(this.mrPath(ref, '/discussions'), {
+      params: { per_page: this.pageSize, page: this.pageParam(cursor) },
+    });
+    return { items: data, nextCursor: this.nextCursor(headers) };
+  }
+
+  /** A diff-anchored discussion needs the MR's `diff_refs`; the caller supplies them. */
+  async createMergeRequestDiscussion(
+    ref: GitLabMergeRequestRef,
+    args: {
+      body: string;
+      position?: {
+        baseSha: string;
+        headSha: string;
+        startSha: string;
+        newPath: string;
+        oldPath?: string;
+        newLine?: number;
+        oldLine?: number;
+      };
+    },
+  ): Promise<GitLabDiscussion> {
+    const { data } = await this.request<GitLabDiscussion>(this.mrPath(ref, '/discussions'), {
+      method: 'POST',
+      body: {
+        body: args.body,
+        ...(args.position
+          ? {
+              position: {
+                base_sha: args.position.baseSha,
+                head_sha: args.position.headSha,
+                start_sha: args.position.startSha,
+                position_type: 'text',
+                new_path: args.position.newPath,
+                old_path: args.position.oldPath ?? args.position.newPath,
+                ...(args.position.newLine === undefined ? {} : { new_line: args.position.newLine }),
+                ...(args.position.oldLine === undefined ? {} : { old_line: args.position.oldLine }),
+              },
+            }
+          : {}),
+      },
+    });
+    return data;
+  }
+
+  async addMergeRequestDiscussionNote(
+    ref: GitLabMergeRequestRef,
+    discussionId: string,
+    body: string,
+  ): Promise<GitLabDiscussionNote> {
+    const { data } = await this.request<GitLabDiscussionNote>(
+      this.mrPath(ref, `/discussions/${encodeURIComponent(discussionId)}/notes`),
+      { method: 'POST', body: { body } },
+    );
+    return data;
+  }
+
+  async approveMergeRequest(ref: GitLabMergeRequestRef): Promise<void> {
+    await this.request<unknown>(this.mrPath(ref, '/approve'), { method: 'POST' });
+  }
+
+  async unapproveMergeRequest(ref: GitLabMergeRequestRef): Promise<void> {
+    await this.request<unknown>(this.mrPath(ref, '/unapprove'), { method: 'POST' });
+  }
+
+  async listMergeRequestApprovals(ref: GitLabMergeRequestRef): Promise<GitLabApprovals> {
+    const { data } = await this.request<GitLabApprovals>(this.mrPath(ref, '/approvals'));
+    return data;
+  }
+
+  /** Reviewers and assignees are set by user id, so usernames need resolving first. */
+  async setMergeRequestReviewers(ref: GitLabMergeRequestRef, reviewerIds: number[]): Promise<GitLabMergeRequest> {
+    const { data } = await this.request<GitLabMergeRequest>(this.mrPath(ref), {
+      method: 'PUT',
+      body: { reviewer_ids: reviewerIds },
+    });
+    return data;
+  }
+
+  async findUserByUsername(username: string): Promise<(GitLabUser & { id: number }) | null> {
+    const { data } = await this.request<(GitLabUser & { id: number })[]>('/users', {
+      params: { username },
+    });
+    return data[0] ?? null;
   }
 }
