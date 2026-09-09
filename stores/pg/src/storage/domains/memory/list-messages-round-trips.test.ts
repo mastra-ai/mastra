@@ -209,3 +209,78 @@ describe('MemoryPG message paging round-trips', () => {
     expect(pageQuery!.query).toContain('(SELECT COUNT(*) FROM');
   });
 });
+
+/**
+ * Fake client for the `includeTotal: false` path. The page query no longer carries
+ * the `AS "__total"` count subquery, so it answers the plain page read (a peek of
+ * `perPage + 1` rows) from `pageRows`.
+ */
+class SkipCountQueryClient extends RecordingDbClientBase {
+  pageRows: Record<string, unknown>[] = [];
+
+  override async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    this.queries.push({ query, values });
+    if (query.includes('AS "__total"')) {
+      throw new Error('COUNT(*) subquery must not run when includeTotal is false');
+    }
+    // Honor the LIMIT (peek = perPage + 1) so hasMore detection can be exercised.
+    const limit = typeof values?.[values.length - 2] === 'number' ? (values[values.length - 2] as number) : undefined;
+    const rows = limit !== undefined ? this.pageRows.slice(0, limit) : this.pageRows;
+    return rows as T[];
+  }
+}
+
+describe('MemoryPG message paging with includeTotal: false', () => {
+  it('skips the COUNT(*) subquery and peeks LIMIT perPage + 1', async () => {
+    const client = new SkipCountQueryClient();
+    client.pageRows = [
+      createRow('message-1', '2025-01-01T00:00:00.000Z'),
+      createRow('message-2', '2025-01-01T00:00:01.000Z'),
+    ];
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 0, includeTotal: false });
+
+    expect(client.queries).toHaveLength(1);
+    const [pageQuery] = client.queries;
+    expect(pageQuery!.query).not.toContain('AS "__total"');
+    expect(pageQuery!.query).not.toContain('COUNT(*)');
+    expect(pageQuery!.query).toContain('ORDER BY "createdAt"');
+    expect(pageQuery!.query).toContain('LIMIT $2 OFFSET $3');
+    // Peek asks for perPage + 1 rows.
+    expect(pageQuery!.values).toEqual(['thread-1', 11, 0]);
+    expect(result.messages).toHaveLength(2);
+    expect(result.hasMore).toBe(false);
+  });
+
+  it('reports hasMore from the extra peeked row without counting', async () => {
+    const client = new SkipCountQueryClient();
+    // Return perPage + 1 rows so the extra row signals more pages.
+    client.pageRows = [
+      createRow('message-1', '2025-01-01T00:00:00.000Z'),
+      createRow('message-2', '2025-01-01T00:00:01.000Z'),
+      createRow('message-3', '2025-01-01T00:00:02.000Z'),
+    ];
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 2, page: 0, includeTotal: false });
+
+    expect(client.queries).toHaveLength(1);
+    expect(client.queries[0]!.values).toEqual(['thread-1', 3, 0]);
+    // The extra peeked row is dropped from the returned page.
+    expect(result.messages).toHaveLength(2);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it('still emits the COUNT(*) subquery by default (includeTotal omitted)', async () => {
+    const client = new MessageQueryClient();
+    client.pageRows = pageRows;
+    client.windowTotal = 7;
+    const memory = new MemoryPG({ client });
+
+    const result = await memory.listMessages({ threadId: 'thread-1', perPage: 10, page: 0 });
+
+    expect(client.queries[0]!.query).toContain('AS "__total"');
+    expect(result.total).toBe(7);
+  });
+});
