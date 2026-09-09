@@ -1268,7 +1268,13 @@ export class MessageList {
         ...(backgroundTasks ? { backgroundTasks } : {}),
       };
 
-      this.markMessageUpdatedAsResponse(msg);
+      // Update ordering and queue the edited metadata for persistence.
+      this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+      this.updateLastCreatedAt(msg);
+      if (!this.stateManager.isResponseMessage(msg)) {
+        this.stateManager.removeMessage(msg);
+        this.stateManager.addToSource(msg, 'response');
+      }
 
       return true;
     }
@@ -1278,25 +1284,10 @@ export class MessageList {
   }
 
   /**
-   * Mark the given provider-executed tool calls on an assistant message as
-   * failed because they can no longer produce a result — e.g. the model stream
-   * terminated with an error before the provider returned. Only the explicitly
-   * listed `toolCallIds` that are still `state: 'call' | 'partial-call'` are
-   * rewritten to a terminal `state: 'output-error'` (preserving args,
-   * providerExecuted, and providerMetadata) so they are no longer
-   * indistinguishable from a live pending tool — see issue #23315.
-   *
-   * The caller passes the specific tool call ids that were abandoned rather
-   * than having this scan for every unresolved provider call: an unrelated bug
-   * that drops a provider result elsewhere should surface as that bug, not get
-   * masked here by a "did not complete" error.
-   *
-   * Leaves client-executed tools (`providerExecuted !== true`), suspended /
-   * approval parts, unlisted ids, and already-resolved (`result` /
-   * `output-error`) parts untouched, as well as any preceding text or
-   * successful results. Keeps the legacy AIV4 `content.toolInvocations` array
-   * in sync and moves the message to the `response` source so it is re-saved.
-   * Returns `true` if any part was updated.
+   * Fail explicitly selected provider calls still in `call` or `partial-call` state.
+   * Explicit IDs prevent masking unrelated missing-result bugs. Preserves args and
+   * metadata, syncs legacy AIV4 invocations, and queues the message for persistence.
+   * Returns whether any call changed.
    */
   public addOutputErrorsToProviderToolCalls(messageId: string, toolCallIds: string[], errorText?: string): boolean {
     if (!messageId || !toolCallIds?.length) {
@@ -1351,24 +1342,15 @@ export class MessageList {
       );
     }
 
-    this.markMessageUpdatedAsResponse(msg);
-
-    return true;
-  }
-
-  /**
-   * Bump the message ordering timestamp and move it into the `response` source
-   * so an in-place content edit gets re-saved by `drainUnsavedMessages`. Shared
-   * by the tool-invocation mutators.
-   */
-  private markMessageUpdatedAsResponse(msg: MastraDBMessage): void {
+    // Update ordering and queue the failed calls for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
     this.updateLastCreatedAt(msg);
-
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
     }
+
+    return true;
   }
 
   /**
@@ -1484,9 +1466,13 @@ export class MessageList {
       );
     }
 
-    // Bump ordering and move the message to the response source so it gets
-    // picked up by drainUnsavedMessages for re-saving.
-    this.markMessageUpdatedAsResponse(msg);
+    // Update ordering and queue the merged result for persistence.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+    this.updateLastCreatedAt(msg);
+    if (!this.stateManager.isResponseMessage(msg)) {
+      this.stateManager.removeMessage(msg);
+      this.stateManager.addToSource(msg, 'response');
+    }
   }
 
   /**

@@ -2452,11 +2452,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
-      // Compute the continue/terminal decision before building any returned snapshots
-      // (currentIterationContent, step response messages, and the `messages` object below).
-      // Reconciliation of abandoned provider tool calls must happen before those conversions
-      // so the returned representations agree with the MessageList about whether the call completed.
-      //
       // NOTE: hasPendingToolCalls must NOT override finishReason='length'.
       // When the provider hits max_tokens mid-generation, it returns finishReason='length' and
       // may also emit a partial/truncated tool call. Retrying with the same parameters produces
@@ -2480,14 +2475,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const shouldContinue =
         shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
 
-      // When the stream terminated with an error and the loop is not continuing or
-      // retrying, any provider-executed tool call from this step can never receive a
-      // result. Mark those specific calls (still in `state: 'call'`) as failed so the
-      // persisted assistant message does not carry an unresolved tool invocation that
-      // is indistinguishable from a live pending tool. We pass the exact tool call ids
-      // seen this step rather than scanning, so an unrelated dropped-result bug can't
-      // be masked as a "did not complete" error here. This must run before the snapshots
-      // below are built so they reflect the reconciled state. See issue #23315.
+      // Fail abandoned provider calls before creating snapshots so persisted history
+      // cannot retain pending calls after a terminal error. Only target this step's IDs.
       if (runState.state.hasErrored && !shouldContinue && !shouldRetry) {
         const providerToolCallIds = toolCalls.filter(tc => tc.providerExecuted === true).map(tc => tc.toolCallId);
         if (providerToolCallIds.length > 0) {
