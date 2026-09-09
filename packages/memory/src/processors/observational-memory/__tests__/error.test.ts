@@ -75,6 +75,61 @@ describe('formatOmError', () => {
   });
 });
 
+const malformedErrors = [
+  ...['message', 'statusCode', 'responseBody', 'cause', 'error'].map(property => ({
+    name: `throwing ${property} getter`,
+    create: () =>
+      Object.defineProperty({}, property, {
+        get() {
+          throw new Error('getter failed');
+        },
+      }),
+  })),
+  {
+    name: 'throwing Proxy',
+    create: () =>
+      new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('trap failed');
+          },
+        },
+      ),
+  },
+  {
+    name: 'revoked Proxy',
+    create: () => {
+      const { proxy, revoke } = Proxy.revocable({}, {});
+      revoke();
+      return proxy;
+    },
+  },
+];
+
+describe.each(malformedErrors)('$name', ({ create }) => {
+  it('falls back without throwing during formatting', () => {
+    expect(formatOmError(create())).toBe('Unknown error');
+    expect(formatOmError(new Error('Wrapper', { cause: create() }))).toBe('Unknown error');
+  });
+
+  it.each([createBufferingFailedMarker, createObservationFailedMarker])(
+    'still creates a failure marker',
+    createMarker => {
+      const marker = createMarker({
+        cycleId: 'cycle',
+        operationType: 'observation',
+        startedAt: new Date().toISOString(),
+        tokensAttempted: 100,
+        error: create(),
+        recordId: 'record',
+        threadId: 'thread',
+      });
+      expect(JSON.parse(JSON.stringify(marker)).data.error).toBe('Unknown error');
+    },
+  );
+});
+
 describe.each([createBufferingFailedMarker, createObservationFailedMarker])(
   'OM failure marker diagnostics',
   createMarker => {

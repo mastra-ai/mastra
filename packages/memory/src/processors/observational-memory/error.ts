@@ -39,7 +39,12 @@ export function formatOmError(error: unknown): string {
     if (value.error !== undefined) collectErrorDetails(value.error, depth + 1);
   }
 
-  collectErrorDetails(error, 0);
+  try {
+    collectErrorDetails(error, 0);
+  } catch {
+    // Malformed thrown values must not prevent the failure marker from being recorded.
+    return 'Unknown error';
+  }
   const message = [...details].join(': ') || 'Unknown error';
   return message.length > 2000 ? `${message.slice(0, 1997)}...` : message;
 }
