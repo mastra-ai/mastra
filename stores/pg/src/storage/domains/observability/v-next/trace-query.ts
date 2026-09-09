@@ -37,7 +37,14 @@ const SPAN_FIELDS = {
 
 const SCORE_FIELDS = {
   scorerId: 's."scorerId"',
+  scorerVersion: 's."scorerVersion"',
+  scoreSource: 's."scoreSource"',
   score: 's."score"',
+  timestamp: 's."timestamp"',
+  spanId: 's."spanId"',
+  entityVersionId: 's."entityVersionId"',
+  parentEntityVersionId: 's."parentEntityVersionId"',
+  rootEntityVersionId: 's."rootEntityVersionId"',
 } satisfies FieldRegistry<TraceQueryScoreField>;
 
 const TRACE_SELECT = `
@@ -226,7 +233,17 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
   }
   if (relationCollections.has('scores')) {
     ctes.push(`current_scores AS MATERIALIZED (
-    SELECT s."traceId", s."scorerId", s."score"
+    SELECT
+      s."traceId",
+      s."spanId",
+      s."timestamp",
+      s."scorerId",
+      s."scorerVersion",
+      s."scoreSource",
+      s."score",
+      s."entityVersionId",
+      s."parentEntityVersionId",
+      s."rootEntityVersionId"
     FROM ${scoreTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
