@@ -125,7 +125,8 @@ export function useScopeControl(
   // A permission answer lands after first paint, so a scope picked meanwhile
   // falls back rather than editing one the caller may not write.
   const pickable = (scope: SettingsScope) => options.includes(scope) && disabledReasons?.[scope] === undefined;
-  const offered = (scope: SettingsScope) => (pickable(scope) ? scope : (options[0] ?? 'personal'));
+  const offered = (scope: SettingsScope) =>
+    pickable(scope) ? scope : (options.find(pickable) ?? options[0] ?? 'personal');
   const value = offered(picked);
   const shown = offered(revealed);
 

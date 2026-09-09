@@ -110,6 +110,13 @@ describe('SettingsSubsection', () => {
       expect(screen.getByRole('button', { name: 'Personal' })).toHaveAttribute('aria-pressed', 'true');
     });
 
+    it('lands on the first scope the caller may pick, not the first listed', () => {
+      render(<ScopeHarness options={['personal', 'org']} disabledReasons={{ personal: 'Unavailable' }} />);
+
+      expect(screen.getByRole('button', { name: 'Org-wide' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Personal' })).toHaveAttribute('aria-disabled', 'true');
+    });
+
     it('falls back when the permission answer takes the picked scope away', async () => {
       const user = userEvent.setup();
       const { rerender } = render(<ScopeHarness options={['personal', 'org']} />);
