@@ -22,6 +22,7 @@ export function attachIncidentioIssueReconciler(
     issueId: item => item.externalSource?.externalId,
     metadata: (_item, issue) => ({
       identifier: issue.identifier,
+      autoStartCandidate: issue.stateType === 'unstarted' || issue.stateType === 'started',
       incidentioItemType: issue.source === 'Follow-up' ? 'follow-up' : 'incident',
       incidentioState: issue.state,
       incidentioStateType: issue.stateType,

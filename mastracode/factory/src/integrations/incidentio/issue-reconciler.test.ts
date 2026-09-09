@@ -53,7 +53,7 @@ describe('incident.io issue reconciler', () => {
           title: 'Stale title',
           stages: ['execute'],
           sessions: {},
-          metadata: { stateType: 'unstarted', labels: ['stale'] },
+          metadata: { stateType: 'unstarted', labels: ['stale'], autoStartCandidate: true },
         },
       });
     }
@@ -87,6 +87,7 @@ describe('incident.io issue reconciler', () => {
         expect.objectContaining({
           externalSource: expect.objectContaining({ externalId: 'incidentio:incident:incident-1' }),
           metadata: expect.objectContaining({
+            autoStartCandidate: true,
             incidentioItemType: 'incident',
             incidentioState: 'Learning',
             incidentioStateType: 'started',
@@ -99,6 +100,7 @@ describe('incident.io issue reconciler', () => {
         expect.objectContaining({
           externalSource: expect.objectContaining({ externalId: 'incidentio:follow-up:follow-up-1' }),
           metadata: expect.objectContaining({
+            autoStartCandidate: false,
             incidentioItemType: 'follow-up',
             incidentioState: 'completed',
             incidentioStateType: 'completed',

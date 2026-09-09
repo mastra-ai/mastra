@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../issue-reconcile-worker.js', () => ({
+  IssueReconcileWorker: class {
+    readonly name = 'incidentio-issue-reconcile';
+
+    constructor(readonly config: unknown) {}
+  },
+}));
+
 import { createBoardRegistry } from '../../boards/index.js';
 import {
   INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
@@ -59,9 +67,10 @@ describe('IncidentioIntegration', () => {
     const workers = integration.workers({
       storage: { projects: { listAll: async () => [] } },
       runtime: { configVersion: 'test-v1', workItems: {}, boards: createBoardRegistry() },
-    } as never);
+    } as never) as unknown as Array<{ name: string; config: { intervalMs?: number } }>;
 
     expect(workers.map(worker => worker.name)).toEqual(['incidentio-issue-reconcile']);
+    expect(workers[0]?.config).toMatchObject({ integrationId: 'incidentio', intervalMs: 60000 });
     expect(incidentioReconciliationInterval()).toBe(60000);
   });
 
