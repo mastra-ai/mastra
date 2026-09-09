@@ -104,6 +104,23 @@ describe('getDynamicInstructionSections', () => {
     };
   }
 
+  it.each([true, false])('matches delegation guidance to registration (%s)', async hasSubagents => {
+    const args = { requestContext: makeRequestContext({}), hasSubagents };
+    const prompt = await getDynamicInstructions(args);
+    expect(prompt.includes('**subagent**')).toBe(hasSubagents);
+    expect(prompt.includes('# Subagent Rules')).toBe(hasSubagents);
+    expect(joinPromptSections(await getDynamicInstructionSections(args))).toBe(prompt);
+  });
+
+  it('omits delegation guidance when permission denies the registered tool', async () => {
+    const prompt = await getDynamicInstructions({
+      requestContext: makeRequestContext({ permissionRules: { tools: { subagent: 'deny' } } }),
+      hasSubagents: true,
+    });
+    expect(prompt).not.toContain('**subagent**');
+    expect(prompt).not.toContain('# Subagent Rules');
+  });
+
   it('rejoins into exactly getDynamicInstructions output without plugins', async () => {
     const requestContext = makeRequestContext({});
 

@@ -30,8 +30,6 @@ import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
-import { defaultFactoryRules } from '@mastra/factory/rules/defaults';
-import type { FactoryStageRuleContext } from '@mastra/factory/rules/types';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
@@ -87,16 +85,6 @@ function credentialEncryption() {
       return { id, key: decodeCredentialEncryptionKey('FACTORY_CREDENTIAL_ENCRYPTION_PREVIOUS_KEYS', value) };
     }),
   });
-}
-
-function investigateIntakeIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
-  } as const;
 }
 
 // Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
@@ -290,34 +278,26 @@ const slack = slackSigningSecret
 
 const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
 
-export const factoryRules = defaultFactoryRules({
-  version: 'mastracode-web-v1',
-  overrides: {
-    work: {
-      intake: {
-        issue: { onEnter: investigateIntakeIssue },
-      },
-    },
-  },
-});
+export const factoryConfigVersion = 'mastracode-web-v1';
 
-const hasPlatformSandboxEnv = ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(
-  key => Boolean(process.env[key]?.trim()),
-);
+const hasPlatformSandboxEnv =
+  ['MASTRA_PLATFORM_ACCESS_TOKEN', 'MASTRA_PLATFORM_SECRET_KEY'].some(key => Boolean(process.env[key]?.trim())) &&
+  ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 export const factory = new MastraFactory({
   auth,
   secretEncryption,
   integrations,
-  rules: factoryRules,
+  configVersion: factoryConfigVersion,
   sandbox: ctx => {
-    if (hasPlatformSandboxEnv) {
+    const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
+    if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
 
-    if (process.env.E2B_API_KEY?.trim()) {
+    if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
         template: createE2BRepoTemplate(ctx),

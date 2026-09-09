@@ -1,4 +1,6 @@
-import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
+import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Comment,
@@ -7,7 +9,10 @@ import {
   CommentComposerInput,
   CommentComposerSend,
   CommentItem,
+  CommentItemAuthor,
+  CommentItemAvatar,
   CommentItemBody,
+  CommentItemContent,
   CommentItemHeader,
   CommentItemTimestamp,
   CommentList,
@@ -16,6 +21,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { format } from 'date-fns';
 import { useState } from 'react';
 
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
+
 type FeedbackThreadProps = {
   feedbackData?: ListFeedbackResponse | null;
   isLoadingFeedbackData?: boolean;
@@ -23,15 +30,103 @@ type FeedbackThreadProps = {
   /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
   onSubmit: (text: string) => void | Promise<unknown>;
   isSubmitting?: boolean;
-  /** Comment layout variant — `embed` renders a compact card suitable for inline use. */
+  /**
+   * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
+   * `embed` renders a compact card suitable for inline use.
+   */
   variant?: CommentVariant;
+  /** When provided, unreviewed rows get a "Mark reviewed" action. */
+  onMarkReviewed?: (feedbackId: string) => void;
+  /** feedbackId whose review-status update is in flight (disables its action). */
+  pendingFeedbackId?: string;
 };
 
-function formatBody(fb: FeedbackRecord): string {
+// The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
+function ReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  return status === 'reviewed' ? (
+    <Badge data-slot="feedback-review-status" variant="green" size="xs" indicator="dot">
+      Reviewed
+    </Badge>
+  ) : (
+    <Badge data-slot="feedback-review-status" variant="yellow" size="xs" indicator="dot">
+      Needs review
+    </Badge>
+  );
+}
+
+function formatBody(fb: FeedbackItem): string {
   const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
   if (text) return text;
   if (fb.feedbackType === 'thumbs') return fb.value === 1 ? '\u{1F44D}' : '\u{1F44E}';
   return String(fb.value ?? '');
+}
+
+type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
+  variant: CommentVariant;
+  items: FeedbackItem[];
+};
+
+function FeedbackItems({ variant, items, onMarkReviewed, pendingFeedbackId }: FeedbackItemsProps) {
+  const rows = items.map((fb, index) => {
+    const ts = new Date(fb.timestamp);
+    const author = feedbackAuthorLabel(fb);
+    const avatar = author ? <Avatar name={author} src={fb.author?.avatarUrl} size="sm" /> : null;
+    const name = author && <CommentItemAuthor>{author}</CommentItemAuthor>;
+    const timestamp = (
+      <CommentItemTimestamp dateTime={ts.toISOString()}>{format(ts, 'MMM d, h:mm:ss aaa')}</CommentItemTimestamp>
+    );
+    const feedbackId = fb.feedbackId;
+    const status = <ReviewStatusBadge status={fb.reviewStatus} />;
+    const markReviewed = onMarkReviewed && feedbackId && fb.reviewStatus !== 'reviewed' && (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ml-auto"
+        disabled={pendingFeedbackId === feedbackId}
+        onClick={() => onMarkReviewed(feedbackId)}
+      >
+        Mark reviewed
+      </Button>
+    );
+    const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
+    const key = feedbackId ?? `${fb.traceId}-${index}`;
+
+    // The thread variant lays the row out as avatar gutter + content column.
+    // Without an author there is nothing to align under, so skip the gutter entirely.
+    if (variant === 'thread') {
+      return (
+        <CommentItem key={key}>
+          {avatar && <CommentItemAvatar>{avatar}</CommentItemAvatar>}
+          <CommentItemContent>
+            <CommentItemHeader>
+              {name}
+              {timestamp}
+              {status}
+              {markReviewed}
+            </CommentItemHeader>
+            {body}
+          </CommentItemContent>
+        </CommentItem>
+      );
+    }
+
+    // Stacked variants have no gutter, so the avatar sits inline in the header.
+    return (
+      <CommentItem key={key}>
+        <CommentItemHeader>
+          {avatar}
+          {name}
+          {timestamp}
+          {status}
+          {markReviewed}
+        </CommentItemHeader>
+        {body}
+      </CommentItem>
+    );
+  });
+
+  // Thread rows are stream entries rendered as `div`s, not list items.
+  return variant === 'thread' ? <>{rows}</> : <CommentList>{rows}</CommentList>;
 }
 
 /**
@@ -44,7 +139,9 @@ export function FeedbackThread({
   onPageChange,
   onSubmit,
   isSubmitting = false,
-  variant,
+  variant = 'thread',
+  onMarkReviewed,
+  pendingFeedbackId,
 }: FeedbackThreadProps) {
   const [text, setText] = useState('');
   const sendBlocked = text.trim().length === 0 || isSubmitting;
@@ -65,21 +162,12 @@ export function FeedbackThread({
             No feedback yet
           </Txt>
         ) : (
-          <CommentList>
-            {feedbackItems.map((fb, index) => {
-              const ts = new Date(fb.timestamp);
-              return (
-                <CommentItem key={`${fb.traceId}-${index}`}>
-                  <CommentItemHeader>
-                    <CommentItemTimestamp dateTime={ts.toISOString()}>
-                      {format(ts, 'MMM d, h:mm:ss aaa')}
-                    </CommentItemTimestamp>
-                  </CommentItemHeader>
-                  <CommentItemBody>{formatBody(fb)}</CommentItemBody>
-                </CommentItem>
-              );
-            })}
-          </CommentList>
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
+          />
         )}
       </div>
 

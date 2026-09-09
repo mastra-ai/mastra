@@ -152,13 +152,25 @@ describe('boardCardStatus', () => {
     ).toEqual({ kind: 'waiting', label: 'Re-review', decisionId: 'decision-9' });
   });
 
-  it('lets an effect the server is already working through outrank the parked run', () => {
+  it('lets active work outrank the parked run', () => {
     expect(
       boardCardStatus({
         proposal: { label: 'Re-review', decisionId: 'decision-9' },
         decision: decision({ type: 'transition', status: 'pending' }),
       }),
     ).toEqual({ kind: 'busy', label: 'Moving this card automatically…' });
+    expect(
+      boardCardStatus({
+        proposal: { label: 'Re-review', decisionId: 'decision-9' },
+        sessionStatus: 'working',
+      }),
+    ).toEqual({ kind: 'idle' });
+    expect(
+      boardCardStatus({
+        proposal: { label: 'Re-review', decisionId: 'decision-9' },
+        sessionStatus: 'initializing',
+      }),
+    ).toEqual({ kind: 'idle' });
   });
 
   it('names the held classification so the card says why it waits on a person', () => {

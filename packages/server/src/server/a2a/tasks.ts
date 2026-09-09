@@ -1,6 +1,7 @@
 import type { Message, Task, TaskStatus, TaskContext, TaskArtifactUpdateEvent, Artifact } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type { IMastraLogger } from '@mastra/core/logger';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, type RequestContext } from '@mastra/core/request-context';
 import { TaskStoreVersionConflictError, type InMemoryTaskStore } from './store';
 import { isTerminalTaskState } from './task-state';
 
@@ -63,6 +64,43 @@ export function applyUpdateToTask(
   return newTask;
 }
 
+function usableId(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+export function resolveTaskMemory({
+  task,
+  agentId,
+  requestContext,
+  metadata,
+  message,
+}: {
+  task?: Task;
+  agentId: string;
+  requestContext?: RequestContext;
+  metadata?: Record<string, unknown>;
+  message?: Message;
+}) {
+  const trustedResource = usableId(requestContext?.get(MASTRA_RESOURCE_ID_KEY));
+  const trustedThread = usableId(requestContext?.get(MASTRA_THREAD_ID_KEY));
+  const storedResource = usableId(task?.metadata?.resourceId);
+
+  if (
+    task &&
+    ((trustedResource && storedResource && trustedResource !== storedResource) ||
+      (trustedThread && trustedThread !== task.contextId))
+  ) {
+    throw MastraA2AError.invalidRequest('Task memory identity conflicts with the authenticated request.');
+  }
+
+  return {
+    thread: task?.contextId ?? trustedThread ?? message?.contextId,
+    resource: task
+      ? (storedResource ?? trustedResource ?? agentId)
+      : (trustedResource ?? usableId(metadata?.resourceId) ?? usableId(message?.metadata?.resourceId) ?? agentId),
+  };
+}
+
 export async function loadOrCreateTask({
   agentId,
   taskId,
@@ -71,6 +109,7 @@ export async function loadOrCreateTask({
   contextId,
   metadata,
   logger,
+  requestContext,
 }: {
   agentId: string;
   taskId: string;
@@ -79,15 +118,17 @@ export async function loadOrCreateTask({
   contextId?: string;
   metadata?: Record<string, unknown>;
   logger?: IMastraLogger;
+  requestContext?: RequestContext;
 }): Promise<Task> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const snapshot = taskStore.loadWithVersion({ agentId, taskId });
     const data = snapshot?.task;
+    const memory = resolveTaskMemory({ task: data, agentId, requestContext, metadata, message });
 
     if (!data) {
       const initialTask: Task = {
         id: taskId,
-        contextId: contextId || crypto.randomUUID(),
+        contextId: memory.thread || contextId || crypto.randomUUID(),
         status: {
           state: 'submitted',
           timestamp: new Date().toISOString(),
@@ -95,7 +136,7 @@ export async function loadOrCreateTask({
         },
         artifacts: [],
         history: [message],
-        metadata: metadata,
+        metadata: { ...metadata, resourceId: memory.resource },
         kind: 'task',
       };
 
@@ -122,6 +163,7 @@ export async function loadOrCreateTask({
 
     let updatedData: Task = {
       ...data,
+      metadata: { ...data.metadata, resourceId: memory.resource },
       history: [...(data.history || []), message],
     };
 

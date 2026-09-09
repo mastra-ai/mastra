@@ -45,6 +45,7 @@ import type { FactoryProjectsStorage } from './storage/domains/projects/base.js'
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { parseSupervisorResourceId } from './supervisor/session.js';
 import { timedPhase } from './timing.js';
+import { pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -651,6 +652,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
         repoFullName: repoFullName,
+        pullRequestNumber: pullRequestNumberFromBranch(session.branch),
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather

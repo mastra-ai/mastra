@@ -1,11 +1,18 @@
 import type { DatasetExperiment } from '@mastra/client-js';
+import { formatCompact, formatCost } from '@mastra/playground-ui/domains/metrics/components/metrics-utils';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, formatDistanceToNow } from 'date-fns';
 import { type ReactNode, useMemo } from 'react';
+import type { ExperimentMetrics } from '../hooks/use-experiment-metrics';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 export interface ExperimentMetaBarProps {
   experiment: DatasetExperiment;
+  metrics?: {
+    data?: ExperimentMetrics;
+    isLoading: boolean;
+    isEnabled: boolean;
+  };
   className?: string;
 }
 
@@ -31,11 +38,13 @@ function formatDuration(ms: number): string {
 
 /**
  * Horizontal metadata strip for the experiment page — Avg score / Items /
- * Started / Duration cells separated by vertical borders. The dataset lives in
- * the page title, so it is not repeated here.
+ * Started / Duration cells separated by vertical borders, plus Tokens / Latency
+ * when the observability store supports metrics. The dataset lives in the page
+ * title, so it is not repeated here.
  */
-export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarProps) {
+export function ExperimentMetaBar({ experiment, metrics, className }: ExperimentMetaBarProps) {
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const isActive = experiment.status === 'running' || experiment.status === 'pending';
 
   // Averages every score fetched so far, so a running experiment reflects only
   // the items scored up to now.
@@ -65,15 +74,13 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
         ) : (
           <>
             <span>{overallAverage.toFixed(3)}</span>
-            {(experiment.status === 'running' || experiment.status === 'pending') && (
-              <span className="text-neutral3">· so far</span>
-            )}
+            {isActive && <span className="text-neutral3">· so far</span>}
           </>
         )}
       </MetaCell>
 
       <MetaCell label="Items">
-        {experiment.status === 'running' || experiment.status === 'pending' ? (
+        {isActive ? (
           <span className="text-neutral3">
             {(experiment.succeededCount ?? 0) + (experiment.failedCount ?? 0)}/{experiment.totalItems} items processed
           </span>
@@ -91,10 +98,9 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
 
       <MetaCell label="Started">
         {startedDate ? (
-          <>
-            <span>{format(startedDate, 'MMM d, h:mm a')}</span>
-            <span className="text-neutral3">· {formatDistanceToNow(startedDate, { addSuffix: true })}</span>
-          </>
+          <span title={formatDistanceToNow(startedDate, { addSuffix: true })}>
+            {format(startedDate, 'MMM d, h:mm a')}
+          </span>
         ) : (
           <span>—</span>
         )}
@@ -103,6 +109,34 @@ export function ExperimentMetaBar({ experiment, className }: ExperimentMetaBarPr
       <MetaCell label="Duration">
         <span>{durationValue}</span>
       </MetaCell>
+
+      {metrics?.isEnabled && (
+        <>
+          <MetaCell label="Tokens">
+            {metrics.data?.totalTokens == null ? (
+              <span className="text-neutral3">—</span>
+            ) : (
+              <>
+                <span>{formatCompact(metrics.data.totalTokens)}</span>
+                {metrics.data.estimatedCost != null && (
+                  <span className="text-neutral3">
+                    · {formatCost(metrics.data.estimatedCost, metrics.data.costUnit)}
+                  </span>
+                )}
+                {isActive && <span className="text-neutral3">· so far</span>}
+              </>
+            )}
+          </MetaCell>
+
+          <MetaCell label="Latency (avg)">
+            {metrics.data?.avgAgentDurationMs == null ? (
+              <span className="text-neutral3">—</span>
+            ) : (
+              <span>{formatDuration(Math.round(metrics.data.avgAgentDurationMs))}</span>
+            )}
+          </MetaCell>
+        </>
+      )}
     </div>
   );
 }

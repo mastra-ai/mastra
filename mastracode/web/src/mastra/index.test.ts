@@ -88,6 +88,15 @@ describe('platform entry (src/mastra/index.ts)', () => {
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
   });
 
+  it('uses the preferred installed boards without deployment-owned lifecycle handlers', async () => {
+    const { factoryConfigVersion } = await import('./index.js');
+    expect(factoryConfigVersion).toBe('mastracode-web-v1');
+    expect(factoryConfigs[0]?.configVersion).toBe(factoryConfigVersion);
+    expect(factoryConfigs[0]).not.toHaveProperty('rules');
+    expect(factoryConfigs[0]?.boards).toBeUndefined();
+    expect(factoryConfigs[0]?.includeDefaultBoards).toBeUndefined();
+  });
+
   it('forwards the dispatcher concurrency environment setting to the factory', { timeout: 60_000 }, async () => {
     vi.stubEnv('MASTRACODE_DISPATCH_MAX_IN_FLIGHT', '7');
     await import('./index.js');
@@ -103,7 +112,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
     vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
     vi.stubEnv('GITHUB_APP_SLUG', 'factory-app');
     vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'test-webhook-secret');
-    const { factoryRules } = await import('./index.js');
+    const { factoryConfigVersion } = await import('./index.js');
     const { GithubIntegration } = await import('@mastra/factory/integrations/github/integration');
     const github = factoryConfigs[0]?.integrations?.find(
       (integration): integration is InstanceType<typeof GithubIntegration> => integration instanceof GithubIntegration,
@@ -123,7 +132,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       tenant: { orgId: 'org-1', projectId: 'project-1' },
       actor: { type: 'github' as const, login: 'contributor', trusted: true, factoryAuthored: false },
       causalChain: [],
-      ruleSetVersion: factoryRules.version,
+      configVersion: factoryConfigVersion,
       factory: { createdAt: '2030-01-01T00:00:00.000Z' },
       repository: { id: 10, fullName: 'acme/repo' },
       item,

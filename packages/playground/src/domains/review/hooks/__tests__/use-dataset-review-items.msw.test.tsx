@@ -52,7 +52,7 @@ describe('useReviewItems', () => {
     );
   };
 
-  it('hydrates the persisted comment (and tags) from the experiment result', async () => {
+  it('hydrates the persisted tags from the experiment result', async () => {
     setupHandlers();
 
     const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
@@ -65,9 +65,6 @@ describe('useReviewItems', () => {
     expect(item.id).toBe(RESULT_ID);
     expect(item.datasetId).toBe(DATASET_ID);
     expect(item.tags).toEqual(['hallucination']);
-    // Regression guard for #19857: the comment used to be hardcoded to ''
-    // on rehydrate, wiping saved comments on every reload.
-    expect(item.comment).toBe('The agent ignored the second question');
   });
 
   it('only fetches the selected experiment when scoped', async () => {

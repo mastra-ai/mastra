@@ -6,10 +6,11 @@ import {
   ChatShellRoot,
   ChatShellScrollButton,
   ChatShellStage,
+  ChatShellTurn,
   ChatShellViewport,
 } from './chat-shell';
 
-export type { ChatShellProps } from './chat-shell';
+export type { ChatShellProps, ChatShellTurnProps } from './chat-shell';
 
 export const ChatShell = Object.assign(ChatShellRoot, {
   Bar: ChatShellBar,
@@ -18,5 +19,6 @@ export const ChatShell = Object.assign(ChatShellRoot, {
   Dock: ChatShellDock,
   ScrollButton: ChatShellScrollButton,
   Stage: ChatShellStage,
+  Turn: ChatShellTurn,
   Viewport: ChatShellViewport,
 });
