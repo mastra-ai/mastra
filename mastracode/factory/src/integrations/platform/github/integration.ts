@@ -267,7 +267,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           suspendedAt: string | null;
           usable: boolean;
         }>;
-      }>('GET', `${API_PREFIX}/github-app/installations`);
+      }>('GET', `${API_PREFIX}/github-app/installations`, undefined, { actingUserId: userId });
       const usable = installations.installations.filter(
         installation => installation.usable && !installation.suspendedAt,
       );
@@ -757,6 +757,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
       'GET',
       `${API_PREFIX}/github-app/installations`,
+      undefined,
+      { actingUserId: userId },
     );
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,

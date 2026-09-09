@@ -217,7 +217,12 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
       'https://platform.example.com/v1/server/github-app/installations',
-      expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'Bearer platform-token',
+          'x-acting-user-id': 'user-1',
+        }),
+      }),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
@@ -1042,6 +1047,12 @@ describe('PlatformGithubIntegration', () => {
       userGithubUsername: 'ada',
       reason: 'ready',
     });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/installations',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-acting-user-id': 'user-1' }),
+      }),
+    );
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://platform.example.com/v1/server/github-app/user-connection?userId=user-1',
       expect.anything(),
