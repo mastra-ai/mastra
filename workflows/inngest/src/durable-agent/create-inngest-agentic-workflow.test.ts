@@ -8,14 +8,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
 
-vi.mock('@mastra/core/agent/durable', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/core/agent/durable')>();
-  return {
-    ...actual,
-    runDurableFinishSideEffects: vi.fn(async () => ({ messageListState: undefined, outputText: undefined })),
-  };
-});
-
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
  * `toolCallConcurrency` instead of always running tool calls sequentially.
@@ -212,6 +204,14 @@ describe('createInngestDurableAgenticWorkflow tool-call tracing (#19842)', () =>
   });
 });
 
+/**
+ * `map-final-output` runs the finish side effects through `engine.step.run`. These tests
+ * only care about how the spans are ended, so the fake engine returns the step's result
+ * without invoking the callback. Mocking the module instead would leak across files,
+ * because this package runs vitest with `--no-isolate`.
+ */
+const skipFinishSideEffects = async () => ({ messageListState: undefined, outputText: undefined });
+
 describe('createInngestDurableAgenticWorkflow final span ends', () => {
   it('ends the model span with usage on attributes and the agent span with text only', async () => {
     const inngest = new Inngest({ id: 'inngest-agentic-workflow-final-span-tests' });
@@ -259,7 +259,7 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: (_name: string, fn: () => unknown) => fn() } },
+      engine: { step: { run: skipFinishSideEffects } },
       mastra: { observability, getLogger: () => undefined },
     });
 
@@ -303,7 +303,7 @@ describe('createInngestDurableAgenticWorkflow final span ends', () => {
         state: {},
       },
       getInitData: () => ({ runId: 'run-1', agentId: 'agent-1' }),
-      engine: { step: { run: (_name: string, fn: () => unknown) => fn() } },
+      engine: { step: { run: skipFinishSideEffects } },
       mastra: { getLogger: () => undefined },
     });
 
