@@ -661,6 +661,13 @@ export function setupKeyHandlers(
 
 export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
+  const reportEventError = (event: { type: string }, err: unknown): void => {
+    // Log but don't crash — individual event errors shouldn't kill the process
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+    if (stack) process.stderr.write(stack + '\n');
+  };
   const listener: AgentControllerEventListener = event => {
     // Notify at receipt, before queueing: a pending prompt blocks the serial
     // queue until answered, which would starve any notification queued behind
@@ -670,14 +677,18 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
     // receipt too, before the event is chained onto the serial queue.
     runPermissionHooksForEvent(state, event);
     eventQueue = eventQueue.then(async () => {
+      if (event.type === 'tool_suspended') {
+        // Start interactive prompts in event order, but don't park the finite
+        // rendering queue on the user's response. Thread switches wait on this
+        // queue and must remain available while a prior thread awaits input.
+        void handleEvent(event).catch(err => reportEventError(event, err));
+        return;
+      }
+
       try {
         await handleEvent(event);
       } catch (err) {
-        // Log but don't crash — individual event errors shouldn't kill the process
-        const msg = err instanceof Error ? err.message : String(err);
-        const stack = err instanceof Error ? err.stack : undefined;
-        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-        if (stack) process.stderr.write(stack + '\n');
+        reportEventError(event, err);
       }
     });
     return eventQueue;

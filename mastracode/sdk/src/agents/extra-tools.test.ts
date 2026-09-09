@@ -17,6 +17,14 @@ import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 // Minimal mock of AgentControllerRequestContext shape that createDynamicTools reads
 function makeRequestContext(
   overrides: {
@@ -189,6 +197,75 @@ describe('createDynamicTools – extraTools', () => {
 
     releases.shift()?.();
     await expect(second).resolves.toEqual({ answer: 'second' });
+  });
+
+  it('should retain the Alexandria execution slot until an aborted execution settles', async () => {
+    const firstAbortObserved = createDeferred<void>();
+    const releaseFirst = createDeferred<void>();
+    const started: string[] = [];
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async ({ question }, context) => {
+        started.push(question);
+        if (question === 'first') {
+          context?.abortSignal?.addEventListener('abort', () => firstAbortObserved.resolve(), { once: true });
+          await releaseFirst.promise;
+        }
+        return { answer: question };
+      },
+    });
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+    })({ requestContext: makeRequestContext() });
+    const firstAbort = new AbortController();
+
+    const first = tools.mastra_expert.execute!({ question: 'first' }, { abortSignal: firstAbort.signal } as any);
+    const second = tools.mastra_expert.execute!({ question: 'second' });
+    await vi.waitFor(() => expect(started).toEqual(['first']));
+
+    firstAbort.abort(new Error('cancelled'));
+    await firstAbortObserved.promise;
+    expect(started).toEqual(['first']);
+
+    releaseFirst.resolve();
+    await expect(first).resolves.toEqual({ answer: 'first' });
+    await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
+    await expect(second).resolves.toEqual({ answer: 'second' });
+  });
+
+  it('should skip an Alexandria execution cancelled while waiting for the queue', async () => {
+    const releaseFirst = createDeferred<void>();
+    const started: string[] = [];
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async ({ question }) => {
+        started.push(question);
+        if (question === 'first') await releaseFirst.promise;
+        return { answer: question };
+      },
+    });
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+    })({ requestContext: makeRequestContext() });
+    const queuedAbort = new AbortController();
+
+    const first = tools.mastra_expert.execute!({ question: 'first' });
+    const cancelled = tools.mastra_expert.execute!({ question: 'cancelled' }, {
+      abortSignal: queuedAbort.signal,
+    } as any);
+    const third = tools.mastra_expert.execute!({ question: 'third' });
+    await vi.waitFor(() => expect(started).toEqual(['first']));
+
+    queuedAbort.abort(new Error('cancelled while queued'));
+    releaseFirst.resolve();
+    await expect(first).resolves.toEqual({ answer: 'first' });
+    await expect(cancelled).rejects.toThrow('cancelled while queued');
+    await expect(third).resolves.toEqual({ answer: 'third' });
+    expect(started).toEqual(['first', 'third']);
   });
 
   it('should let extraTools win over pluginTools for embedding overrides', async () => {

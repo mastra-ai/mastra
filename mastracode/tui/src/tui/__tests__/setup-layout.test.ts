@@ -190,4 +190,45 @@ describe('buildLayout startup header', () => {
 
     expect(order).toEqual(['start:message_update', 'end:message_update', 'start:agent_end', 'end:agent_end']);
   });
+
+  it('does not block the finite event queue on a suspended interactive prompt', async () => {
+    let listener: ((event: { type: string }) => Promise<void>) | undefined;
+    const state = {
+      session: {
+        subscribe: vi.fn((handler: typeof listener) => {
+          listener = handler;
+          return vi.fn();
+        }),
+      },
+    } as any;
+    const answerPrompt = createDeferred<void>();
+    const order: string[] = [];
+    const handleEvent = vi.fn(async (event: { type: string }) => {
+      order.push(`start:${event.type}`);
+      if (event.type === 'tool_suspended') {
+        await answerPrompt.promise;
+      }
+      order.push(`end:${event.type}`);
+    });
+
+    subscribeToAgentController(state, handleEvent);
+    const prompt = listener?.({ type: 'tool_suspended' });
+    const threadChange = listener?.({ type: 'thread_changed' });
+    const drained = state.waitForAgentControllerEvents?.();
+    await drained;
+
+    expect(order).toEqual(['start:tool_suspended', 'start:thread_changed', 'end:thread_changed']);
+
+    answerPrompt.resolve();
+    await prompt;
+    await threadChange;
+    await vi.waitFor(() =>
+      expect(order).toEqual([
+        'start:tool_suspended',
+        'start:thread_changed',
+        'end:thread_changed',
+        'end:tool_suspended',
+      ]),
+    );
+  });
 });

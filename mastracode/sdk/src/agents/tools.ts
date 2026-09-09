@@ -45,8 +45,12 @@ async function executeAlexandriaSerially(tool: ToolLike, args: any[]): Promise<u
 
   await previous.catch(() => undefined);
   try {
+    const abortSignal = args[1]?.abortSignal as AbortSignal | undefined;
+    abortSignal?.throwIfAborted();
     return await tool.execute?.apply(tool, args);
   } finally {
+    // The active tool receives the same abort signal and owns terminating its
+    // nested execution. Never release this slot until that execution settles.
     release();
   }
 }
