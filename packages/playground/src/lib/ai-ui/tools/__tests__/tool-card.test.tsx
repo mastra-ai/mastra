@@ -305,11 +305,7 @@ describe('ToolCard dispatch', () => {
       };
       const { rerender } = render(<ToolPartCard part={part} />, { wrapper: Providers });
       expect(screen.queryByRole('img', { name: 'Failed' })).toBeNull();
-      rerender(
-        <ToolPartCard
-          part={{ ...part, state: 'output-error', errorText: 'Provider rejected the request' }}
-        />,
-      );
+      rerender(<ToolPartCard part={{ ...part, state: 'output-error', errorText: 'Provider rejected the request' }} />);
       expect(screen.getByRole('img', { name: 'Failed' })).not.toBeNull();
       expect(screen.getByTestId('agent-badge').querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
       expect(screen.getByTestId('agent-error').textContent).toBe('Provider rejected the request');
@@ -442,27 +438,33 @@ describe('ToolCard dispatch', () => {
     });
   });
 
-  it('surfaces a failed delegation on the agent badge with its error text', () => {
-    const errorText = 'Failed agent tool execution for head: Incorrect API key provided';
-    renderToolCard(
-      baseProps({
-        toolName: 'agent-head',
-        output: undefined,
-        state: 'output-error',
-        errorText,
-      }),
-    );
-    const badge = screen.getByTestId('agent-badge');
-    expect(badge.getAttribute('data-status')).toBe('error');
-    expect(screen.getByTestId('agent-error').textContent).toContain(errorText);
+  describe('when a delegation fails with error text', () => {
+    it('surfaces the failure on the agent badge', () => {
+      const errorText = 'Failed agent tool execution for head: Incorrect API key provided';
+      renderToolCard(
+        baseProps({
+          toolName: 'agent-head',
+          output: undefined,
+          state: 'output-error',
+          errorText,
+        }),
+      );
+      const badge = screen.getByTestId('agent-badge');
+      expect(badge.getAttribute('data-status')).toBe('error');
+      expect(screen.getByTestId('agent-error').textContent).toContain(errorText);
+    });
   });
 
-  it('surfaces a failed generic tool with its error text', () => {
-    renderToolCard(baseProps({ toolName: 'searchDocs', output: undefined, state: 'output-error', errorText: 'boom' }));
-    const badge = screen.getByTestId('tool-badge');
-    expect(badge.getAttribute('data-status')).toBe('error');
-    fireEvent.click(badge.querySelector('button')!);
-    expect(screen.getByTestId('tool-result').textContent).toContain('boom');
+  describe('when a generic tool fails with error text', () => {
+    it('displays the failure and error text', () => {
+      renderToolCard(
+        baseProps({ toolName: 'searchDocs', output: undefined, state: 'output-error', errorText: 'boom' }),
+      );
+      const badge = screen.getByTestId('tool-badge');
+      expect(badge.getAttribute('data-status')).toBe('error');
+      fireEvent.click(badge.querySelector('button')!);
+      expect(screen.getByTestId('tool-result').textContent).toContain('boom');
+    });
   });
 
   it('keeps an unsettled call from a finished run quiet', () => {
