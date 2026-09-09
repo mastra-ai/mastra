@@ -91,6 +91,7 @@
     "cerebras/gemma-4-31b-it",
     "consensusprotocol/Qwen3.8-27B",
     "consensusprotocol/glm-5.3-flash",
+    "consensusprotocol/gpt-oss-20b",
     "deepinfra/mimo-v2.5",
     "deepinfra/nemotron-3-ultra-550b",
     "deepinfra/qwen3-vl-235b-a22b-instruct",

@@ -1,10 +1,21 @@
 // @vitest-environment jsdom
-import type { DatasetExperimentResult } from '@mastra/client-js';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { DatasetExperimentResult, GetSystemPackagesResponse } from '@mastra/client-js';
+import { EntityType } from '@mastra/core/observability';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import {
+  metricsCapableSystemPackages,
+  metricsUnavailableSystemPackages,
+  traceSpans,
+  traceUsageBreakdown,
+} from '@/pages/traces/__tests__/fixtures/traces';
 import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
+import { TestLinkProvider } from '@/test/link-provider';
+import { server } from '@/test/msw-server';
+import { makeWrapper, TEST_BASE_URL } from '@/test/render';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
   id: 'res-1',
@@ -22,6 +33,16 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   createdAt: new Date('2026-01-01T00:00:00Z'),
   updatedAt: new Date('2026-01-01T00:00:00Z'),
   ...overrides,
+});
+
+// The panel prefetches trace feedback (needs-review dot) and the trace itself (usage rows).
+beforeEach(() => {
+  server.use(
+    http.get('*/api/observability/feedback', () =>
+      HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 50, hasMore: false } }),
+    ),
+    http.get('*/api/observability/traces/:traceId', () => HttpResponse.json(traceSpans)),
+  );
 });
 
 beforeAll(() => {
@@ -42,14 +63,19 @@ function renderPanel(
   props: Partial<Parameters<typeof ExperimentResultPanel>[0]> = {},
 ) {
   const onTagsChange = vi.fn();
+  const { wrapper: Wrapper } = makeWrapper();
   render(
-    <ExperimentResultPanel
-      result={result}
-      onClose={() => {}}
-      onTagsChange={onTagsChange}
-      tagVocabulary={['alpha', 'beta']}
-      {...props}
-    />,
+    <Wrapper>
+      <TestLinkProvider>
+        <ExperimentResultPanel
+          result={result}
+          onClose={() => {}}
+          onTagsChange={onTagsChange}
+          tagVocabulary={['alpha', 'beta']}
+          {...props}
+        />
+      </TestLinkProvider>
+    </Wrapper>,
   );
   return { onTagsChange };
 }
@@ -115,7 +141,7 @@ describe('ExperimentResultPanel metadata', () => {
 
   describe('given no onTagsChange handler', () => {
     it('renders tags read-only without picker or remove buttons', () => {
-      render(<ExperimentResultPanel result={makeResult({ tags: ['alpha'] })} onClose={() => {}} />);
+      renderPanel(makeResult({ tags: ['alpha'] }), { onTagsChange: undefined });
 
       expect(screen.getByText('alpha')).toBeDefined();
       expect(screen.queryByRole('combobox')).toBeNull();
@@ -123,9 +149,128 @@ describe('ExperimentResultPanel metadata', () => {
     });
 
     it('renders each tag with colors computed from its value', () => {
-      render(<ExperimentResultPanel result={makeResult({ tags: ['alpha'] })} onClose={() => {}} />);
+      renderPanel(makeResult({ tags: ['alpha'] }), { onTagsChange: undefined });
 
       expectComputedTag(screen.getByText('alpha'), 'alpha');
     });
+  });
+});
+
+describe('ExperimentResultPanel review controls', () => {
+  it('renders a "See experiment" link when experimentLink is provided', () => {
+    renderPanel(makeResult(), { experimentLink: '/experiments/exp-1' });
+
+    expect(screen.getByRole('link', { name: /See experiment/ }).getAttribute('href')).toBe('/experiments/exp-1');
+  });
+
+  it('splits into Details and Feedback tabs when feedbackTabSlot is provided and the result has a trace', () => {
+    const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
+    renderPanel(makeResult({ traceId: 'trace-1' }), { feedbackTabSlot });
+
+    expect(screen.getByText('Item Id')).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: 'Feedback' }));
+    expect(screen.getByText('feedback for trace-1')).toBeDefined();
+  });
+
+  it('renders no tabs without a trace id even when feedbackTabSlot is provided', () => {
+    renderPanel(makeResult({ traceId: null }), { feedbackTabSlot: () => <div>feedback</div> });
+
+    expect(screen.queryByRole('tab', { name: 'Feedback' })).toBeNull();
+    expect(screen.getByText('Item Id')).toBeDefined();
+  });
+
+  it('renders the complete action for needs-review results when onComplete is provided', () => {
+    const onComplete = vi.fn();
+    renderPanel(makeResult({ status: 'needs-review' }), { onComplete });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as reviewed' }));
+    expect(onComplete).toHaveBeenCalled();
+  });
+
+  it('hides the complete action when the result does not need review', () => {
+    renderPanel(makeResult({ status: null }), { onComplete: vi.fn() });
+
+    expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
+  });
+});
+
+describe('ExperimentResultPanel trace usage', () => {
+  const onTraceRequest = vi.fn();
+  const onBreakdownRequest = vi.fn();
+
+  const setUsageHandlers = ({
+    systemPackages,
+    rootEntityType,
+  }: {
+    systemPackages: GetSystemPackagesResponse;
+    rootEntityType: EntityType;
+  }) => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => {
+        onTraceRequest();
+        const [root] = traceSpans.spans;
+        // Storage does not guarantee root-first ordering: put a child span first.
+        return HttpResponse.json({
+          ...traceSpans,
+          spans: [
+            { ...root, spanId: 'span-child', parentSpanId: root.spanId, entityType: EntityType.TOOL },
+            { ...root, entityType: rootEntityType },
+          ],
+        });
+      }),
+      http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
+        onBreakdownRequest();
+        return HttpResponse.json(traceUsageBreakdown);
+      }),
+    );
+  };
+
+  beforeEach(() => {
+    onTraceRequest.mockClear();
+    onBreakdownRequest.mockClear();
+  });
+
+  it('renders no usage rows and fetches nothing when the result has no trace', async () => {
+    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    renderPanel(makeResult({ traceId: null }));
+
+    await screen.findByText('Item Id');
+    expect(onTraceRequest).not.toHaveBeenCalled();
+    expect(onBreakdownRequest).not.toHaveBeenCalled();
+    expect(screen.queryByText('Input tokens')).toBeNull();
+  });
+
+  it('shows tokens and cost for an agent trace when metrics are supported', async () => {
+    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    renderPanel(makeResult({ traceId: 'trace-a' }));
+
+    expect(await screen.findByText('Input tokens')).toBeDefined();
+    expect(onBreakdownRequest).toHaveBeenCalled();
+    expect(screen.getByText('100')).toBeDefined();
+    expect(screen.getByText('Output tokens')).toBeDefined();
+    expect(screen.getByText('—')).toBeDefined();
+    expect(screen.getByText('Cost')).toBeDefined();
+    expect(screen.getByText('$0.0010')).toBeDefined();
+  });
+
+  it('skips usage for a workflow trace', async () => {
+    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.WORKFLOW });
+    renderPanel(makeResult({ traceId: 'trace-a' }));
+
+    await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
+    await screen.findByText('Item Id');
+    expect(onBreakdownRequest).not.toHaveBeenCalled();
+    expect(screen.queryByText('Input tokens')).toBeNull();
+  });
+
+  it('skips usage when the observability storage does not support metrics', async () => {
+    setUsageHandlers({ systemPackages: metricsUnavailableSystemPackages, rootEntityType: EntityType.AGENT });
+    renderPanel(makeResult({ traceId: 'trace-a' }));
+
+    await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
+    await screen.findByText('Item Id');
+    expect(onBreakdownRequest).not.toHaveBeenCalled();
+    expect(screen.queryByText('Input tokens')).toBeNull();
   });
 });

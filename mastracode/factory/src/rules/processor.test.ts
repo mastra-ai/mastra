@@ -372,6 +372,127 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).toContain('Factory release phase: Release Queue (queued)');
   });
 
+  it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const onResult = vi.fn(() => ({
+      type: 'transition' as const,
+      board: 'release',
+      stage: 'shipped',
+      idempotencyKey: 'release-shipped',
+    }));
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queue', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Publishing release', kind: 'working', role: 'publisher', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      tools: { ship_it: { onResult } },
+    });
+    const prepared = await prepare(storage, 'publisher', 'issue', { id: 'release', stage: 'shipping' });
+    const message = toolMessage({ toolName: 'ship_it' });
+    const reader = { listMessages: vi.fn(async () => ({ messages: [message], hasMore: false })) };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'release-v1',
+      storage,
+      boards: createBoardRegistry({ boards: [release], includeDefaultBoards: false }),
+      messageReader: reader as never,
+    });
+    await processor.reconcileBinding(prepared.binding);
+    await processor.reconcileBinding(prepared.binding);
+    expect(onResult).toHaveBeenCalledOnce();
+    expect(onResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        board: 'release',
+        item: expect.objectContaining({ stages: ['shipping'] }),
+        configVersion: 'release-v1',
+      }),
+    );
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ board: 'release', stage: 'shipped' }) }),
+    ]);
+    expect(await storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).toMatchObject({
+      lastMessageId: message.id,
+    });
+    expect((await processor.computeStateSignal(stateArgs(requestContext())))?.contents).toContain(
+      'Publishing release (shipping)',
+    );
+  });
+
+  it.each([['unknown'], ['planning'], ['shipping', 'queued']])(
+    'fails closed for invalid installed-board phases %j',
+    async (...stages) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const onResult = vi.fn(() => undefined);
+      const release = defineBoard({
+        id: 'release',
+        title: 'Release',
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queue', kind: 'resting', next: 'shipping' },
+          shipping: { title: 'Shipping', kind: 'working', role: 'publisher', next: 'shipped' },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+        },
+        tools: { ship_it: { onResult } },
+      });
+      const prepared = await prepare(storage, 'publisher', 'issue', { id: 'release', stage: 'shipping' });
+      await storage.update({ orgId: 'org-1', userId: 'user-1', id: prepared.item.id, patch: { stages } });
+      const reader = {
+        listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'ship_it' })], hasMore: false })),
+      };
+      const processor = new FactoryPhaseStateProcessor({
+        configVersion: 'rules-v1',
+        storage,
+        boards: createBoardRegistry({ boards: [release] }),
+        messageReader: reader as never,
+      });
+      await processor.reconcileBinding(prepared.binding);
+      await processor.processInputStep(inputArgs(requestContext(), [toolMessage({ toolName: 'ship_it' })]));
+      expect(onResult).not.toHaveBeenCalled();
+      expect(reader.listMessages).not.toHaveBeenCalled();
+      expect(await processor.computeStateSignal(stateArgs(requestContext()))).toBeUndefined();
+    },
+  );
+
+  it.each([
+    { board: 'missing', stage: 'shipped' },
+    { board: 'release', stage: 'unknown' },
+    { board: 'release', stage: 'planning' },
+    { board: 'work', stage: 'planning' },
+  ])('rejects invalid tool-result target $board/$stage before persistence', async target => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queue', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Shipping', kind: 'working', role: 'triage', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      tools: { ship_it: { onResult: () => ({ type: 'transition', ...target, idempotencyKey: 'invalid-target' }) } },
+    });
+    const prepared = await prepare(storage, 'triage', 'issue', { id: 'release', stage: 'shipping' });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'release-v1',
+      storage,
+      boards: createBoardRegistry({ boards: [release] }),
+    });
+    await processor.processInputStep(inputArgs(requestContext(), [toolMessage({ toolName: 'ship_it' })]));
+    const identity = JSON.stringify([prepared.binding.id, 'thread-1', 'assistant-1', 'tool-call-1']);
+    expect(await storage.getTransitionResultByIngress('org-1', PROJECT_ID, identity)).toMatchObject({
+      status: 'rejected',
+      code: 'rule_error',
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal?.contents).toContain('Shipping (shipping)');
+    expect(signal?.contents).not.toContain('triageType');
+    expect(signal?.contents).not.toContain('Planning autonomously');
+  });
+
   it('uses completed step results to avoid reconciling unrelated historical messages', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
@@ -545,7 +666,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('re-emits phase state when either review runtime field changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage, 'review', 'pull-request');
+    await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
     const boards = createBoardRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));
@@ -581,7 +702,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('rejects review phase state without a selected model', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepare(storage, 'review', 'pull-request');
+    await prepare(storage, 'review', 'pull-request', { id: 'review', stage: 'review' });
     const boards = createBoardRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 

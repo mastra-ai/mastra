@@ -8,7 +8,7 @@ import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
+import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -107,6 +107,127 @@ function request(
     causalChain: overrides.causalChain,
   };
 }
+
+describe('installed lifecycle decision targets', () => {
+  const linkedDecision = {
+    type: 'upsertLinkedWorkItem' as const,
+    idempotencyKey: 'release-linked',
+    board: 'distribution',
+    stage: 'waiting',
+    source: 'github-issue' as const,
+    sourceKey: 'mastra-ai/mastra#42',
+    title: 'Distribute release',
+    url: 'https://github.com/mastra-ai/mastra/issues/42',
+  };
+  const transitionDecision = {
+    type: 'transition' as const,
+    idempotencyKey: 'release-shipped',
+    board: 'release',
+    stage: 'shipped',
+  };
+
+  async function setup(exit: FactoryRuleDecision, enter: FactoryRuleDecision) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const onExit = vi.fn(() => exit);
+    const onEnter = vi.fn(() => enter);
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing', onExit: { issue: onExit } },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { issue: onEnter },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const distribution = defineBoard({
+      id: 'distribution',
+      title: 'Distribution',
+      initialPhase: 'waiting',
+      phases: { waiting: { title: 'Waiting', kind: 'resting' } },
+    });
+    const item = await createItem(storage, { board: 'release', stages: ['queued'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'release-targets-v1',
+      boards: createBoardRegistry({ boards: [release, distribution], includeDefaultBoards: false }),
+    });
+    const input = {
+      ...request(item, { stage: 'preparing' }),
+      actor: { type: 'system' as const, id: 'release-coordinator' },
+      ingress: { type: 'rule' as const, identity: 'release-prepare' },
+    };
+    return { storage, item, service, input, onExit, onEnter };
+  }
+
+  it('accepts custom lifecycle transitions and cross-installed linked items before persistence', async () => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(linkedDecision, transitionDecision);
+    const result = await service.transition(input);
+    expect(result).toMatchObject({ status: 'accepted', stage: 'preparing' });
+    expect(onEnter).toHaveBeenCalledWith(expect.objectContaining({ configVersion: 'release-targets-v1' }));
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['preparing'],
+      revision: item.revision + 1,
+    });
+    const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decisions).toHaveLength(2);
+    expect(decisions.map(record => record.decision)).toEqual(
+      expect.arrayContaining([linkedDecision, transitionDecision]),
+    );
+
+    const restarted = new FactoryTransitionService({
+      storage,
+      configVersion: 'release-targets-v2',
+      boards: createBoardRegistry({ includeDefaultBoards: false }),
+    });
+    expect(await restarted.transition(input)).toEqual(result);
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(2);
+  });
+
+  it.each([
+    ['unknown transition board', { ...transitionDecision, board: 'missing' }],
+    ['unknown transition phase', { ...transitionDecision, stage: 'missing' }],
+    ['phase belonging to another board', { ...transitionDecision, stage: 'waiting' }],
+    ['transition board reassignment', { ...transitionDecision, board: 'distribution', stage: 'waiting' }],
+    ['unknown linked board', { ...linkedDecision, board: 'missing' }],
+    ['foreign linked phase', { ...linkedDecision, stage: 'preparing' }],
+  ] as const)('rejects %s atomically after an earlier valid lifecycle decision', async (_label, decision) => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(linkedDecision, decision);
+    expect(await service.transition(input)).toMatchObject({ status: 'rejected', code: 'rule_error' });
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledOnce();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'release',
+      stages: ['queued'],
+      revision: item.revision,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('rejects an invalid exit target before invoking entry or persisting effects', async () => {
+    const { storage, item, service, input, onExit, onEnter } = await setup(
+      { ...linkedDecision, stage: 'missing' },
+      transitionDecision,
+    );
+    expect(await service.transition(input)).toMatchObject({ status: 'rejected', code: 'rule_error' });
+    expect(onExit).toHaveBeenCalledOnce();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      stages: ['queued'],
+      revision: item.revision,
+    });
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+  });
+});
 
 describe('installed board transition policies', () => {
   async function setup(

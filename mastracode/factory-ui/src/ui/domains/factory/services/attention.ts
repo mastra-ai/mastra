@@ -1,13 +1,14 @@
 import type { FactoryHealthRepair } from '@mastra/factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
+import { boardPath } from '../boardCatalog';
 import { requestJson } from './request';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 export type FactoryAttentionReceiptAction = 'read' | 'archive' | 'restore';
 export type FactoryAttentionTarget =
   | { kind: 'thread'; sessionId: string; threadId: string }
-  | { kind: 'work-item'; workItemId: string; board: 'work' | 'review'; commentId?: string }
+  | { kind: 'work-item'; workItemId: string; board: string; commentId?: string }
   | { kind: 'rules' };
 
 interface FactoryAttentionItemBase {
@@ -181,7 +182,7 @@ export function factoryAttentionTargetPath(factoryId: string, target: FactoryAtt
   }
   if (target.kind === 'work-item') {
     const comment = target.commentId ? `&comment=${encodeURIComponent(target.commentId)}` : '';
-    return `/factories/${factoryId}/${target.board}?item=${encodeURIComponent(target.workItemId)}${comment}`;
+    return `${boardPath(factoryId, target.board)}?item=${encodeURIComponent(target.workItemId)}${comment}`;
   }
   return `/factories/${factoryId}/rules`;
 }

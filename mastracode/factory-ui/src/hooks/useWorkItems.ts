@@ -1,5 +1,4 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { isFactoryRuleStage } from '@mastra/factory/rules/types';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   queryOptions,
@@ -148,11 +147,6 @@ type TransitionWorkItemVariables = {
   reenter?: boolean;
 };
 
-function requireFactoryStage(stage: string): FactoryRuleStage {
-  if (!isFactoryRuleStage(stage)) throw new Error(`Unsupported Factory stage: ${stage}`);
-  return stage;
-}
-
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -163,7 +157,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
       transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
-        stage: requireFactoryStage(stage),
+        stage,
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
@@ -223,7 +217,7 @@ interface PendingTransitionVariables {
 
 function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  if (!('stage' in value) || !isFactoryRuleStage(value.stage)) return false;
+  if (!('stage' in value) || typeof value.stage !== 'string') return false;
   if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item))
     return false;
   return typeof value.item.id === 'string';

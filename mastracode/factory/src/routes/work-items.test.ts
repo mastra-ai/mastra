@@ -141,6 +141,76 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('installed board catalog', () => {
+  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+        preparing: {
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          next: 'shipped',
+          onEnter: { 'github-issue': () => [] },
+        },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(response.status).toBe(200);
+    const { boards } = await response.json();
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
+      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
+    );
+    expect(boards.at(-1)).toEqual({
+      id: 'release',
+      title: 'Release Preview',
+      initialPhase: 'queued',
+      phases: [
+        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'preparing',
+          title: 'Preparing',
+          kind: 'working',
+          role: 'release-preparer',
+          transitions: [{ outcome: null, to: 'shipped' }],
+        },
+        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+      ],
+    });
+  });
+
+  it('supports an empty installation', async () => {
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ includeDefaultBoards: false }),
+    );
+    const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
+    expect(await response.json()).toEqual({ boards: [] });
+  });
+
+  it('requires authentication and project membership', async () => {
+    expect((await buildApp(null).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(401);
+    expect((await buildApp({ workosId: 'u1' }).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(403);
+    await seedProject('other-org');
+    expect((await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).status).toBe(404);
+  });
+});
+
 // ── Auth / scoping ───────────────────────────────────────────────────────
 describe('auth and scoping', () => {
   it('401s without a user', async () => {
@@ -202,7 +272,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
     expect(workItem.stageHistory[0].exitedAt).toBeUndefined();
   });
 
-  it('creates a work item on an installed custom board at its initial phase', async () => {
+  it('imports incident.io incidents and follow-ups onto an installed custom board at its initial phase', async () => {
     const releaseBoard = defineBoard({
       id: 'release',
       title: 'Release',
@@ -213,19 +283,56 @@ describe('POST /web/factory/projects/:id/work-items', () => {
       },
     });
     const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
-    const res = await buildApp(orgUser, undefined, undefined, new Set(), boardRegistry).request(
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
+    const importedItems = [
       {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:incident:incident-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'INC-42: API unavailable',
+      },
+      {
+        externalSource: {
+          integrationId: 'incidentio',
+          type: 'issue',
+          externalId: 'incidentio:follow-up:follow-up-1',
+          url: 'https://app.incident.io/acme/incidents/incident-1',
+        },
+        title: 'Add database failover alert',
+      },
+    ];
+
+    for (const importedItem of importedItems) {
+      const res = await app.request(`/web/factory/projects/${PROJECT_ID}/work-items`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(createBody({ board: 'release', stages: undefined })),
-      },
-    );
+        body: JSON.stringify(createBody({ ...importedItem, board: 'release', stages: undefined })),
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).workItem).toMatchObject({
+        ...importedItem,
+        board: 'release',
+        stages: ['queued'],
+      });
+    }
 
-    expect(res.status).toBe(200);
-    expect((await res.json()).workItem).toMatchObject({ board: 'release', stages: ['queued'] });
-    const [stored] = await listItems();
-    expect(stored).toMatchObject({ board: 'release', stages: ['queued'] });
+    await expect(listItems()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalSource: importedItems[0]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+        expect.objectContaining({
+          externalSource: importedItems[1]!.externalSource,
+          board: 'release',
+          stages: ['queued'],
+        }),
+      ]),
+    );
   });
 
   it('rejects an external-source upsert that tries to bypass governed stage transition', async () => {

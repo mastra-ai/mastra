@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useCreateFeedback } from '../hooks/use-create-feedback';
 import { useTraceFeedback } from '../hooks/use-trace-feedback';
 import { FeedbackThread } from './feedback-thread';
+import { useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 
 type TraceFeedbackTabProps = {
   traceId: string;
@@ -19,6 +20,7 @@ export function TraceFeedbackTab({ traceId, variant }: TraceFeedbackTabProps) {
   const [page, setPage] = useState(0);
   const { data, isLoading } = useTraceFeedback({ traceId, page });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId });
+  const updateReviewStatus = useUpdateFeedbackReviewStatus();
 
   return (
     <FeedbackThread
@@ -28,6 +30,8 @@ export function TraceFeedbackTab({ traceId, variant }: TraceFeedbackTabProps) {
       onSubmit={text => mutateAsync({ text })}
       isSubmitting={isPending}
       variant={variant}
+      onMarkReviewed={feedbackId => updateReviewStatus.mutate({ feedbackId, reviewStatus: 'reviewed' })}
+      pendingFeedbackId={updateReviewStatus.isPending ? updateReviewStatus.variables.feedbackId : undefined}
     />
   );
 }

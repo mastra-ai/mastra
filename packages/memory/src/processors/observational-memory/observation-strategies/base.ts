@@ -5,6 +5,7 @@ import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
+import { formatOmError } from '../error';
 import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
@@ -121,6 +122,7 @@ export abstract class ObservationStrategy {
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
@@ -137,7 +139,7 @@ export abstract class ObservationStrategy {
             cycleId,
             operationType: 'observation',
             startedAt: new Date().toISOString(),
-            error: error instanceof Error ? error.message : String(error),
+            error: formatOmError(error),
             recordId: record.id,
             threadId,
           },

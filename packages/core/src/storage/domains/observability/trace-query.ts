@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import type { ScoreRecord } from './scores';
+import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
 export const TRACE_QUERY_MAX_NODES = 100;
@@ -23,6 +25,7 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const timestampLiteralSchema = z.string().datetime({ offset: true });
 const predicatePathSchema = z
   .string()
   .min(1)
@@ -214,9 +217,13 @@ export type TraceQueryField =
   | 'entityType'
   | 'environment'
   | 'status';
-export type TraceQuerySpanField = 'spanType' | 'error';
-export type TraceQueryScoreField = 'scorerId' | 'score';
+type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
+export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
+export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
 export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
+type TraceQueryMetadataKey = Extract<keyof NonNullable<SpanRecord['metadata']>, string>;
+export type TraceQueryMetadataField = `metadata.${TraceQueryMetadataKey}`;
+export type TraceQueryPredicateField = TraceQueryCanonicalField | TraceQueryMetadataField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
@@ -224,17 +231,17 @@ export type TraceQueryPresenceOperator = 'exists' | 'notExists';
 export type TrustedTraceQueryScalarPredicate =
   | {
       type: 'comparison';
-      field: TraceQueryCanonicalField;
+      field: TraceQueryPredicateField;
       operator: TraceQueryComparisonOperator;
       value: string | number;
     }
   | {
       type: 'membership';
-      field: TraceQueryCanonicalField;
+      field: TraceQueryPredicateField;
       operator: TraceQueryMembershipOperator;
       values: Array<string | number>;
     }
-  | { type: 'presence'; field: TraceQueryCanonicalField; operator: TraceQueryPresenceOperator }
+  | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
   | { type: 'not'; arg: TrustedTraceQueryScalarPredicate };
 
@@ -282,6 +289,7 @@ export type TraceQueryIssueCode =
   | 'time_range_too_large'
   | 'predicate_too_complex'
   | 'field_not_allowed'
+  | 'invalid_metadata_key'
   | 'operator_not_allowed'
   | 'invalid_operands'
   | 'invalid_literal'
@@ -337,11 +345,13 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
 interface FieldRule {
   type: 'string' | 'number' | 'timestamp' | 'presence';
   operators: ReadonlySet<string>;
+  nonEmpty?: boolean;
 }
 
 const STRING_OPERATORS = new Set(['eq', 'ne', 'in', 'notIn', 'exists', 'notExists']);
 const ORDERED_OPERATORS = new Set([...STRING_OPERATORS, 'lt', 'lte', 'gt', 'gte']);
 const PRESENCE_OPERATORS = new Set(['exists', 'notExists']);
+const METADATA_FIELD_RULE: FieldRule = { type: 'string', operators: STRING_OPERATORS, nonEmpty: true };
 
 const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
   traceId: { type: 'string', operators: STRING_OPERATORS },
@@ -355,15 +365,35 @@ const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
   status: { type: 'string', operators: STRING_OPERATORS },
 };
 
-const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
+const SPAN_FIELD_RULES = {
+  name: { type: 'string', operators: STRING_OPERATORS },
   spanType: { type: 'string', operators: STRING_OPERATORS },
+  model: { type: 'string', operators: STRING_OPERATORS },
+  provider: { type: 'string', operators: STRING_OPERATORS },
+  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
+  status: { type: 'string', operators: STRING_OPERATORS },
   error: { type: 'presence', operators: PRESENCE_OPERATORS },
-};
+  entityType: { type: 'string', operators: STRING_OPERATORS },
+  entityId: { type: 'string', operators: STRING_OPERATORS },
+  entityName: { type: 'string', operators: STRING_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+} as const satisfies Partial<Record<Extract<keyof SpanRecord, string> | TraceQueryDerivedSpanField, FieldRule>>;
 
-const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {
+const SCORE_FIELD_RULES = {
   scorerId: { type: 'string', operators: STRING_OPERATORS },
+  scorerVersion: { type: 'string', operators: STRING_OPERATORS },
+  scoreSource: { type: 'string', operators: STRING_OPERATORS },
   score: { type: 'number', operators: ORDERED_OPERATORS },
-};
+  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  spanId: { type: 'presence', operators: PRESENCE_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+} as const satisfies Partial<Record<Extract<keyof ScoreRecord, string>, FieldRule>>;
 
 type PredicateContext = 'trace' | 'spans' | 'scores';
 
@@ -610,10 +640,10 @@ function planPredicate(
   const rules = rulesForContext(context);
   if (predicate.op === 'exists' || predicate.op === 'notExists') {
     const field = normalizePath(predicate.path);
-    const rule = getRule(field, rules, [...path, 'path'], state);
+    const rule = getRule(field, context, rules, [...path, 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
-    return { type: 'presence', field: field as TraceQueryCanonicalField, operator: predicate.op };
+    return { type: 'presence', field: field as TraceQueryPredicateField, operator: predicate.op };
   }
 
   if (predicate.op === 'in' || predicate.op === 'notIn') {
@@ -634,7 +664,7 @@ function planPredicate(
       return undefined;
     }
     const field = normalizePath(predicate.value.path);
-    const rule = getRule(field, rules, [...path, 'value', 'path'], state);
+    const rule = getRule(field, context, rules, [...path, 'value', 'path'], state);
     if (!rule) return undefined;
     if (!rule.operators.has(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
     const values = normalizeSet(predicate.set, rule);
@@ -648,7 +678,7 @@ function planPredicate(
     }
     return {
       type: 'membership',
-      field: field as TraceQueryCanonicalField,
+      field: field as TraceQueryPredicateField,
       operator: predicate.op,
       values,
     };
@@ -672,7 +702,7 @@ function planPredicate(
     return undefined;
   }
   const field = normalizePath(comparison.left.path);
-  const rule = getRule(field, rules, [...path, 'left', 'path'], state);
+  const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
   if (!rule) return undefined;
   if (!rule.operators.has(comparison.op)) addOperatorIssue(comparison.op, field, [...path, 'op'], state);
   const value = normalizeLiteral(comparison.right.literal, rule);
@@ -684,7 +714,7 @@ function planPredicate(
     });
     return undefined;
   }
-  return { type: 'comparison', field: field as TraceQueryCanonicalField, operator: comparison.op, value };
+  return { type: 'comparison', field: field as TraceQueryPredicateField, operator: comparison.op, value };
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
@@ -695,10 +725,23 @@ function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
 
 function getRule(
   field: string,
+  context: PredicateContext,
   rules: Record<string, FieldRule>,
   path: Array<string | number>,
   state: PlannerState,
 ): FieldRule | undefined {
+  if (context === 'trace' && field.startsWith('metadata.')) {
+    const key = field.slice('metadata.'.length);
+    if (key.length === 0 || key.includes('.')) {
+      state.issues.push({
+        code: 'invalid_metadata_key',
+        path,
+        message: 'Metadata predicates require one non-empty top-level key',
+      });
+      return undefined;
+    }
+    return METADATA_FIELD_RULE;
+  }
   if (!Object.hasOwn(rules, field)) {
     state.issues.push({ code: 'field_not_allowed', path, message: 'The predicate field is not allowed here' });
     return undefined;
@@ -716,17 +759,24 @@ function addOperatorIssue(operator: string, field: string, path: Array<string | 
 
 function normalizePath(path: string): string {
   const match = /^\$\{([^}]+)\}$/.exec(path.trim());
-  return (match?.[1] ?? path).trim();
+  const unwrapped = match?.[1] ?? path;
+  const normalized = unwrapped.trim();
+  if (normalized.startsWith('metadata.')) {
+    const prefixIndex = unwrapped.indexOf('metadata.');
+    return `metadata.${unwrapped.slice(prefixIndex + 'metadata.'.length)}`;
+  }
+  return normalized;
 }
 
 function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {
   if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   if (rule.type === 'timestamp') {
-    if (typeof value !== 'string') return undefined;
-    const timestamp = new Date(value);
-    return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+    const timestamp = timestampLiteralSchema.safeParse(value);
+    return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
-  if (rule.type === 'string') return typeof value === 'string' ? value : undefined;
+  if (rule.type === 'string') {
+    return typeof value === 'string' && (!rule.nonEmpty || value.trim().length > 0) ? value : undefined;
+  }
   return undefined;
 }
 

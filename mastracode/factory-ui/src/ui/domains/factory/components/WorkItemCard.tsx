@@ -8,7 +8,8 @@ import { useParams } from 'react-router';
 import { boardCardStatus } from '../boardCardStatus';
 import { setDragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
-import { itemStageLabel } from '../boardStages';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import { itemBoard, itemStageLabel } from '../boardStages';
 import {
   awaitsTriageDecision,
   cardActions,
@@ -92,6 +93,10 @@ export function WorkItemCard({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const morph = useCardMorph({ openFor: deepLinkCommentId });
+  const catalog = useBoardCatalog(item.githubProjectId);
+  const boardId = itemBoard(item);
+  const custom = boardId !== 'work' && boardId !== 'review';
+  const definition = catalog.data?.find(board => board.id === boardId);
 
   const evaluating = evaluatingStage !== undefined;
   const busyLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
@@ -102,6 +107,9 @@ export function WorkItemCard({
   const primaryMove =
     moves.find(move => move.stage === columnStage) ?? moves.find(move => !(move.role in sessions)) ?? moves[0];
   const threadSession = itemThreadSession(sessions);
+  const nextPhaseId = definition?.phases.find(phase => phase.id === columnStage)?.transitions?.[0]?.to;
+  const nextPhaseDef = definition?.phases.find(phase => phase.id === nextPhaseId);
+  const nextPhase = nextPhaseDef === undefined ? undefined : { id: nextPhaseDef.id, label: nextPhaseDef.title };
   const wickStatus = threadSession !== undefined ? sessionStatus : undefined;
   const sessionHref =
     threadSession === undefined
@@ -110,7 +118,10 @@ export function WorkItemCard({
   const proposedRunLabel =
     proposal === undefined
       ? undefined
-      : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
+      : custom
+        ? // A proposal for a role this board never declares is a leftover from another board.
+          definition?.phases.find(phase => phase.role === proposal.role)?.title
+        : (moves.find(move => move.role === proposal.role)?.label ?? primaryMove?.label ?? 'Start run');
 
   const activity = workItemActivity(item, activityPage);
   const status = boardCardStatus({
@@ -121,7 +132,12 @@ export function WorkItemCard({
     moving:
       evaluatingStage === undefined
         ? undefined
-        : { stage: evaluatingStage, label: itemStageLabel(item, evaluatingStage) },
+        : {
+            stage: evaluatingStage,
+            label:
+              definition?.phases.find(phase => phase.id === evaluatingStage)?.title ??
+              itemStageLabel(item, evaluatingStage),
+          },
     preparing: busyLabel,
     decision,
     transitionReason,
@@ -133,7 +149,8 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: resumeStage(columnStage, sessions),
+    resumeStage: custom ? undefined : resumeStage(columnStage, sessions),
+    nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
     onApproveProposal,

@@ -330,7 +330,7 @@ The actor signal is trusted input, so construct it server-side:
 - Establish tenant scope server-side. Built-in agent HTTP routes ignore a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
 - Durable resume keeps its existing request-context recovery and merge behavior. This doesn't make a persisted actor trusted for a later workflow segment.
 - The tenant-scope check confirms that a trusted `organizationId` exists. It doesn't verify that `actor.agentId` belongs to that organization. When that relationship matters, verify it in `requireActor` using authoritative provider data.
-- Treat `actor.permissions` as an unverified claim. Resolve authoritative grants from a trusted source. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
+- Treat `actor.permissions` as an unverified claim. To enforce least privilege, resolve the agent's permissions from a trusted source, such as a manifest or your FGA backend keyed by `agentId`. Don't trust the inline values.
 - Once a provider implements `requireActor`, errors from that method stop execution. Mastra doesn't fall back to organization-only authorization.
 
 ## Related
