@@ -1917,6 +1917,58 @@ describe('reflect()', () => {
   });
 
   describe('transform hooks', () => {
+    it('preserves thread context in thread-scoped buffered reflection transforms', async () => {
+      const resourceId = 'buffered-reflection-resource';
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: threadId,
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const beforeReflection = vi.fn();
+      const afterReflection = vi.fn(() => ({ observations: '* transformed buffered reflection' }));
+      const transformOm = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        hooks: { beforeReflection, afterReflection },
+        observation: { model: createMockObserverModel(), messageTokens: 100 },
+        reflection: { model: createMockReflectorModel(), observationTokens: 1000, bufferActivation: 0.01 },
+      });
+      const messages = createBulkMessages(10, threadId).map(message => ({ ...message, resourceId }));
+      await storage.saveMessages({ messages });
+      const result = await transformOm.observe({ threadId, resourceId, messages });
+      expect(result.observed).toBe(true);
+      await transformOm.waitForBuffering(threadId, resourceId, 5000);
+
+      expect(beforeReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId, trigger: 'manual' }),
+      );
+      expect(afterReflection).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId, resourceId, trigger: 'manual' }),
+      );
+      const record = await transformOm.getRecord(threadId, resourceId);
+      expect(record?.bufferedReflection).toContain('transformed buffered reflection');
+    });
+
+    it('rejects resource-scoped async reflection before transform hooks can run', () => {
+      const beforeReflection = vi.fn();
+      expect(
+        () =>
+          new ObservationalMemory({
+            storage,
+            scope: 'resource',
+            hooks: { beforeReflection },
+            observation: { model: createMockObserverModel(), messageTokens: 100 },
+            reflection: { model: createMockReflectorModel(), observationTokens: 1000, bufferActivation: 0.5 },
+          }),
+      ).toThrow("Async buffering is not yet supported with scope: 'resource'");
+      expect(beforeReflection).not.toHaveBeenCalled();
+    });
+
     it('beforeReflection rewrites what the reflector sees and afterReflection rewrites what is persisted', async () => {
       const reflectorModel = createMockReflectorModel();
       const doGenerate = vi.spyOn(reflectorModel, 'doGenerate');
