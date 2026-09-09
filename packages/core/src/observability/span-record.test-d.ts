@@ -1,12 +1,17 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type { SpanRecord } from '../storage/domains/observability/tracing';
-import { isSpanRecordOfType } from './span-record';
+import { describeSpanError, describeSpanInput, describeSpanOutput, isSpanRecordOfType } from './span-record';
 import type {
   AgentRunInput,
+  AgentRunResult,
+  AgentRunResumeInput,
+  InterruptedSpanOutput,
   ModelGenerationInput,
+  ModelGenerationResult,
   ModelStepInput,
   ModelStepOutput,
   ModelStepResult,
+  SpanErrorInfo,
   UsageStats,
 } from './types';
 import { SpanType } from './types';
@@ -53,5 +58,24 @@ describe('isSpanRecordOfType types', () => {
         expectTypeOf(span.output).toEqualTypeOf<ModelStepOutput | null | undefined>();
       }
     }
+  });
+});
+
+describe('describeSpan* types', () => {
+  it('narrows the tagged payload on its type field', () => {
+    const span = {} as SpanRecord;
+    const input = describeSpanInput(span);
+    const output = describeSpanOutput(span);
+
+    expectTypeOf(describeSpanError(span)).toEqualTypeOf<SpanErrorInfo | undefined>();
+
+    if (input?.type === 'text') expectTypeOf(input.value).toEqualTypeOf<string>();
+    if (input?.type === 'agent-run-resume') expectTypeOf(input.value).toEqualTypeOf<AgentRunResumeInput>();
+    if (input?.type === 'json') expectTypeOf(input.value).toEqualTypeOf<unknown>();
+
+    if (output?.type === 'interrupted') expectTypeOf(output.value).toEqualTypeOf<InterruptedSpanOutput>();
+    if (output?.type === 'agent-run-result') expectTypeOf(output.value).toEqualTypeOf<AgentRunResult>();
+    if (output?.type === 'model-generation-result') expectTypeOf(output.value).toEqualTypeOf<ModelGenerationResult>();
+    if (output?.type === 'model-step-result') expectTypeOf(output.value).toEqualTypeOf<ModelStepResult>();
   });
 });

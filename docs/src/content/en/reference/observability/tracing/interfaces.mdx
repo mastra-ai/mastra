@@ -130,6 +130,31 @@ if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
 }
 ```
 
+To pick a renderer without checking shapes yourself, describe the payload. The tag is derived at read time from `spanType` and the value's shape. Nothing is stored.
+
+```typescript
+import {
+  describeSpanError,
+  describeSpanInput,
+  describeSpanOutput,
+} from '@mastra/core/observability'
+
+const input = describeSpanInput(span)
+// { type: 'text' | 'messages' | 'agent-run-resume' | 'json'; value } | undefined
+
+const output = describeSpanOutput(span)
+// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'text' | 'json'; value } | undefined
+
+switch (output?.type) {
+  case 'interrupted':
+    return output.value.status // 'suspended' | 'aborted'
+  case 'model-generation-result':
+    return output.value.text
+}
+
+describeSpanError(span) // SpanErrorInfo | undefined
+```
+
 ### Span
 
 Span interface, used internally for tracing.

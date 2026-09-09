@@ -13,4 +13,6 @@ if (isSpanRecordOfType(span, SpanType.MODEL_GENERATION)) {
 }
 ```
 
+For rendering, `describeSpanInput`, `describeSpanOutput` and `describeSpanError` return the payload tagged by what it holds (`messages`, `agent-run-resume`, `interrupted`, `model-generation-result`, `json`, ...), so a UI can switch on `type` instead of checking shapes. The tag is derived at read time and never stored.
+
 Nothing changes at runtime or in storage. Spans you create yourself with one of those four types must now match the new shapes at compile time.
