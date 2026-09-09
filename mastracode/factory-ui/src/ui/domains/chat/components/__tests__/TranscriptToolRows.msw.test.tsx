@@ -187,7 +187,7 @@ describe('TranscriptEntries tool rows', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole('group', { name: 'Tool group: 3 steps' }, { timeout: 5000 });
+    await screen.findByRole('group', { name: 'Tool group: 3 steps' });
     expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
   });
 

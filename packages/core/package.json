@@ -641,16 +641,6 @@
         "default": "./dist/workspace/index.cjs"
       }
     },
-    "./tools/payload-transform": {
-      "import": {
-        "types": "./dist/tools/payload-transform.d.ts",
-        "default": "./dist/tools/payload-transform.js"
-      },
-      "require": {
-        "types": "./dist/tools/payload-transform.d.ts",
-        "default": "./dist/tools/payload-transform.cjs"
-      }
-    },
     "./tools/is-vercel-tool": {
       "import": {
         "types": "./dist/tools/is-vercel-tool.d.ts",

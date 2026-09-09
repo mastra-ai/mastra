@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Show buffered messages and running tool calls when opening an active Factory thread. Reconnects replay the active run through the same message accumulator as Studio and reconcile completed messages with saved history.
+Show the prompt and running tool call when opening a Factory thread mid-run by replaying the agent's buffered thread stream.

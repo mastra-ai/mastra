@@ -1,7 +1,6 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import type { ChunkType } from '@mastra/core/stream';
 import { accumulateChunk } from '@mastra/react';
-import type { MastraDBMessageMetadata } from '@mastra/react';
 
 import { isRecord } from '../../../../lib/isRecord';
 
@@ -33,58 +32,47 @@ export function createThreadStreamHandler(onEvent: (event: AgentControllerEvent)
       if (chunk.type === 'start') {
         messages = [];
       }
-      const previousMessages = messages;
       if (
-        (chunk.type === 'data-signal' || chunk.type === 'data-system-reminder') &&
+        (chunk.type === 'data-user-message' || chunk.type === 'data-signal' || chunk.type === 'data-system-reminder') &&
         'data' in chunk &&
         isRecord(chunk.data) &&
         typeof chunk.data.id === 'string'
       ) {
-        onEvent({
-          type: 'message_end',
-          message: {
-            id: chunk.data.id,
-            role: 'signal',
-            createdAt: signalCreatedAt(chunk.data),
-            content: { format: 2, parts: [{ type: chunk.type, data: chunk.data }], metadata: { signal: chunk.data } },
-          },
-        });
+        const signals: MastraDBMessage[] =
+          chunk.type === 'data-user-message'
+            ? accumulateChunk({ chunk, conversation: [], metadata: { mode: 'stream' } })
+            : [
+                {
+                  id: chunk.data.id,
+                  role: 'signal',
+                  createdAt: signalCreatedAt(chunk.data),
+                  content: { format: 2, parts: [{ type: chunk.type, data: chunk.data }] },
+                },
+              ];
+        for (const message of signals) {
+          onEvent({
+            type: 'message_end',
+            message: {
+              ...message,
+              role: 'signal',
+              createdAt: signalCreatedAt(chunk.data),
+              content: { ...message.content, metadata: { ...message.content.metadata, signal: chunk.data } },
+            },
+          });
+        }
         return;
       }
 
+      const previousMessages = messages;
       messages = accumulateChunk({ chunk, conversation: messages, metadata: { mode: 'stream' } });
-      const userSignal = chunk.type === 'data-user-message' && 'data' in chunk ? chunk.data : undefined;
       const finished = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
-      messages = messages.map((message, index) => {
-        if (message === previousMessages[index]) return message;
-        if (message.role === 'user' && userSignal) {
-          message = {
-            ...message,
-            role: 'signal',
-            createdAt: signalCreatedAt(userSignal),
-            content: { ...message.content, metadata: { ...message.content.metadata, signal: userSignal } },
-          };
-        }
+      for (const [index, message] of messages.entries()) {
+        if (message === previousMessages[index]) continue;
         if (message.role === 'assistant' && message.content.parts.every(part => part.type.startsWith('data-'))) {
-          return message;
+          continue;
         }
         const streaming = !finished && message.role === 'assistant' && index === messages.length - 1;
         onEvent({ type: streaming ? 'message_update' : 'message_end', message });
-        return message;
-      });
-
-      const metadata: MastraDBMessageMetadata = messages.at(-1)?.content.metadata ?? {};
-      switch (chunk.type) {
-        case 'tool-call-approval': {
-          const approval = metadata.requireApprovalMetadata?.[chunk.payload.toolName];
-          if (approval) onEvent({ type: 'tool_approval_required', ...approval });
-          break;
-        }
-        case 'tool-call-suspended': {
-          const suspension = metadata.suspendedTools?.[chunk.payload.toolName];
-          if (suspension) onEvent({ type: 'tool_suspended', ...suspension });
-          break;
-        }
       }
     },
   };

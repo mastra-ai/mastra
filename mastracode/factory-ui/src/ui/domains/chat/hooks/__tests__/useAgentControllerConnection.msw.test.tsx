@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { queryKeys } from '../../../../../api/keys';
-import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { deriveConnectionStatus, useAgentControllerConnection } from '../useAgentControllerConnection';
 import { reconnectRefetchInterval } from '../../../../../hooks/useAgentControllerSessionSync';
 
@@ -80,7 +80,7 @@ describe('useAgentControllerConnection', () => {
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(onReadState).toHaveBeenCalledTimes(2));
+    expect(onReadState).toHaveBeenCalledTimes(1);
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
@@ -273,7 +273,7 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps live completion and tasks when the first-connect refresh returns stale state', async () => {
+  it('given a state refetch started before a task event, then the stale response does not replace the live tasks', async () => {
     const encoder = new TextEncoder();
     const onEvent = vi.fn();
     let emit: (event: AgentControllerEvent) => void = () => {};
@@ -297,7 +297,6 @@ describe('useAgentControllerConnection', () => {
           modeId: 'build',
           modelId: 'openai/gpt-4o-mini',
           threadId: 'thread-1',
-          running: true,
           tasks: [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Working on old task' }],
         });
       }),
@@ -321,20 +320,20 @@ describe('useAgentControllerConnection', () => {
     );
     await waitFor(() => expect(result.current.status).toBe('ready'));
 
+    void client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined, 'thread-1'),
+      exact: true,
+    });
     await waitFor(() => expect(stateReads).toBe(2));
 
     const liveTasks = [
       { id: 'new', content: 'New task', status: 'in_progress' as const, activeForm: 'Working on new task' },
     ];
     emit({ type: 'task_updated', tasks: liveTasks });
-    emit({ type: 'agent_end', reason: 'complete' });
     await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
-    expect(result.current.state?.running).toBe(false);
 
     releaseRefetch?.();
-    await waitForMutationsIdle(client);
-    expect(result.current.state?.tasks).toEqual(liveTasks);
-    expect(result.current.state?.running).toBe(false);
+    await waitFor(() => expect(result.current.state?.tasks).toEqual(liveTasks));
   });
 
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
@@ -576,6 +575,7 @@ describe('useAgentControllerConnection', () => {
 
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
 
+    await waitFor(() => expect(onStream).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
     await waitFor(() => expect(onStream).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.status).toBe('ready'));

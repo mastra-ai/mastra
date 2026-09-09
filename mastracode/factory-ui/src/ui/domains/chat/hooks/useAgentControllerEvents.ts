@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
 import type { AgentControllerSession } from '../services/agentControllerClient';
@@ -53,10 +53,9 @@ function ensureConnected(session: AgentControllerSession, subscription: SharedSu
   subscription.unsubscribe = undefined;
   subscription.connecting = true;
 
-  const emitEvent = (event: AgentControllerEvent) => {
+  const threadStream = createThreadStreamHandler(event => {
     for (const listener of subscription.eventListeners) listener(event);
-  };
-  const threadStream = createThreadStreamHandler(emitEvent);
+  });
 
   void session
     .subscribe({
@@ -117,16 +116,19 @@ export function useAgentControllerEvents({
   // Losing visibility tears the subscription down through the normal cleanup
   // path; regaining it re-subscribes and re-syncs like any reconnect.
   const visible = useDocumentVisible();
-  const receiveEvent = useEffectEvent(onEvent);
-  const connectedChange = useEffectEvent(onConnectedChange);
+  const onEventRef = useRef(onEvent);
+  const onConnectedChangeRef = useRef(onConnectedChange);
+
+  onEventRef.current = onEvent;
+  onConnectedChangeRef.current = onConnectedChange;
 
   useEffect(() => {
     if (!enabled || !session || !epoch || !visible) return;
 
     const subscription = getSubscription(session);
-    const handleEvent = (event: AgentControllerEvent) => receiveEvent(event);
+    const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
     const handleState = (state: SseConnectionState) => {
-      connectedChange(state === 'connected');
+      onConnectedChangeRef.current(state === 'connected');
       setConnectionState(state);
     };
 

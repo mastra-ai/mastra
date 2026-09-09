@@ -1,43 +1,9 @@
-import type { AgentControllerSessionState, AgentControllerTaskSnapshot } from '@mastra/client-js';
+import type { AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import type { RefObject } from 'react';
 
 import { queryKeys } from '../api/keys';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
-
-interface LiveTasks {
-  threadId?: string;
-  tasks: AgentControllerTaskSnapshot[];
-}
-
-export interface LiveEvents {
-  generation: number;
-  running?: { value: boolean; at: number };
-  tasks?: LiveTasks & { at: number };
-}
-
-export function recordLiveEvent(live: LiveEvents, event: { running?: boolean; tasks?: LiveTasks }): number {
-  const since = live.generation;
-  const at = since + 1;
-  live.generation = at;
-  if (event.tasks) live.tasks = { ...event.tasks, at };
-  if (event.running !== undefined) live.running = { value: event.running, at };
-  return since;
-}
-
-export function overlayLiveEvents(
-  state: AgentControllerSessionState,
-  live: LiveEvents,
-  since: number,
-  threadId?: string,
-): AgentControllerSessionState {
-  const { tasks, running } = live;
-  return {
-    ...state,
-    ...(tasks && tasks.at > since && tasks.threadId === threadId ? { tasks: tasks.tasks } : {}),
-    ...(running && running.at > since ? { running: running.value } : {}),
-  };
-}
 
 interface UseAgentControllerSessionSyncArgs {
   agentControllerId: string;
@@ -47,7 +13,8 @@ interface UseAgentControllerSessionSyncArgs {
   baseUrl?: string;
   enabled?: boolean;
   sseConnected: boolean;
-  liveEvents: RefObject<LiveEvents>;
+  taskEventGeneration: RefObject<number>;
+  liveTasks: RefObject<{ threadId?: string; tasks: AgentControllerTaskSnapshot[] } | undefined>;
 }
 
 export function reconnectRefetchInterval(sseConnected: boolean, fetchFailureCount: number): false | number {
@@ -64,7 +31,8 @@ export function useAgentControllerSessionSync({
   baseUrl = '',
   enabled = true,
   sseConnected,
-  liveEvents,
+  taskEventGeneration,
+  liveTasks,
 }: UseAgentControllerSessionSyncArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
@@ -77,9 +45,13 @@ export function useAgentControllerSessionSync({
   return useQuery({
     queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, threadId),
     queryFn: async () => {
-      const since = liveEvents.current.generation;
+      const generationAtRequestStart = taskEventGeneration.current;
       const state = await session!.state({ threadId });
-      return overlayLiveEvents(state, liveEvents.current, since, threadId);
+      const latestTasks = liveTasks.current;
+      const liveEventOvertookRequest = generationAtRequestStart !== taskEventGeneration.current;
+      return liveEventOvertookRequest && latestTasks && latestTasks.threadId === threadId
+        ? { ...state, tasks: latestTasks.tasks }
+        : state;
     },
     enabled: enabled && Boolean(session),
     staleTime: Infinity,

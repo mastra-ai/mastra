@@ -247,7 +247,7 @@ export interface SubscribeAgentControllerSessionOptions {
    * attempted — the subscription is dead after this fires.
    */
   onError?: (error: unknown) => void;
-  /** Reset accumulated chunks here before the reconnected stream replays the active run. */
+  /** Reset chunks before replay and re-fetch session state for missed controller events. */
   onReconnect?: () => void;
   /**
    * Automatically re-establish the stream after an established stream drops
