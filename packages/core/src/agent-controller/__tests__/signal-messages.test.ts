@@ -24,6 +24,7 @@ function createAgentMock(activeRunId: () => string | null) {
     getConfiguredProcessorWorkflows: vi.fn(async () => []),
     listScorers: vi.fn(async () => []),
     getChannels: vi.fn(() => null),
+    listSuspendedRuns: vi.fn(async () => ({ runs: [], total: 0 })),
     subscribeToThread: vi.fn(async () => createSubscription(activeRunId)),
     sendSignal: vi.fn((signal: any, _options?: any) => ({
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
