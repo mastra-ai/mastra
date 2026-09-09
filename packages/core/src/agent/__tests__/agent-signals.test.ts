@@ -3808,6 +3808,47 @@ describe('Agent signals', () => {
     }
   });
 
+  it.each(['reactive', 'system-reminder'] as const)(
+    'persists an idle %s signal without broadcasting it',
+    async type => {
+      const memory = new MockMemory();
+      const target = { threadId: 'hidden-persist-thread', resourceId: 'hidden-persist-user' };
+      await memory.createThread(target);
+      const agent = new Agent({
+        id: 'hidden-persist-agent',
+        name: 'Hidden Persist Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+        memory,
+      });
+      const subscription = await agent.subscribeToThread(target);
+      const events: unknown[] = [];
+      const consume = (async () => {
+        for await (const event of subscription.stream) events.push(event);
+      })();
+      try {
+        const result = agent.sendSignal(
+          { type, contents: 'internal context' },
+          {
+            ...target,
+            ifIdle: { behavior: 'persist' },
+          },
+        );
+        await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
+        await result.persisted;
+        expect((await memory.recall(target)).messages).toHaveLength(0);
+        const stored = await memory.recall({ ...target, includeSystemReminders: true });
+        expect(stored.messages).toHaveLength(1);
+        expect(stored.messages[0]?.content.parts).toContainEqual({ type: 'text', text: 'internal context' });
+        expect(subscription.activeRunId()).toBeNull();
+      } finally {
+        subscription.unsubscribe();
+        await consume;
+      }
+      expect(events).toEqual([]);
+    },
+  );
+
   it('does not persist or broadcast a transient idle signal when idle behavior is persist', async () => {
     const memory = new MockMemory();
     await memory.createThread({ threadId: 'transient-idle-persist-thread', resourceId: 'transient-idle-persist-user' });
@@ -5463,79 +5504,85 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('drains thread-targeted follow-up signals into an idle-started run before the run record exists', async () => {
-    const prompts: any[][] = [];
+  it.each(['user-message', 'reactive', 'system-reminder'] as const)(
+    'drains pre-run %s signals with matching visibility',
+    async type => {
+      const prompts: any[][] = [];
 
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        prompts.push(prompt);
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
 
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'response' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            },
-          ]),
-        };
-      },
-    });
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
 
-    const agent = new Agent({
-      id: 'idle-start-thread-target-agent',
-      name: 'Idle Start Thread Target Agent',
-      instructions: 'Test',
-      model,
-    });
+      const agent = new Agent({
+        id: 'idle-start-thread-target-agent',
+        name: 'Idle Start Thread Target Agent',
+        instructions: 'Test',
+        model,
+      });
 
-    const subscription = await agent.subscribeToThread({
-      threadId: 'idle-start-thread',
-      resourceId: 'idle-start-user',
-    });
-    const iterator = subscription.stream[Symbol.asyncIterator]();
-    const runPromise = readNextRun(iterator);
-
-    const firstSignal = await agent.sendSignal(
-      { type: 'user-message', contents: 'start idle stream' },
-      {
-        resourceId: 'idle-start-user',
+      const subscription = await agent.subscribeToThread({
         threadId: 'idle-start-thread',
-        ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
-      },
-    );
-
-    const followUp = await agent.sendSignal(
-      { type: 'user-message', contents: 'thread targeted follow up' },
-      {
         resourceId: 'idle-start-user',
-        threadId: 'idle-start-thread',
-        ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
-      },
-    );
+      });
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      const runPromise = readNextRunWithParts(iterator);
 
-    const firstAccepted = await firstSignal.accepted;
-    const followUpAccepted = await followUp.accepted;
-    const firstRunId = 'runId' in firstAccepted ? firstAccepted.runId : undefined;
-    const followUpRunId = 'runId' in followUpAccepted ? followUpAccepted.runId : undefined;
-    expect(firstAccepted.action).toBe('wake');
-    expect(followUpRunId).toBe(firstRunId);
+      const firstSignal = await agent.sendSignal(
+        { type: 'user-message', contents: 'start idle stream' },
+        {
+          resourceId: 'idle-start-user',
+          threadId: 'idle-start-thread',
+          ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
+        },
+      );
 
-    const run = await runPromise;
-    expect(run.value.runId).toBe(firstRunId);
-    expect(run.value.text).toBe('response');
-    expect(prompts).toHaveLength(1);
-    expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
+      const followUp = await agent.sendSignal(
+        { type, contents: 'thread targeted follow up' },
+        {
+          resourceId: 'idle-start-user',
+          threadId: 'idle-start-thread',
+          ifIdle: { streamOptions: { memory: { resource: 'idle-start-user', thread: 'idle-start-thread' } } },
+        },
+      );
 
-    subscription.unsubscribe();
-  });
+      const firstAccepted = await firstSignal.accepted;
+      const followUpAccepted = await followUp.accepted;
+      const firstRunId = 'runId' in firstAccepted ? firstAccepted.runId : undefined;
+      const followUpRunId = 'runId' in followUpAccepted ? followUpAccepted.runId : undefined;
+      expect(firstAccepted.action).toBe('wake');
+      expect(followUpRunId).toBe(firstRunId);
+
+      const run = await runPromise;
+      expect(run.value.runId).toBe(firstRunId);
+      expect(run.value.text).toBe('response');
+      expect(run.value.parts.filter((part: any) => part.data?.contents === 'thread targeted follow up')).toHaveLength(
+        type === 'user-message' ? 1 : 0,
+      );
+      expect(prompts).toHaveLength(1);
+      expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
+
+      subscription.unsubscribe();
+    },
+  );
 
   it('completes a signal-started run that no caller subscribes to or consumes', async () => {
     // Regression: a fire-and-forget wake (e.g. an agent schedule) starts a thread run
@@ -5945,82 +5992,85 @@ describe('Agent signals', () => {
     await expect(nextRun).resolves.toEqual({ value: undefined, done: true });
   });
 
-  it('drains a signal by active run id into the active run', async () => {
-    let releaseFirst!: () => void;
-    const firstFinished = new Promise<void>(resolve => {
-      releaseFirst = resolve;
-    });
-    let streamCount = 0;
-    const prompts: any[][] = [];
+  it.each(['user-message', 'reactive', 'system-reminder'] as const)(
+    'drains active %s signals with matching visibility',
+    async type => {
+      let releaseFirst!: () => void;
+      const firstFinished = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      let streamCount = 0;
+      const prompts: any[][] = [];
 
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        streamCount += 1;
-        prompts.push(prompt);
-        const responseText = streamCount === 1 ? 'run id first response' : 'run id signal response';
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          streamCount += 1;
+          prompts.push(prompt);
+          const responseText = streamCount === 1 ? 'run id first response' : 'run id signal response';
 
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: new ReadableStream({
-            async start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: `run-id-${streamCount}`,
-                modelId: 'mock-model-id',
-                timestamp: new Date(0),
-              });
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              if (streamCount === 1) {
-                await firstFinished;
-              }
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              });
-              controller.close();
-            },
-          }),
-        };
-      },
-    });
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({
+                  type: 'response-metadata',
+                  id: `run-id-${streamCount}`,
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (streamCount === 1) {
+                  await firstFinished;
+                }
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
 
-    const agent = new Agent({
-      id: 'run-id-signal-agent',
-      name: 'Run Id Signal Agent',
-      instructions: 'Test',
-      model,
-    });
-    const subscription = await agent.subscribeToThread({
-      threadId: 'run-id-thread',
-      resourceId: 'run-id-user',
-    });
-    const iterator = subscription.stream[Symbol.asyncIterator]();
-    const firstRunPromise = readNextRun(iterator);
+      const agent = new Agent({
+        id: 'run-id-signal-agent',
+        name: 'Run Id Signal Agent',
+        instructions: 'Test',
+        model,
+      });
+      const subscription = await agent.subscribeToThread({
+        threadId: 'run-id-thread',
+        resourceId: 'run-id-user',
+      });
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      const firstRunPromise = readNextRunWithParts(iterator);
 
-    const stream = await agent.stream('Hello', {
-      memory: { thread: 'run-id-thread', resource: 'run-id-user' },
-    });
-    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+      const stream = await agent.stream('Hello', {
+        memory: { thread: 'run-id-thread', resource: 'run-id-user' },
+      });
+      await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    const runIdSignalResult = agent.sendSignal(
-      { type: 'user-message', contents: 'Hello by run id' },
-      { runId: stream.runId },
-    );
-    await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      const runIdSignalResult = agent.sendSignal({ type, contents: 'Hello by run id' }, { runId: stream.runId });
+      await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
-    releaseFirst();
-    await firstRunPromise;
-    await expect(stream.text).resolves.toBe('run id first responserun id signal response');
-    expect(streamCount).toBe(2);
-    expect(JSON.stringify(prompts[1])).toContain('Hello by run id');
+      releaseFirst();
+      const run = await firstRunPromise;
+      expect(run.value.parts.filter((part: any) => part.data?.contents === 'Hello by run id')).toHaveLength(
+        type === 'user-message' ? 1 : 0,
+      );
+      await expect(stream.text).resolves.toBe('run id first responserun id signal response');
+      expect(streamCount).toBe(2);
+      expect(JSON.stringify(prompts[1])).toContain('Hello by run id');
 
-    subscription.unsubscribe();
-  });
+      subscription.unsubscribe();
+    },
+  );
 
   it('throws when sending a signal to an unknown run id without a thread target', () => {
     const agent = new Agent({
@@ -6035,61 +6085,69 @@ describe('Agent signals', () => {
     );
   });
 
-  it('starts an idle thread run with a system-reminder signal as user-role XML context', async () => {
-    let capturedPrompt: any[] | undefined;
-    const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        capturedPrompt = prompt;
-        return {
-          rawCall: { rawPrompt: prompt, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'system-signal-id', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'system signal response' },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            },
-          ]),
-        };
-      },
-    });
+  it.each(['reactive', 'system-reminder'] as const)(
+    'delivers idle %s context to the model without echoing it',
+    async type => {
+      let capturedPrompt: any[] | undefined;
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          capturedPrompt = prompt;
+          return {
+            rawCall: { rawPrompt: prompt, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'system-signal-id', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'system signal response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
 
-    const agent = new Agent({
-      id: 'system-signal-agent',
-      name: 'System Signal Agent',
-      instructions: 'Test',
-      model,
-    });
+      const agent = new Agent({
+        id: 'system-signal-agent',
+        name: 'System Signal Agent',
+        instructions: 'Test',
+        model,
+      });
 
-    const stream = await agent.sendSignal(
-      { type: 'system-reminder', contents: 'continue', attributes: { reminderType: 'test-reminder' } },
-      {
+      const subscription = await agent.subscribeToThread({
         resourceId: 'system-signal-user',
         threadId: 'system-signal-thread',
-        ifIdle: { streamOptions: { memory: { resource: 'system-signal-user', thread: 'system-signal-thread' } } },
-      },
-    );
+      });
+      const runPromise = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+      const stream = await agent.sendSignal(
+        { type, contents: 'continue', attributes: { reminderType: 'test-reminder' } },
+        {
+          resourceId: 'system-signal-user',
+          threadId: 'system-signal-thread',
+          ifIdle: { streamOptions: { memory: { resource: 'system-signal-user', thread: 'system-signal-thread' } } },
+        },
+      );
 
-    await expect(stream.accepted).resolves.toMatchObject({ action: 'wake' });
-    for (let i = 0; i < 10 && !capturedPrompt; i++) {
-      await nextTick();
-    }
-    expect(
-      capturedPrompt?.some(
-        message =>
-          message.role === 'user' &&
-          Array.isArray(message.content) &&
-          message.content.some(
-            (part: any) => part.text === '<system-reminder reminderType="test-reminder">continue</system-reminder>',
-          ),
-      ),
-    ).toBe(true);
-  });
+      await expect(stream.accepted).resolves.toMatchObject({ action: 'wake' });
+      const run = await runPromise;
+      subscription.unsubscribe();
+      expect(run.value.parts.filter((part: any) => part.type === 'data-signal')).toEqual([]);
+      expect(
+        capturedPrompt?.some(
+          message =>
+            message.role === 'user' &&
+            Array.isArray(message.content) &&
+            message.content.some(
+              (part: any) => part.text === '<system-reminder reminderType="test-reminder">continue</system-reminder>',
+            ),
+        ),
+      ).toBe(true);
+    },
+  );
 
   describe('delivery option attributes', () => {
     it('resolveDeliveryAttributes merges option attributes into signal attributes', () => {

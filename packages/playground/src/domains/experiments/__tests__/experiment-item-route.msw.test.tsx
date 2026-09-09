@@ -1,3 +1,4 @@
+import type { GetMetricAggregateArgs, GetMetricAggregateResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -23,6 +24,7 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
+import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ExperimentItemPage from '@/pages/experiments/experiment/item';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
@@ -73,8 +75,23 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
   return { router, queryClient };
 };
 
+let metricRequests: GetMetricAggregateArgs[] = [];
+
+const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> = {
+  sum: { value: 12400, estimatedCost: 0.0123, costUnit: 'USD' },
+  avg: { value: 1850 },
+  count: { value: 42 },
+};
+
 beforeEach(() => {
+  metricRequests = [];
   server.use(
+    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
+      const body = (await request.json()) as GetMetricAggregateArgs;
+      metricRequests.push(body);
+      return HttpResponse.json(metricAggregateByAggregation[body.aggregation] ?? { value: null });
+    }),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
@@ -114,6 +131,22 @@ describe('experiment item sub-route', () => {
 
       await screen.findByText('item-2');
       expect(screen.queryByRole('tab')).toBeNull();
+    });
+  });
+
+  describe('given the experiment route on a metrics-capable store', () => {
+    it('when the page loads, then it requests metric aggregates filtered by the route experimentId and renders Tokens/Latency in the meta bar', async () => {
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Tokens')).toBeDefined();
+      expect(await screen.findByText('12.4K')).toBeDefined();
+      expect(screen.getByText('Latency (avg)')).toBeDefined();
+      expect(await screen.findByText('1.9s')).toBeDefined();
+
+      expect(metricRequests.length).toBeGreaterThanOrEqual(3);
+      for (const body of metricRequests) {
+        expect(body.filters).toEqual({ experimentId: EXPERIMENT_ID });
+      }
     });
   });
 
@@ -170,6 +203,121 @@ describe('experiment item sub-route', () => {
       expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    });
+  });
+
+  describe('when the user selects results to tag', () => {
+    const patches: Array<{ resultId: string; body: unknown }> = [];
+
+    beforeEach(() => {
+      patches.length = 0;
+      server.use(
+        http.patch(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          async ({ params, request }) => {
+            const body = await request.json();
+            patches.push({ resultId: String(params.resultId), body });
+            const original = resultsResponse.results.find(r => r.id === params.resultId)!;
+            return HttpResponse.json({ ...original, ...(body as object) });
+          },
+        ),
+      );
+    });
+
+    async function openTagPicker() {
+      const trigger = await screen.findByRole('combobox');
+      expect(trigger.textContent).toContain('Add tag');
+      fireEvent.click(trigger);
+      return screen.findByPlaceholderText('Search or create tag...');
+    }
+
+    function selectOption(option: HTMLElement) {
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+    }
+
+    it('only shows the "Add tag" picker once something is selected', async () => {
+      renderExperimentRoute();
+
+      await screen.findByRole('checkbox', { name: 'Select result item-1' });
+      expect(screen.queryByRole('combobox')).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect((await screen.findByRole('combobox')).textContent).toContain('Add tag');
+    });
+
+    it('lists tags already present on results as existing options', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      await openTagPicker();
+
+      expect(await screen.findByRole('option', { name: 'alpha' })).toBeDefined();
+    });
+
+    it('creates a new tag on every selected result and keeps the selection', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-2' }));
+
+      const search = await openTagPicker();
+      fireEvent.input(search, { target: { value: 'smoke' }, inputType: 'insertText' });
+      selectOption(await screen.findByRole('option', { name: 'Create "smoke"' }));
+
+      await waitFor(() => {
+        expect(patches).toEqual([
+          { resultId: 'res-1', body: { tags: ['smoke'] } },
+          { resultId: 'res-2', body: { tags: ['alpha', 'smoke'] } },
+        ]);
+      });
+      expect(screen.getByRole('checkbox', { name: 'Select result item-1' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('checkbox', { name: 'Select result item-2' }).getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
+  describe('when the user edits tags from the open result panel', () => {
+    const patches: Array<{ resultId: string; body: unknown }> = [];
+
+    beforeEach(() => {
+      patches.length = 0;
+      server.use(
+        http.patch(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          async ({ params, request }) => {
+            const body = await request.json();
+            patches.push({ resultId: String(params.resultId), body });
+            const original = resultsResponse.results.find(r => r.id === params.resultId)!;
+            return HttpResponse.json({ ...original, ...(body as object) });
+          },
+        ),
+      );
+    });
+
+    it('removes a tag from the metadata row', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
+      const dialog = await screen.findByRole('dialog');
+
+      fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove tag alpha' }));
+
+      await waitFor(() => {
+        expect(patches).toEqual([{ resultId: 'res-2', body: { tags: [] } }]);
+      });
+    });
+
+    it('adds a known tag from the metadata row picker', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+      const dialog = await screen.findByRole('dialog');
+
+      fireEvent.click(await within(dialog).findByRole('combobox'));
+      const option = await screen.findByRole('option', { name: 'alpha' });
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+
+      await waitFor(() => {
+        expect(patches).toEqual([{ resultId: 'res-1', body: { tags: ['alpha'] } }]);
+      });
     });
   });
 

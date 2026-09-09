@@ -19,10 +19,10 @@ export interface CreateFactoryFromDraftOptions {
 }
 
 /**
- * The wizard's single write: create the Factory, link the repository, feed its
- * issue intake (plus the Linear project when one was picked), and save the
- * model its runs start on. Nothing before this touches the server, so an
- * abandoned wizard leaves nothing behind.
+ * The wizard's single write: create the Factory, link the repository (which
+ * feeds its issue intake), route the Linear project when one was picked, and
+ * save the model its runs start on. Nothing before this touches the server, so
+ * an abandoned wizard leaves nothing behind.
  */
 export function useCreateFactoryFromDraft({
   draft,
@@ -38,21 +38,18 @@ export function useCreateFactoryFromDraft({
   const saveIntakeBinding = useSaveIntakeBindingMutation();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
 
-  // One config write for both sources — two read-modify-writes would drop
-  // each other's selection.
-  const feedBoard = async (repositorySlug: string, linear?: { sourceId: string; factoryProjectId: string }) => {
-    if (linear) {
-      await saveIntakeBinding.mutateAsync({
-        integrationId: 'linear',
-        sourceId: linear.sourceId,
-        factoryProjectId: linear.factoryProjectId,
-      });
-    }
+  const feedLinearProject = async (linear: { sourceId: string; factoryProjectId: string }) => {
+    await saveIntakeBinding.mutateAsync({
+      integrationId: 'linear',
+      sourceId: linear.sourceId,
+      factoryProjectId: linear.factoryProjectId,
+      // A fresh Factory only has its built-in boards; issues belong on Work.
+      board: 'work',
+    });
     const config = await fetchIntakeConfig(baseUrl);
-    const githubSelection = selectIntakeSource(config.github, repositorySlug);
-    const linearSelection = linear ? selectIntakeSource(config.linear, linear.sourceId) : config.linear;
-    if (githubSelection === config.github && linearSelection === config.linear) return;
-    await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection, linear: linearSelection });
+    const linearSelection = selectIntakeSource(config.linear, linear.sourceId);
+    if (linearSelection === config.linear) return;
+    await saveIntakeConfig.mutateAsync({ ...config, linear: linearSelection });
   };
 
   return useMutation({
@@ -69,13 +66,12 @@ export function useCreateFactoryFromDraft({
         await onRepositoryLinked(linked.projectRepositoryId);
       }
 
-      const linearPick = draft.linearProjectId
-        ? { sourceId: draft.linearProjectId, factoryProjectId: factory.id }
-        : undefined;
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
         applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
-        feedBoard(draft.repository.fullName, linearPick),
+        draft.linearProjectId
+          ? feedLinearProject({ sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+          : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onCreated(factory);

@@ -271,6 +271,38 @@ describe('Composite auth', () => {
       });
     });
 
+    describe('resource mapping validation', () => {
+      it.each([null, undefined, '', '   ', 0, false, {}, []])(
+        'rejects an invalid selected mapping: %s',
+        async resourceId => {
+          const provider = new MockAuthProvider(true, true, false, { id: 'bob' });
+          provider.mapUserToResourceId = vi.fn().mockReturnValue(resourceId);
+          const composite = new CompositeAuth([provider]);
+          const user = await composite.authenticateToken('token', mockRequest);
+          expect(() => composite.mapUserToResourceId?.(user)).toThrow('must return a non-empty string');
+        },
+      );
+
+      it.each([false, true])('preserves an unmapped provider with nested composite = %s', async nested => {
+        const mapped = new MockAuthProvider(false);
+        mapped.mapUserToResourceId = () => 'alice';
+        const unmapped = new MockAuthProvider(true, true, false, { id: 'bob' });
+        const inner = new CompositeAuth([mapped, unmapped]);
+        const composite = nested ? new CompositeAuth([inner]) : inner;
+        const user = await composite.authenticateToken('token', mockRequest);
+        expect(composite.mapUserToResourceId).toBeTypeOf('function');
+        expect(composite.mapUserToResourceId?.(user)).toBeUndefined();
+      });
+
+      it('rejects an invalid mapping inside nested composites', async () => {
+        const provider = new MockAuthProvider(true, true, false, { id: 'bob' });
+        provider.mapUserToResourceId = () => null;
+        const composite = new CompositeAuth([new CompositeAuth([provider])]);
+        const user = await composite.authenticateToken('token', mockRequest);
+        expect(() => composite.mapUserToResourceId?.(user)).toThrow('must return a non-empty string');
+      });
+    });
+
     describe('integration scenarios', () => {
       it('should work with mixed success/failure authentication and authorization', async () => {
         const user1 = { id: 1, role: 'user' };

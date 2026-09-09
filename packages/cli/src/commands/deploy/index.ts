@@ -15,6 +15,7 @@ import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
+import { coreFeatures } from '@mastra/core/features';
 import { analyzeEntryProjectType } from '@mastra/deployer/build';
 import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
@@ -921,6 +922,14 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
+    // Progressive discovery: only hint at `mastra env diagnosis` when the
+    // command is actually registered (same feature gate as index.ts). The
+    // failed-deploy webhook has already inserted a PENDING diagnosis row,
+    // so the command returns "in progress" immediately rather than 404-ing
+    // while the agent runs.
+    if (coreFeatures.has('deploy-diagnosis')) {
+      p.log.info(`Run \`mastra env diagnosis ${deployResult.id}\` for suggestions.`);
+    }
     process.exit(1);
   } else {
     p.log.warning(`Deploy ended with status: ${finalStatus.status}`);

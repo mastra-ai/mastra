@@ -149,6 +149,7 @@
     "google/gemini-flash-lite-latest",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
+    "meta/llama-3.1-70b-instruct",
     "meta/llama-3.1-8b-instruct",
     "meta/llama-3.3-70b-instruct",
     "meta/muse-spark-1.1",

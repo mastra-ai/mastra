@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useCreateFeedback } from '../hooks/use-create-feedback';
 import { useSpanFeedback } from '../hooks/use-span-feedback';
 import { FeedbackThread } from './feedback-thread';
+import { useUpdateFeedbackReviewStatus } from '@/domains/feedback/hooks/use-feedback';
 
 type SpanFeedbackTabProps = {
   traceId: string;
@@ -17,6 +18,7 @@ export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
   const [page, setPage] = useState(0);
   const { data, isLoading } = useSpanFeedback({ traceId, spanId, page });
   const { mutateAsync, isPending } = useCreateFeedback({ traceId, spanId });
+  const updateReviewStatus = useUpdateFeedbackReviewStatus();
 
   return (
     <FeedbackThread
@@ -25,6 +27,8 @@ export function SpanFeedbackTab({ traceId, spanId }: SpanFeedbackTabProps) {
       onPageChange={setPage}
       onSubmit={text => mutateAsync({ text })}
       isSubmitting={isPending}
+      onMarkReviewed={feedbackId => updateReviewStatus.mutate({ feedbackId, reviewStatus: 'reviewed' })}
+      pendingFeedbackId={updateReviewStatus.isPending ? updateReviewStatus.variables.feedbackId : undefined}
     />
   );
 }

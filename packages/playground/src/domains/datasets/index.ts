@@ -16,7 +16,6 @@ export * from './utils/csv-validation';
 export * from './utils/json-cell-parser';
 
 // JSON import utilities
-export * from './hooks/use-json-parser';
 export * from './utils/json-validation';
 
 // Selection and export utilities
@@ -54,8 +53,8 @@ export { AddItemDialog } from './components/add-item-dialog';
 // Item detail components
 export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';
 export type { DatasetItemHeaderProps } from './components/dataset-detail/dataset-item-header';
-export { DatasetItemContent } from './components/dataset-detail/dataset-item-content';
-export type { DatasetItemContentProps } from './components/dataset-detail/dataset-item-content';
+export { DatasetItemDetails } from './components/items/dataset-item-details';
+export type { DatasetItemDetailsProps } from './components/items/dataset-item-details';
 export { EditModeContent } from './components/dataset-detail/dataset-item-form';
 export type { EditModeContentProps } from './components/dataset-detail/dataset-item-form';
 export { ItemPageToolbar } from './components/dataset-detail/item-page-toolbar';
@@ -89,7 +88,6 @@ export {
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
-export { DatasetItemVersionsPanel } from './components/versions';
 export { DatasetCompareVersionToolbar } from './components/versions';
 export { DatasetCompareVersionsList } from './components/versions';
 

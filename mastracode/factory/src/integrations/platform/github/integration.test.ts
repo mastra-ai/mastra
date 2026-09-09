@@ -1,8 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBoardRegistry } from '../../../boards/index.js';
 
-import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
@@ -10,7 +10,7 @@ import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js'
 import { PlatformGithubIntegration } from './integration.js';
 
 const config = {
-  baseUrl: 'https://platform.example.com/v1',
+  baseUrl: 'https://platform.example.com',
   accessToken: 'platform-token',
 };
 
@@ -61,7 +61,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 beforeEach(() => {
-  vi.stubEnv('MASTRA_SHARED_API_URL', config.baseUrl);
+  vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', config.baseUrl);
   vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', config.accessToken);
 });
 
@@ -954,11 +954,10 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      rules: {
-        config: defaultFactoryRules({
-          version: 'test-rules',
-        }),
+      runtime: {
+        configVersion: 'test-rules',
         workItems: seed.workItems,
+        boards: createBoardRegistry(),
       },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
@@ -1170,9 +1169,9 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('defaults the Platform base URL and requires a platform credential', () => {
-    vi.stubEnv('MASTRA_SHARED_API_URL', '');
-    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
+  it('defaults the integrations API URL and requires a platform credential', () => {
+    vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
+    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'integrations.mastra.ai' });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'injected-token');
@@ -1334,6 +1333,20 @@ describe('PlatformGithubIntegration', () => {
         issues: { enabled: true },
       },
     });
+  });
+
+  it('removes one issue label through the Platform proxy and surfaces a missing label as a 404', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(json({})).mockResolvedValueOnce(json({}, 404));
+    const integration = createIntegration(fetchImpl);
+
+    await integration.removeIssueLabel(7, 'acme/app', 12, 'status: needs approval');
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(init?.method).toBe('DELETE');
+    expect(String(url)).toContain('/issues/12/labels/status%3A%20needs%20approval');
+
+    await expect(integration.removeIssueLabel(7, 'acme/app', 12, 'gone')).rejects.toMatchObject({ status: 404 });
+    await expect(integration.removeIssueLabel(7, 'acme/app', 12, '  ')).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   describe('resolveIntakeDispatch', () => {

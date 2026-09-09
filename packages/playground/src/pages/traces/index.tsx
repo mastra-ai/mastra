@@ -53,11 +53,10 @@ type TracesPageProps = {
 export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesPageProps = {}) {
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
-  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
-    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
-  });
-  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
+  // Must run before `useTraceFilterPersistence` hydrates: react-router resolves functional
+  // `setSearchParams` updates against the render-time params, so within one commit the last
+  // call wins. Scoping first lets hydration (which re-runs only once) land on top of it.
   useEffect(() => {
     if (!scopedEntityId) return;
     const currentRoot = searchParams.get('rootEntityType');
@@ -75,6 +74,11 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       { replace: true },
     );
   }, [scopedEntityId, scopedEntityType, searchParams, setSearchParams]);
+
+  const setPersistedSearchParams = useTraceFilterPersistence(searchParams, setSearchParams, {
+    storageKey: isScoped ? `mastra:traces:saved-filters:${scopedEntityType}:${scopedEntityId}` : undefined,
+  });
+  const url = useTraceUrlState(searchParams, setPersistedSearchParams);
 
   const lockedFieldIds = useMemo<readonly string[]>(() => (isScoped ? ['rootEntityType', 'entityId'] : []), [isScoped]);
   const hiddenCreatorFieldIds = useMemo<readonly string[]>(

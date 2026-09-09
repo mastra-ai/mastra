@@ -41,7 +41,7 @@ async function claimDecision(
     ...SCOPE,
     workItemId,
     ingress: { identity: key, triggerType: 'test' },
-    ruleSetVersion: 'rules-v1',
+    configVersion: 'rules-v1',
     expectedRevision: workItem.revision,
     actor: { type: 'system', id: 'rules' },
     outcome: { status: 'accepted' },
