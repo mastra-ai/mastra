@@ -1270,7 +1270,6 @@ export class MessageList {
 
       // Update ordering and queue the edited metadata for persistence.
       this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-      this.updateLastCreatedAt(msg);
       if (!this.stateManager.isResponseMessage(msg)) {
         this.stateManager.removeMessage(msg);
         this.stateManager.addToSource(msg, 'response');
@@ -1344,7 +1343,6 @@ export class MessageList {
 
     // Update ordering and queue the failed calls for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-    this.updateLastCreatedAt(msg);
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
@@ -1468,7 +1466,6 @@ export class MessageList {
 
     // Update ordering and queue the merged result for persistence.
     this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
-    this.updateLastCreatedAt(msg);
     if (!this.stateManager.isResponseMessage(msg)) {
       this.stateManager.removeMessage(msg);
       this.stateManager.addToSource(msg, 'response');
