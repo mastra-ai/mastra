@@ -200,7 +200,7 @@ Title generation (`generateTitle`) is a top-level thread concern and **isn't** a
 
 :::
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved, the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/subagents#message-filtering) callback.
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved; the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/subagents#message-filtering) callback.
 
 :::note
 

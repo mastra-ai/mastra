@@ -741,7 +741,7 @@ Buffered observations also include continuation hints, a suggested next response
 
 When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
-Reflection works similarly, the Reflector runs in the background when observations reach a fraction of the reflection threshold.
+Reflection works similarly: the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
 ### Settings
 
