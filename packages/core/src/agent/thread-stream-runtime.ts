@@ -11,7 +11,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context
 import type { MastraModelOutput } from '../stream/base/output';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
-import type { AgentExecutionOptions } from './agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
@@ -123,6 +123,12 @@ function sanitizeBroadcastPart(part: unknown): unknown {
   return part;
 }
 
+async function resolveSignalStreamOptions<Options extends AgentExecutionOptionsBase<any>>(
+  streamOptions: Options | (() => Promise<Options>) | undefined,
+) {
+  return typeof streamOptions === 'function' ? streamOptions() : streamOptions;
+}
+
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
   return {
     ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
@@ -168,7 +174,7 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   runId: string;
   resourceId: string;
   threadId: string;
-  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  streamOptions?: AgentExecutionOptionsBase<OUTPUT> | (() => Promise<AgentExecutionOptionsBase<OUTPUT>>);
 };
 
 type PendingContinuation<OUTPUT = unknown> = {
@@ -1850,10 +1856,11 @@ export class AgentThreadStreamRuntime {
     }
 
     try {
+      const streamOptions = await resolveSignalStreamOptions(pendingIdle.streamOptions);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
-        ...(pendingIdle.streamOptions as any),
+        ...(streamOptions as any),
         runId: pendingIdle.runId,
-        memory: withThreadMemory(pendingIdle.streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
+        memory: withThreadMemory(streamOptions?.memory, pendingIdle.resourceId, pendingIdle.threadId),
       });
 
       if ((idleQueue?.length ?? 0) > 0) {
@@ -2709,7 +2716,8 @@ export class AgentThreadStreamRuntime {
     const resourceId = target.resourceId;
     const threadId = target.threadId;
 
-    const requestContext = target.ifIdle?.streamOptions?.requestContext;
+    const streamOptions = await resolveSignalStreamOptions(target.ifIdle?.streamOptions);
+    const requestContext = streamOptions?.requestContext;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const memory = await agent.getMemory({ requestContext });
     if (!memory) {
@@ -2744,7 +2752,12 @@ export class AgentThreadStreamRuntime {
       return { skipped: true, reason: 'unchanged' };
     }
 
-    return this.sendSignal<OUTPUT>(agent, applied.signal, target, pubsub);
+    return this.sendSignal<OUTPUT>(
+      agent,
+      applied.signal,
+      { ...target, resourceId, threadId, ifIdle: { ...target.ifIdle, streamOptions } },
+      pubsub,
+    );
   }
 
   /**
@@ -2839,12 +2852,8 @@ export class AgentThreadStreamRuntime {
             accepted: Promise.resolve({ action: 'discard' as const }),
           };
         }
-        const persisted = this.#persistSignal(
-          agent,
-          signal,
-          resourceId,
-          threadId,
-          target.ifIdle?.streamOptions?.requestContext,
+        const persisted = resolveSignalStreamOptions(target.ifIdle?.streamOptions).then(streamOptions =>
+          this.#persistSignal(agent, signal, resourceId, threadId, streamOptions?.requestContext),
         );
         void persisted.catch(() => {});
         return {
@@ -2932,16 +2941,18 @@ export class AgentThreadStreamRuntime {
           accepted: Promise.resolve({ action: 'discard' as const }),
         };
       }
-      const persisted = this.#persistAndBroadcastIdleSignal(
-        state,
-        pubsub,
-        key,
-        runId,
-        agent,
-        signal,
-        resourceId,
-        threadId,
-        target.ifIdle?.streamOptions?.requestContext,
+      const persisted = resolveSignalStreamOptions(target.ifIdle?.streamOptions).then(streamOptions =>
+        this.#persistAndBroadcastIdleSignal(
+          state,
+          pubsub,
+          key,
+          runId,
+          agent,
+          signal,
+          resourceId,
+          threadId,
+          streamOptions?.requestContext,
+        ),
       );
       void persisted.catch(() => {});
       return {
@@ -3042,11 +3053,12 @@ export class AgentThreadStreamRuntime {
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
+        const streamOptions = await resolveSignalStreamOptions(target.ifIdle?.streamOptions);
         const output = await agent.stream(signal, {
-          ...(target.ifIdle?.streamOptions as any),
+          ...(streamOptions as any),
           untilIdle: true,
           runId: reservedRunId,
-          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+          memory: withThreadMemory(streamOptions?.memory, resourceId, threadId),
         });
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {

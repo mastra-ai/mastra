@@ -8,6 +8,79 @@ import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 
 describe('session signal context at run completion', () => {
+  it.each(['user', 'notification'] as const)('keeps active %s delivery free of idle setup', async kind => {
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      finishFirst = resolve;
+    });
+    let calls = 0;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            const call = ++calls;
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text' });
+            controller.enqueue({ type: 'text-delta', id: 'text', delta: 'done' });
+            if (call === 1) await firstFinished;
+            controller.enqueue({ type: 'text-end', id: 'text' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+    const agent = new Agent({ id: 'active-context', name: 'Active context', instructions: 'Respond briefly.', model });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { agent }, storage, logger: false });
+    const controller = new AgentController({
+      id: 'active-controller',
+      workspace: createMockWorkspace(),
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'active-session', ownerId: 'owner' });
+    const first = session.sendMessage({ content: 'first' });
+    try {
+      await vi.waitFor(() => expect(calls).toBe(1));
+      const runId = session.run.getRunId();
+      const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions');
+      const syncModel = vi.spyOn(session.model, 'syncFromPersisted');
+      const clearAbort = vi.spyOn(session.run, 'clearAbortRequested');
+      if (kind === 'user') {
+        await expect(session.sendSignal({ content: 'second' }, { requireDelivery: true }).accepted).resolves.toEqual({
+          accepted: true,
+          action: 'deliver',
+          runId,
+        });
+      } else {
+        const result = await session.sendNotificationSignal({
+          source: 'factory',
+          kind: 'manual',
+          priority: 'high',
+          summary: 'second',
+        });
+        await expect(result.accepted).resolves.toEqual({ action: 'deliver', runId });
+      }
+      expect(buildStreamOptions).not.toHaveBeenCalled();
+      expect(syncModel).not.toHaveBeenCalled();
+      expect(clearAbort).not.toHaveBeenCalled();
+      expect(session.run.getRunId()).toBe(runId);
+      finishFirst();
+      await first;
+      await vi.waitFor(() => expect(calls).toBe(2));
+    } finally {
+      finishFirst();
+      await first;
+      session.stream.detach();
+    }
+  });
+
   it.each(['user', 'notification'] as const)(
     'preserves controller and caller context when an active %s send reaches an idle runtime',
     async kind => {

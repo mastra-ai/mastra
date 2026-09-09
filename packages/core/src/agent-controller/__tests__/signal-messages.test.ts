@@ -70,7 +70,7 @@ describe('AgentController signal messages', () => {
         ifActive: { attributes: { path: 'active' } },
         ifIdle: expect.objectContaining({
           attributes: { path: 'idle' },
-          streamOptions: expect.objectContaining({ requestContext: expect.anything() }),
+          streamOptions: expect.any(Function),
         }),
       }),
     );

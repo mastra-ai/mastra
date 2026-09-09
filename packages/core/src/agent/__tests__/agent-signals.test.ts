@@ -3743,6 +3743,108 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('defers queued stream options until the active run completes', async () => {
+    const { model, releaseFirst } = createBlockingFirstTextStreamModel('first', 'queued');
+    const agent = new Agent({ id: 'lazy-queue', name: 'Lazy queue', instructions: 'Test', model });
+    const target = { resourceId: 'lazy-queue-user', threadId: 'lazy-queue-thread' };
+    const requestContext = new RequestContext();
+    const streamOptions = vi.fn(async () => ({ requestContext }));
+    const streamSpy = vi.spyOn(agent, 'stream');
+    const first = await agent.stream('first', { memory: { resource: target.resourceId, thread: target.threadId } });
+    try {
+      const queued = agent.queueMessage('queued', { ...target, ifIdle: { streamOptions } });
+      await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+      expect(streamOptions).not.toHaveBeenCalled();
+      releaseFirst();
+      await first.text;
+      await vi.waitFor(() => expect(streamSpy).toHaveBeenCalledTimes(2));
+      expect(streamOptions).toHaveBeenCalledTimes(1);
+      expect(streamSpy.mock.calls[1]?.[1]?.requestContext).toBe(requestContext);
+      const output = await streamSpy.mock.results[1]!.value;
+      await expect(output.text).resolves.toBe('queued');
+    } finally {
+      releaseFirst();
+      await first.text;
+    }
+  });
+
+  it.each([false, true])('resolves lazy persistence context with active=%s', async active => {
+    const { model, releaseFirst } = createBlockingFirstTextStreamModel('first', 'later');
+    const memory = new MockMemory();
+    const threadId = `lazy-persist-${active}`;
+    const resourceId = 'lazy-persist-user';
+    await memory.createThread({ threadId, resourceId });
+    const agent = new Agent({ id: threadId, name: 'Lazy persistence', instructions: 'Test', model, memory });
+    const stream = active
+      ? await agent.stream('first', { memory: { thread: threadId, resource: resourceId } })
+      : undefined;
+    const requestContext = new RequestContext();
+    requestContext.set('caller', 'factory');
+    const streamOptions = vi.fn(async () => ({ requestContext }));
+    const getMemory = vi.spyOn(agent, 'getMemory');
+    try {
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'persist lazily' },
+        {
+          resourceId,
+          threadId,
+          ifActive: { behavior: 'persist' },
+          ifIdle: { behavior: 'persist', streamOptions },
+        },
+      );
+      await expect(result.accepted).resolves.toEqual({ action: 'persist' });
+      await result.persisted;
+      expect(streamOptions).toHaveBeenCalledTimes(1);
+      expect(getMemory).toHaveBeenCalledWith({ requestContext });
+      const recalled = await memory.recall({ resourceId, threadId });
+      expect(JSON.stringify(recalled.messages)).toContain('persist lazily');
+    } finally {
+      releaseFirst();
+      if (stream) await stream.text;
+    }
+  });
+
+  it('releases the idle reservation when lazy stream setup fails', async () => {
+    const agent = new Agent({
+      id: 'lazy-setup-failure',
+      name: 'Lazy setup failure',
+      instructions: 'Test',
+      model: createTextStreamModel('recovered'),
+    });
+    const target = { resourceId: 'lazy-failure-user', threadId: 'lazy-failure-thread' };
+    const streamOptions = vi.fn(async () => {
+      throw new Error('options failed');
+    });
+    const failed = agent.sendSignal(
+      { type: 'user-message', contents: 'first' },
+      { ...target, ifIdle: { streamOptions } },
+    );
+    await expect(failed.accepted).rejects.toThrow('options failed');
+    expect(streamOptions).toHaveBeenCalledTimes(1);
+    const recovered = await agent.sendSignal({ type: 'user-message', contents: 'retry' }, target).accepted;
+    expect(recovered.action).toBe('wake');
+    if (recovered.action !== 'wake') throw new Error('Expected a fresh run');
+    await expect(recovered.output.text).resolves.toBe('recovered');
+  });
+
+  it.each(['discard', 'persist'] as const)('does not resolve lazy options for transient idle %s', async behavior => {
+    const agent = new Agent({
+      id: `lazy-discard-${behavior}`,
+      name: 'Lazy discard',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+    });
+    const streamOptions = vi.fn(async () => {
+      throw new Error('must not build');
+    });
+    const result = agent.sendSignal(
+      { type: 'user-message', contents: 'discard', transient: true },
+      { resourceId: 'lazy-discard-user', threadId: `lazy-discard-${behavior}`, ifIdle: { behavior, streamOptions } },
+    );
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    expect(streamOptions).not.toHaveBeenCalled();
+  });
+
   it('persists an idle signal without waking the agent when idle behavior is persist', async () => {
     let streamCount = 0;
     const memory = new MockMemory();

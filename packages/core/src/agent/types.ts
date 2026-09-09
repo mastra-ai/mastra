@@ -158,7 +158,12 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
  */
 export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
   behavior?: AgentSignalIdleBehavior;
-  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  /**
+   * Options for a new run or persistence. A factory is evaluated only when
+   * options are needed, never for active delivery or discarded signals.
+   * State signals also resolve the factory before updating stored state.
+   */
+  streamOptions?: AgentExecutionOptions<OUTPUT> | (() => Promise<AgentExecutionOptions<OUTPUT>>);
   attributes?: AgentSignalAttributes;
 };
 

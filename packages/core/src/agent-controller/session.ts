@@ -3430,13 +3430,14 @@ export class Session<TState = unknown> {
             message: 'The pending tool approval was declined because the user sent a new message.',
           },
         });
-        // The run can finish before the agent accepts this signal. Preserve
-        // session context if delivery has to wake an idle thread instead.
-        const streamOptions = await this.machinery.buildStreamOptions({
-          requestContext: requestContextInput,
-          tracingContext,
-          tracingOptions,
-        });
+        // Build fresh run options only if delivery needs an idle fallback.
+        // Active delivery must not synchronize models or rebuild toolsets.
+        const streamOptions = () =>
+          this.machinery.buildStreamOptions({
+            requestContext: requestContextInput,
+            tracingContext,
+            tracingOptions,
+          });
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
@@ -3520,11 +3521,12 @@ export class Session<TState = unknown> {
     const agent = this.machinery.getAgent();
     await this.thread.ensureSubscription(threadId);
 
-    const streamOptions = await this.machinery.buildStreamOptions({
-      requestContext: requestContextInput,
-      tracingContext,
-      tracingOptions,
-    });
+    const streamOptions = () =>
+      this.machinery.buildStreamOptions({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
 
     return agent.sendNotificationSignal(input, {
       resourceId: this.identity.getResourceId(),
