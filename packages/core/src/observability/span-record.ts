@@ -78,12 +78,21 @@ const MESSAGE_LIST_INPUT_SPANS: readonly SpanType[] = [
  * - `text`: a plain string, such as the prompt passed to an agent
  * - `messages`: a message list, unwrapped from the `{ messages }` envelope
  *   model generation spans and legacy agent spans record
- * - `agent-run-resume`: the resume data of a resumed agent run, whatever keys it carries
+ * - `agent-run-resume`: the resume data of a resumed agent run, whatever shape it has
  * - `json`: anything else, such as tool arguments or workflow step data
  */
 export function describeSpanInput(span: SpanRecord): SpanInputDescription | undefined {
   const input: unknown = span.input;
   if (input == null) return undefined;
+
+  // A resumed run's input is resume data whatever it looks like, so the resumed marker
+  // settles it before any shape check. Runs resumed before core always recorded an
+  // object can hold a bare string, array or number here, which is normalized to match.
+  if (span.spanType === SpanType.AGENT_RUN && span.metadata?.resumed === true) {
+    const value = isRecord(input) ? input : { resumeData: input };
+    return { type: 'agent-run-resume', value: value as AgentRunResumeInput };
+  }
+
   if (typeof input === 'string') return { type: 'text', value: input };
   if (Array.isArray(input)) {
     return MESSAGE_LIST_INPUT_SPANS.includes(span.spanType)
@@ -93,11 +102,6 @@ export function describeSpanInput(span: SpanRecord): SpanInputDescription | unde
   if (!isRecord(input)) return { type: 'json', value: input };
 
   const isAgentRun = span.spanType === SpanType.AGENT_RUN;
-  // A resumed run's input is resume data, whatever keys it happens to carry, so the
-  // resumed marker settles it before any shape check.
-  if (isAgentRun && span.metadata?.resumed === true) {
-    return { type: 'agent-run-resume', value: input as AgentRunResumeInput };
-  }
   if ((isAgentRun || span.spanType === SpanType.MODEL_GENERATION) && 'messages' in input) {
     const { messages } = input;
     if (typeof messages === 'string') return { type: 'text', value: messages };

@@ -94,22 +94,32 @@ describe('describeSpanInput', () => {
     });
   });
 
-  it('tags a resumed run by its marker, whatever keys the resume data carries', () => {
+  it('tags a resumed run by its marker, whatever shape the resume data has', () => {
     const resumed = { metadata: { resumed: true } };
+    const tag = (input: unknown) => describeSpanInput(span(SpanType.AGENT_RUN, { input, ...resumed }));
 
     // Resume data that happens to carry `messages` is still resume data.
-    expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { messages: ['approved'] }, ...resumed }))).toEqual({
-      type: 'agent-run-resume',
-      value: { messages: ['approved'] },
-    });
-    expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { resumeData: 'Yes' }, ...resumed }))).toEqual({
-      type: 'agent-run-resume',
-      value: { resumeData: 'Yes' },
-    });
+    expect(tag({ messages: ['approved'] })).toEqual({ type: 'agent-run-resume', value: { messages: ['approved'] } });
+    expect(tag({ resumeData: 'Yes' })).toEqual({ type: 'agent-run-resume', value: { resumeData: 'Yes' } });
+
+    // Runs resumed before core always recorded an object can hold a bare value.
+    expect(tag('Yes')).toEqual({ type: 'agent-run-resume', value: { resumeData: 'Yes' } });
+    expect(tag(['approved'])).toEqual({ type: 'agent-run-resume', value: { resumeData: ['approved'] } });
+    expect(tag(42)).toEqual({ type: 'agent-run-resume', value: { resumeData: 42 } });
+    expect(tag(false)).toEqual({ type: 'agent-run-resume', value: { resumeData: false } });
+
+    // A span that recorded no input stays empty, as it does for every span type.
+    expect(tag(null)).toBeUndefined();
+
     // Without the marker, a `{ messages }` envelope is still a message list.
     expect(describeSpanInput(span(SpanType.AGENT_RUN, { input: { messages: ['approved'] } }))).toEqual({
       type: 'messages',
       value: ['approved'],
+    });
+    // The marker only speaks for agent runs; a tool call's string input is still text.
+    expect(describeSpanInput(span(SpanType.TOOL_CALL, { input: 'Yes', ...resumed }))).toEqual({
+      type: 'text',
+      value: 'Yes',
     });
   });
 
