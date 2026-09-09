@@ -50,9 +50,11 @@ export function SettingsLayout({
               >
                 {title}
               </Txt>
-              {titleAccessory ? <div className="shrink-0">{titleAccessory}</div> : null}
+              {titleAccessory !== undefined && titleAccessory !== null ? (
+                <div className="shrink-0">{titleAccessory}</div>
+              ) : null}
             </div>
-            {description ? (
+            {description !== undefined && description !== null ? (
               <Txt as="p" variant="ui-md" className="text-neutral4 m-0 leading-tight wrap-break-word">
                 {description}
               </Txt>
