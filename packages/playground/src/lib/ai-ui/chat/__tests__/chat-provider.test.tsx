@@ -912,6 +912,53 @@ describe('ChatProvider', () => {
     expect(workingMemoryRequest.mock.calls.length).toBeGreaterThan(initialWorkingMemoryReads);
   });
 
+  it('refreshes working memory once when the stream finishes (OM disabled)', async () => {
+    // Finish-path refresh with no OM boundary and no updateWorkingMemory tool call:
+    // the sidebar must still re-read working memory, exactly once.
+    const emitFinish = createDeferred();
+    let persisted = false;
+    const workingMemoryRequest = vi.fn(() =>
+      HttpResponse.json(workingMemoryFixture(persisted ? 'fresh working memory' : 'stale working memory')),
+    );
+    const Probe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-value">{workingMemoryData}</div>;
+    };
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, workingMemoryRequest),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder();
+                await emitFinish.promise;
+                persisted = true;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <Probe />
+          <SendOnMount text="hello" />
+        </ChatProvider>
+      </Wrapper>,
+    );
+    await screen.findByText('stale working memory');
+    const initialWorkingMemoryReads = workingMemoryRequest.mock.calls.length;
+    emitFinish.resolve();
+    await screen.findByText('fresh working memory');
+    expect(workingMemoryRequest).toHaveBeenCalledTimes(initialWorkingMemoryReads + 1);
+  });
+
   it('waits for the signals run to finish before refreshing buffered working memory', async () => {
     delete window.MASTRA_AGENT_SIGNALS;
     const accepted = createDeferred();

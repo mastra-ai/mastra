@@ -802,6 +802,8 @@ export type GetMemoryConfigParams = GeneratedRequest<QueryParams<'GET /memory/co
 
 export type GetMemoryConfigResponse = GeneratedResponse<'GET /memory/config'>;
 
+export type GetWorkingMemoryResponse = GeneratedResponse<'GET /memory/threads/:threadId/working-memory'>;
+
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;

@@ -128,6 +128,7 @@ import type {
   SaveScoreResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  GetWorkingMemoryResponse,
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
@@ -882,7 +883,7 @@ export class MastraClient extends BaseResource {
     threadId: string;
     resourceId?: string;
     requestContext?: RequestContext | Record<string, any>;
-  }) {
+  }): Promise<GetWorkingMemoryResponse> {
     return this.request(
       `/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
     );

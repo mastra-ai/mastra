@@ -1,9 +1,9 @@
-import type { RouteResponse } from '@mastra/client-js';
+import type { GetWorkingMemoryResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-type WorkingMemoryResponse = RouteResponse<'GET /memory/threads/:threadId/working-memory'>;
+type WorkingMemoryResponse = GetWorkingMemoryResponse;
 
 interface WorkingMemoryTemplate {
   content?: string;

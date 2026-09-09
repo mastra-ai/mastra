@@ -173,21 +173,6 @@ export const useChatSendHandler = ({
   // data right away. Runs on every chat completion regardless of whether
   // observational memory is enabled, so the thread messages and memory status
   // shown in the panel are never stale after a stream finishes.
-  const refreshTimelinePanel = useCallback(
-    (currentThreadId?: string) => {
-      if (!currentThreadId) return;
-      void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, currentThreadId) });
-      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(currentThreadId) });
-      void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, currentThreadId) });
-      // Also poke the timeline panel directly. The panel resolves its own thread id
-      // from the route, so it stays correct even for brand-new threads where
-      // `deps.threadId` is still undefined at send time and the keyed refetch above
-      // cannot target the real thread yet.
-      signalTimelineRefresh();
-    },
-    [agentId, queryClient, signalTimelineRefresh],
-  );
-
   // Partial key: matches the working-memory query for this thread regardless of resourceId.
   const refreshWorkingMemory = useCallback(
     (currentThreadId?: string) => {
@@ -195,6 +180,27 @@ export const useChatSendHandler = ({
       void queryClient.invalidateQueries({ queryKey: workingMemoryQueryKey(agentId, currentThreadId) });
     },
     [agentId, queryClient],
+  );
+
+  const refreshTimelinePanel = useCallback(
+    (currentThreadId?: string) => {
+      if (!currentThreadId) return;
+      void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, currentThreadId) });
+      // With OM enabled, working memory is only final once buffering completes, so
+      // `completeObservationalMemoryBuffering` owns that refresh; refreshing here too
+      // would just read the pre-buffering value.
+      if (!sendDepsRef.current.isOMEnabled) {
+        refreshWorkingMemory(currentThreadId);
+      }
+      // Also poke the timeline panel directly. The panel resolves its own thread id
+      // from the route, so it stays correct even for brand-new threads where
+      // `deps.threadId` is still undefined at send time and the keyed refetch above
+      // cannot target the real thread yet.
+      signalTimelineRefresh();
+    },
+    [agentId, queryClient, refreshWorkingMemory, signalTimelineRefresh],
   );
 
   const completeObservationalMemoryBuffering = useCallback(
