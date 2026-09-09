@@ -507,6 +507,21 @@ function checkEnvVarNames(
 /* ------------------------------------------------------------------ */
 
 /**
+ * Whether the deploy env satisfies the Redis requirement for a dedicated
+ * workers service: the platform needs Redis (pub/sub) to coordinate the
+ * worker service with the API. Met when a usable `REDIS_URL` is in the
+ * deploy env or provided by a platform-managed database.
+ */
+export function hasWorkersRedisRequirement(
+  envVars: Record<string, string>,
+  managedEnvVarNames?: string[] | null,
+): boolean {
+  const redisUrl = envVars.REDIS_URL;
+  const managed = new Set(managedEnvVarNames ?? []);
+  return (redisUrl !== undefined && isUsableEnvVarValue('REDIS_URL', redisUrl)) || managed.has('REDIS_URL');
+}
+
+/**
  * If the build extracted a workers manifest with `enabled: true` but the
  * deploy env doesn't provide `REDIS_URL` (locally or via a platform-managed
  * database), surface a missing-env-var warning with the standard `redis`
@@ -556,9 +571,7 @@ async function checkWorkersNeedRedis(
       : workerManifest.enabled === true;
   if (!workersEnabled) return [];
 
-  const redisUrl = envVars.REDIS_URL;
-  const managed = new Set(managedEnvVarNames ?? []);
-  if ((redisUrl !== undefined && isUsableEnvVarValue('REDIS_URL', redisUrl)) || managed.has('REDIS_URL')) return [];
+  if (hasWorkersRedisRequirement(envVars, managedEnvVarNames)) return [];
 
   const autofix = dbAutofixFor('REDIS_URL');
   return [

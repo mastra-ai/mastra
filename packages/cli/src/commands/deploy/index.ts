@@ -30,7 +30,12 @@ import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { fetchDatabases } from '../db/platform-api.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
-import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import {
+  mergePreflightEnvVars,
+  preflightBuildOutput,
+  printPreflightIssues,
+  hasWorkersRedisRequirement,
+} from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
@@ -148,50 +153,73 @@ export async function hasEnabledWorkers(targetDir: string): Promise<boolean> {
   return workerManifestHasEnabledWorkers(await readWorkersConfig(targetDir));
 }
 
-export type WorkersDeployMode = 'separate' | 'inline';
+export type WorkersDeployMode = 'dedicated' | 'in-process';
 
 /**
- * Decide whether this deploy should provision a dedicated worker service
- * ("separate") or run workers alongside the API server in the same container
- * ("inline").
+ * `--workers dedicated` was requested but the deploy env can't satisfy the
+ * platform's Redis (pub/sub) coordination requirement. Hard error: an
+ * explicit flag must not silently degrade to in-process.
+ */
+export class WorkersRedisRequirementError extends Error {}
+
+/**
+ * Decide whether this deploy should provision a dedicated workers service
+ * ("dedicated") or run background tasks in-process inside the API server
+ * container ("in-process").
  *
- * Order of precedence:
- *   1. Explicit `--workers` flag wins.
- *   2. If the environment already has a worker service, stay on separate —
- *      switching a live environment to inline is a destructive-feeling
- *      change we don't perform without an explicit flag.
- *   3. If no workers are actually configured in the build, mode is
- *      irrelevant; return `separate` (the default, no side effects).
- *   4. Non-interactive / `--yes` deploys default to the recommended
- *      `separate` mode.
- *   5. Otherwise prompt.
+ * The workers manifest ships (→ dedicated) only when the build emitted
+ * enabled workers AND the deploy env meets the Redis (pub/sub) requirement,
+ * AND one of:
+ *   - the environment already has a workers service,
+ *   - the user passed `--workers dedicated`,
+ *   - the deploy is non-interactive / `--yes`,
+ *   - the user answers yes at the prompt.
+ *
+ * `--workers in-process` always wins. `--workers dedicated` without the
+ * Redis requirement throws {@link WorkersRedisRequirementError} instead of
+ * degrading; the implicit paths degrade to in-process (call site warns).
  */
 export async function resolveWorkersDeployMode(input: {
   workersEnabled: boolean;
+  redisRequirementMet: boolean;
   environmentHasWorkerService: boolean;
   workersOption: WorkersDeployMode | undefined;
   autoAccept: boolean;
   promptConfirm: (message: string) => Promise<boolean | symbol>;
   isCancel: (value: unknown) => value is symbol;
 }): Promise<WorkersDeployMode> {
-  if (input.workersOption) return input.workersOption;
-  if (input.environmentHasWorkerService) return 'separate';
-  if (!input.workersEnabled) return 'separate';
-  if (input.autoAccept) return 'separate';
+  if (input.workersOption === 'in-process') return 'in-process';
+  // No enabled workers in the build → nothing to provision, mode is
+  // irrelevant (an explicit `--workers dedicated` gets a warning at the
+  // call site).
+  if (!input.workersEnabled) return 'in-process';
+  if (input.workersOption === 'dedicated') {
+    if (!input.redisRequirementMet) {
+      throw new WorkersRedisRequirementError(
+        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file, or run `mastra deploy` without --workers and accept the managed Redis attach when prompted.',
+      );
+    }
+    return 'dedicated';
+  }
+  if (!input.redisRequirementMet) return 'in-process';
+  if (input.environmentHasWorkerService) return 'dedicated';
+  if (input.autoAccept) return 'dedicated';
 
   const answer = await input.promptConfirm(
-    'Run background workers as a separate service? (recommended — the alternative runs them alongside the API server in the same container)',
+    'Provision a dedicated workers service? (recommended — otherwise background tasks run in-process inside the API server container)',
   );
-  if (input.isCancel(answer)) return 'separate';
-  return answer === false ? 'inline' : 'separate';
+  if (input.isCancel(answer)) return 'dedicated';
+  return answer === false ? 'in-process' : 'dedicated';
 }
 
 /**
  * Suppress the workers manifest from the build output so the platform treats
- * this deploy as "no dedicated worker service" and railway-builder omits
- * `ENV MASTRA_WORKERS=false`, letting workers boot in the API container.
+ * this deploy as "no dedicated workers service": railway-builder omits
+ * `ENV MASTRA_WORKERS=false` so background tasks run in the API container,
+ * and the platform spins down any existing workers service for the
+ * environment.
  */
-export async function suppressWorkersManifestForInlineMode(targetDir: string): Promise<void> {
+export async function suppressWorkersManifest(targetDir: string): Promise<void> {
   try {
     await unlink(workersManifestPath(targetDir));
   } catch (error) {
@@ -223,7 +251,7 @@ export async function applyPlatformWorkersFlagGate(deps: {
     ? await deps.analytics.isFeatureEnabled('platform-workers', { groups: { organization: deps.orgId } })
     : false;
   if (flagOn) return 'preserved';
-  await suppressWorkersManifestForInlineMode(deps.targetDir);
+  await suppressWorkersManifest(deps.targetDir);
   return 'suppressed';
 }
 
@@ -1147,17 +1175,19 @@ export interface DeployOptions {
   envFile?: string;
   /**
    * How to run background workers for this deploy:
-   *   `separate` — provision a dedicated worker service.
-   *   `inline`   — run workers in-process alongside the API server.
+   *   `dedicated`  — provision a dedicated workers service (errors if the
+   *                  deploy env lacks the Redis requirement).
+   *   `in-process` — run background tasks inside the API server container;
+   *                  spins down an existing workers service.
    * When omitted, the CLI prompts on the first deploy where workers are
-   * detected but the environment has no worker service yet.
+   * detected but the environment has no workers service yet.
    */
-  workers?: 'separate' | 'inline';
+  workers?: WorkersDeployMode;
 }
 
 export async function unifiedDeployAction(dir: string | undefined, opts: DeployOptions) {
-  if (opts.workers !== undefined && opts.workers !== 'separate' && opts.workers !== 'inline') {
-    throw new Error(`--workers must be "separate" or "inline" (got "${String(opts.workers)}")`);
+  if (opts.workers !== undefined && opts.workers !== 'dedicated' && opts.workers !== 'in-process') {
+    throw new Error(`--workers must be "dedicated" or "in-process" (got "${String(opts.workers)}")`);
   }
   const analytics = getAnalytics();
   if (!analytics) {
@@ -1448,6 +1478,11 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   const deploymentEnv = mergePreflightEnvVars(environment.envVars, envVars);
 
+  // Managed-resource env var names (e.g. an attached Redis injects
+  // REDIS_URL at deploy time). Auto-provisioning during preflight can grow
+  // this set; the workers-mode gate below needs the final picture.
+  let managedEnvVarNames = environment.managedEnvVarNames ?? null;
+
   // Pre-upload validation. Preflight sees the same env picture the platform
   // applies at deploy time: request env vars merged over the environment's
   // stored vars (request wins), so platform-stored vars don't false-alarm.
@@ -1498,13 +1533,10 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       // we told the user the DB was attached. Merging is enough; no need
       // to re-fetch the environment because attachDatabase's response is
       // authoritative for the vars it just injected.
-      const mergedManagedNames = [
-        ...(environment.managedEnvVarNames ?? []),
-        ...autoProvisioned.newlyManagedEnvVarNames,
-      ];
+      managedEnvVarNames = [...(environment.managedEnvVarNames ?? []), ...autoProvisioned.newlyManagedEnvVarNames];
       issues = await preflightBuildOutput(targetDir, deploymentEnv, {
         hasEnvFile: hasAmbientEnvFile,
-        managedEnvVarNames: mergedManagedNames,
+        managedEnvVarNames,
         environmentName: environment.name,
         checkWorkers: true,
       });
@@ -1537,20 +1569,48 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  const workersMode = await resolveWorkersDeployMode({
-    workersEnabled,
-    environmentHasWorkerService: Boolean(environment.workerProviderServiceId),
-    workersOption: opts.workers,
-    autoAccept,
-    promptConfirm: message => p.confirm({ message, initialValue: true }),
-    isCancel: (value): value is symbol => p.isCancel(value),
-  });
-  if (workersMode === 'inline' && workersEnabled) {
-    await suppressWorkersManifestForInlineMode(targetDir);
-    p.log.step('Running workers inline in the server container (no dedicated worker service)');
-    // Re-derive so the deployment overview reflects the inline mode.
+  const environmentHasWorkerService = Boolean(environment.workerProviderServiceId);
+  const redisRequirementMet = hasWorkersRedisRequirement(deploymentEnv, managedEnvVarNames);
+  let workersMode: WorkersDeployMode;
+  try {
+    workersMode = await resolveWorkersDeployMode({
+      workersEnabled,
+      redisRequirementMet,
+      environmentHasWorkerService,
+      workersOption: opts.workers,
+      autoAccept,
+      promptConfirm: message => p.confirm({ message, initialValue: true }),
+      isCancel: (value): value is symbol => p.isCancel(value),
+    });
+  } catch (error) {
+    if (error instanceof WorkersRedisRequirementError) {
+      p.cancel(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+  if (workersMode === 'in-process' && workersEnabled) {
+    await suppressWorkersManifest(targetDir);
+    if (!redisRequirementMet) {
+      p.log.warn(
+        'Background workers are configured, but the deploy env has no usable REDIS_URL — the platform needs Redis (pub/sub) to coordinate a dedicated workers service. Background tasks will run in-process inside the API server container.',
+      );
+    } else {
+      p.log.step('Running background tasks in-process inside the API server container (no dedicated workers service)');
+    }
+    // Re-derive so the deployment overview reflects the in-process mode.
     workersConfig = await readWorkersConfig(targetDir);
     workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  }
+  if (workersMode === 'in-process' && environmentHasWorkerService) {
+    p.log.warn(
+      'This environment has a dedicated workers service — deploying without a workers manifest will spin it down. Background tasks will run in-process inside the API server container.',
+    );
+  }
+  if (opts.workers === 'dedicated' && !workersEnabled) {
+    p.log.warn(
+      'Ignoring --workers dedicated: the build emitted no enabled workers manifest — the Mastra config disables workers (`workers: false`) or the account is not enrolled. No dedicated workers service will be provisioned.',
+    );
   }
 
   const publicUrls = derivePublicUrls(environment.slug, projectType);
