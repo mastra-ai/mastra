@@ -5303,6 +5303,7 @@ export const API_ROUTE_METADATA = {
       "id",
       "maxConcurrency",
       "metadata",
+      "model",
       "name",
       "provenance",
       "requestContext",
