@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { reviewBoard } from '../boards/review.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
+import { defaultGitlabRules } from '../integrations/gitlab/default-rules.js';
 import { defaultLinearRules } from '../integrations/linear/default-rules.js';
 import type {
   FactoryGithubRuleContext,
@@ -9,6 +10,7 @@ import type {
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
 } from './types.js';
+import { FACTORY_RULE_SOURCES } from './types.js';
 
 const passThrough = vi.fn(() => undefined);
 const base = {
@@ -146,6 +148,35 @@ describe('built-in board and integration handlers', () => {
     expect(defaultGithubRules.pullRequestMerged).toBeTypeOf('function');
     expect(defaultLinearRules.issueObserved).toBeTypeOf('function');
     expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
+    expect(defaultGitlabRules.issueOpened).toBeTypeOf('function');
+    expect(workBoard.rules.triage?.gitlabIssue?.onEnter).toBeTypeOf('function');
+  });
+
+  // A provider-backed card whose family has no handler in a working phase
+  // enters that lane and nothing happens: no agent is invoked and the column
+  // silently stalls. `manual` is exempt — an operator-created card is driven by
+  // the person who made it, so an unseated lane is the intended behavior there.
+  describe.each([
+    ['work', workBoard],
+    ['review', reviewBoard],
+  ] as const)('%s board', (_boardId, board) => {
+    const providerFamilies = (phaseId: string) =>
+      Object.keys(board.rules[phaseId] ?? {})
+        .filter(family => family !== 'manual')
+        .sort();
+    const handledFamilies = [...new Set(Object.keys(board.phases).flatMap(providerFamilies))].sort();
+    const seatedLanes = Object.entries(board.phases)
+      .filter(([phaseId, phase]) => phase.kind === 'working' && providerFamilies(phaseId).length > 0)
+      .map(([phaseId]) => phaseId);
+
+    it('handles at least one provider-backed rule family, all of them declared', () => {
+      expect(handledFamilies.length).toBeGreaterThan(0);
+      expect(FACTORY_RULE_SOURCES).toEqual(expect.arrayContaining(handledFamilies));
+    });
+
+    it.each(seatedLanes)('seats every provider family it handles in the %s lane', phaseId => {
+      expect(providerFamilies(phaseId)).toEqual(handledFamilies);
+    });
   });
 
   it('materializes observed Linear issues directly in Triage', async () => {

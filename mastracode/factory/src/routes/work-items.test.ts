@@ -8,6 +8,7 @@ import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
+import { WORK_ITEM_SOURCES } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
@@ -1092,6 +1093,41 @@ describe('GET /web/factory/projects/:id/decisions', () => {
         expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'github-pr' }),
         expect.objectContaining({ type: 'sendMessage', source: null }),
       ]),
+    );
+  });
+
+  // The response used to name providers with a hand-written list, so a new one
+  // read as an unlinked card in the UI. Every declared source must round-trip.
+  it.each(WORK_ITEM_SOURCES.filter(source => source !== 'manual'))('round-trips a %s card source', async source => {
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: null,
+      ingress: { identity: `decision-${source}`, triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `decision-${source}-linked`,
+          board: 'work',
+          source,
+          sourceKey: `${source}:7`,
+          title: 'Fix the login flow',
+          url: null,
+          stage: 'intake',
+          metadata: {},
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-02T00:00:00.000Z'),
+    });
+
+    const body = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json();
+    expect(body.decisions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'upsertLinkedWorkItem', source })]),
     );
   });
 });

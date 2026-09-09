@@ -55,18 +55,25 @@ function triageIssueEntry(context: FactoryStageRuleContext) {
   return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
 }
 
-const LINEAR_FETCH_HINT =
-  "Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.";
-
-function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
-    role: 'triage',
-    skillName: 'factory-triage',
-    arguments: `${sourceRef(context.item)}\n\n${LINEAR_FETCH_HINT}`,
-  } as const;
+/**
+ * Non-GitHub providers need to be pointed at their own read tool: `gh` cannot
+ * see a Linear or GitLab issue, and the triage skill would otherwise have to
+ * guess which provider it is on.
+ */
+function investigateWithFetchHint(provider: string, tool: string) {
+  const hint = `Start by fetching the issue's full details (description and comments) with the ${tool} tool.`;
+  return (context: FactoryStageRuleContext) =>
+    ({
+      type: 'invokeSkill',
+      idempotencyKey: `${context.ingress.id}:factory-triage-${provider}`,
+      role: 'triage',
+      skillName: 'factory-triage',
+      arguments: `${sourceRef(context.item)}\n\n${hint}`,
+    }) as const;
 }
+
+const investigateTriagedLinearIssue = investigateWithFetchHint('linear', 'linear_get_issue');
+const investigateTriagedGitlabIssue = investigateWithFetchHint('gitlab', 'gitlab_get_issue');
 
 function planWorkItem(context: FactoryStageRuleContext) {
   return {
@@ -142,21 +149,25 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       kind: 'working',
       role: 'triage',
       outcomes: allOtherPhases,
-      onEnter: { issue: triageIssueEntry, linearIssue: investigateTriagedLinearIssue },
+      onEnter: {
+        issue: triageIssueEntry,
+        linearIssue: investigateTriagedLinearIssue,
+        gitlabIssue: investigateTriagedGitlabIssue,
+      },
     },
     planning: {
       title: 'Planning',
       kind: 'working',
       role: 'plan',
       outcomes: allOtherPhases,
-      onEnter: { issue: planWorkItem, linearIssue: planWorkItem, manual: planWorkItem },
+      onEnter: { issue: planWorkItem, linearIssue: planWorkItem, gitlabIssue: planWorkItem, manual: planWorkItem },
     },
     execute: {
       title: 'Building',
       kind: 'working',
       role: 'work',
       outcomes: allOtherPhases,
-      onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, manual: buildWorkItem },
+      onEnter: { issue: buildWorkItem, linearIssue: buildWorkItem, gitlabIssue: buildWorkItem, manual: buildWorkItem },
     },
     review: {
       title: 'Review',
@@ -169,7 +180,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       title: 'Done',
       kind: 'terminal',
       outcomes: allOtherPhases,
-      onEnter: { issue: completeIssue },
+      onEnter: { issue: completeIssue, gitlabIssue: completeIssue },
     },
     canceled: {
       title: 'Canceled',

@@ -22,6 +22,7 @@ import type {
 import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
+import { isWorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -168,10 +169,7 @@ function summaryRole(boards: BoardRegistry, decision: Record<string, unknown>): 
 /** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
 function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
   if (decision.type !== 'upsertLinkedWorkItem') return null;
-  const source = decision.source;
-  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
-    ? source
-    : null;
+  return isWorkItemSource(decision.source) ? decision.source : null;
 }
 
 function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord) {

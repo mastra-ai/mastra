@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemSource } from './types.js';
-import { factoryRuleSourceForWorkItem, workItemSource } from './types.js';
+import { factoryRuleSourceForWorkItem, WORK_ITEM_SOURCES, workItemSource } from './types.js';
 
 describe('workItemSource', () => {
   it('maps stored provenance onto the board vocabulary', () => {
@@ -22,12 +22,17 @@ describe('factoryRuleSourceForWorkItem', () => {
     ['github-issue', 'issue'],
     ['github-pr', 'pullRequest'],
     ['linear-issue', 'linearIssue'],
+    ['gitlab-issue', 'gitlabIssue'],
     ['manual', 'manual'],
-    // GitLab has no rule family of its own: its ingress is a webhook stub, so
-    // its cards must read as operator-driven rather than borrowing another
-    // provider's rules. Give it its own family only alongside a real event feed.
-    ['gitlab-issue', 'manual'],
   ] as const)('reports %s as the %s rule family', (source, expected) => {
     expect(factoryRuleSourceForWorkItem(source satisfies WorkItemSource)).toBe(expected);
+  });
+
+  // A provider that borrows another's family inherits rules written against a
+  // different API, so every source must name a family of its own.
+  it('gives every work item source a distinct rule family, sharing only with manual', () => {
+    const families = WORK_ITEM_SOURCES.filter(source => source !== 'manual').map(factoryRuleSourceForWorkItem);
+    expect(new Set(families).size).toBe(families.length);
+    expect(families).not.toContain('manual');
   });
 });

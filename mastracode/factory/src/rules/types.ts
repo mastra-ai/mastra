@@ -1,6 +1,16 @@
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'gitlab-issue' | 'manual';
+/**
+ * Every provider a card can be synced from. Single source of truth: validation
+ * and the route response derive from this, so adding a provider cannot leave a
+ * hand-maintained copy behind that silently drops it.
+ */
+export const WORK_ITEM_SOURCES = ['github-issue', 'github-pr', 'linear-issue', 'gitlab-issue', 'manual'] as const;
+export type WorkItemSource = (typeof WORK_ITEM_SOURCES)[number];
+
+export function isWorkItemSource(value: unknown): value is WorkItemSource {
+  return typeof value === 'string' && (WORK_ITEM_SOURCES as readonly string[]).includes(value);
+}
 
 /** The source label that holds an issue at rest until a maintainer decides; compared lowercased. */
 export const NEEDS_APPROVAL_LABEL = 'status: needs approval';
@@ -116,7 +126,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
 export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
-export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
+export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'gitlabIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
 
 export const FACTORY_GITHUB_EVENTS = [
@@ -484,12 +494,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'pullRequest';
     case 'linear-issue':
       return 'linearIssue';
-    // GitLab has no rule family yet: its ingress is a webhook stub, so no rule
-    // ever fires for one. Reported as `manual` so rule evaluation treats these
-    // items as operator-driven rather than silently matching another provider's
-    // rules. Give GitLab its own `FACTORY_RULE_SOURCES` entry when the webhook
-    // starts emitting events.
     case 'gitlab-issue':
+      return 'gitlabIssue';
     case 'manual':
       return 'manual';
   }

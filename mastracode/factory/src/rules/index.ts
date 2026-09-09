@@ -2,12 +2,15 @@ export { resolveFactoryStageRules } from './resolve.js';
 export type { ResolvedFactoryStageRule } from './resolve.js';
 export {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_GITLAB_EVENTS,
   FACTORY_LINEAR_EVENTS,
   FACTORY_RULE_BOARDS,
   FACTORY_RULE_SOURCES,
   FACTORY_RULE_STAGES,
   factoryRuleSourceForWorkItem,
   isFactoryRuleStage,
+  isWorkItemSource,
+  WORK_ITEM_SOURCES,
 } from './types.js';
 export type {
   FactoryBoardRuleLeaf,
@@ -15,6 +18,8 @@ export type {
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryGitlabEventName,
+  FactoryGitlabRuleContext,
   FactoryLinearEventName,
   FactoryLinearRuleContext,
   FactoryInvokeSkillDecision,
