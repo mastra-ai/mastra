@@ -151,6 +151,10 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
     "$schema": "http://json-schema.org/draft-07/schema#",
     "additionalProperties": false,
     "properties": {
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer",
+      },
       "recordId": {
         "minLength": 1,
         "type": "string",
@@ -166,6 +170,7 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
     },
     "required": [
       "recordId",
+      "expectedVersion",
       "scope",
     ],
     "type": "object",

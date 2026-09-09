@@ -1,5 +1,5 @@
 import type { KnowledgeScopeIds, KnowledgeStorage } from '@mastra/core/storage';
-import { isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { isKnowledgeScopeVisible, KnowledgeConflictError } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -257,20 +257,29 @@ export function createKnowledgeWriteTools(
     }),
     knowledge_rescope: createTool({
       id: 'knowledge_rescope',
-      description: 'Change a record visibility scope.',
+      description: 'Change a record visibility scope using optimistic concurrency.',
       inputSchema: {
         type: 'object',
-        properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeLevelSchema },
-        required: ['recordId', 'scope'],
+        properties: {
+          recordId: { type: 'string', minLength: 1 },
+          expectedVersion: { type: 'integer', minimum: 1 },
+          scope: scopeLevelSchema,
+        },
+        required: ['recordId', 'expectedVersion', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; scope: SubconsciousScopeSelection };
+        const value = input as { recordId: string; expectedVersion: number; scope: SubconsciousScopeSelection };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         await requireVisible(store, 'record', record.id, options, 'KnowledgeRecord');
-        return store.setRecordScopes({ id: record.id, scopeIds: resolveWriteScopeIds(options, value.scope) });
+        if (record.version !== value.expectedVersion) throw new KnowledgeConflictError(record.id);
+        return store.setRecordScopes({
+          id: record.id,
+          version: record.version,
+          scopeIds: resolveWriteScopeIds(options, value.scope),
+        });
       },
     }),
     knowledge_write_node_description: createTool({
