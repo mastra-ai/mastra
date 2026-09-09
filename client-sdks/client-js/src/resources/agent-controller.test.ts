@@ -847,4 +847,52 @@ describe('AgentController Resource', () => {
     expect(result.notificationId).toBe('n-1');
     expect(result.decision).toBe('deliver');
   });
+  describe('exact thread request binding', () => {
+    it('carries the selected thread on state, approval, Stop and state updates', async () => {
+      const session = client.getAgentController('code').session('user-1', 'chat / one', { threadId: 'old / thread' });
+      for (const command of [
+        () => session.state(),
+        () => session.approveTool('call-1', true),
+        () => session.abort(),
+        () => session.setState({ yolo: false }),
+      ]) {
+        mockJson({ ok: true });
+        await command();
+        const url = new URL(lastCall()[0]);
+        expect(url.searchParams.get('sessionScope')).toBe('chat / one');
+        expect(url.searchParams.get('sessionThreadId')).toBe('old / thread');
+      }
+    });
+
+    it('carries the selected thread on a stream without a preceding create request', async () => {
+      const session = client.getAgentController('code').session('user-1', 'chat-one', { threadId: 'older-thread' });
+      mockSse([]);
+      const subscription = await session.subscribe({ onEvent: () => {} });
+      expect(new URL(lastCall()[0]).searchParams.get('sessionThreadId')).toBe('older-thread');
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+      subscription.unsubscribe();
+    });
+
+    it('keeps exact binding through explicit native thread navigation', async () => {
+      const session = client.getAgentController('code').session('user-1', 'chat-one', { threadId: 'first-thread' });
+      mockJson({ threadId: 'first-thread' });
+      await session.create();
+      expect(JSON.parse(lastCall()[1].body as string).threadId).toBe('first-thread');
+      mockJson({ ok: true });
+      await session.switchThread('second-thread');
+      mockJson({});
+      await session.state();
+      expect(new URL(lastCall()[0]).searchParams.get('sessionThreadId')).toBe('second-thread');
+      mockJson({ id: 'created-thread' });
+      await session.createThread('New thread');
+      mockJson({});
+      await session.state();
+      expect(new URL(lastCall()[0]).searchParams.get('sessionThreadId')).toBe('created-thread');
+      mockJson({ id: 'cloned-thread' });
+      await session.cloneThread();
+      mockJson({});
+      await session.state();
+      expect(new URL(lastCall()[0]).searchParams.get('sessionThreadId')).toBe('cloned-thread');
+    });
+  });
 });

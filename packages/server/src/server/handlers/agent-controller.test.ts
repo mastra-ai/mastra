@@ -1119,4 +1119,47 @@ describe('agent-controller routes', () => {
       ).rejects.toThrow('thread "missing-thread" not found');
     });
   });
+  describe('exact Session thread on each request', () => {
+    it.each([
+      ['state', GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE, {}],
+      ['approval', AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE, { toolCallId: 'saved-call', approved: false }],
+      ['Stop', ABORT_AGENT_CONTROLLER_SESSION_ROUTE, {}],
+    ])('binds a cold %s request to the older thread', async (_name, route, payload) => {
+      const controller = mastra.getAgentController('code');
+      await controller.init();
+      const older = await controller.createSession({
+        resourceId: 'owner',
+        scope: 'prepare-old',
+        threadId: 'older-thread',
+      });
+      await controller.createSession({ resourceId: 'owner', scope: 'prepare-new', threadId: 'newer-thread' });
+      expect(await controller.getSessionByResource('owner', 'reconnected')).toBeUndefined();
+      await route.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'owner',
+        sessionScope: 'reconnected',
+        sessionThreadId: older.thread.getId(),
+        ...payload,
+      } as any);
+      const restored = await controller.getSessionByResource('owner', 'reconnected');
+      expect(restored?.thread.getId()).toBe('older-thread');
+    });
+
+    it.each(['missing-thread', 'other-owners-thread'])('rejects %s before creating a Session', async threadId => {
+      const controller = mastra.getAgentController('code');
+      await controller.init();
+      await controller.createSession({ resourceId: 'other-owner', scope: 'other', threadId: 'other-owners-thread' });
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'owner',
+          sessionScope: 'reconnected',
+          sessionThreadId: threadId,
+        } as any),
+      ).rejects.toThrow('Thread not found');
+      expect(await controller.getSessionByResource('owner', 'reconnected')).toBeUndefined();
+    });
+  });
 });

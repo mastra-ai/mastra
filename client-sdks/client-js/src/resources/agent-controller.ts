@@ -293,6 +293,7 @@ export class AgentControllerSession extends BaseResource {
     private readonly controllerId: string,
     private readonly resourceId: string,
     private readonly scope?: string,
+    private sessionThreadId?: string,
   ) {
     super(options);
   }
@@ -301,11 +302,14 @@ export class AgentControllerSession extends BaseResource {
     return `/agent-controller/${encodeURIComponent(this.controllerId)}/sessions/${encodeURIComponent(this.resourceId)}`;
   }
 
-  /** Append this session's scope (if any) as a `sessionScope` query param. */
+  /** Carry scope and an optional exact thread on every Session request. */
   private url(path: string): string {
-    if (this.scope === undefined) return path;
+    const query: string[] = [];
+    if (this.scope !== undefined) query.push(`sessionScope=${encodeURIComponent(this.scope)}`);
+    if (this.sessionThreadId !== undefined) query.push(`sessionThreadId=${encodeURIComponent(this.sessionThreadId)}`);
+    if (!query.length) return path;
     const sep = path.includes('?') ? '&' : '?';
-    return `${path}${sep}sessionScope=${encodeURIComponent(this.scope)}`;
+    return `${path}${sep}${query.join('&')}`;
   }
 
   /**
@@ -314,19 +318,24 @@ export class AgentControllerSession extends BaseResource {
    * every tag. Pass `threadId` to bind the session to one exact thread,
    * creating it with that id when it does not exist.
    */
-  create(options?: {
+  async create(options?: {
     tags?: Record<string, string>;
     threadId?: string;
   }): Promise<CreateAgentControllerSessionResponse> {
-    return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
-      method: 'POST',
-      body: {
-        resourceId: this.resourceId,
-        tags: options?.tags,
-        threadId: options?.threadId,
-        sessionScope: this.scope,
+    const created = await this.request<CreateAgentControllerSessionResponse>(
+      `/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`,
+      {
+        method: 'POST',
+        body: {
+          resourceId: this.resourceId,
+          tags: options?.tags,
+          threadId: options?.threadId ?? this.sessionThreadId,
+          sessionScope: this.scope,
+        },
       },
-    });
+    );
+    if (this.sessionThreadId !== undefined) this.sessionThreadId = created.threadId;
+    return created;
   }
 
   /**
@@ -659,14 +668,17 @@ export class AgentControllerSession extends BaseResource {
   /** Switch the session to an existing thread (rebinds stream + state). */
   async switchThread(threadId: string): Promise<void> {
     await this.request(this.url(`${this.base()}/thread`), { method: 'POST', body: { threadId } });
+    if (this.sessionThreadId !== undefined) this.sessionThreadId = threadId;
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
   async createThread(title?: string): Promise<CreateAgentControllerThreadResponse> {
-    return this.request(this.url(`${this.base()}/threads`), {
+    const created = await this.request<CreateAgentControllerThreadResponse>(this.url(`${this.base()}/threads`), {
       method: 'POST',
       body: { title },
     });
+    if (this.sessionThreadId !== undefined) this.sessionThreadId = created.id;
+    return created;
   }
 
   /** Delete a thread. If it's the active thread the session unbinds. */
@@ -689,10 +701,12 @@ export class AgentControllerSession extends BaseResource {
     sourceThreadId?: string;
     title?: string;
   }): Promise<CreateAgentControllerThreadResponse> {
-    return this.request(this.url(`${this.base()}/threads/clone`), {
+    const cloned = await this.request<CreateAgentControllerThreadResponse>(this.url(`${this.base()}/threads/clone`), {
       method: 'POST',
       body: options ?? {},
     });
+    if (this.sessionThreadId !== undefined) this.sessionThreadId = cloned.id;
+    return cloned;
   }
 
   /** List messages for a specific thread. */
@@ -850,9 +864,12 @@ export class AgentController extends BaseResource {
    * Scope to a session bound to `resourceId` (e.g. a user or conversation id).
    * Pass `scope` to address an independent session over the same resourceId
    * (e.g. one session per git worktree, with the worktree path as the scope).
+   * Pass `options.threadId` to bind every request to that thread, including
+   * the first request after a server restart. Use a distinct scope for each
+   * independent thread. Requires server support for `sessionThreadId`.
    */
-  session(resourceId: string, scope?: string): AgentControllerSession {
-    return new AgentControllerSession(this.options, this.controllerId, resourceId, scope);
+  session(resourceId: string, scope?: string, options?: { threadId?: string }): AgentControllerSession {
+    return new AgentControllerSession(this.options, this.controllerId, resourceId, scope, options?.threadId);
   }
 }
 

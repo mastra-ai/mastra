@@ -20330,6 +20330,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
 
 export type GetAgentControllerControllerIdSessionsResourceId_QueryParams = {
   sessionScope?: string | undefined;
+  sessionThreadId?: string | undefined;
   threadId?: string | undefined;
 };
 
@@ -20467,6 +20468,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams 
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
   sessionScope?: string | undefined;
+  sessionThreadId?: string | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
