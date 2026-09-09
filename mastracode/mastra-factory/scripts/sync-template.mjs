@@ -18,7 +18,7 @@
  *   node scripts/sync-template.mjs [--out <dir>] [--tag <dist-tag>]
  *
  * `--tag` pins every linked dependency to one dist-tag, for the local E2E
- * registry. Otherwise matching latest/alpha releases are selected.
+ * registry. Otherwise the latest release of each linked dependency is selected.
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -108,23 +108,9 @@ function resolveTaggedVersion(name, tag) {
   }
 }
 
-function baseVersion(version) {
-  return version.split('-')[0];
-}
-
-function resolveLinkedVersion(name, localVersion) {
-  if (pinTag) return { version: resolveTaggedVersion(name, pinTag), tag: pinTag };
-
-  const localBase = baseVersion(localVersion);
-  if (!localVersion.includes('-alpha.')) {
-    const latestVersion = resolveTaggedVersion(name, 'latest');
-    if (baseVersion(latestVersion) === localBase) return { version: latestVersion, tag: 'latest' };
-  }
-
-  const alphaVersion = resolveTaggedVersion(name, 'alpha');
-  if (baseVersion(alphaVersion) === localBase) return { version: alphaVersion, tag: 'alpha' };
-
-  throw new Error(`sync-template: no published ${name} version matches local release ${localBase}.`);
+function resolveLinkedVersion(name) {
+  const tag = pinTag ?? 'latest';
+  return { version: resolveTaggedVersion(name, tag), tag };
 }
 
 function sourceDependencySpec(manifest, name) {
@@ -137,8 +123,8 @@ function resolveDependency(manifest, name) {
   const spec = sourceDependencySpec(manifest, name);
   if (!spec.startsWith('link:')) return spec;
 
-  const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
-  const { version, tag } = resolveLinkedVersion(name, localVersion);
+  linkedPackageVersion(name, linkSpecToRelPath(spec));
+  const { version, tag } = resolveLinkedVersion(name);
   console.log(`  ✓ ${name}@${version} (${tag})`);
   return version;
 }
@@ -180,10 +166,8 @@ function writePackageJson() {
 
   // Transitive runtime peer that must be declared as a direct dep so npm
   // resolves it without needing pnpm's auto-install-peers behavior.
-  const { version: memoryVersion, tag: memoryTag } = resolveLinkedVersion(
-    '@mastra/memory',
-    linkedPackageVersion('@mastra/memory', 'packages/memory'),
-  );
+  linkedPackageVersion('@mastra/memory', 'packages/memory');
+  const { version: memoryVersion, tag: memoryTag } = resolveLinkedVersion('@mastra/memory');
   manifest.dependencies['@mastra/memory'] = memoryVersion;
   console.log(`  ✓ @mastra/memory@${memoryVersion} (${memoryTag})`);
 
