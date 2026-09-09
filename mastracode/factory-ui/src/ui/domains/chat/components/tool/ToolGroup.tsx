@@ -5,9 +5,6 @@ import type { ToolCall } from '../../services/transcript';
 import { ToolTime } from '../ToolTime';
 import { ToolCard } from './ToolCard';
 
-/** Consecutive tool calls this long collapse into one group row. */
-export const TOOL_GROUP_MIN = 3;
-
 export function ToolGroup({ tools }: { tools: ToolCall[] }) {
   return (
     <ToolCallGroup

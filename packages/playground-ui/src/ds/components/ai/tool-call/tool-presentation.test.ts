@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { presentTool, stringifyToolValue, toolEdit } from './tool-presentation';
+import { isTaskTool, presentTool, stringifyToolValue, toolEdit } from './tool-presentation';
 
 describe('presentTool', () => {
   it('maps stable workspace aliases to humanized actions with their salient argument', () => {
@@ -79,5 +79,12 @@ describe('toolEdit', () => {
   it('leaves other calls to the raw arguments', () => {
     expect(toolEdit('view', { path: 'a.ts' })).toBeUndefined();
     expect(toolEdit('edit_file', { path: 'a.ts' })).toBeUndefined();
+  });
+});
+
+describe('isTaskTool', () => {
+  it('names the four task tools the docked task list draws, and nothing else', () => {
+    expect(['task_write', 'task_update', 'task_complete', 'task_check'].every(isTaskTool)).toBe(true);
+    expect(['view', 'task', 'ask_user'].some(isTaskTool)).toBe(false);
   });
 });

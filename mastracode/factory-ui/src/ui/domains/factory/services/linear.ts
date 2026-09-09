@@ -35,6 +35,8 @@ export interface LinearIssue {
   assignee: string | null;
   creator?: string | null;
   team: string | null;
+  /** Linear project the issue was read from; matches an intake binding's `sourceId`. */
+  sourceId?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;

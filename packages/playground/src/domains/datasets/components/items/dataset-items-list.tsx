@@ -113,7 +113,7 @@ export function DatasetItemsList({
   const gridColumns = [isSelectionActive ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
 
   return (
-    <DataList columns={gridColumns} scrollRef={containerRef}>
+    <DataList columns={gridColumns} scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={isSelectionActive}>
         {isSelectionActive && (
           <DataList.TopSelectCell

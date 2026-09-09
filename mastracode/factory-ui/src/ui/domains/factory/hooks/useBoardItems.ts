@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
@@ -10,7 +11,7 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
-import { belongsToBoard } from '../boardStages';
+import { belongsToBoard, itemBoard } from '../boardStages';
 import type { BoardKind } from '../boardStages';
 import { createWorkItemComment } from '../services/comments';
 import { inferredParentWorkItemId } from '../services/relationships';
@@ -45,6 +46,7 @@ export function useBoardItems({
 }) {
   const { baseUrl } = useApiConfig();
   const items = useWorkItemsQuery(factoryProjectId);
+  const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
@@ -55,6 +57,8 @@ export function useBoardItems({
 
   const all = useMemo(() => items.data ?? [], [items.data]);
   const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
+  // Sources whose card sits on another board: the only withheld feed items worth explaining.
+  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind)).sort(byNewest);
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
@@ -73,7 +77,7 @@ export function useBoardItems({
     void transition
       .mutateAsync({
         item,
-        board: belongsToBoard(item, 'review') ? 'review' : 'work',
+        board: itemBoard(item),
         stage: toStage,
         cause: options.cause ?? 'card_action',
         ...(item.stages.length === 1 && item.stages[0] === toStage ? { reenter: true } : {}),
@@ -91,6 +95,12 @@ export function useBoardItems({
     // and both read the pre-click state, so the hands-off patch would run twice
     // and queue two runs.
     if (!item || movingRef.current.has(id)) return;
+    const boardId = itemBoard(item);
+    if (boardId !== 'work' && boardId !== 'review') {
+      const definition = catalog.data?.find(board => board.id === boardId);
+      const phase = definition?.phases.find(candidate => item.stages.includes(candidate.id));
+      if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
+    }
     movingRef.current.add(id);
     const release = () => movingRef.current.delete(id);
     if (!options.preapprovePlans) {
@@ -109,28 +119,34 @@ export function useBoardItems({
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
     if (payload.kind === 'work-item') {
-      if (payload.fromStage === toStage) return;
+      const item = all.find(candidate => candidate.id === payload.id);
+      if (!item || !belongsToBoard(item, kind) || payload.fromStage === toStage) return;
       move(payload.id, toStage, { cause });
       return;
     }
     setDropError(undefined);
+    // A dropped candidate files onto this board and enters at its initial phase.
+    // With the catalog unresolved, `stages` is left out so the server picks it
+    // rather than guessing a phase the board may not declare.
+    const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase;
     const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
     const parentWorkItemId = source === 'github-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
     void (async () => {
       const item = await upsert.mutateAsync({
+        board: kind,
         source,
         sourceKey,
         parentWorkItemId,
         title,
         url,
-        stages: ['intake'],
+        ...(initialPhase ? { stages: [initialPhase] } : {}),
         metadata,
       });
       // The kickoff reads the card's feed, so typed guidance reaches the run as a comment on it.
       if (customPrompt) {
         await createWorkItemComment(baseUrl, item.id, { body: customPrompt, clientToken: crypto.randomUUID() });
       }
-      if (toStage !== 'intake') requestTransition(item, toStage, { cause });
+      if (!item.stages.includes(toStage)) requestTransition(item, toStage, { cause });
     })().catch(error => {
       const failure = error instanceof Error ? error : new Error('The card could not be filed.');
       setDropError(failure);
@@ -142,6 +158,7 @@ export function useBoardItems({
     all,
     visible,
     knownSourceKeys,
+    elsewhereSourceKeys,
     isPending: items.isPending,
     error: items.isError ? items.error : undefined,
     mutationError: [upsert, update, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,

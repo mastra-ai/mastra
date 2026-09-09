@@ -7,11 +7,10 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { EllipsisVerticalIcon, GitCompareIcon, History, Pencil, Trash2 } from 'lucide-react';
+import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { EditModeContent } from '../dataset-detail/dataset-item-form';
-import { CompareWithDialog } from './compare-with-dialog';
 import { DatasetItemDetails } from './dataset-item-details';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -72,9 +71,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // "Compare with…" dialog state
-  const [showCompareDialog, setShowCompareDialog] = useState(false);
 
   // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
@@ -287,10 +283,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                       <Pencil />
                       Edit
                     </DropdownMenu.Item>
-                    <DropdownMenu.Item onSelect={() => setShowCompareDialog(true)}>
-                      <GitCompareIcon />
-                      Compare with…
-                    </DropdownMenu.Item>
                     <DropdownMenu.Item
                       onSelect={() => setShowDeleteConfirm(true)}
                       className="text-red-500 focus:text-red-400"
@@ -335,13 +327,6 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
           )}
         </DataPanel.Content>
       </DataPanel>
-
-      <CompareWithDialog
-        datasetId={datasetId}
-        currentItemId={item.id}
-        open={showCompareDialog}
-        onOpenChange={setShowCompareDialog}
-      />
 
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

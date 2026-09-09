@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.65.0-alpha.9",
+  "version": "1.65.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -875,7 +875,8 @@
     "postpack": "node -e \"require('node:fs').rmSync('LICENSE.md', { force: true })\"",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "tsx scripts/generate-providers.ts",
-    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm oxfmt:changed",
+    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && pnpm format:model-router",
+    "format:model-router": "cd ../.. && pnpm oxfmt packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ && cd docs && pnpm oxfmt 'src/content/en/models/**/*.{ts,js}' --ignore-path /dev/null --no-error-on-unmatched-pattern",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test": "npm run test:unit"
   },

@@ -170,6 +170,663 @@ describe('PgVector', () => {
       expect(defaultResults.map(result => result.id)).toEqual(['legacy-id']);
       expect(acmeResults.map(result => result.id)).toEqual(['legacy-id']);
     });
+
+    describe('lazy migration without createIndex', () => {
+      const lazyIndex = 'test_namespace_lazy_migration';
+      let lazyVectorDB: PgVector;
+
+      beforeEach(async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`DROP TABLE IF EXISTS ${lazyIndex}`);
+          await client.query(`
+            CREATE TABLE ${lazyIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+          await client.query(
+            `INSERT INTO ${lazyIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+            ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+          );
+        } finally {
+          client.release();
+        }
+        // Fresh instance so no per-process caches from createIndex() are present.
+        lazyVectorDB = new PgVector({ connectionString, id: 'pg-vector-lazy-test' });
+      });
+
+      afterEach(async () => {
+        await lazyVectorDB.deleteIndex({ indexName: lazyIndex });
+        await lazyVectorDB.disconnect();
+      });
+
+      const getNamespaceColumns = async () => {
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = 'namespace'`,
+            [lazyIndex],
+          );
+          return result.rows;
+        } finally {
+          client.release();
+        }
+      };
+
+      it.each(['metadata query', 'vector query', 'upsert', 'updateVector', 'deleteVector', 'deleteVectors'])(
+        'reconciles a legacy table on first %s',
+        async operation => {
+          if (operation === 'metadata query') {
+            expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(1);
+          } else if (operation === 'vector query') {
+            expect(await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+          } else if (operation === 'upsert') {
+            await lazyVectorDB.upsert({
+              indexName: lazyIndex,
+              vectors: [[0, 1, 0]],
+              ids: ['legacy-id'],
+              namespace: 'acme',
+            });
+          } else if (operation === 'updateVector') {
+            await lazyVectorDB.updateVector({
+              indexName: lazyIndex,
+              id: 'legacy-id',
+              update: { metadata: { updated: true } },
+            });
+          } else if (operation === 'deleteVector') {
+            await lazyVectorDB.deleteVector({ indexName: lazyIndex, id: 'legacy-id' });
+          } else {
+            await lazyVectorDB.deleteVectors({ indexName: lazyIndex, ids: ['legacy-id'] });
+          }
+          const rows = await vectorDB.pool.query('SELECT vector_id, namespace, metadata FROM ' + lazyIndex);
+          expect(await getNamespaceColumns()).toHaveLength(1);
+          expect(rows.rows).toHaveLength(operation.startsWith('delete') ? 0 : operation === 'upsert' ? 2 : 1);
+          if (operation === 'updateVector') expect(rows.rows[0].metadata).toEqual({ updated: true });
+          if (operation === 'upsert') expect(rows.rows.map(row => row.namespace).sort()).toEqual(['acme', 'default']);
+        },
+      );
+
+      it.each(['missing', 'non-vector'])('rechecks a previously %s table after external provisioning', async state => {
+        await vectorDB.pool.query('DROP TABLE ' + lazyIndex);
+        if (state === 'non-vector') await vectorDB.pool.query('CREATE TABLE ' + lazyIndex + ' (id int)');
+        await expect(lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).rejects.toThrow();
+        await vectorDB.pool.query('DROP TABLE IF EXISTS ' + lazyIndex);
+        await vectorDB.pool.query(
+          'CREATE TABLE ' + lazyIndex + ' (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+        );
+        await lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[1, 0, 0]], ids: ['new'] });
+        expect((await vectorDB.pool.query('SELECT vector_id FROM ' + lazyIndex)).rows).toEqual([{ vector_id: 'new' }]);
+      });
+
+      it.each(['column only', 'legacy uniqueness', 'alternate index'])('reconciles partial state: %s', async state => {
+        await vectorDB.pool.query('ALTER TABLE ' + lazyIndex + " ADD COLUMN namespace text NOT NULL DEFAULT 'default'");
+        if (state !== 'column only') {
+          await vectorDB.pool.query(
+            'CREATE UNIQUE INDEX alternate_namespace_idx ON ' + lazyIndex + ' (vector_id, namespace)',
+          );
+        }
+        if (state === 'alternate index') {
+          await vectorDB.pool.query('ALTER TABLE ' + lazyIndex + ' DROP CONSTRAINT ' + lazyIndex + '_vector_id_key');
+          await lazyVectorDB.disconnect();
+          lazyVectorDB = new PgVector({ connectionString, id: 'external-schema', disableInit: true });
+        }
+        await lazyVectorDB.upsert({
+          indexName: lazyIndex,
+          vectors: [[0, 1, 0]],
+          ids: ['legacy-id'],
+          namespace: 'acme',
+        });
+        expect((await vectorDB.pool.query('SELECT namespace FROM ' + lazyIndex + ' ORDER BY namespace')).rows).toEqual([
+          { namespace: 'acme' },
+          { namespace: 'default' },
+        ]);
+      });
+
+      it.each(['nonunique', 'wrong columns', 'partial', 'expression'])(
+        'rejects a misleading %s index and retries after repair',
+        async kind => {
+          await vectorDB.pool.query(
+            'ALTER TABLE ' + lazyIndex + " ADD COLUMN namespace text NOT NULL DEFAULT 'default'",
+          );
+          const definition =
+            kind === 'wrong columns'
+              ? '(vector_id)'
+              : kind === 'expression'
+                ? '(namespace, lower(vector_id))'
+                : '(namespace, vector_id)';
+          await vectorDB.pool.query(
+            'CREATE ' +
+              (kind === 'nonunique' ? '' : 'UNIQUE') +
+              ' INDEX ' +
+              lazyIndex +
+              '_namespace_vector_id_idx ON ' +
+              lazyIndex +
+              ' ' +
+              definition +
+              (kind === 'partial' ? " WHERE namespace = 'default'" : ''),
+          );
+          await expect(
+            lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } }),
+          ).rejects.toMatchObject({ id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED' });
+          expect(
+            (
+              await vectorDB.pool.query("SELECT 1 FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'u'", [
+                lazyIndex,
+              ])
+            ).rowCount,
+          ).toBe(1);
+          await vectorDB.pool.query('DROP INDEX ' + lazyIndex + '_namespace_vector_id_idx');
+          expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(1);
+        },
+      );
+
+      it('serializes concurrent first use across instances and createIndex with a single-connection pool', async () => {
+        await lazyVectorDB.disconnect();
+        lazyVectorDB = new PgVector({ connectionString, id: 'single-connection', max: 1 });
+        const other = new PgVector({ connectionString, id: 'concurrent-instance', max: 1 });
+        try {
+          await Promise.all([
+            lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } }),
+            lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['legacy-id'], namespace: 'acme' }),
+            other.createIndex({ indexName: lazyIndex, dimension: 3 }),
+            other.query({ indexName: lazyIndex, queryVector: [1, 0, 0] }),
+          ]);
+          expect((await vectorDB.pool.query('SELECT * FROM ' + lazyIndex)).rowCount).toBe(2);
+        } finally {
+          await other.disconnect();
+        }
+      }, 10000);
+
+      it('invalidates readiness after deletion and raw recreation', async () => {
+        await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
+        await lazyVectorDB.deleteIndex({ indexName: lazyIndex });
+        await vectorDB.pool.query(
+          'CREATE TABLE ' + lazyIndex + ' (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+        );
+        await lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[1, 0, 0]], ids: ['recreated'] });
+        expect(await getNamespaceColumns()).toHaveLength(1);
+      });
+
+      it('does not repeat catalog readiness checks on a warm instance', async () => {
+        await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
+        const client = await lazyVectorDB.pool.connect();
+        const query = vi.spyOn(client, 'query');
+        client.release();
+        try {
+          await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
+          expect(query).toHaveBeenCalled();
+          expect(query.mock.calls.some(call => String(call[0]).includes('pg_attribute'))).toBe(false);
+        } finally {
+          query.mockRestore();
+        }
+      });
+
+      it('honors environment-disabled initialization without caching failure', async () => {
+        vi.stubEnv('MASTRA_DISABLE_STORAGE_INIT', 'true');
+        try {
+          await expect(
+            lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } }),
+          ).rejects.toMatchObject({ id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED' });
+          expect(await getNamespaceColumns()).toHaveLength(0);
+        } finally {
+          vi.unstubAllEnvs();
+        }
+        expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(1);
+      });
+
+      it('rolls back DDL permission failures and retries with the same instance', async () => {
+        const role = 'namespace_lazy_restricted';
+        await vectorDB.pool.query('CREATE ROLE ' + role);
+        await vectorDB.pool.query('GRANT USAGE ON SCHEMA public TO ' + role);
+        await vectorDB.pool.query('GRANT SELECT ON ' + lazyIndex + ' TO ' + role);
+        await lazyVectorDB.disconnect();
+        lazyVectorDB = new PgVector({ connectionString, id: 'restricted-lazy', max: 1 });
+        const client = await lazyVectorDB.pool.connect();
+        await client.query('SET ROLE ' + role);
+        client.release();
+        try {
+          await expect(lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).rejects.toThrow(
+            'must be owner',
+          );
+          expect(await getNamespaceColumns()).toHaveLength(0);
+          const restored = await lazyVectorDB.pool.connect();
+          try {
+            await restored.query('RESET ROLE');
+          } finally {
+            restored.release();
+          }
+          expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(1);
+        } finally {
+          await lazyVectorDB.disconnect();
+          await vectorDB.pool.query('DROP OWNED BY ' + role);
+          await vectorDB.pool.query('DROP ROLE ' + role);
+          lazyVectorDB = new PgVector({ connectionString, id: 'lazy-cleanup' });
+        }
+      });
+
+      it('reads an externally migrated table with SELECT-only permissions and initialization disabled', async () => {
+        await vectorDB.pool.query('ALTER TABLE ' + lazyIndex + " ADD COLUMN namespace text NOT NULL DEFAULT 'default'");
+        await vectorDB.pool.query(
+          'CREATE UNIQUE INDEX external_namespace_idx ON ' + lazyIndex + ' (namespace, vector_id)',
+        );
+        await vectorDB.pool.query('ALTER TABLE ' + lazyIndex + ' DROP CONSTRAINT ' + lazyIndex + '_vector_id_key');
+        const role = 'namespace_lazy_reader';
+        await vectorDB.pool.query('CREATE ROLE ' + role);
+        await vectorDB.pool.query('GRANT USAGE ON SCHEMA public TO ' + role);
+        await vectorDB.pool.query('GRANT SELECT ON ' + lazyIndex + ' TO ' + role);
+        const reader = new PgVector({ connectionString, id: 'read-only-lazy', disableInit: true, max: 1 });
+        try {
+          const client = await reader.pool.connect();
+          try {
+            await client.query('SET ROLE ' + role);
+          } finally {
+            client.release();
+          }
+          expect(await reader.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(1);
+          expect(await reader.query({ indexName: lazyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+        } finally {
+          await reader.disconnect();
+          await vectorDB.pool.query('DROP OWNED BY ' + role);
+          await vectorDB.pool.query('DROP ROLE ' + role);
+        }
+      });
+
+      it('migrates long index names without truncation collisions', async () => {
+        const name = 'lazy_' + 'a'.repeat(58);
+        await vectorDB.pool.query(
+          'CREATE TABLE "' + name + '" (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+        );
+        try {
+          await lazyVectorDB.upsert({ indexName: name, vectors: [[1, 0, 0]], ids: ['id'] });
+          await lazyVectorDB.upsert({ indexName: name, vectors: [[0, 1, 0]], ids: ['id'], namespace: 'acme' });
+          expect((await vectorDB.pool.query('SELECT * FROM "' + name + '"')).rowCount).toBe(2);
+        } finally {
+          await lazyVectorDB.deleteIndex({ indexName: name });
+        }
+      });
+
+      it('resolves custom-schema and search_path aliases to the same legacy table', async () => {
+        const schema = 'namespace_lazy_schema';
+        await vectorDB.pool.query('CREATE SCHEMA ' + schema);
+        await vectorDB.pool.query(
+          'CREATE TABLE ' + schema + '.' + lazyIndex + ' (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+        );
+        const explicit = new PgVector({ connectionString, id: 'explicit-schema', schemaName: schema, max: 1 });
+        const implicit = new PgVector({
+          connectionString,
+          id: 'search-path-schema',
+          pgPoolOptions: { options: '-c search_path=' + schema + ',public', max: 1 },
+        });
+        try {
+          await Promise.all([
+            explicit.upsert({ indexName: lazyIndex, vectors: [[1, 0, 0]], ids: ['id'] }),
+            implicit.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['id'], namespace: 'acme' }),
+          ]);
+          expect((await vectorDB.pool.query('SELECT * FROM ' + schema + '.' + lazyIndex)).rowCount).toBe(2);
+          expect(await getNamespaceColumns()).toHaveLength(1);
+          expect(
+            (
+              await vectorDB.pool.query(
+                "SELECT 1 FROM pg_attribute WHERE attrelid = $1::regclass AND attname = 'namespace'",
+                [lazyIndex],
+              )
+            ).rowCount,
+          ).toBe(0);
+        } finally {
+          await explicit.disconnect();
+          await implicit.disconnect();
+          await vectorDB.pool.query('DROP SCHEMA ' + schema + ' CASCADE');
+        }
+      });
+
+      it('migrates on query, upsert, and delete without createIndex', async () => {
+        expect(await getNamespaceColumns()).toHaveLength(0);
+
+        const results = await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 });
+        expect(results.map(result => result.id)).toEqual(['legacy-id']);
+        expect(await getNamespaceColumns()).toHaveLength(1);
+
+        await lazyVectorDB.upsert({
+          indexName: lazyIndex,
+          vectors: [[0, 1, 0]],
+          ids: ['legacy-id'],
+          namespace: 'acme',
+        });
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).map(r => r.id),
+        ).toEqual(['legacy-id']);
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [0, 1, 0], namespace: 'acme' })).map(
+            r => r.id,
+          ),
+        ).toEqual(['legacy-id']);
+
+        await lazyVectorDB.deleteVector({ indexName: lazyIndex, id: 'legacy-id' });
+        expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } })).toHaveLength(0);
+        expect(
+          await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [0, 1, 0], namespace: 'acme' }),
+        ).toHaveLength(1);
+      });
+
+      it('migrates on updateVector and deleteVectors without createIndex', async () => {
+        await lazyVectorDB.updateVector({
+          indexName: lazyIndex,
+          id: 'legacy-id',
+          update: { metadata: { source: 'updated' } },
+        });
+        expect(
+          (await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'updated' } })).map(r => r.id),
+        ).toEqual(['legacy-id']);
+
+        await lazyVectorDB.deleteVectors({ indexName: lazyIndex, ids: ['legacy-id'] });
+        expect(await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'updated' } })).toHaveLength(0);
+      });
+
+      it('throws a descriptive error instead of running DDL when init is disabled', async () => {
+        await lazyVectorDB.disconnect();
+        lazyVectorDB = new PgVector({ connectionString, id: 'pg-vector-lazy-disabled', disableInit: true });
+
+        await expect(
+          lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 }),
+        ).rejects.toMatchObject({ id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED' });
+        expect(await getNamespaceColumns()).toHaveLength(0);
+
+        // Migration via createIndex() on an init-enabled instance unblocks the disabled instance.
+        await vectorDB.createIndex({ indexName: lazyIndex, dimension: 3 });
+        const results = await lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 });
+        expect(results.map(result => result.id)).toEqual(['legacy-id']);
+      });
+
+      it('re-checks after a missing table is created externally instead of caching a no-op', async () => {
+        const missingIndex = 'test_namespace_lazy_missing';
+        const drop = await vectorDB.pool.connect();
+        try {
+          await drop.query(`DROP TABLE IF EXISTS ${missingIndex}`);
+        } finally {
+          drop.release();
+        }
+
+        // First touch: table does not exist, so the caller's own query surfaces the error. This
+        // must NOT leave a cached "ready" result that skips migration once the table appears.
+        await expect(
+          lazyVectorDB.query({ indexName: missingIndex, queryVector: [1, 0, 0], topK: 10 }),
+        ).rejects.toBeDefined();
+
+        // An external initializer now creates a legacy (pre-namespace) table.
+        const setup = await vectorDB.pool.connect();
+        try {
+          await setup.query(`
+            CREATE TABLE ${missingIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+          await setup.query(
+            `INSERT INTO ${missingIndex} (vector_id, embedding, metadata) VALUES ($1, $2::vector, $3::jsonb)`,
+            ['legacy-id', '[1,0,0]', JSON.stringify({ source: 'legacy' })],
+          );
+        } finally {
+          setup.release();
+        }
+
+        try {
+          // Same instance must re-check and migrate now rather than reuse the earlier no-op.
+          const results = await lazyVectorDB.query({ indexName: missingIndex, queryVector: [1, 0, 0], topK: 10 });
+          expect(results.map(r => r.id)).toEqual(['legacy-id']);
+        } finally {
+          await lazyVectorDB.deleteIndex({ indexName: missingIndex });
+        }
+      });
+
+      it('rejects when a same-named index cannot serve the namespace conflict target', async () => {
+        // Add the namespace column plus a non-unique index that collides with the reserved name.
+        // `ensureNamespaceSchema`'s `CREATE UNIQUE INDEX IF NOT EXISTS` cannot replace it, so
+        // readiness must fail loudly rather than cache a state where upserts break on conflict.
+        const setup = await vectorDB.pool.connect();
+        try {
+          await setup.query(`ALTER TABLE ${lazyIndex} ADD COLUMN namespace VARCHAR(255) NOT NULL DEFAULT 'default'`);
+          await setup.query(`ALTER TABLE ${lazyIndex} DROP CONSTRAINT IF EXISTS ${lazyIndex}_vector_id_key`);
+          await setup.query(`CREATE INDEX ${lazyIndex}_namespace_vector_id_idx ON ${lazyIndex} (namespace, vector_id)`);
+        } finally {
+          setup.release();
+        }
+
+        const operations = [
+          () => lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } }),
+          () => lazyVectorDB.query({ indexName: lazyIndex, queryVector: [1, 0, 0], topK: 10 }),
+          () => lazyVectorDB.upsert({ indexName: lazyIndex, vectors: [[0, 1, 0]], ids: ['legacy-id'] }),
+          () => lazyVectorDB.deleteVector({ indexName: lazyIndex, id: 'legacy-id' }),
+        ];
+
+        for (const operation of operations) {
+          await expect(operation()).rejects.toMatchObject({
+            id: 'MASTRA_VECTOR_PG_ENSURE_NAMESPACE_MIGRATION_REQUIRED',
+            category: 'USER',
+            message: expect.stringContaining('Resolve conflicting index names'),
+          });
+        }
+      });
+    });
+
+    describe('long table names (issue #23273)', () => {
+      // 63 chars: the Postgres identifier limit. `${name}_namespace_vector_id_idx` would be 87 chars.
+      const legacyIndexes = [39, 40, 63].map(length => 'test_ns_legacy_'.padEnd(length, 'x'));
+      legacyIndexes.push(`${legacyIndexes[2]!.slice(0, -1)}y`);
+      const longFreshIndex = 'test_ns_fresh_00123456789abcdef0123456789abcdef0123456789abcdef';
+      const longHalfIndex = 'test_ns_half_000123456789abcdef0123456789abcdef0123456789abcdef';
+
+      const uniqueIndexDefs = async (table: string) => {
+        const client = await vectorDB.pool.connect();
+        try {
+          const result = await client.query<{ indexdef: string }>(
+            `SELECT indexdef FROM pg_indexes
+             WHERE schemaname = 'public' AND tablename = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexdef NOT LIKE '%_pkey%'`,
+            [table],
+          );
+          return result.rows.map(row => row.indexdef);
+        } finally {
+          client.release();
+        }
+      };
+
+      afterAll(async () => {
+        for (const indexName of [...legacyIndexes, longFreshIndex, longHalfIndex]) {
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it.each(legacyIndexes)('migrates a legacy table named %s', async longLegacyIndex => {
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longLegacyIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )
+          `);
+        } finally {
+          client.release();
+        }
+
+        await vectorDB.pool.query(`INSERT INTO ${longLegacyIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        await vectorDB.createIndex({ indexName: longLegacyIndex, dimension: 3 });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+
+        const defs = await uniqueIndexDefs(longLegacyIndex);
+        expect(defs).toHaveLength(1);
+        const indexName = defs[0]!.split(' ')[3]!;
+        expect(indexName.length).toBeLessThanOrEqual(63);
+        if (longLegacyIndex.length === 39) {
+          expect(indexName).toBe(`${longLegacyIndex}_namespace_vector_id_idx`);
+        }
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longLegacyIndex, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+        expect(await vectorDB.query({ indexName: longLegacyIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+        expect(
+          await vectorDB.query({ indexName: longLegacyIndex, queryVector: [0, 1, 0], namespace: 'acme' }),
+        ).toHaveLength(1);
+      });
+
+      it('migrates both legacy tables when their old 32-bit namespace hashes collide', async () => {
+        // Both names hash to 6d75b957 with xxhash h32 and share the retained prefix.
+        const tables = [
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx0000000000009nsg',
+          'test_ns_collision_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx000000000000bfc0',
+        ];
+        try {
+          for (const indexName of tables) {
+            await vectorDB.pool.query(`CREATE TABLE ${indexName} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT UNIQUE NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb
+            )`);
+            await vectorDB.createIndex({ indexName, dimension: 3 });
+            const defs = await uniqueIndexDefs(indexName);
+            expect(defs).toHaveLength(1);
+            expect(defs[0]).toContain('(namespace, vector_id)');
+            expect(defs[0]!.split(' ')[3]!.length).toBeLessThanOrEqual(63);
+            await vectorDB.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+            await vectorDB.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+            expect(await vectorDB.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+            expect(await vectorDB.query({ indexName, queryVector: [0, 1, 0], namespace: 'acme' })).toHaveLength(1);
+          }
+        } finally {
+          for (const indexName of tables) {
+            await vectorDB.deleteIndex({ indexName });
+          }
+        }
+      });
+
+      it('creates a fresh index whose name is at the identifier limit', async () => {
+        expect(longFreshIndex).toHaveLength(63);
+        await vectorDB.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        const reopened = new PgVector({ connectionString, id: 'pg-namespace-reopened' });
+        try {
+          await reopened.createIndex({ indexName: longFreshIndex, dimension: 3 });
+        } finally {
+          await reopened.disconnect();
+        }
+
+        const defs = await uniqueIndexDefs(longFreshIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        await vectorDB.upsert({ indexName: longFreshIndex, vectors: [[0, 1, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longFreshIndex, queryVector: [0, 1, 0] })).toHaveLength(1);
+      });
+
+      it('repairs a table left half-migrated by the previous implementation', async () => {
+        expect(longHalfIndex).toHaveLength(63);
+        // Reproduce the broken state: namespace column added, legacy UNIQUE dropped, no new index.
+        const client = await vectorDB.pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE ${longHalfIndex} (
+              id SERIAL PRIMARY KEY,
+              vector_id TEXT NOT NULL,
+              embedding vector(3),
+              metadata JSONB DEFAULT '{}'::jsonb,
+              namespace VARCHAR(255) NOT NULL DEFAULT ''
+            )
+          `);
+        } finally {
+          client.release();
+        }
+        await vectorDB.pool.query(`INSERT INTO ${longHalfIndex} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        expect(await uniqueIndexDefs(longHalfIndex)).toHaveLength(0);
+
+        await vectorDB.createIndex({ indexName: longHalfIndex, dimension: 3 });
+
+        const defs = await uniqueIndexDefs(longHalfIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain('(namespace, vector_id)');
+        await vectorDB.upsert({ indexName: longHalfIndex, vectors: [[1, 0, 0]], ids: ['a'] });
+        expect(await vectorDB.query({ indexName: longHalfIndex, queryVector: [1, 0, 0] })).toHaveLength(1);
+      });
+
+      it('preserves legacy uniqueness when replacement creation fails and allows retry', async () => {
+        const indexName = 'test_ns_failure'.padEnd(63, 'x');
+        await vectorDB.pool.query(`
+          CREATE TABLE ${indexName} (
+            id SERIAL PRIMARY KEY,
+            vector_id TEXT UNIQUE NOT NULL,
+            embedding vector(3),
+            metadata JSONB DEFAULT '{}'::jsonb
+          )
+        `);
+        await vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id, embedding) VALUES ('a', '[1,0,0]')`);
+        const originalQuery = pg.Client.prototype.query;
+        const querySpy = vi.spyOn(pg.Client.prototype, 'query').mockImplementation(function (query, ...args) {
+          if (typeof query === 'string' && query.startsWith('CREATE UNIQUE INDEX') && query.includes(indexName)) {
+            throw new Error('Injected namespace index failure');
+          }
+          return originalQuery.call(this, query, ...args);
+        });
+        try {
+          await expect(vectorDB.createIndex({ indexName, dimension: 3 })).rejects.toThrow();
+          querySpy.mockRestore();
+          const legacyDefs = await uniqueIndexDefs(indexName);
+          expect(legacyDefs).toHaveLength(1);
+          expect(legacyDefs[0]).toContain('(vector_id)');
+          await expect(vectorDB.pool.query(`INSERT INTO ${indexName} (vector_id) VALUES ('a')`)).rejects.toMatchObject({
+            code: '23505',
+          });
+          await vectorDB.createIndex({ indexName, dimension: 3 });
+          const reopened = new PgVector({ connectionString, id: 'pg-namespace-retry' });
+          try {
+            await reopened.createIndex({ indexName, dimension: 3 });
+            await reopened.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          } finally {
+            await reopened.disconnect();
+          }
+          const defs = await uniqueIndexDefs(indexName);
+          expect(defs).toHaveLength(1);
+          expect(defs[0]).toContain('(namespace, vector_id)');
+        } finally {
+          querySpy.mockRestore();
+          await vectorDB.deleteIndex({ indexName });
+        }
+      });
+
+      it('creates a long-named index in an explicit schema', async () => {
+        const schemaName = 'test_ns_long_schema';
+        const indexName = 'test_ns_schema'.padEnd(63, 'x');
+        const scoped = new PgVector({ connectionString, schemaName, id: 'pg-namespace-schema' });
+        try {
+          await scoped.createIndex({ indexName, dimension: 3 });
+          await scoped.upsert({ indexName, vectors: [[1, 0, 0]], ids: ['a'] });
+          await scoped.upsert({ indexName, vectors: [[0, 1, 0]], ids: ['a'], namespace: 'acme' });
+          expect(await scoped.query({ indexName, queryVector: [1, 0, 0] })).toHaveLength(1);
+          const indexes = await scoped.pool.query<{ indexname: string; indexdef: string }>(
+            "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2 AND indexdef LIKE '%(namespace, vector_id)'",
+            [schemaName, indexName],
+          );
+          expect(indexes.rows).toHaveLength(1);
+          expect(indexes.rows[0]!.indexname.length).toBeLessThanOrEqual(63);
+          expect(indexes.rows[0]!.indexdef).toContain('CREATE UNIQUE INDEX');
+        } finally {
+          await scoped.disconnect();
+          await vectorDB.pool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+        }
+      });
+
+      it('keeps the unhashed index name for short table names', async () => {
+        const defs = await uniqueIndexDefs(legacyIndex);
+        expect(defs).toHaveLength(1);
+        expect(defs[0]).toContain(`${legacyIndex}_namespace_vector_id_idx`);
+      });
+    });
   });
 
   describe('Metadata-Only Query', () => {

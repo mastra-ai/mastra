@@ -37,6 +37,7 @@ export function attachLinearIssueReconciler(
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
+    boards,
     linearRules: linear.rules,
   });
 

@@ -90,6 +90,7 @@ const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.work_item.labels_reconciled': 'reconciled the labels on',
   'factory.intake.config_updated': 'changed intake settings on',
   'factory.intake.binding_updated': 'changed an intake binding on',
+  'factory.intake.label_route_updated': 'changed an intake label route on',
 };
 
 /** Some events name nothing — an intake setting has no title — so the verb drops its preposition. */

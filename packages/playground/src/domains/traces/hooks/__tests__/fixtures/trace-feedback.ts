@@ -12,6 +12,7 @@ const baseFeedback = {
   timestamp: new Date('2026-08-26T10:00:00.000Z'),
   feedbackType: 'thumbs',
   value: 1,
+  reviewStatus: 'needs-review',
 } satisfies Partial<Feedback>;
 
 export function feedbackRecord(overrides: Partial<Feedback> & { feedbackId: string }): Feedback {
@@ -44,6 +45,11 @@ export const authoredFeedbackResponse = listFeedbackResponse([
     value: 'Looks off to me',
     author: { id: 'user-1', name: 'Marvin Frachet', avatarUrl: 'https://example.com/marvin.png' },
   }),
+]);
+
+/** Trace-level record that has already been reviewed. */
+export const reviewedFeedbackResponse = listFeedbackResponse([
+  feedbackRecord({ feedbackId: 'reviewed', feedbackType: 'comment', value: 'All good', reviewStatus: 'reviewed' }),
 ]);
 
 export const otherSpanFeedbackResponse = listFeedbackResponse([

@@ -51,6 +51,8 @@ export interface IntakeIssue {
   assignee: string | null;
   assignees?: string[];
   source: string | null;
+  /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
+  sourceId?: string | null;
   labels: string[];
   commentCount: number | null;
   createdAt: string;

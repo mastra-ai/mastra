@@ -56,7 +56,7 @@ export function ExperimentsToolbar({
     const { selectedCount, onExecuteCompare, onCancelSelection, compareDisabledReason } = selection;
     const canCompare = selectedCount === 2 && !compareDisabledReason;
     return (
-      <div className="flex w-full items-center justify-end gap-4">
+      <div className="flex min-h-9 w-full items-center justify-end gap-4">
         <div className="flex items-center gap-5">
           <div className="text-neutral3 flex items-center gap-2 pl-6 text-sm">
             <Badge size="md" variant={selectedCount < 2 ? 'red' : 'green'}>
@@ -79,7 +79,7 @@ export function ExperimentsToolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-9 flex-wrap items-center gap-2">
       <div className="max-w-120 min-w-64 flex-1">
         <ListSearch
           label="Search experiments"

@@ -1,4 +1,5 @@
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { FactoryWebTelemetry } from '../../telemetry/FactoryWebTelemetry';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
@@ -44,7 +45,12 @@ const OnboardingGuard = () => {
     return <Navigate to={`/factories/${factories[0].id}`} replace />;
   }
 
-  return <Outlet />;
+  return (
+    <>
+      <FactoryWebTelemetry />
+      <Outlet />
+    </>
+  );
 };
 
 function AuthNotConfiguredScreen() {

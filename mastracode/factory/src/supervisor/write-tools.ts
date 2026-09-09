@@ -1,9 +1,10 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import { boardForWorkItem } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { AuditAction } from '../storage/domains/audit/actions.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -118,18 +119,21 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: 'Move or accept one Factory work item after the person confirms the destination stage.',
-      inputSchema: z.object({ workItemId: z.string().min(1), stage: z.enum(FACTORY_RULE_STAGES) }),
+      inputSchema: z.object({
+        workItemId: z.string().min(1),
+        stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
+      }),
       requireApproval: true,
       execute: async ({ workItemId, stage }) => {
         const item = await deps.workItems.get({ orgId: deps.scope.orgId, id: workItemId });
         if (!item || item.factoryProjectId !== deps.scope.factoryProjectId) throw new Error('Work item not found.');
-        const from = factoryRuleStage(item.stages);
+        const from = item.stages.length === 1 ? item.stages[0] : undefined;
         if (!from) throw new Error('The work item does not have one valid Factory stage.');
         const result = await deps.transitionService.transition({
           orgId: deps.scope.orgId,
           factoryProjectId: deps.scope.factoryProjectId,
           workItemId,
-          board: item.externalSource?.type === 'pull-request' ? 'review' : 'work',
+          board: boardForWorkItem(item),
           stage,
           expectedRevision: item.revision,
           actor: { type: 'human', id: deps.userId },

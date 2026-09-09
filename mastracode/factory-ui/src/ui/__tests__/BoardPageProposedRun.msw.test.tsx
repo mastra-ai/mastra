@@ -278,6 +278,13 @@ describe('Board card with a proposed run', () => {
           },
         }),
       ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: true, workspace: { id: 'workspace-1' } }),
       ),
