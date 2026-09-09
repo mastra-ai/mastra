@@ -124,4 +124,8 @@ export interface McpServerStatus {
   disabledScope?: 'project' | 'global';
   /** This project's explicit server override, or undefined when inheriting the global default. */
   projectOverride?: 'enabled' | 'disabled';
+  /** The per-server global default before applying a project override or the global kill switch. */
+  globalDefault?: 'enabled' | 'disabled';
+  /** Whether the global all-MCP kill switch currently overrides every server and project setting. */
+  globalKillSwitch?: boolean;
 }

@@ -262,6 +262,8 @@ export function createMcpManager(
     ...status,
     ...(authenticatingServers.has(status.name) ? { authenticating: true } : {}),
     ...(projectServerOverrides.has(status.name) ? { projectOverride: projectServerOverrides.get(status.name) } : {}),
+    globalDefault: globallyDisabledServers.has(status.name) ? 'disabled' : 'enabled',
+    globalKillSwitch: globalDisableState.allDisabled,
   });
 
   const MAX_STDERR_LINES = 200;

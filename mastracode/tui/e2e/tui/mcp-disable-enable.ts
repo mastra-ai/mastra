@@ -95,13 +95,13 @@ export const mcpDisableEnableScenario = {
     // Disable the server and confirm the explicit project override persists.
     terminal.submit('/mcp disable disable_target');
     await runtime.waitForScreenText(
-      /MCP: Disabled "disable_target" in this project\. Use \/mcp inherit disable_target to restore the global default\./i,
+      /MCP: "disable_target" disabled in this project\. It will remain disabled if the global default changes\./i,
       terminal,
       15_000,
     );
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(
-      /disable_target \[http\] \(disabled in this project — use \/mcp inherit disable_target to restore global default\)/i,
+      /disable_target \[http\] \(disabled in this project; global default: enabled — use \/mcp inherit disable_target\)/i,
       terminal,
       10_000,
     );
@@ -119,7 +119,7 @@ export const mcpDisableEnableScenario = {
     // Clear the project override and confirm the inherited global default reconnects it.
     terminal.submit('/mcp inherit disable_target');
     await runtime.waitForScreenText(
-      /MCP: "disable_target" now inherits its global default — 1 tool\(s\)\./i,
+      /MCP: Removed this project's setting for "disable_target"\. It is now enabled by the global default — 1 tool\(s\)\./i,
       terminal,
       15_000,
     );
@@ -128,14 +128,10 @@ export const mcpDisableEnableScenario = {
 
     // A global per-server disable is a default that this project can override.
     terminal.submit('/mcp disable disable_target --global');
-    await runtime.waitForScreenText(
-      /MCP: Disabled "disable_target" by default for all projects\. Explicit project enables remain active\./i,
-      terminal,
-      15_000,
-    );
+    await runtime.waitForScreenText(/MCP: Global default for "disable_target" set to disabled\./i, terminal, 15_000);
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(
-      /disable_target \[http\] \(disabled by global setting — override via \/mcp enable disable_target\)/i,
+      /disable_target \[http\] \(disabled by global default — override via \/mcp enable disable_target\)/i,
       terminal,
       15_000,
     );
@@ -145,24 +141,44 @@ export const mcpDisableEnableScenario = {
     await runtime.waitForScreenText(/MCP_GLOBAL_PERSISTED=disable_target/i, terminal, 10_000);
 
     terminal.submit('/mcp enable disable_target');
-    await runtime.waitForScreenText(/MCP: Enabled "disable_target" in this project — 1 tool\(s\)/i, terminal, 15_000);
-    terminal.submit('/mcp status');
     await runtime.waitForScreenText(
-      /disable_target \[http\] \(connected; project override: enabled\)/i,
+      /MCP: "disable_target" enabled in this project, overriding the disabled global default — 1 tool\(s\)\./i,
       terminal,
       15_000,
     );
-    runtime.printScreen('mcp project override enabled', terminal);
+    terminal.submit('/mcp status');
+    await runtime.waitForScreenText(
+      /disable_target \[http\] \(connected; project setting: enabled; global default: disabled\)/i,
+      terminal,
+      15_000,
+    );
+
+    // The selector exposes both settings and omits the no-op global disable action.
+    terminal.submit('/mcp');
+    await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 10_000);
+    await runtime.waitForScreenText(
+      /disable_target \[http\] connected · enabled in this project \(global default: disabled\)/i,
+      terminal,
+      10_000,
+    );
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Use global default \(disabled\)/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Enable by default for all projects/i, terminal, 10_000);
+    await runtime.waitForScreenTextAbsent(/Disable by default for all projects/i, terminal, 1_000);
+    runtime.printScreen('mcp project setting enabled over global default', terminal);
+    terminal.write('\x1b');
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
 
     terminal.submit('/mcp inherit disable_target');
     await runtime.waitForScreenText(
-      /MCP: "disable_target" now inherits its global default and is disabled\./i,
+      /MCP: Removed this project's setting for "disable_target"\. It is now disabled by the global default\./i,
       terminal,
       15_000,
     );
 
     terminal.submit('/mcp enable disable_target --global');
-    await runtime.waitForScreenText(/MCP: Enabled "disable_target" by default for all projects\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/MCP: Global default for "disable_target" set to enabled\./i, terminal, 15_000);
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(/disable_target \[http\] \(connected\)/i, terminal, 15_000);
     runtime.printScreen('mcp globally re-enabled', terminal);

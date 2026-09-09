@@ -62,25 +62,16 @@ interface ServerAction {
   key: string;
 }
 
-const DISABLE_ACTIONS: ServerAction[] = [
-  { label: 'Disable in this project', key: 'disable' },
-  { label: 'Disable by default for all projects', key: 'disable-global' },
-];
-
-const INHERIT_ACTION: ServerAction = { label: 'Use global default', key: 'inherit' };
-
 const CONNECTED_ACTIONS: ServerAction[] = [
   { label: 'View tools', key: 'tools' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
-  ...DISABLE_ACTIONS,
 ];
 
 const FAILED_ACTIONS: ServerAction[] = [
   { label: 'View error', key: 'error' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
-  ...DISABLE_ACTIONS,
 ];
 
 const NEEDS_AUTH_ACTIONS: ServerAction[] = [
@@ -88,15 +79,27 @@ const NEEDS_AUTH_ACTIONS: ServerAction[] = [
   { label: 'View error', key: 'error' },
   { label: 'View logs', key: 'logs' },
   { label: 'Reconnect', key: 'reconnect' },
-  ...DISABLE_ACTIONS,
 ];
 
-const DISABLED_PROJECT_ACTIONS: ServerAction[] = [{ label: 'Enable in this project', key: 'enable' }, INHERIT_ACTION];
+function getSettingActions(status: McpServerStatus): ServerAction[] {
+  const actions: ServerAction[] = [];
+  if (status.projectOverride === 'enabled' || (!status.projectOverride && !status.disabled)) {
+    actions.push({ label: 'Disable in this project', key: 'disable' });
+  } else {
+    actions.push({ label: 'Enable in this project', key: 'enable' });
+  }
 
-const DISABLED_GLOBAL_ACTIONS: ServerAction[] = [
-  { label: 'Enable in this project', key: 'enable' },
-  { label: 'Enable by default for all projects', key: 'enable-global' },
-];
+  if (status.projectOverride) {
+    actions.push({ label: `Use global default (${status.globalDefault ?? 'enabled'})`, key: 'inherit' });
+  }
+
+  actions.push(
+    status.globalDefault === 'disabled'
+      ? { label: 'Enable by default for all projects', key: 'enable-global' }
+      : { label: 'Disable by default for all projects', key: 'disable-global' },
+  );
+  return actions;
+}
 
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
@@ -221,7 +224,11 @@ export class McpSelectorComponent extends Box implements Focusable {
         icon = theme.fg('muted', '⊘');
         stateText = theme.fg(
           'muted',
-          status.disabledScope === 'global' ? 'disabled (global default)' : 'disabled (project override)',
+          status.globalKillSwitch
+            ? 'disabled by global kill switch'
+            : status.disabledScope === 'global'
+              ? 'disabled by global default'
+              : 'disabled in this project',
         );
       } else if (this._reloading) {
         icon = theme.fg('warning', '⟳');
@@ -247,8 +254,16 @@ export class McpSelectorComponent extends Box implements Focusable {
         icon = theme.fg('error', '✗');
         stateText = theme.fg('error', 'failed');
       }
-      if (!status.disabled && status.projectOverride) {
-        stateText += theme.fg('muted', ` (project override: ${status.projectOverride})`);
+      if (status.projectOverride) {
+        const globalDefault = status.globalDefault ?? 'enabled';
+        stateText += theme.fg(
+          'muted',
+          status.globalKillSwitch
+            ? ` · project setting: ${status.projectOverride} (global default: ${globalDefault})`
+            : status.disabled
+              ? ` (global default: ${globalDefault})`
+              : ` · ${status.projectOverride} in this project (global default: ${globalDefault})`,
+        );
       }
 
       const cursor = isSelected ? theme.fg('accent', '› ') : '  ';
@@ -409,31 +424,22 @@ export class McpSelectorComponent extends Box implements Focusable {
     const status = this.statuses[this.selectedIndex];
     if (!status) return;
 
-    if (status.disabled) {
-      if (status.projectOverride === 'disabled') {
-        this.subMenuActions = DISABLED_PROJECT_ACTIONS;
-      } else if (status.projectOverride === 'enabled') {
-        this.subMenuActions = [INHERIT_ACTION];
-      } else {
-        this.subMenuActions = DISABLED_GLOBAL_ACTIONS;
-      }
-    } else if (this.isAuthenticating(status)) {
+    if (this.isAuthenticating(status)) {
       // A server mid-OAuth shows a cancel path (the user may have closed the
       // browser). Authoritative even if a polled refresh cleared `connecting`,
       // and after a close/reopen via the manager-owned status flag.
       this.subMenuActions = AUTHENTICATING_ACTIONS;
     } else if (status.connecting) {
       this.subMenuActions = CONNECTING_ACTIONS;
-    } else if (status.connected) {
-      this.subMenuActions = CONNECTED_ACTIONS;
-    } else if (status.needsAuth) {
-      this.subMenuActions = NEEDS_AUTH_ACTIONS;
     } else {
-      this.subMenuActions = FAILED_ACTIONS;
-    }
-
-    if (!status.disabled && status.projectOverride) {
-      this.subMenuActions = [...this.subMenuActions, INHERIT_ACTION];
+      const serverActions = status.disabled
+        ? []
+        : status.connected
+          ? CONNECTED_ACTIONS
+          : status.needsAuth
+            ? NEEDS_AUTH_ACTIONS
+            : FAILED_ACTIONS;
+      this.subMenuActions = [...serverActions, ...getSettingActions(status)];
     }
 
     this.subMenuOpen = true;
@@ -548,29 +554,35 @@ export class McpSelectorComponent extends Box implements Focusable {
         }
         const updated = result.statuses.find(s => s.name === name);
         if (global) {
-          this.showInfoCallback(
-            disabled
-              ? `MCP: Disabled "${name}" by default for all projects. Explicit project enables remain active.`
-              : `MCP: Enabled "${name}" by default for all projects.`,
-          );
-          if (!disabled && updated?.projectOverride === 'disabled') {
-            this.showInfoCallback(`MCP: "${name}" is still disabled by this project's override.`);
-          } else if (!disabled && updated?.disabled) {
-            this.showInfoCallback(`MCP: All MCP is still disabled by the global kill switch.`);
+          this.showInfoCallback(`MCP: Global default for "${name}" set to ${disabled ? 'disabled' : 'enabled'}.`);
+          if (updated?.projectOverride === 'enabled') {
+            this.showInfoCallback(`MCP: This project remains enabled by its project setting.`);
+          } else if (updated?.projectOverride === 'disabled') {
+            this.showInfoCallback(`MCP: This project remains disabled by its project setting.`);
+          } else if (updated?.globalKillSwitch) {
+            this.showInfoCallback(`MCP: All MCP remains disabled by the global kill switch.`);
           }
         } else if (disabled) {
-          this.showInfoCallback(`MCP: Disabled "${name}" in this project. Use "Use global default" to inherit.`);
-        } else if (updated?.disabled) {
-          this.showInfoCallback(`MCP: Enabled "${name}" in this project, but the global kill switch is active.`);
+          this.showInfoCallback(
+            `MCP: "${name}" disabled in this project. It will remain disabled if the global default changes.`,
+          );
+        } else if (updated?.globalKillSwitch) {
+          this.showInfoCallback(
+            `MCP: Project setting for "${name}" saved as enabled, but all MCP is disabled by the global kill switch.`,
+          );
         } else if (updated?.connected) {
-          this.showInfoCallback(`MCP: Enabled "${name}" in this project — ${updated.toolCount} tool(s)`);
+          this.showInfoCallback(
+            updated.globalDefault === 'disabled'
+              ? `MCP: "${name}" enabled in this project, overriding the disabled global default — ${updated.toolCount} tool(s).`
+              : `MCP: "${name}" enabled in this project — ${updated.toolCount} tool(s).`,
+          );
         } else if (updated?.needsAuth) {
           this.showInfoCallback(
-            `MCP: Enabled "${name}" in this project — needs authentication \u2192 run /mcp to authenticate`,
+            `MCP: "${name}" enabled in this project (global default: ${updated.globalDefault ?? 'enabled'}) — needs authentication.`,
           );
         } else {
           this.showInfoCallback(
-            `MCP: Enabled "${name}" in this project but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
+            `MCP: "${name}" enabled in this project, but failed to connect: ${updated?.error ?? 'Unknown error'}`,
           );
         }
       })
@@ -596,15 +608,25 @@ export class McpSelectorComponent extends Box implements Focusable {
         this._authenticating.clear();
         this._cancelling.clear();
         const updated = result.statuses.find(server => server.name === name);
-        if (updated?.disabled) {
-          this.showInfoCallback(`MCP: "${name}" now inherits its global default and is disabled.`);
+        if (updated?.globalKillSwitch) {
+          this.showInfoCallback(
+            `MCP: Removed this project's setting for "${name}". The global kill switch remains active.`,
+          );
+        } else if (updated?.disabled) {
+          this.showInfoCallback(
+            `MCP: Removed this project's setting for "${name}". It is now disabled by the global default.`,
+          );
         } else if (updated?.connected) {
-          this.showInfoCallback(`MCP: "${name}" now inherits its global default — ${updated.toolCount} tool(s).`);
+          this.showInfoCallback(
+            `MCP: Removed this project's setting for "${name}". It is now enabled by the global default — ${updated.toolCount} tool(s).`,
+          );
         } else if (updated?.needsAuth) {
-          this.showInfoCallback(`MCP: "${name}" now inherits its global default — needs authentication.`);
+          this.showInfoCallback(
+            `MCP: Removed this project's setting for "${name}". The global default is enabled, but authentication is required.`,
+          );
         } else {
           this.showInfoCallback(
-            `MCP: "${name}" now inherits its global default but failed to connect: ${updated?.error ?? 'Unknown error'}`,
+            `MCP: Removed this project's setting for "${name}", but it failed to connect: ${updated?.error ?? 'Unknown error'}`,
           );
         }
       })

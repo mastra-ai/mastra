@@ -249,7 +249,7 @@ describe('handleMcpCommand', () => {
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', true, { global: false });
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Disabled "filesystem" in this project. Use /mcp inherit filesystem to restore the global default.',
+      'MCP: "filesystem" disabled in this project. It will remain disabled if the global default changes.',
     );
   });
 
@@ -259,9 +259,7 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['disable', 'filesystem', '--global']);
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', true, { global: true });
-    expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Disabled "filesystem" by default for all projects. Explicit project enables remain active.',
-    );
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Global default for "filesystem" set to disabled.');
   });
 
   it('explains when a project-level enable is saved beneath the global kill switch', async () => {
@@ -277,12 +275,14 @@ describe('handleMcpCommand', () => {
       disabled: true,
       disabledScope: 'global',
       projectOverride: 'enabled',
+      globalDefault: 'enabled',
+      globalKillSwitch: true,
     });
 
     await handleMcpCommand(ctx, ['enable', 'filesystem']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Enabled "filesystem" in this project, but all MCP is disabled by the global kill switch. The override is saved.',
+      'MCP: Project setting for "filesystem" saved as enabled, but all MCP is disabled by the global kill switch.',
     );
   });
 
@@ -309,7 +309,28 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['enable', 'filesystem']);
 
     expect(setServerDisabled).toHaveBeenCalledWith('filesystem', false, { global: false });
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: Enabled "filesystem" in this project — 2 tool(s)');
+    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: "filesystem" enabled in this project — 2 tool(s).');
+  });
+
+  it('explains when a project enable overrides a disabled global default', async () => {
+    const { ctx, setServerDisabled } = createContext();
+    setServerDisabled.mockResolvedValueOnce({
+      name: 'filesystem',
+      connected: true,
+      connecting: false,
+      transport: 'stdio',
+      toolCount: 2,
+      toolNames: ['read_file', 'write_file'],
+      projectOverride: 'enabled',
+      globalDefault: 'disabled',
+      globalKillSwitch: false,
+    });
+
+    await handleMcpCommand(ctx, ['enable', 'filesystem']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: "filesystem" enabled in this project, overriding the disabled global default — 2 tool(s).',
+    );
   });
 
   it('reports needs-auth when an enabled server requires authentication', async () => {
@@ -327,7 +348,7 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['enable', 'oauth_server']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(
-      'MCP: Enabled "oauth_server" in this project — needs authentication \u2192 run /mcp to authenticate',
+      'MCP: "oauth_server" enabled in this project (global default: enabled) — needs authentication.',
     );
   });
 
@@ -414,7 +435,9 @@ describe('handleMcpCommand', () => {
     await handleMcpCommand(ctx, ['inherit', 'filesystem']);
 
     expect(inheritServer).toHaveBeenCalledWith('filesystem');
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: "filesystem" now inherits its global default — 2 tool(s).');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: Removed this project\'s setting for "filesystem". It is now enabled by the global default — 2 tool(s).',
+    );
   });
 
   it('reports when inheriting a globally disabled server', async () => {
@@ -431,7 +454,9 @@ describe('handleMcpCommand', () => {
 
     await handleMcpCommand(ctx, ['inherit', 'filesystem']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('MCP: "filesystem" now inherits its global default and is disabled.');
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'MCP: Removed this project\'s setting for "filesystem". It is now disabled by the global default.',
+    );
   });
 
   it('clears all project overrides via /mcp inherit all', async () => {

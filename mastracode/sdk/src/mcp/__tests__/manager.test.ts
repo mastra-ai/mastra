@@ -1599,6 +1599,8 @@ describe('createMcpManager', () => {
         const status = await projectA.setServerDisabled('fs', true, { global: true });
         expect(status.disabled).toBe(true);
         expect(status.disabledScope).toBe('global');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(projectA.getTools())).toEqual(['api_fetch']);
 
         // A different project sees the same server disabled with global scope.
@@ -1623,12 +1625,16 @@ describe('createMcpManager', () => {
         expect(status.disabled).toBeUndefined();
         expect(status.connected).toBe(true);
         expect(status.projectOverride).toBe('enabled');
+        expect(status.globalDefault).toBe('disabled');
+        expect(status.globalKillSwitch).toBe(false);
         expect(Object.keys(manager.getTools())).toEqual(['fs_read']);
 
         const inherited = await manager.inheritServer('fs');
         expect(inherited.disabled).toBe(true);
         expect(inherited.disabledScope).toBe('global');
         expect(inherited.projectOverride).toBeUndefined();
+        expect(inherited.globalDefault).toBe('disabled');
+        expect(inherited.globalKillSwitch).toBe(false);
         expect(Object.keys(manager.getTools())).toEqual([]);
       });
     });
@@ -1708,7 +1714,17 @@ describe('createMcpManager', () => {
         expect(manager.isAllDisabledGlobally()).toBe(true);
         expect(manager.getDisabledServers()).toEqual(['api', 'fs']);
         expect(Object.keys(manager.getTools())).toEqual([]);
-        expect(manager.getServerStatuses().every(s => s.disabled && s.disabledScope === 'global')).toBe(true);
+        expect(
+          manager
+            .getServerStatuses()
+            .every(
+              status =>
+                status.disabled &&
+                status.disabledScope === 'global' &&
+                status.globalDefault === 'enabled' &&
+                status.globalKillSwitch,
+            ),
+        ).toBe(true);
 
         // Other projects are affected too.
         const other = createMcpManager('/tmp/project-b');

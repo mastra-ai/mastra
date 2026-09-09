@@ -192,35 +192,35 @@ async function setDisabled(
   }
 
   if (global) {
-    if (disabled) {
-      ctx.showInfo(`MCP: Disabled "${target}" by default for all projects. Explicit project enables remain active.`);
-    } else {
-      ctx.showInfo(`MCP: Enabled "${target}" by default for all projects.`);
-      if (status.projectOverride === 'disabled') {
-        ctx.showInfo(`MCP: "${target}" is still disabled by this project's override.`);
-      } else if (mm.isAllDisabledGlobally()) {
-        ctx.showInfo('MCP: All MCP is still disabled by the global kill switch.');
-      }
+    ctx.showInfo(`MCP: Global default for "${target}" set to ${disabled ? 'disabled' : 'enabled'}.`);
+    if (status.projectOverride === 'enabled') {
+      ctx.showInfo('MCP: This project remains enabled by its project setting.');
+    } else if (status.projectOverride === 'disabled') {
+      ctx.showInfo('MCP: This project remains disabled by its project setting.');
+    } else if (status.globalKillSwitch) {
+      ctx.showInfo('MCP: All MCP remains disabled by the global kill switch.');
     }
     return;
   }
 
   if (disabled) {
+    ctx.showInfo(`MCP: "${target}" disabled in this project. It will remain disabled if the global default changes.`);
+  } else if (status.globalKillSwitch) {
     ctx.showInfo(
-      `MCP: Disabled "${target}" in this project. Use /mcp inherit ${target} to restore the global default.`,
-    );
-  } else if (status.disabled) {
-    ctx.showInfo(
-      `MCP: Enabled "${target}" in this project, but all MCP is disabled by the global kill switch. The override is saved.`,
+      `MCP: Project setting for "${target}" saved as enabled, but all MCP is disabled by the global kill switch.`,
     );
   } else if (status.connected) {
-    ctx.showInfo(`MCP: Enabled "${target}" in this project — ${status.toolCount} tool(s)`);
-  } else if (status.needsAuth) {
-    ctx.showInfo(`MCP: Enabled "${target}" in this project — needs authentication \u2192 run /mcp to authenticate`);
-  } else {
     ctx.showInfo(
-      `MCP: Enabled "${target}" in this project, but it failed to connect: ${status.error ?? 'Unknown error'}`,
+      status.globalDefault === 'disabled'
+        ? `MCP: "${target}" enabled in this project, overriding the disabled global default — ${status.toolCount} tool(s).`
+        : `MCP: "${target}" enabled in this project — ${status.toolCount} tool(s).`,
     );
+  } else if (status.needsAuth) {
+    ctx.showInfo(
+      `MCP: "${target}" enabled in this project (global default: ${status.globalDefault ?? 'enabled'}) — needs authentication.`,
+    );
+  } else {
+    ctx.showInfo(`MCP: "${target}" enabled in this project, but failed to connect: ${status.error ?? 'Unknown error'}`);
   }
 }
 
@@ -245,15 +245,21 @@ async function inheritServer(ctx: SlashCommandContext, target: string | undefine
   const status = await mm.inheritServer(target);
   if (status.error && /not found/i.test(status.error)) {
     ctx.showInfo(`MCP: Failed to inherit "${target}": ${status.error}`);
+  } else if (status.globalKillSwitch) {
+    ctx.showInfo(`MCP: Removed this project's setting for "${target}". The global kill switch remains active.`);
   } else if (status.disabled) {
-    ctx.showInfo(`MCP: "${target}" now inherits its global default and is disabled.`);
+    ctx.showInfo(`MCP: Removed this project's setting for "${target}". It is now disabled by the global default.`);
   } else if (status.connected) {
-    ctx.showInfo(`MCP: "${target}" now inherits its global default — ${status.toolCount} tool(s).`);
+    ctx.showInfo(
+      `MCP: Removed this project's setting for "${target}". It is now enabled by the global default — ${status.toolCount} tool(s).`,
+    );
   } else if (status.needsAuth) {
-    ctx.showInfo(`MCP: "${target}" now inherits its global default — needs authentication \u2192 run /mcp.`);
+    ctx.showInfo(
+      `MCP: Removed this project's setting for "${target}". The global default is enabled, but authentication is required.`,
+    );
   } else {
     ctx.showInfo(
-      `MCP: "${target}" now inherits its global default, but failed to connect: ${status.error ?? 'Unknown error'}`,
+      `MCP: Removed this project's setting for "${target}", but it failed to connect: ${status.error ?? 'Unknown error'}`,
     );
   }
 }
@@ -310,20 +316,25 @@ function showTextStatus(ctx: SlashCommandContext): void {
             : status.needsAuth
               ? '\u26a0'
               : '\u2717';
-    const overrideLabel = status.projectOverride ? `; project override: ${status.projectOverride}` : '';
+    const globalDefault = status.globalDefault ?? 'enabled';
+    const projectSetting = status.projectOverride
+      ? `; project setting: ${status.projectOverride}; global default: ${globalDefault}`
+      : '';
     const state = status.disabled
-      ? status.disabledScope === 'global'
-        ? `disabled by global setting${overrideLabel} — override via /mcp enable ${status.name}`
-        : `disabled in this project — use /mcp inherit ${status.name} to restore global default`
+      ? status.globalKillSwitch
+        ? `disabled by global kill switch${projectSetting}`
+        : status.disabledScope === 'global'
+          ? `disabled by global default — override via /mcp enable ${status.name}`
+          : `disabled in this project; global default: ${globalDefault} — use /mcp inherit ${status.name}`
       : status.authenticating
-        ? `authenticating${overrideLabel} — cancel via /mcp`
+        ? `authenticating${projectSetting} — cancel via /mcp`
         : status.connecting
-          ? `connecting${overrideLabel}...`
+          ? `connecting${projectSetting}...`
           : status.connected
-            ? `connected${overrideLabel}`
+            ? `connected${projectSetting}`
             : status.needsAuth
-              ? `needs auth${overrideLabel} — authenticate via /mcp`
-              : `error: ${status.error}${overrideLabel}`;
+              ? `needs auth${projectSetting} — authenticate via /mcp`
+              : `error: ${status.error}${projectSetting}`;
     lines.push(`  ${icon} ${status.name} [${status.transport}] (${state})`);
     if (status.toolNames.length > 0) {
       for (const toolName of status.toolNames) {
