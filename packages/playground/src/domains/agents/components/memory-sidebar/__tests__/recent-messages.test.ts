@@ -25,6 +25,16 @@ describe('Recent message settings', () => {
     });
   });
 
+  describe('when history has only a token budget', () => {
+    it('describes enabled history without a message-count limit', () => {
+      expect(getRecentMessagesSettings({ maxTokens: 4000 })).toEqual({
+        enabled: true,
+        maxMessages: undefined,
+        description: 'Includes recent message history with a 4000-token context budget, trimming oldest history first.',
+      });
+    });
+  });
+
   describe('when history contains one message', () => {
     it('uses the singular message label', () => {
       expect(getRecentMessagesSettings(1).description).toBe('Includes the last 1 message in context.');
