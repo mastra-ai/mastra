@@ -590,6 +590,22 @@ export class ProcessorRunner {
     // user-supplied processor workflow keeps the persisting defaults, so the opt-out is
     // applied per run here — leaving the same workflow's standalone runs untouched.
     const isPerChunkPhase = input.phase === 'outputStream';
+    // Runtime-only fields are shared with the processor step adapters in either path.
+    const inputData = {
+      ...input,
+      processorStates: this.processorStates,
+      abortSignal,
+      agent: this.agent,
+    } as ProcessorStepOutput;
+
+    if (isPerChunkPhase && workflow.__executeOutputStream) {
+      return workflow.__executeOutputStream({
+        inputData,
+        tracingContext: observabilityContext?.tracingContext,
+        requestContext,
+        outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
+      });
+    }
 
     // Create a run and start the workflow
     const run = await workflow.createRun(
@@ -601,16 +617,7 @@ export class ProcessorRunner {
         : undefined,
     );
     const result = await run.start({
-      // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
-      // but not part of the official ProcessorStepOutput schema
-      inputData: {
-        ...input,
-        // Pass the processorStates map so workflow processor steps can access their state
-        processorStates: this.processorStates,
-        // Pass abortSignal so processors can cancel in-flight work
-        abortSignal,
-        agent: this.agent,
-      } as ProcessorStepOutput,
+      inputData,
       ...observabilityContext,
       requestContext,
       outputWriter: writer ? chunk => writer.custom(chunk) : undefined,

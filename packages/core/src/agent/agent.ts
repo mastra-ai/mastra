@@ -1783,6 +1783,7 @@ export class Agent<
     workflow.__setLogger(this.logger);
 
     const stateSignalProcessors: Processor[] = [];
+    const streamSteps: NonNullable<ProcessorWorkflow['__executeOutputStream']>[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -1796,6 +1797,12 @@ export class Agent<
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
         step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        if (processor.processOutputStream) {
+          // The processor adapter only reads inputData, requestContext, tracingContext and
+          // outputWriter. Reuse it to preserve processor state, spans, signals and data-part
+          // filtering without running the workflow engine for every streamed chunk.
+          streamSteps.push(step.execute as NonNullable<ProcessorWorkflow['__executeOutputStream']>);
+        }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
@@ -1813,6 +1820,16 @@ export class Agent<
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
       );
+      // Opaque/nested workflows may contain arbitrary steps and must use the workflow engine.
+      if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
+        committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
+          for (const execute of streamSteps) {
+            if (!inputData.part) break;
+            inputData = await execute({ ...context, inputData });
+          }
+          return inputData;
+        };
+      }
     }
     // Register the parent Mastra instance on this internal processor workflow so that its
     // createRun() -> getWorkflowRunById() can read configured storage instead of logging

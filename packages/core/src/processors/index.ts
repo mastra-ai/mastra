@@ -10,12 +10,13 @@ import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap } from '../observability';
+import type { ObservabilityContext, ProcessorSpanType, SpanTypeMap, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
+import type { OutputWriter } from '../workflows/types';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -932,6 +933,13 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __stateSignalProcessors?: Processor[];
   /** @internal Whether a framework-generated workflow needs per-chunk execution. Unknown workflows always execute. */
   __processOutputStream?: boolean;
+  /** @internal Execute a generated linear stream processor chain without a workflow run. */
+  __executeOutputStream?: (args: {
+    inputData: ProcessorStepOutput;
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    outputWriter?: OutputWriter;
+  }) => Promise<ProcessorStepOutput>;
 };
 
 /**
