@@ -1,5 +1,6 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { MessageList } from '@mastra/core/agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
@@ -872,30 +873,54 @@ describe('accumulateChunk - tool calls', () => {
     );
   });
 
-  it('reads a serialized delegation failure message from its cause', () => {
-    const message = 'Failed agent tool execution for head: Incorrect API key provided';
-    // Native Error.message is non-enumerable; the delegation wrapper's cause
-    // survives JSON transport with the readable MastraError message inside it.
-    const error = JSON.parse(
-      JSON.stringify(
-        Object.assign(new Error(message), {
-          cause: { message, code: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', details: { internal: 'not display text' } },
+  it.each(['Failed agent tool execution for head', 'The delegated service is unavailable', ''])(
+    'reads the serialized delegation wrapper message %j without exposing the provider cause',
+    message => {
+      // Native Error.message is non-enumerable; the delegation wrapper's cause
+      // survives JSON transport with the readable MastraError message inside it.
+      const error = JSON.parse(
+        JSON.stringify(
+          Object.assign(new Error(message), {
+            cause: new MastraError(
+              {
+                id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.USER,
+                text: message,
+              },
+              new Error('Private provider diagnostic'),
+            ),
+          }),
+        ),
+      );
+      const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
+      expect(out[0].content.parts).toContainEqual(
+        expect.objectContaining({
+          toolInvocation: expect.objectContaining({ state: 'output-error', errorText: message }),
         }),
-      ),
-    );
-    const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
-    expect(out[0].content.parts).toContainEqual(
-      expect.objectContaining({
-        toolInvocation: expect.objectContaining({ state: 'output-error', errorText: message }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it.each([
     { error: new Error('outer'), expected: 'outer' },
     { error: { message: 'outer', cause: { message: 'inner' } }, expected: 'outer' },
     { error: { message: '', cause: { message: 'inner' } }, expected: '' },
-    { error: { cause: { message: '', cause: { message: 'inner' } } }, expected: '' },
+    {
+      error: { cause: { id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', message: '', cause: { message: 'inner' } } },
+      expected: '',
+    },
+    { error: { cause: { message: 'Private provider diagnostic' } }, expected: '[object Object]' },
+    {
+      error: { cause: { code: 'PROVIDER_ERROR', message: 'Private provider diagnostic' } },
+      expected: '[object Object]',
+    },
+    {
+      error: {
+        cause: { code: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', cause: { message: 'Private provider diagnostic' } },
+      },
+      expected: '[object Object]',
+    },
     { error: { cause: null }, expected: '[object Object]' },
   ])('keeps existing error text behavior for $error', ({ error, expected }) => {
     const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);

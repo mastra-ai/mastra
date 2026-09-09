@@ -46,12 +46,15 @@ type StreamChunk = {
 function toolErrorText(error: unknown): string {
   if (error && typeof error === 'object') {
     if ('message' in error && typeof error.message === 'string') return error.message;
-    // A serialized delegation wrapper can lose its non-enumerable message
-    // while retaining the readable message in its serialized MastraError cause.
+    // Recover only the delegation wrapper's model-facing message, never an
+    // arbitrary provider cause. Native Error.message can be lost over JSON.
     if ('cause' in error) {
       const cause = error.cause;
-      if (cause && typeof cause === 'object' && 'message' in cause && typeof cause.message === 'string') {
-        return cause.message;
+      if (cause && typeof cause === 'object') {
+        const code = 'id' in cause ? cause.id : 'code' in cause ? cause.code : undefined;
+        if (code === 'AGENT_AGENT_TOOL_EXECUTION_FAILED' && 'message' in cause && typeof cause.message === 'string') {
+          return cause.message;
+        }
       }
     }
   }
