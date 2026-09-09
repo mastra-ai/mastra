@@ -71,9 +71,8 @@ describe('provider-executed tool call + terminal error', () => {
   const expectProviderErrorSurfaced = (chunks: any[], thrownError: unknown, message = 'provider blew up') => {
     const errorChunk = chunks.find(c => c.type === 'error');
     const surfaced =
-      (errorChunk && JSON.stringify(errorChunk.payload ?? errorChunk).includes(message)) ||
-      (thrownError && String((thrownError as any)?.message ?? thrownError).includes(message)) ||
-      Boolean(errorChunk);
+      String(errorChunk?.payload?.error?.message ?? errorChunk?.error?.message ?? '').includes(message) ||
+      (thrownError && String((thrownError as any)?.message ?? thrownError).includes(message));
     expect(surfaced).toBe(true);
   };
 
@@ -159,11 +158,30 @@ describe('provider-executed tool call + terminal error', () => {
     expectProviderErrorSurfaced(chunks, thrownError);
   });
 
-  it('does not add a spurious error to a fallback provider tool call that later succeeds', async () => {
-    // First attempt fails at the transport level → the loop falls back to the second
-    // model. The second model completes a provider tool call successfully. The final
-    // message list must NOT carry a fabricated output-error: reconciliation only
-    // targets the terminal-error step, never a subsequent successful fallback result.
+  it('does not persist an incomplete provider tool input when the stream fails mid-argument', async () => {
+    const { messageList, result, chunks, thrownError } = await runLoop(
+      convertArrayToReadableStream([
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'tool-input-start', id: 'partial-1', toolName: 'web_search', providerExecuted: true },
+        { type: 'tool-input-delta', id: 'partial-1', delta: `{"query":` },
+        { type: 'error', error: new Error('provider blew up') },
+        { type: 'finish', finishReason: 'error', usage: testUsage },
+      ] as any),
+    );
+
+    // Without a completed input, there is no invocation to persist or reconcile.
+    expect(assistantToolParts(messageList)).toEqual([]);
+    const steps = await result.steps;
+    const responseParts = steps.flatMap(s =>
+      (s.response?.messages ?? []).flatMap(m => (Array.isArray(m.content) ? m.content : [])),
+    );
+    expect(responseParts.filter(p => p.type === 'tool-call' || p.type === 'tool-result')).toEqual([]);
+    expectProviderErrorSurfaced(chunks, thrownError);
+  });
+
+  it('preserves a successful provider tool result after a pre-stream model fallback', async () => {
+    // The first model fails before emitting any calls; this does not exercise a
+    // retry with an already-pending provider call.
     const messageList = createMessageListWithUserMessage();
     const failing = new MastraLanguageModelV2Mock({
       doStream: async () => {
@@ -208,11 +226,8 @@ describe('provider-executed tool call + terminal error', () => {
       ...defaultSettings(),
     });
 
-    try {
-      await convertAsyncIterableToArray(result.fullStream);
-    } catch {
-      // ignored
-    }
+    const chunks = await convertAsyncIterableToArray(result.fullStream);
+    expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
 
     const toolParts = assistantToolParts(messageList);
     const succeeded = toolParts.find(p => p.toolInvocation.toolCallId === 'call-2');
