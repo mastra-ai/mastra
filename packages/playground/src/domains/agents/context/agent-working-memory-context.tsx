@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 import { useAgentWorkingMemory } from '@/domains/agents/hooks/use-agent-working-memory';
@@ -9,7 +10,7 @@ type AgentWorkingMemoryContextType = {
   isLoading: boolean;
   isUpdating: boolean;
   updateWorkingMemory: (newMemory: string) => Promise<void>;
-  refetch: () => Promise<void>;
+  refetch: () => Promise<unknown>;
 };
 
 export const WorkingMemoryContext = createContext<AgentWorkingMemoryContextType>({
