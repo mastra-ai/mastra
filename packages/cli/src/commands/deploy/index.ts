@@ -11,7 +11,7 @@
 
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm, stat, access, readFile, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, rm, stat, access, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
@@ -27,7 +27,7 @@ import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
-import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { getToken, getCurrentOrgId, loadCredentials } from '../auth/credentials.js';
 import { fetchDatabases } from '../db/platform-api.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
 import {
@@ -72,6 +72,7 @@ function elapsed(ms: number): string {
 
 const workersManifestPath = (targetDir: string): string => join(targetDir, '.mastra', 'output', 'workers.json');
 const workerManifestCheckPath = (targetDir: string): string => join(targetDir, '.mastra', 'worker-manifest-checked');
+const WORKER_MANIFEST_CHECK_VERSION = '2';
 
 async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   try {
@@ -82,10 +83,10 @@ async function hasWorkersManifest(targetDir: string): Promise<boolean> {
   }
 }
 
-async function hasWorkerManifestCheck(targetDir: string): Promise<boolean> {
+export async function hasWorkerManifestCheck(targetDir: string): Promise<boolean> {
   try {
-    await access(workerManifestCheckPath(targetDir));
-    return true;
+    const version = await readFile(workerManifestCheckPath(targetDir), 'utf-8');
+    return version.trim() === WORKER_MANIFEST_CHECK_VERSION;
   } catch {
     return false;
   }
@@ -213,46 +214,30 @@ export async function resolveWorkersDeployMode(input: {
 }
 
 /**
- * Suppress the workers manifest from the build output so the platform treats
- * this deploy as "no dedicated workers service": railway-builder omits
- * `ENV MASTRA_WORKERS=false` so background tasks run in the API container,
- * and the platform spins down any existing workers service for the
- * environment.
- */
-export async function suppressWorkersManifest(targetDir: string): Promise<void> {
-  try {
-    await unlink(workersManifestPath(targetDir));
-  } catch (error) {
-    // Missing file is the desired end state — nothing to do.
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-}
-
-/**
- * Rollout gate: evaluate the `platform-workers` PostHog flag scoped to the
- * org (the CLI's distinct id is the telemetry id, so the flag must target
- * the `organization` group) and suppress the workers manifest when it is
- * off, so the overview, the prompt, and the platform's provisioning
- * behavior all agree: background tasks run in-process in the API container,
- * exactly as before the workers stack.
+ * Rollout gate: evaluate the `platform-workers` PostHog flag as the
+ * authenticated platform user, retaining the org as group context.
  *
+ * Headless auth has no user id, so it falls back to organization targeting.
  * Fails closed — a PostHog error or disabled telemetry (`analytics` null)
- * suppresses the manifest. The platform re-evaluates the same flag at
- * deploy time as belt-and-suspenders.
+ * suppresses workers for this deploy without mutating the reusable build output.
  */
 export async function applyPlatformWorkersFlagGate(deps: {
-  targetDir: string;
   orgId: string;
+  userId?: string;
   analytics: {
-    isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean>;
+    isFeatureEnabled(
+      flag: string,
+      options?: { distinctId?: string; groups?: Record<string, string> },
+    ): Promise<boolean>;
   } | null;
 }): Promise<'preserved' | 'suppressed'> {
   const flagOn = deps.analytics
-    ? await deps.analytics.isFeatureEnabled('platform-workers', { groups: { organization: deps.orgId } })
+    ? await deps.analytics.isFeatureEnabled('platform-workers', {
+        ...(deps.userId ? { distinctId: deps.userId } : {}),
+        groups: { organization: deps.orgId },
+      })
     : false;
-  if (flagOn) return 'preserved';
-  await suppressWorkersManifest(deps.targetDir);
-  return 'suppressed';
+  return flagOn ? 'preserved' : 'suppressed';
 }
 
 type ArchitectureColors = ReturnType<typeof pc.createColors>;
@@ -470,6 +455,7 @@ function renderDeploymentPanel(
     environment: Pick<Environment, 'name' | 'region'>;
     workersEnabled: boolean;
     workersConfig: Record<string, unknown> | null;
+    showWorkersConfig: boolean;
     renderedAt: Date;
   },
   colors: ArchitectureColors,
@@ -489,10 +475,14 @@ function renderDeploymentPanel(
     colors.bold(input.projectName),
     colors.bold(`${input.environment.name} (${formatDeploymentRegion(input.environment.region)})`),
     colors.dim(formatArchitectureDate(input.renderedAt)),
-    '',
-    colors.bold('Workers Config'),
-    colors.dim('Static analysis only; runtime workers may differ.'),
-    ...workersConfigLines,
+    ...(input.showWorkersConfig
+      ? [
+          '',
+          colors.bold('Workers Config'),
+          colors.dim('Static analysis only; runtime workers may differ.'),
+          ...workersConfigLines,
+        ]
+      : []),
   ];
 }
 
@@ -563,6 +553,7 @@ export function renderDeploymentArchitecture(
     serverLabel: string;
     workersEnabled: boolean;
     workersConfig: Record<string, unknown> | null;
+    showWorkersConfig?: boolean;
     databases: readonly ProjectDatabase[];
     observabilityEnabled: boolean;
     renderedAt?: Date;
@@ -640,6 +631,7 @@ export function renderDeploymentArchitecture(
       environment: input.environment,
       workersEnabled: input.workersEnabled,
       workersConfig: input.workersConfig,
+      showWorkersConfig: input.showWorkersConfig !== false,
       renderedAt: input.renderedAt ?? new Date(),
     },
     colors,
@@ -679,7 +671,10 @@ function getGitBranch(projectDir: string): string | null {
   }
 }
 
-export async function zipOutput(projectDir: string): Promise<string> {
+export async function zipOutput(
+  projectDir: string,
+  options: { includeWorkersManifest?: boolean } = {},
+): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
   await mkdir(tmpDir, { recursive: true });
@@ -706,6 +701,7 @@ export async function zipOutput(projectDir: string): Promise<string> {
           'worker-manifest.mjs.map',
           'workers-config.mjs',
           'workers-config.mjs.map',
+          ...(options.includeWorkersManifest === false ? ['workers.json'] : []),
         ],
         dot: true,
       },
@@ -1237,6 +1233,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   // Step 1: Auth
   const token = await getToken();
+  const userId = isHeadless ? undefined : (await loadCredentials())?.user.id;
 
   // Step 2: Load existing project config
   const projectConfig = await loadProjectConfig(targetDir, opts.config);
@@ -1393,7 +1390,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       p.log.step('Build metadata is outdated, rebuilding...');
     }
     await runBuild(targetDir, { debug: opts.debug });
-    await writeFile(workerManifestCheckPath(targetDir), '');
+    await writeFile(workerManifestCheckPath(targetDir), WORKER_MANIFEST_CHECK_VERSION);
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
   } else {
     p.log.step('Build is up-to-date, skipping rebuild');
@@ -1557,15 +1554,15 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   let workersConfig = await readWorkersConfig(targetDir);
   let workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+  let includeWorkersManifest = true;
+  let showWorkersConfig = true;
 
   if (workersEnabled) {
-    const gate = await applyPlatformWorkersFlagGate({ targetDir, orgId, analytics: getAnalytics() });
+    const gate = await applyPlatformWorkersFlagGate({ orgId, userId, analytics: getAnalytics() });
     if (gate === 'suppressed') {
-      p.log.warn(
-        'Background workers are not enabled for this account — the workers manifest will not be shipped and background tasks will run inside the API server container.',
-      );
-      workersConfig = await readWorkersConfig(targetDir);
-      workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+      includeWorkersManifest = false;
+      showWorkersConfig = false;
+      workersEnabled = false;
     }
   }
 
@@ -1590,7 +1587,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     throw error;
   }
   if (workersMode === 'in-process' && workersEnabled) {
-    await suppressWorkersManifest(targetDir);
+    includeWorkersManifest = false;
     if (!redisRequirementMet) {
       p.log.warn(
         'Background workers are configured, but the deploy env has no usable REDIS_URL — the platform needs Redis (pub/sub) to coordinate a dedicated workers service. Background tasks will run in-process inside the API server container.',
@@ -1598,9 +1595,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     } else {
       p.log.step('Running background tasks in-process inside the API server container (no dedicated workers service)');
     }
-    // Re-derive so the deployment overview reflects the in-process mode.
-    workersConfig = await readWorkersConfig(targetDir);
-    workersEnabled = workerManifestHasEnabledWorkers(workersConfig);
+    // Reflect in-process mode in the overview without deleting reusable build metadata.
+    workersConfig = null;
+    workersEnabled = false;
   }
   if (workersMode === 'in-process' && environmentHasWorkerService) {
     p.log.warn(
@@ -1628,6 +1625,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       serverLabel: publicUrls.serverLabel,
       workersEnabled,
       workersConfig,
+      showWorkersConfig,
       databases,
       observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
     }),
@@ -1636,7 +1634,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   t = performance.now();
   s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
+  const zipPath = await zipOutput(targetDir, { includeWorkersManifest });
   const zipStat = await stat(zipPath);
   const sizeKB = zipStat.size / 1024;
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;

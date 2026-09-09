@@ -289,18 +289,21 @@ export class PosthogAnalytics {
   }
 
   /**
-   * Evaluate a PostHog feature flag. The distinct id is the CLI's telemetry
-   * id, so per-user targeting won't match platform user ids — pass the
-   * platform org id via `options.groups.organization` and target flags at
-   * the organization group. Fails closed (returns `false`) on any error.
+   * Evaluate a PostHog feature flag. Platform flags can override the CLI's
+   * anonymous telemetry id with the authenticated platform identity while
+   * retaining organization group context. Fails closed on any error.
    */
-  async isFeatureEnabled(flag: string, options?: { groups?: Record<string, string> }): Promise<boolean> {
+  async isFeatureEnabled(
+    flag: string,
+    options?: { distinctId?: string; groups?: Record<string, string> },
+  ): Promise<boolean> {
     if (!this.client) return false;
     try {
-      const result = await this.client.getFeatureFlag(flag, this.distinctId, {
+      const flags = await this.client.evaluateFlags(options?.distinctId ?? this.distinctId, {
         groups: options?.groups,
+        flagKeys: [flag],
       });
-      return result === true;
+      return flags.getFlag(flag) === true;
     } catch {
       return false;
     }

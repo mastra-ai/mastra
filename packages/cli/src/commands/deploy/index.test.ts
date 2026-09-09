@@ -30,11 +30,11 @@ import {
   applyPlatformWorkersFlagGate,
   deployBuildNeedsRefresh,
   hasEnabledWorkers,
+  hasWorkerManifestCheck,
   renderDeploymentArchitecture,
   resolveEnvironment,
   resolveProject,
   resolveWorkersDeployMode,
-  suppressWorkersManifest,
   WorkersRedisRequirementError,
   zipOutput,
 } from './index.js';
@@ -134,6 +134,7 @@ describe('deploy artifact', () => {
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(join(outputDir, 'package.json'), JSON.stringify({ name: 'test-output' }));
     writeFileSync(join(outputDir, 'index.mjs'), 'export {};');
+    writeFileSync(join(outputDir, 'workers.json'), JSON.stringify({ version: 1, orchestration: { enabled: true } }));
     writeFileSync(join(outputDir, 'worker-manifest.mjs'), 'throw new Error("build-only");');
     writeFileSync(join(outputDir, 'worker-manifest.mjs.map'), '{}');
     writeFileSync(join(outputDir, 'workers-config.mjs'), 'export const workers = [];');
@@ -158,10 +159,19 @@ describe('deploy artifact', () => {
     expect(zip).toContain('output/.npmrc');
     expect(zip).toContain('output/package.json');
     expect(zip).toContain('output/index.mjs');
+    expect(zip).toContain('output/workers.json');
     expect(zip).not.toContain('worker-manifest.mjs');
     expect(zip).not.toContain('workers-config.mjs');
     expect(zip).not.toContain('node_modules');
     expect(zip).not.toContain('.bin');
+  });
+
+  it('omits workers.json from an in-process deploy without deleting reusable build metadata', async () => {
+    zipPath = await zipOutput(projectDir, { includeWorkersManifest: false });
+
+    const zip = readFileSync(zipPath, 'latin1');
+    expect(zip).not.toContain('output/workers.json');
+    expect(readFileSync(join(outputDir, 'workers.json'), 'utf-8')).toContain('orchestration');
   });
 
   it('refreshes an otherwise-current build when deploy metadata has not been checked', () => {
@@ -174,6 +184,15 @@ describe('deploy artifact', () => {
 
   it('does not refresh a current build when deploy metadata exists', () => {
     expect(deployBuildNeedsRefresh({ isStale: false }, true, false)).toBe(false);
+  });
+
+  it('invalidates the legacy empty metadata marker so a deleted workers manifest is rebuilt once', async () => {
+    const markerPath = join(projectDir, '.mastra', 'worker-manifest-checked');
+    writeFileSync(markerPath, '');
+    await expect(hasWorkerManifestCheck(projectDir)).resolves.toBe(false);
+
+    writeFileSync(markerPath, '2');
+    await expect(hasWorkerManifestCheck(projectDir)).resolves.toBe(true);
   });
 
   it.each([
@@ -320,6 +339,33 @@ describe('deploy artifact', () => {
     expect(coloredDiagram).toContain(`${colors.green('●')} ${colors.bold(colors.white('Custom'))}`);
   });
 
+  it('omits every Workers Config line when the rollout flag is disabled, even with a built manifest', () => {
+    const diagram = renderDeploymentArchitecture(
+      {
+        projectName: 'My Agent',
+        environment: { id: 'env_1', name: 'production', region: 'pdx' },
+        serverLabel: 'Server',
+        workersEnabled: false,
+        workersConfig: {
+          version: 1,
+          orchestration: { enabled: true },
+          scheduler: { enabled: false },
+          backgroundTasks: { enabled: true, mode: 'full' },
+          custom: [],
+        },
+        showWorkersConfig: false,
+        databases: [],
+        observabilityEnabled: true,
+        renderedAt: new Date('2026-08-27T16:30:00.000Z'),
+      },
+      pc.createColors(false),
+    );
+
+    expect(diagram).not.toContain('Workers Config');
+    expect(diagram).not.toContain('Static analysis only; runtime workers may differ.');
+    expect(diagram).not.toContain('Status: Disabled');
+  });
+
   it('renders the Factory card with an orange outline', () => {
     const colors = pc.createColors(true);
     const diagram = renderDeploymentArchitecture(
@@ -398,12 +444,28 @@ describe('applyPlatformWorkersFlagGate', () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it('preserves the manifest when the flag is on, evaluated against the organization group', async () => {
+  it('preserves the manifest when the flag is on, evaluated as the authenticated user', async () => {
     const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(true) };
 
-    await expect(applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics })).resolves.toBe(
-      'preserved',
-    );
+    await expect(
+      applyPlatformWorkersFlagGate({
+        orgId: 'org-1',
+        userId: 'user_123',
+        analytics,
+      }),
+    ).resolves.toBe('preserved');
+
+    expect(analytics.isFeatureEnabled).toHaveBeenCalledWith('platform-workers', {
+      distinctId: 'user_123',
+      groups: { organization: 'org-1' },
+    });
+    expect(readFileSync(manifestPath, 'utf-8')).toContain('orchestration');
+  });
+
+  it('falls back to organization targeting and preserves reusable build metadata when the flag is off', async () => {
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+
+    await expect(applyPlatformWorkersFlagGate({ orgId: 'org-1', analytics })).resolves.toBe('suppressed');
 
     expect(analytics.isFeatureEnabled).toHaveBeenCalledWith('platform-workers', {
       groups: { organization: 'org-1' },
@@ -411,22 +473,19 @@ describe('applyPlatformWorkersFlagGate', () => {
     expect(readFileSync(manifestPath, 'utf-8')).toContain('orchestration');
   });
 
-  it('suppresses the manifest when the flag is off', async () => {
-    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValue(false) };
+  it('can enable workers on a later deploy after an earlier flag-off deploy', async () => {
+    const analytics = { isFeatureEnabled: vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true) };
 
-    await expect(applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics })).resolves.toBe(
-      'suppressed',
-    );
-
-    expect(() => readFileSync(manifestPath, 'utf-8')).toThrow();
+    await expect(applyPlatformWorkersFlagGate({ orgId: 'org-1', analytics })).resolves.toBe('suppressed');
+    await expect(hasEnabledWorkers(projectDir)).resolves.toBe(true);
+    await expect(applyPlatformWorkersFlagGate({ orgId: 'org-1', analytics })).resolves.toBe('preserved');
+    await expect(hasEnabledWorkers(projectDir)).resolves.toBe(true);
   });
 
-  it('fails closed when telemetry is disabled (analytics null)', async () => {
-    await expect(
-      applyPlatformWorkersFlagGate({ targetDir: projectDir, orgId: 'org-1', analytics: null }),
-    ).resolves.toBe('suppressed');
+  it('fails closed without deleting build metadata when telemetry is disabled', async () => {
+    await expect(applyPlatformWorkersFlagGate({ orgId: 'org-1', analytics: null })).resolves.toBe('suppressed');
 
-    expect(() => readFileSync(manifestPath, 'utf-8')).toThrow();
+    expect(readFileSync(manifestPath, 'utf-8')).toContain('orchestration');
   });
 });
 
@@ -534,34 +593,5 @@ describe('resolveWorkersDeployMode', () => {
     const promptConfirm = vi.fn().mockResolvedValue(CANCEL_SYMBOL);
     const mode = await resolveWorkersDeployMode({ ...base, promptConfirm });
     expect(mode).toBe('dedicated');
-  });
-});
-
-describe('suppressWorkersManifest', () => {
-  let projectDir: string;
-  let outputDir: string;
-  let manifestPath: string;
-
-  beforeEach(() => {
-    projectDir = mkdtempSync(join(tmpdir(), 'cli-workers-in-process-'));
-    outputDir = join(projectDir, '.mastra', 'output');
-    mkdirSync(outputDir, { recursive: true });
-    manifestPath = join(outputDir, 'workers.json');
-  });
-
-  afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
-  });
-
-  it('removes the workers manifest so the platform runs workers in the API container', async () => {
-    writeFileSync(manifestPath, JSON.stringify({ version: 1, orchestration: { enabled: true } }));
-
-    await suppressWorkersManifest(projectDir);
-
-    await expect(hasEnabledWorkers(projectDir)).resolves.toBe(false);
-  });
-
-  it('is a no-op when no manifest is present', async () => {
-    await expect(suppressWorkersManifest(projectDir)).resolves.toBeUndefined();
   });
 });
