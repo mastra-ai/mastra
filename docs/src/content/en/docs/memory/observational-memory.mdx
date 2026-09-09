@@ -847,7 +847,7 @@ OM exposes two kinds of config-level hooks on `observationalMemory.hooks`:
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
       hooks: {
         // Drop or redact messages before the Observer sees them.
         beforeObservation: ({ messages }) => ({
