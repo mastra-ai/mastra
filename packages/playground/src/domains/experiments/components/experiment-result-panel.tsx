@@ -232,8 +232,9 @@ export function ExperimentResultPanel({
 
   return (
     <DataPanel collapsed={collapsed} className={className}>
-      <DataPanel.Header>
-        <DataPanel.Heading className="shrink-0 whitespace-nowrap">
+      {/* Actions may wrap on narrow panels; the close button sits outside the group so it stays on the first row. */}
+      <DataPanel.Header className="items-start">
+        <DataPanel.Heading className="shrink-0 self-center whitespace-nowrap">
           Result <b># {result.id.length > 12 ? `${result.id.slice(0, 12)}…` : result.id}</b>
         </DataPanel.Heading>
         <ButtonsGroup className="ml-auto flex-wrap justify-end">
@@ -267,8 +268,8 @@ export function ExperimentResultPanel({
               Mark as reviewed
             </Button>
           )}
-          <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" />
         </ButtonsGroup>
+        <DataPanel.CloseButton onClick={onClose} tooltip="Close result panel" className="shrink-0" />
       </DataPanel.Header>
 
       {!collapsed && (

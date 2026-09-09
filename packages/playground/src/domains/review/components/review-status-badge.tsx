@@ -9,7 +9,7 @@ function reviewStatusBadgeVariant(status: string): ComponentProps<typeof Badge>[
   return 'neutral';
 }
 
-type ReviewStatusBadgeProps = Omit<ComponentProps<typeof Badge>, 'variant' | 'children'> & {
+type ReviewStatusBadgeProps = Omit<ComponentProps<typeof Badge>, 'variant' | 'children' | 'icon' | 'indicator'> & {
   status: ReviewStatus | (string & {});
   children?: ReactNode;
 };

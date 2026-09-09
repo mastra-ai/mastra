@@ -9,7 +9,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { MoreVertical, Pencil, Play } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
@@ -174,6 +174,21 @@ export default function Scorer() {
     />
   ) : null;
 
+  const scorerActionsMenu = isStoredScorer ? (
+    <DropdownMenu>
+      <DropdownMenu.Trigger asChild>
+        <Button size="lg" aria-label="Scorer actions menu">
+          <MoreVertical />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" className="w-48">
+        <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
+          <Pencil /> Edit Scorer
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ) : null;
+
   const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
 
   if (showEmptyState) {
@@ -182,9 +197,15 @@ export default function Scorer() {
       (agentsError instanceof Error ? agentsError.message : undefined) ??
       (workflowsError instanceof Error ? workflowsError.message : undefined) ??
       'An unexpected error occurred';
+    const hasError = isUnauthorized || isForbidden || hasOtherError;
 
     return (
-      <PageLayout width="wide" height="full" className="grid-rows-[1fr]">
+      <PageLayout width="wide" height="full" className={hasError || !scorerActionsMenu ? 'grid-rows-[1fr]' : undefined}>
+        {!hasError && scorerActionsMenu && (
+          <PageLayout.TopArea>
+            <ButtonsGroup className="ml-auto">{scorerActionsMenu}</ButtonsGroup>
+          </PageLayout.TopArea>
+        )}
         <PageLayout.MainArea isCentered>
           {isUnauthorized ? (
             <SessionExpired />
@@ -224,20 +245,7 @@ export default function Scorer() {
               <Play />
               Run Experiment
             </Button>
-            {isStoredScorer && (
-              <DropdownMenu>
-                <DropdownMenu.Trigger asChild>
-                  <Button size="lg" aria-label="Scorer actions menu">
-                    <MoreVertical />
-                  </Button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end" className="w-48">
-                  <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-                    <Pencil /> Edit Scorer
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu>
-            )}
+            {scorerActionsMenu}
           </ButtonsGroup>
         </div>
       </PageLayout.TopArea>
