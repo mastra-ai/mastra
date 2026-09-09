@@ -22,7 +22,7 @@ export type ExperimentResultsListItem = {
   status?: DatasetExperimentResult['status'] | null;
   tags?: string[] | null;
   /** Inline scores, used by the summary `scores` column. */
-  scores?: Record<string, number> | ClientScoreRowData[] | null;
+  scores?: Record<string, number> | Array<{ score: number | null }> | null;
 };
 
 export type ExperimentResultsListColumn = {

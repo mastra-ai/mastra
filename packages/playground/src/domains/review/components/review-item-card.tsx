@@ -25,8 +25,8 @@ export interface ReviewItem {
   clusterId?: string;
   experimentId?: string;
   traceId?: string;
-  createdAt?: string;
-  status?: string;
+  createdAt?: DatasetExperimentResult['createdAt'];
+  status?: DatasetExperimentResult['status'];
   groundTruth?: unknown;
   toolMockReport?: DatasetExperimentResult['toolMockReport'];
 }

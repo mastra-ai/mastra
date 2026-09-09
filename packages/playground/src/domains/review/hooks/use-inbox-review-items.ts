@@ -1,4 +1,4 @@
-import type { MastraClient } from '@mastra/client-js';
+import type { DatasetExperimentResult, MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -11,7 +11,7 @@ export type InboxDatasetReviewItem = {
   input: unknown;
   output: unknown;
   error?: unknown;
-  status?: 'needs-review' | 'complete' | null;
+  status?: DatasetExperimentResult['status'];
   tags?: string[] | null;
 };
 

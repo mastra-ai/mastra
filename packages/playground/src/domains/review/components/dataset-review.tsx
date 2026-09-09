@@ -22,7 +22,6 @@ import { CheckCircle, ChevronDown, CircleSlashIcon, FilterIcon, Sparkles, Trash2
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
-import type { ReviewItem } from './review-item-card';
 import { RouteItemOverlay } from '@/components/route-item-overlay';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';

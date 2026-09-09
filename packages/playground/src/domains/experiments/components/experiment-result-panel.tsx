@@ -10,8 +10,6 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { format } from 'date-fns/format';
 import {
@@ -25,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -40,7 +38,7 @@ import { useLinkComponent } from '@/lib/framework';
 export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | 'itemId' | 'input' | 'output'> &
   Partial<Pick<DatasetExperimentResult, 'createdAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'>> & {
     error?: unknown;
-    tags?: string[] | null;
+    tags: string[] | null;
   };
 
 export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };

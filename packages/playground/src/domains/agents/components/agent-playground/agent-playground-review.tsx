@@ -1,4 +1,3 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
