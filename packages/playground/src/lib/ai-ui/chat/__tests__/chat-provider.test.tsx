@@ -842,6 +842,61 @@ describe('ChatProvider', () => {
     },
   );
 
+  it('refreshes working memory when the agent tool updateWorkingMemory succeeds mid-stream', async () => {
+    // Pre-existing path: a `tool-result` chunk for `updateWorkingMemory` with
+    // `success: true` must re-read working memory even when OM is disabled.
+    const emitToolResult = createDeferred();
+    let persisted = false;
+    const workingMemoryRequest = vi.fn(() =>
+      HttpResponse.json(workingMemoryFixture(persisted ? 'fresh working memory' : 'stale working memory')),
+    );
+    const Probe = () => {
+      const { workingMemoryData } = useWorkingMemory();
+      return <div data-testid="wm-value">{workingMemoryData}</div>;
+    };
+    server.use(...baseHandlers([]));
+    server.use(
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/working-memory`, workingMemoryRequest),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder();
+                await emitToolResult.promise;
+                persisted = true;
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      type: 'tool-result',
+                      payload: { toolCallId: 'call-1', toolName: 'updateWorkingMemory', result: { success: true } },
+                    })}\n\n`,
+                  ),
+                );
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+    render(
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <Probe />
+          <SendOnMount text="remember this" />
+        </ChatProvider>
+      </Wrapper>,
+    );
+    await screen.findByText('stale working memory');
+    const initialWorkingMemoryReads = workingMemoryRequest.mock.calls.length;
+    emitToolResult.resolve();
+    await screen.findByText('fresh working memory');
+    expect(workingMemoryRequest.mock.calls.length).toBeGreaterThan(initialWorkingMemoryReads);
+  });
+
   it('waits for the signals run to finish before refreshing buffered working memory', async () => {
     delete window.MASTRA_AGENT_SIGNALS;
     const accepted = createDeferred();
