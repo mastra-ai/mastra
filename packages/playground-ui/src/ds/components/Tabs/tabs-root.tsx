@@ -1,5 +1,8 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { TabsContext } from './tabs-context';
+import './tabs.css';
 import { cn } from '@/lib/utils';
 
 export type TabsRootProps<T extends string> = {
@@ -21,17 +24,25 @@ export const Tabs = <T extends string>({
   frame = 'stroke',
   className,
 }: TabsRootProps<T>) => {
+  const [uncontrolledValue, setUncontrolledValue] = useState(defaultTab);
+  const selectedValue = value ?? uncontrolledValue;
+  const select = (next: T) => {
+    setUncontrolledValue(next);
+    onValueChange?.(next);
+  };
   return (
-    <BaseTabs.Root
-      defaultValue={defaultTab}
-      value={value}
-      onValueChange={onValueChange ? next => onValueChange(next) : undefined}
-      data-slot="tabs"
-      data-appearance={appearance}
-      data-frame={frame}
-      className={cn('group/tabs', appearance === 'default' ? 'overflow-y-auto' : 'w-full min-w-0', className)}
-    >
-      {children}
-    </BaseTabs.Root>
+    <TabsContext.Provider value={{ appearance, frame, value: selectedValue, select }}>
+      <BaseTabs.Root
+        defaultValue={defaultTab}
+        value={selectedValue}
+        onValueChange={select}
+        data-slot="tabs"
+        data-appearance={appearance}
+        data-frame={frame}
+        className={cn('group/tabs', appearance === 'default' ? 'overflow-y-auto' : 'w-full min-w-0', className)}
+      >
+        {children}
+      </BaseTabs.Root>
+    </TabsContext.Provider>
   );
 };

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TabContent } from './tabs-content';
@@ -43,12 +43,88 @@ describe('Tab', () => {
     fireEvent.click(tab);
     expect(tab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Needs attention')).toBeTruthy();
-    const pulse = tab.querySelector('.animate-pulse');
-    expect(pulse?.className).toContain('[animation-iteration-count:3]');
-    expect(pulse?.className).toContain('motion-reduce:animate-none');
+    expect(tab.querySelector('[data-slot="tab-attention"]')?.getAttribute('aria-hidden')).toBe('true');
     rerender(content(false));
     expect(screen.queryByText('Needs attention')).toBeNull();
+    expect(tab.querySelector('[data-slot="tab-attention"]')).toBeNull();
   });
+  it('moves overflowed tabs into the menu and promotes the selected item', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    render(
+      <Tabs defaultTab="first" appearance="contained" frame="inset">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+          <Tab value="third">Third</Tab>
+        </TabList>
+        <TabContent value="first">First panel</TabContent>
+        <TabContent value="second">Second panel</TabContent>
+        <TabContent value="third">Third panel</TabContent>
+      </Tabs>,
+    );
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Second']);
+    fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Third' }));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['First', 'Third']);
+    expect(screen.getByRole('tab', { name: 'Third' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Third panel')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Second' })).toBeNull();
+  });
+
+  it('restores overflowed tabs when the container grows', () => {
+    const callbacks = new Set<() => void>();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private callback: () => void) {
+          callbacks.add(callback);
+        }
+        observe() {}
+        disconnect() {
+          callbacks.delete(this.callback);
+        }
+        unobserve() {}
+      },
+    );
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    render(
+      <Tabs defaultTab="first" appearance="contained">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+      </Tabs>,
+    );
+    expect(screen.queryByRole('tab', { name: 'Second' })).toBeNull();
+    width.mockReturnValue(1024);
+    act(() => callbacks.forEach(callback => callback()));
+    expect(screen.getByRole('tab', { name: 'Second' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '1 more tabs' })).toBeNull();
+  });
+
+  it('leaves controlled selection with the caller when an overflow item is chosen', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 100, 36));
+    const onValueChange = vi.fn();
+    const content = (value: string) => (
+      <Tabs defaultTab="first" value={value} onValueChange={onValueChange} appearance="contained">
+        <TabList>
+          <Tab value="first">First</Tab>
+          <Tab value="second">Second</Tab>
+        </TabList>
+      </Tabs>
+    );
+    const { rerender } = render(content('first'));
+    fireEvent.click(screen.getByRole('button', { name: '1 more tabs' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Second' }));
+    expect(onValueChange).toHaveBeenCalledWith('second');
+    expect(screen.getByRole('tab', { name: 'First' }).getAttribute('aria-selected')).toBe('true');
+    rerender(content('second'));
+    expect(screen.getByRole('tab', { name: 'Second' }).getAttribute('aria-selected')).toBe('true');
+  });
+
   describe('when tabs use the contained appearance', () => {
     it('keeps the tab interface composable and switches its panel', () => {
       render(
