@@ -136,6 +136,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
         protocolVersion: 'v2',
         temporalRunId: 'temporal-a',
         externalTraceId: 'external-a',
+        paddedValue: '  padded value  ',
         emptyValue: '',
         numericValue: 42,
         nestedValue: { child: 'value' },
@@ -439,6 +440,14 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
           { op: 'notExists', path: 'metadata.emptyValue' },
         ],
       },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'compares metadata predicates against trimmed string values',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'metadata.paddedValue' }, right: { literal: 'padded value' } },
     },
     expected: [{ traceId: 'trace-a' }],
   },

@@ -552,7 +552,6 @@ describe('planTraceQuery', () => {
     expect(error.issues[0]).toMatchObject({ code: 'field_not_allowed', path: ['where', 'spans', 'some', 'path'] });
   });
 
-
   it('enforces field-specific operators and literal types', () => {
     const badErrorOperator = validationError(() =>
       planTraceQuery(
