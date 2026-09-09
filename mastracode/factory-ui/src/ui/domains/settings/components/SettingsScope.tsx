@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Building2, CircleUserRound, Server, Users } from 'lucide-react';
@@ -13,6 +14,7 @@ export type SettingsScope = 'personal' | 'factory' | 'org' | 'deployment';
 export type ScopeControl = {
   value: SettingsScope;
   options: readonly SettingsScope[];
+  disabledReasons?: Partial<Record<SettingsScope, string>>;
   onChange: (scope: SettingsScope) => void;
 };
 
@@ -32,40 +34,68 @@ export function ScopeBadge({ scope }: { scope: SettingsScope }) {
   );
 }
 
-export function ScopeSwitch({ value, options, onChange }: ScopeControl) {
+export function ScopeSwitch({ value, options, disabledReasons, onChange }: ScopeControl) {
   return (
     <div
       role="group"
       aria-label="Who these settings apply to"
       className="border-border1 inline-flex items-center gap-0.5 rounded-[9px] border p-0.5"
     >
-      {options.map(scope => {
-        const { label, icon: Icon } = SCOPE_BADGE[scope];
-        const selected = scope === value;
-        return (
-          <button
-            key={scope}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChange(scope)}
-            className={cn(
-              'text-icon3 hover:text-icon5 inline-flex h-5 cursor-pointer items-center rounded-[7px] outline-none',
-              focusRing.visible,
-              transitions.colors,
-            )}
-          >
-            {selected ? (
-              <ScopeBadge scope={scope} />
-            ) : (
-              <span className="text-ui-xs inline-flex h-5 items-center gap-1 px-1.5 font-medium">
-                <Icon aria-hidden="true" className="h-icon-sm w-icon-sm" />
-                {label}
-              </span>
-            )}
-          </button>
-        );
-      })}
+      {options.map(scope => (
+        <ScopeOption
+          key={scope}
+          scope={scope}
+          selected={scope === value}
+          disabledReason={disabledReasons?.[scope]}
+          onPick={() => onChange(scope)}
+        />
+      ))}
     </div>
+  );
+}
+
+function ScopeOption({
+  scope,
+  selected,
+  disabledReason,
+  onPick,
+}: {
+  scope: SettingsScope;
+  selected: boolean;
+  disabledReason?: string;
+  onPick: () => void;
+}) {
+  const { label, icon: Icon } = SCOPE_BADGE[scope];
+  const disabled = disabledReason !== undefined;
+  const button = (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onPick}
+      className={cn(
+        'text-icon3 hover:text-icon5 inline-flex h-5 cursor-pointer items-center rounded-[7px] outline-none',
+        'aria-disabled:hover:text-icon3 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+        focusRing.visible,
+        transitions.colors,
+      )}
+    >
+      {selected ? (
+        <ScopeBadge scope={scope} />
+      ) : (
+        <span className="text-ui-xs inline-flex h-5 items-center gap-1 px-1.5 font-medium">
+          <Icon aria-hidden="true" className="h-icon-sm w-icon-sm" />
+          {label}
+        </span>
+      )}
+    </button>
+  );
+  if (!disabled) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent>{disabledReason}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -86,20 +116,21 @@ export type ScopeSwapControl = ScopeControl & { shown: SettingsScope; bodyRef: R
 /** `value` follows the switch at once; `shown` follows once the current body has slid out, so render the body from `shown` inside `ScopeSwap`. */
 export function useScopeControl(
   options: readonly SettingsScope[],
-  initial: SettingsScope = 'personal',
+  disabledReasons?: ScopeControl['disabledReasons'],
 ): ScopeSwapControl {
-  const [picked, setPicked] = useState(initial);
-  const [revealed, setRevealed] = useState(initial);
+  const [picked, setPicked] = useState<SettingsScope>('personal');
+  const [revealed, setRevealed] = useState<SettingsScope>('personal');
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Options shrink when a permission answer lands, so a scope picked while the
-  // answer was pending falls back rather than editing a scope no longer offered.
-  const offered = (scope: SettingsScope) => (options.includes(scope) ? scope : (options[0] ?? initial));
+  // A permission answer lands after first paint, so a scope picked meanwhile
+  // falls back rather than editing one the caller may not write.
+  const pickable = (scope: SettingsScope) => options.includes(scope) && disabledReasons?.[scope] === undefined;
+  const offered = (scope: SettingsScope) => (pickable(scope) ? scope : (options[0] ?? 'personal'));
   const value = offered(picked);
   const shown = offered(revealed);
 
   const onChange = (next: SettingsScope) => {
-    if (next === value) return;
+    if (next === value || !pickable(next)) return;
     setPicked(next);
     const dx = options.indexOf(next) > options.indexOf(value) ? SLIDE_PX : -SLIDE_PX;
     const exit = animate(
@@ -127,7 +158,7 @@ export function useScopeControl(
     );
   };
 
-  return { value, shown, options, onChange, bodyRef };
+  return { value, shown, options, disabledReasons, onChange, bodyRef };
 }
 
 /** Clips the slide horizontally: a translate on a full-width body widens the page, and every scrollable ancestor answers with a scrollbar. */

@@ -31,6 +31,7 @@ type CredentialScope = 'user' | 'org';
 type Credential = NonNullable<ProviderInfo['userCredential']>;
 
 const CREDENTIAL_LABEL: Record<Credential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
+const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
 
 interface ActiveOAuthSession {
   provider: string;
@@ -118,8 +119,8 @@ export function ProviderAccessSection({ description }: { description?: string })
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
-  const scopeOptions: SettingsScope[] = authEnabled && canWriteOrgKey ? ['personal', 'org'] : ['personal'];
-  const scopeControl = useScopeControl(scopeOptions);
+  const scopeOptions: SettingsScope[] = authEnabled ? ['personal', 'org'] : ['personal'];
+  const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
   const scope: CredentialScope = scopeControl.shown === 'org' ? 'org' : 'user';
   const rowScope: RowScope = { scope, authEnabled };
   const scopeArg = authEnabled ? { scope } : {};
