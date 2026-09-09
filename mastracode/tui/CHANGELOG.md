@@ -1,5 +1,21 @@
 # mastracode
 
+## 0.39.0-alpha.17
+
+### Minor Changes
+
+- Added project-level MCP enable overrides and `/mcp inherit` for restoring global defaults. The MCP selector now shows both the project setting and global default, and hides global actions that would not change the setting. ([#23255](https://github.com/mastra-ai/mastra/pull/23255))
+
+  ```text
+  /mcp enable notion
+  /mcp inherit notion
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`50f5d03`](https://github.com/mastra-ai/mastra/commit/50f5d03dc334183fcab561089f78fc2c26c272c7)]:
+  - @mastra/code-sdk@1.7.0-alpha.16
+
 ## 0.38.1-alpha.16
 
 ### Patch Changes
