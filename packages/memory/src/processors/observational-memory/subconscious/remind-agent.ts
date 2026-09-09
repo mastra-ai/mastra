@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
-import type { ProcessorContext } from '@mastra/core/processors';
+import type { InputProcessor, ProcessInputStepArgs, ProcessorContext } from '@mastra/core/processors';
 import type { KnowledgeScope } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -8,6 +8,7 @@ import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
 import { createKnowledgeTools } from './knowledge-tools';
+import { RemindContextStateProcessor } from './remind-context-state';
 import { RemindContinuationProcessor } from './remind-continuation';
 import { getRemindMessageMetadata } from './remind-protocol';
 import type { SubconsciousModel } from './types';
@@ -106,6 +107,56 @@ function passiveCheck(
   return undefined;
 }
 
+/**
+ * Supplies the reply tool with the run's live conversation.
+ *
+ * Reply authorization checks the question against the run's messages, and the
+ * provider-facing view is the one that survives observational memory rebuilding
+ * the conversation mid-run. Scope is still enforced downstream by the tool
+ * itself; this only decides which view of the conversation it inspects.
+ */
+function createQuestionContextProcessor(replyTool: ToolAction<any, any, any>): InputProcessor {
+  return {
+    id: 'remind-question-context',
+    processInputStep: ({ messageList, tools }: ProcessInputStepArgs) => {
+      const contextualReply: typeof replyTool = {
+        ...replyTool,
+        execute: async (input, context) =>
+          replyTool.execute?.(input, {
+            ...context,
+            agent: context.agent ? { ...context.agent, messages: messageList.get.all.aiV5.model() } : undefined,
+          }),
+      };
+      return { tools: { ...tools, reply_to_memory_question: contextualReply } };
+    },
+  };
+}
+
+function buildInputProcessors(options: {
+  additionalTools?: Record<string, ToolAction<any, any, any>>;
+  parentMemory?: Memory;
+  parentThreadId: string;
+  resourceId: string;
+}): InputProcessor[] | undefined {
+  const processors: InputProcessor[] = [];
+  const replyTool = options.additionalTools?.reply_to_memory_question;
+  if (replyTool) processors.push(createQuestionContextProcessor(replyTool));
+  const parentMemory = options.parentMemory;
+  if (parentMemory) {
+    processors.push(
+      new RemindContextStateProcessor({
+        readParentObservations: async () => {
+          const engine = await parentMemory.omEngine;
+          if (!engine) return undefined;
+          const record = await engine.getRecord(options.parentThreadId, options.resourceId);
+          return record?.activeObservations ?? undefined;
+        },
+      }),
+    );
+  }
+  return processors.length > 0 ? processors : undefined;
+}
+
 export function createReminderAgent(options: {
   model: SubconsciousModel;
   memory: Memory;
@@ -114,6 +165,13 @@ export function createReminderAgent(options: {
   resourceId: string;
   parentThreadId: string;
   parentAgent?: ProcessorContext['agent'];
+  /**
+   * The parent conversation's own memory. The sidekick's memory deliberately
+   * runs without observational memory, so the parent's record is only reachable
+   * through the owner's instance. Omit it and the parent-context lane is simply
+   * not offered.
+   */
+  parentMemory?: Memory;
   fallbackSendSignal: SendSignal;
   additionalTools?: Record<string, ToolAction<any, any, any>>;
   instructions?: string;
@@ -239,25 +297,7 @@ export function createReminderAgent(options: {
       ...options.additionalTools,
       send_reminder: sendReminder,
     },
-    inputProcessors: options.additionalTools?.reply_to_memory_question
-      ? [
-          {
-            id: 'remind-question-context',
-            processInputStep: ({ messageList, tools }) => {
-              const replyTool = options.additionalTools!.reply_to_memory_question!;
-              const contextualReply: typeof replyTool = {
-                ...replyTool,
-                execute: async (input, context) =>
-                  replyTool.execute?.(input, {
-                    ...context,
-                    agent: context.agent ? { ...context.agent, messages: messageList.get.all.aiV5.model() } : undefined,
-                  }),
-              };
-              return { tools: { ...tools, reply_to_memory_question: contextualReply } };
-            },
-          },
-        ]
-      : undefined,
+    inputProcessors: buildInputProcessors(options),
     outputProcessors,
     maxProcessorRetries: outputProcessors ? 1 : undefined,
   });

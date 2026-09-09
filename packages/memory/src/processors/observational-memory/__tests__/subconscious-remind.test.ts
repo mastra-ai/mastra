@@ -426,14 +426,16 @@ describe('Subconscious remind', () => {
 
       expect(prompts[0]).toContain('user: what is the weather like on the moon?');
       expect(prompts[0]).toContain('already visible');
-      expect(prompts[0]).toContain("What the parent's accumulated observations already say about these candidates:");
+      // The parent's accumulated observations now arrive on their own state lane,
+      // recomputed when the sidekick is prompted, so the check message itself no
+      // longer carries a copy that has to be paid for on every check.
+      expect(prompts[0]).not.toContain(
+        "What the parent's accumulated observations already say about these candidates:",
+      );
       if (activeObservations) {
-        // Accumulated memory this small stays under the projection budget, so it is forwarded whole
-        // rather than filtered: below the budget, filtering would cost recall and save nothing.
-        expect(prompts[0]).toContain(activeObservations);
-      } else {
-        expect(prompts[0]).toMatch(/no accumulated observations?[^\n]*available/i);
+        expect(prompts[0]).not.toContain(activeObservations);
       }
+      void expectActiveExcerpt;
       expect(prompts[0]).toContain('Newly extracted observations:');
       expect(prompts[0]).toContain('compare each proposed fact against ALL supplied parent context');
       expect(prompts[0]).toContain('A different source ID or another conversation');

@@ -5,7 +5,7 @@ import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
-import { extractDistinctiveTerms, projectCandidateContext } from './candidate-context';
+import { extractDistinctiveTerms } from './candidate-context';
 import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
@@ -117,10 +117,6 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             ),
           ];
           const recentMessages = context.recentMessages?.trim() || '(none)';
-          const candidateContext = projectCandidateContext({
-            activeObservations: context.activeObservations ?? '',
-            sources,
-          });
           const replyTool = context.mainAgent
             ? createReplyToMemoryQuestionTool({
                 memory: remindMemory,
@@ -137,6 +133,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
             resourceId,
             parentThreadId: context.threadId,
             parentAgent: context.mainAgent,
+            parentMemory: context.memory,
             fallbackSendSignal: context.sendSignal,
             additionalTools: replyTool ? { reply_to_memory_question: replyTool } : undefined,
             instructions: config.instructions,
@@ -144,7 +141,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           });
           const delivery = agent.sendMessage(
             {
-              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nNewly extracted observations:\n${context.rawObservations}\n\nWhat the parent's accumulated observations already say about these candidates:\n${candidateContext}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
+              contents: `Passive reminder check ${eventId}\n\nCurrent time: ${new Date(createdAt).toISOString()}\n\nScoped source candidates:\n${JSON.stringify(sources)}\n\nNewly extracted observations:\n${context.rawObservations}\n\nRecent conversation messages already visible to the parent agent:\n${recentMessages}`,
               metadata: {
                 [REMIND_MESSAGE_METADATA_KEY]: { type: 'passive-check', eventId, candidateIds },
               },
