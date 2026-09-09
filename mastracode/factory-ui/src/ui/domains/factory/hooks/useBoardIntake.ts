@@ -62,10 +62,13 @@ export function useBoardIntake({
   );
   const linearEligible =
     !review && (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
-  const linearReady = linearEligible && linearRouted;
   // Bindings decide whether this board gets a Linear feed at all, so an
-  // eligible board stays pending until they load rather than looking empty.
+  // eligible board stays pending until they load rather than looking empty,
+  // and a failed load is shown as a feed error (with retry) rather than
+  // being mistaken for "nothing bound here".
   const bindingsPending = linearEligible && bindingsQuery.isPending;
+  const bindingsFailed = linearEligible && bindingsQuery.isError;
+  const linearReady = linearEligible && (linearRouted || bindingsFailed);
 
   // GitHub issues route by label: a label routed to a board sends its issues
   // there, and Work keeps every unrouted issue. A custom board only offers the
@@ -174,7 +177,16 @@ export function useBoardIntake({
         refetch: () => labelRoutesQuery.refetch(),
       }
     : issues;
-  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearIssues };
+  const linearFeed = bindingsFailed
+    ? {
+        ...linearIssues,
+        isPending: false,
+        error: bindingsQuery.error,
+        isFetchNextPageError: false,
+        refetch: () => bindingsQuery.refetch(),
+      }
+    : linearIssues;
+  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearFeed };
   const feed = active ? browsed[active] : undefined;
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {

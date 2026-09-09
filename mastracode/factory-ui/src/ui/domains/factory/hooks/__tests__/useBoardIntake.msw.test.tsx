@@ -84,6 +84,20 @@ describe('useBoardIntake Linear gating', () => {
     await waitFor(() => expect(result.current.available).toContain('linear'));
   });
 
+  it('reports a failed binding load instead of treating it as nothing bound', async () => {
+    stubIntake([]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).toEqual(['linear']);
+    expect(result.current.candidates).toEqual([]);
+    expect(result.current.feedByColumn.intake?.error).toBeInstanceOf(Error);
+  });
+
   it('keeps a Linear-eligible board pending until its bindings have loaded', async () => {
     const binding: IntakeSourceBinding = {
       integrationId: 'linear',
