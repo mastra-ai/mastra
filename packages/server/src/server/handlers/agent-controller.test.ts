@@ -598,10 +598,18 @@ describe('agent-controller routes', () => {
       const session = await controller.createSession({ resourceId: 'user-ds', id: 'user-ds', ownerId: 'code' });
       session.emit({ type: 'tool_start', toolCallId: 'call-1', toolName: 'read', args: { path: 'a.ts' } });
 
-      let received: unknown;
+      // The first frame is the connect-time snapshot (no tools yet); wait for
+      // the one that carries the tool.
+      let received: any;
       for (let i = 0; i < 10 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object' && 'type' in value && value.type === 'display_state_changed') {
+        if (
+          value &&
+          typeof value === 'object' &&
+          'type' in value &&
+          value.type === 'display_state_changed' &&
+          (value as any).displayState.activeTools['call-1']
+        ) {
           received = value;
         }
       }
@@ -609,6 +617,36 @@ describe('agent-controller routes', () => {
 
       expect(received).toBeDefined();
       const wire = JSON.parse(JSON.stringify(received));
+      expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
+    });
+
+    it('sends the current display state as the first frame so late joiners see in-flight tools', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-late', id: 'user-late', ownerId: 'code' });
+      session.displayState.apply({ type: 'agent_start' } as any);
+      session.displayState.apply({
+        type: 'tool_start',
+        toolCallId: 'call-1',
+        toolName: 'read',
+        args: { path: 'a.ts' },
+      });
+
+      // Client connects after the run started — nothing above went through the bus.
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-late',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const { value } = await reader.read();
+      await reader.cancel();
+
+      const wire = JSON.parse(JSON.stringify(value));
+      expect(wire.type).toBe('display_state_changed');
+      expect(wire.displayState.isRunning).toBe(true);
       expect(wire.displayState.activeTools['call-1']).toMatchObject({ name: 'read', status: 'running' });
     });
   });

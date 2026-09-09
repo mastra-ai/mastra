@@ -1654,3 +1654,150 @@ describe('live user signals sent by someone else', () => {
     expect(drawable[0]?.id).toMatch(/^local-/);
   });
 });
+
+describe('display_state_changed seeds the in-flight run for a late joiner', () => {
+  const emptyDisplayState = {
+    isRunning: true,
+    currentMessage: null,
+    queuedFollowUps: 0,
+    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    activeTools: {},
+    toolInputBuffers: {},
+    pendingApproval: null,
+    pendingSuspensions: {},
+    activeSubagents: {},
+    omProgress: undefined,
+    bufferingMessages: false,
+    bufferingObservations: false,
+    modifiedFiles: {},
+    tasks: [],
+    previousTasks: [],
+  };
+
+  function snapshot(overrides: Record<string, unknown>) {
+    return {
+      type: 'event' as const,
+      event: { type: 'display_state_changed' as const, displayState: { ...emptyDisplayState, ...overrides } },
+    } as Parameters<typeof transcriptReducer>[1];
+  }
+
+  function toolsOf(state: ReturnType<typeof transcriptReducer>) {
+    return state.entries.flatMap(e => (e.kind === 'message' ? Object.values(e.runtimeTools ?? {}) : []));
+  }
+
+  it('draws the running tool, partial message, prompts and subagent from the snapshot', () => {
+    const currentMessage = {
+      id: 'assistant-live',
+      role: 'assistant',
+      createdAt: '2026-09-09T10:00:00.000Z',
+      content: { format: 2, parts: [{ type: 'text', text: 'Reading the file…' }] },
+    };
+    const state = transcriptReducer(
+      createInitialTranscript({ messages: [], threadId: 't1' }),
+      snapshot({
+        currentMessage,
+        activeTools: { 'call-1': { name: 'view', args: { path: 'a.ts' }, status: 'running', partialResult: 'so far' } },
+        pendingSuspensions: {
+          'call-2': { toolCallId: 'call-2', toolName: 'ask_user', args: { q: '?' }, suspendPayload: { question: '?' } },
+        },
+        activeSubagents: { 'call-3': { agentType: 'explore', task: 'find it', modelId: 'm', status: 'running' } },
+        queuedFollowUps: 2,
+      }),
+    );
+
+    expect(state.entries.find(e => e.kind === 'message' && e.id === 'assistant-live')).toMatchObject({
+      streaming: true,
+    });
+    expect(toolsOf(state)).toEqual([
+      expect.objectContaining({ toolCallId: 'call-1', toolName: 'view', status: 'running', result: 'so far' }),
+    ]);
+    expect(state.entries).toContainEqual(
+      expect.objectContaining({ kind: 'suspension', id: 'suspension-call-2', toolCallId: 'call-2' }),
+    );
+    expect(state.entries).toContainEqual(
+      expect.objectContaining({ kind: 'subagent', id: 'subagent-call-3', done: false }),
+    );
+    expect(state.followUpCount).toBe(2);
+  });
+
+  it('seeds a pending approval prompt', () => {
+    const state = transcriptReducer(
+      createInitialTranscript({ messages: [], threadId: 't1' }),
+      snapshot({ pendingApproval: { toolCallId: 'call-1', toolName: 'execute_command', args: { command: 'rm' } } }),
+    );
+    expect(state.entries).toContainEqual(
+      expect.objectContaining({ kind: 'approval', id: 'approval-call-1', toolName: 'execute_command' }),
+    );
+  });
+
+  it('never regresses a tool that already ended on the live stream', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'call-1', toolName: 'view', args: { path: 'a.ts' } },
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'call-1', toolName: 'view', result: 'final', isError: false },
+    });
+
+    state = transcriptReducer(
+      state,
+      snapshot({ activeTools: { 'call-1': { name: 'view', args: { path: 'a.ts' }, status: 'running' } } }),
+    );
+
+    expect(toolsOf(state)).toEqual([expect.objectContaining({ toolCallId: 'call-1', status: 'done', result: 'final' })]);
+  });
+
+  it('does not overwrite a message already streaming on screen', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: dbMessage('assistant-live', 'assistant', [{ type: 'text', text: 'newer text' }]),
+      },
+    });
+    state = transcriptReducer(
+      state,
+      snapshot({
+        currentMessage: {
+          id: 'assistant-live',
+          role: 'assistant',
+          createdAt: '2026-09-09T10:00:00.000Z',
+          content: { format: 2, parts: [{ type: 'text', text: 'older' }] },
+        },
+      }),
+    );
+    const entry = state.entries.find(e => e.kind === 'message' && e.id === 'assistant-live');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'newer text' }]);
+  });
+
+  it('is a no-op when the same snapshot arrives twice', () => {
+    const action = snapshot({
+      activeTools: { 'call-1': { name: 'view', args: {}, status: 'running' } },
+      pendingSuspensions: { 'call-2': { toolCallId: 'call-2', toolName: 'ask_user', args: {}, suspendPayload: {} } },
+      activeSubagents: { 'call-3': { agentType: 'explore', task: 't', status: 'running' } },
+    });
+    const once = transcriptReducer(createInitialTranscript({ messages: [], threadId: 't1' }), action);
+    const twice = transcriptReducer(once, action);
+    expect(twice.entries).toHaveLength(once.entries.length);
+    expect(toolsOf(twice)).toHaveLength(1);
+  });
+
+  it('drops the prompt when tool_end reports the call resolved elsewhere', () => {
+    let state = transcriptReducer(
+      createInitialTranscript({ messages: [], threadId: 't1' }),
+      snapshot({
+        pendingSuspensions: { 'call-2': { toolCallId: 'call-2', toolName: 'ask_user', args: {}, suspendPayload: {} } },
+      }),
+    );
+    expect(state.entries.some(e => e.kind === 'suspension')).toBe(true);
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'call-2', toolName: 'ask_user', result: 'yes', isError: false },
+    });
+    expect(state.entries.some(e => e.kind === 'suspension')).toBe(false);
+  });
+});

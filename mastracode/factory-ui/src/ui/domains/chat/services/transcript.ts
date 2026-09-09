@@ -347,12 +347,16 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
-    case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+    case 'tool_end': {
+      const next = withTool(state, event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
       }));
+      // A prompt answered elsewhere (another tab, the TUI) never gets a local
+      // resolvePrompt; the call ending is the signal it is no longer pending.
+      return dropPromptsFor(next, event.toolCallId);
+    }
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -490,14 +494,20 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     }
 
     // Canonical display-state snapshot — carries the status-line figures
-    // (OM msg/mem budgets and cumulative token usage).
+    // (OM msg/mem budgets and cumulative token usage) and, on connect, the
+    // in-flight run a late joiner missed the events for.
     case 'display_state_changed': {
       const ds = event.displayState;
-      return {
-        ...state,
-        omProgress: ds.omProgress ?? state.omProgress,
-        usage: ds.tokenUsage ?? state.usage,
-      };
+      return seedFromDisplayState(
+        {
+          ...state,
+          omProgress: ds.omProgress ?? state.omProgress,
+          usage: ds.tokenUsage ?? state.usage,
+          followUpCount: ds.queuedFollowUps ?? state.followUpCount,
+        },
+        ds,
+        viewerId,
+      );
     }
 
     // Follow-up queue.
@@ -1236,6 +1246,104 @@ function toolPart(tool: ToolCall): MastraMessagePart {
 function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptState {
   if (state.entries.some(e => 'id' in e && e.id === prompt.id)) return state;
   return { ...state, entries: [...state.entries, prompt] };
+}
+
+function dropPromptsFor(state: TranscriptState, toolCallId: string): TranscriptState {
+  const entries = state.entries.filter(
+    e => !((e.kind === 'approval' || e.kind === 'suspension') && e.toolCallId === toolCallId),
+  );
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+type DisplayStateSnapshot = Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState'];
+
+/**
+ * Fold the controller's display state into the transcript. The bus only forwards
+ * future events, so this snapshot (sent as the first SSE frame, and again on every
+ * live change) is how a late joiner learns about the in-flight tool, the partial
+ * assistant text and the prompt the run is parked on.
+ *
+ * Non-regressive: it may arrive after live events already landed, or after a
+ * reconnect. Anything already on screen wins — a `done` tool never goes back to
+ * `running`, and a streaming message is never overwritten by an older copy.
+ */
+function seedFromDisplayState(
+  state: TranscriptState,
+  ds: DisplayStateSnapshot,
+  viewerId?: string,
+): TranscriptState {
+  let next = state;
+
+  const current = ds.currentMessage;
+  if (current && current.role === 'assistant') {
+    const drawn = next.entries.some(
+      e => e.kind === 'message' && (e.id === current.id || e.message.id === current.id),
+    );
+    if (!drawn) {
+      next = upsertMessage(
+        next,
+        { ...current, createdAt: new Date(current.createdAt) } as MastraDBMessage,
+        true,
+        viewerId,
+      );
+    }
+  }
+
+  for (const [toolCallId, tool] of Object.entries(ds.activeTools ?? {})) {
+    next = withTool(
+      next,
+      toolCallId,
+      t =>
+        t.status !== 'running'
+          ? t
+          : {
+              ...t,
+              toolName: tool.name,
+              args: t.args ?? tool.args,
+              result: t.result ?? tool.result ?? tool.partialResult,
+              status: tool.status === 'completed' ? 'done' : tool.status === 'error' ? 'error' : 'running',
+              createdAt: t.createdAt ?? Date.now(),
+            },
+      { toolName: tool.name, args: tool.args },
+    );
+  }
+
+  if (ds.pendingApproval) {
+    const { toolCallId, toolName, args } = ds.pendingApproval;
+    next = pushPrompt(next, { kind: 'approval', id: `approval-${toolCallId}`, toolCallId, toolName, args });
+  }
+  for (const s of Object.values(ds.pendingSuspensions ?? {})) {
+    next = pushPrompt(next, {
+      kind: 'suspension',
+      id: `suspension-${s.toolCallId}`,
+      toolCallId: s.toolCallId,
+      toolName: s.toolName,
+      args: s.args,
+      suspendPayload: s.suspendPayload,
+    });
+  }
+
+  for (const [toolCallId, sub] of Object.entries(ds.activeSubagents ?? {})) {
+    const id = `subagent-${toolCallId}`;
+    if (next.entries.some(e => e.kind === 'subagent' && e.id === id)) continue;
+    next = {
+      ...next,
+      entries: [
+        ...next.entries,
+        {
+          kind: 'subagent',
+          id,
+          toolCallId,
+          agentType: sub.agentType,
+          task: sub.task,
+          modelId: sub.modelId ?? '',
+          done: sub.status !== 'running',
+        },
+      ],
+    };
+  }
+
+  return next;
 }
 
 function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {

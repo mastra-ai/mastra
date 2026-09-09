@@ -561,6 +561,23 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
             }
           });
 
+          // The bus only forwards future events, so a late-joining client would
+          // otherwise see `running: true` with no in-flight tool, prompt or
+          // streaming text. displayState is the fold of every past event —
+          // send it as the first frame. Subscribe first so nothing is lost in
+          // the gap; the client folds the snapshot non-regressively.
+          try {
+            controller.enqueue(
+              toWireEvent({
+                type: 'display_state_changed',
+                displayState: session.displayState.get(),
+              } as AgentControllerEvent),
+            );
+          } catch {
+            cleanup();
+            return;
+          }
+
           const abortCleanup = () => cleanup(controller);
           abortSignal?.addEventListener('abort', abortCleanup, { once: true });
           scheduleHeartbeat();
