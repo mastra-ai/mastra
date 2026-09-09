@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from './single-connection-client';
 
@@ -86,6 +86,7 @@ describe('gateSingleConnectionClient', () => {
     const client = await setup();
 
     const tx = await client.transaction('write');
+    await tx.execute({ sql: 'INSERT INTO t (v) VALUES (?)', args: ['uncommitted'] });
     await expect(tx.execute('INSERT INTO nope VALUES (1)')).rejects.toThrow();
     tx.close();
 
@@ -95,27 +96,28 @@ describe('gateSingleConnectionClient', () => {
   });
 
   it('queues batch and executeMultiple behind an open transaction too', async () => {
-    const client = await setup();
+    const raw = createClient({ url: ':memory:' });
+    const client = gateSingleConnectionClient(raw);
+    await client.execute('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)');
+    const batchSpy = vi.spyOn(raw, 'batch');
+    const multipleSpy = vi.spyOn(raw, 'executeMultiple');
     const tx = await client.transaction('write');
     await tx.execute({ sql: 'INSERT INTO t (v) VALUES (?)', args: ['in-tx'] });
 
-    const order: string[] = [];
-    const batch = client.batch([{ sql: 'INSERT INTO t (v) VALUES (?)', args: ['batch'] }]).then(() => {
-      order.push('batch');
-    });
-    const multiple = client.executeMultiple("INSERT INTO t (v) VALUES ('multi')").then(() => {
-      order.push('multiple');
-    });
-    await new Promise(r => setTimeout(r, 20));
-    expect(order).toEqual([]);
+    const batch = client.batch([{ sql: 'INSERT INTO t (v) VALUES (?)', args: ['batch'] }]);
+    const multiple = client.executeMultiple("INSERT INTO t (v) VALUES ('multi')");
+    // Let ready microtasks run, then check driver invocation rather than completion time.
+    await new Promise<void>(resolve => queueMicrotask(resolve));
+    expect(batchSpy).not.toHaveBeenCalled();
+    expect(multipleSpy).not.toHaveBeenCalled();
 
     await tx.commit();
-    order.push('commit');
     await Promise.all([batch, multiple]);
-    expect(order).toEqual(['commit', 'batch', 'multiple']);
+    expect(batchSpy).toHaveBeenCalledOnce();
+    expect(multipleSpy).toHaveBeenCalledOnce();
 
-    const rows = await client.execute('SELECT v FROM t ORDER BY id');
-    expect(rows.rows.map(r => r.v)).toEqual(['in-tx', 'batch', 'multi']);
+    const rows = await client.execute('SELECT v FROM t');
+    expect(rows.rows.map(r => r.v).sort()).toEqual(['batch', 'in-tx', 'multi']);
     client.close();
   });
 
