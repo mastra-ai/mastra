@@ -326,6 +326,8 @@ export function compileClickHouseTraceQuery(plan: TrustedTraceQueryPlan): Compil
     FROM ${TABLE_FEEDBACK_EVENTS} FINAL
     WHERE isNotNull(traceId)
       AND traceId IN (SELECT traceId FROM root_scope)
+    ORDER BY feedbackId, timestamp DESC
+    LIMIT 1 BY feedbackId
   )`);
   }
 

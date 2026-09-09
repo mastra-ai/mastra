@@ -165,7 +165,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
                 spans: TRACE_QUERY_FIXTURE_DATA.spans,
                 relatedSpans: [],
                 scores: TRACE_QUERY_FIXTURE_DATA.scores,
-                feedback: currentTraceQueryFeedbackFixture(),
+                feedback: TRACE_QUERY_FIXTURE_DATA.feedback,
               };
         const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
           .filter(span => span.traceId !== null)

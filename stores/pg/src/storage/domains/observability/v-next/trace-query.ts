@@ -224,6 +224,14 @@ function latestScorePredicate(scoreTable: string): string {
   )`;
 }
 
+function latestFeedbackPredicate(feedbackTable: string): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM ${feedbackTable} newer
+    WHERE newer."feedbackId" = s."feedbackId"
+      AND newer."cursorId" > s."cursorId"
+  )`;
+}
+
 function collectRelationCollections(
   predicate: TrustedTraceQueryPredicate | undefined,
   collections = new Set<'spans' | 'scores' | 'feedback'>(),
@@ -377,6 +385,7 @@ export function compilePostgresTraceQuery(schema: string, plan: TrustedTraceQuer
     FROM ${feedbackTable} s
     WHERE s."traceId" IS NOT NULL
       AND s."traceId" IN (SELECT "traceId" FROM root_scope)
+      AND ${latestFeedbackPredicate(feedbackTable)}
   )`);
   }
 

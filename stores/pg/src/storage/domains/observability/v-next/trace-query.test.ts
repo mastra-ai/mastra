@@ -245,6 +245,8 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain('s."valueString" IS NOT NULL AND s."valueString" IN');
     expect(compiled.text).toContain('(s."valueString" IS NOT NULL OR s."valueNumber" IS NOT NULL)');
     expect(compiled.text).toContain('FROM "public"."mastra_feedback_events" s');
+    expect(compiled.text).toContain('newer."feedbackId" = s."feedbackId"');
+    expect(compiled.text).toContain('newer."cursorId" > s."cursorId"');
     expect(compiled.text).not.toContain("rating' OR TRUE --");
     expect(compiled.values).toContain("rating' OR TRUE --");
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');

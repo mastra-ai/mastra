@@ -1078,6 +1078,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'applies feedback none to only the latest record when its timestamp changes',
+    request: {
+      timeRange: fullRange,
+      where: {
+        feedback: {
+          none: {
+            op: 'eq',
+            left: { path: 'feedbackSource' },
+            right: { literal: 'superseded-patient' },
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
     name: 'preserves string feedback values without numeric coercion',
     request: {
       timeRange: fullRange,
