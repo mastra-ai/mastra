@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 export interface SettingsLayoutProps {
   title?: ReactNode;
+  titleAccessory?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
   inset?: boolean;
@@ -11,7 +12,15 @@ export interface SettingsLayoutProps {
   children: ReactNode;
 }
 
-export function SettingsLayout({ title, description, action, inset = false, variant, children }: SettingsLayoutProps) {
+export function SettingsLayout({
+  title,
+  titleAccessory,
+  description,
+  action,
+  inset = false,
+  variant,
+  children,
+}: SettingsLayoutProps) {
   if (title === undefined || title === null) {
     return variant === 'header' ? (
       children
@@ -33,13 +42,16 @@ export function SettingsLayout({ title, description, action, inset = false, vari
       >
         <div className={cn('flex min-w-0 flex-wrap items-start justify-between gap-4', inset && 'pl-4')}>
           <div className="grid min-w-0 gap-2">
-            <Txt
-              as="h1"
-              variant="header-md"
-              className={cn('min-w-0 truncate', 'font-sans font-medium tracking-normal text-neutral4')}
-            >
-              {title}
-            </Txt>
+            <div className="flex min-w-0 items-center gap-2">
+              <Txt
+                as="h1"
+                variant="header-md"
+                className={cn('min-w-0 truncate', 'font-sans font-medium tracking-normal text-neutral4')}
+              >
+                {title}
+              </Txt>
+              {titleAccessory ? <div className="shrink-0">{titleAccessory}</div> : null}
+            </div>
             {description ? (
               <Txt as="p" variant="ui-md" className="text-neutral4 m-0 leading-tight wrap-break-word">
                 {description}

@@ -7,6 +7,7 @@ describe('SettingsLayout', () => {
     const output = renderToStaticMarkup(
       <SettingsLayout
         title="Project Settings"
+        titleAccessory={<span>Studio</span>}
         description="Manage your project configuration."
         action={<button type="button">Save</button>}
       >
@@ -16,9 +17,11 @@ describe('SettingsLayout', () => {
 
     expect(output).toContain('<h1');
     expect(output).toContain('Project Settings');
+    expect(output).toContain('<span>Studio</span>');
     expect(output).toContain('data-slot="settings-page-header"');
     expect(output).toContain('flex min-w-0 flex-wrap items-start justify-between gap-4');
     expect(output).not.toContain('pl-4');
+    expect(output).toContain('flex min-w-0 items-center gap-2');
     expect(output).toContain('min-w-0 truncate');
     expect(output).toContain('<p');
     expect(output).toContain('Manage your project configuration.');

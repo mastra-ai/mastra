@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { Section } from '../Section';
 import type { SectionVariant } from '../Section';
@@ -12,6 +13,7 @@ type SettingsLayoutStoryProps = {
   inset: boolean;
   sectionVariant: SectionVariant;
   showAction: boolean;
+  showTitleAccessory: boolean;
   variant: 'default' | 'header';
 };
 
@@ -21,6 +23,7 @@ function SettingsLayoutStory({
   inset,
   sectionVariant,
   showAction,
+  showTitleAccessory,
   variant,
 }: SettingsLayoutStoryProps) {
   const content = (
@@ -55,6 +58,7 @@ function SettingsLayoutStory({
   return (
     <SettingsLayout
       title={title}
+      titleAccessory={showTitleAccessory ? <Badge size="sm">Studio</Badge> : undefined}
       description={description || undefined}
       inset={inset}
       action={showAction ? <Button size="sm">Save changes</Button> : undefined}
@@ -81,6 +85,7 @@ const meta = {
     inset: false,
     sectionVariant: 'factory',
     showAction: false,
+    showTitleAccessory: false,
     variant: 'default',
   },
   argTypes: {
@@ -92,6 +97,7 @@ const meta = {
       options: ['default', 'flat', 'factory'],
     },
     showAction: { control: 'boolean' },
+    showTitleAccessory: { control: 'boolean' },
     variant: {
       control: 'select',
       options: ['default', 'header'],
@@ -122,7 +128,8 @@ export const InsetWithAction: Story = {
 export const HeaderOnly: Story = {
   args: {
     title: 'Deployment',
-    description: 'Studio · Jan 1, 2025 07:00:00 · abcdef1',
+    description: 'Jan 1, 2025 07:00:00 · abcdef1',
+    showTitleAccessory: true,
     variant: 'header',
   },
 };
