@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod/v4';
+import type { ScoreRecord } from './scores';
+import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
 export const TRACE_QUERY_MAX_NODES = 100;
@@ -23,6 +25,7 @@ const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(v
 const literalStringSchema = z
   .string()
   .refine(value => hasMaxUtf8Bytes(value, TRACE_QUERY_MAX_STRING_BYTES), 'String literal is too large');
+const timestampLiteralSchema = z.string().datetime({ offset: true });
 const predicatePathSchema = z
   .string()
   .min(1)
@@ -214,8 +217,9 @@ export type TraceQueryField =
   | 'entityType'
   | 'environment'
   | 'status';
-export type TraceQuerySpanField = 'spanType' | 'error';
-export type TraceQueryScoreField = 'scorerId' | 'score';
+type TraceQueryDerivedSpanField = 'model' | 'provider' | 'durationMs' | 'status';
+export type TraceQuerySpanField = keyof typeof SPAN_FIELD_RULES;
+export type TraceQueryScoreField = keyof typeof SCORE_FIELD_RULES;
 export type TraceQueryCanonicalField = TraceQueryField | TraceQuerySpanField | TraceQueryScoreField;
 export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
@@ -355,15 +359,35 @@ const TRACE_FIELD_RULES: Record<TraceQueryField, FieldRule> = {
   status: { type: 'string', operators: STRING_OPERATORS },
 };
 
-const SPAN_FIELD_RULES: Record<TraceQuerySpanField, FieldRule> = {
+const SPAN_FIELD_RULES = {
+  name: { type: 'string', operators: STRING_OPERATORS },
   spanType: { type: 'string', operators: STRING_OPERATORS },
+  model: { type: 'string', operators: STRING_OPERATORS },
+  provider: { type: 'string', operators: STRING_OPERATORS },
+  startedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  endedAt: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  durationMs: { type: 'number', operators: ORDERED_OPERATORS },
+  status: { type: 'string', operators: STRING_OPERATORS },
   error: { type: 'presence', operators: PRESENCE_OPERATORS },
-};
+  entityType: { type: 'string', operators: STRING_OPERATORS },
+  entityId: { type: 'string', operators: STRING_OPERATORS },
+  entityName: { type: 'string', operators: STRING_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+} as const satisfies Partial<Record<Extract<keyof SpanRecord, string> | TraceQueryDerivedSpanField, FieldRule>>;
 
-const SCORE_FIELD_RULES: Record<TraceQueryScoreField, FieldRule> = {
+const SCORE_FIELD_RULES = {
   scorerId: { type: 'string', operators: STRING_OPERATORS },
+  scorerVersion: { type: 'string', operators: STRING_OPERATORS },
+  scoreSource: { type: 'string', operators: STRING_OPERATORS },
   score: { type: 'number', operators: ORDERED_OPERATORS },
-};
+  timestamp: { type: 'timestamp', operators: ORDERED_OPERATORS },
+  spanId: { type: 'presence', operators: PRESENCE_OPERATORS },
+  entityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  parentEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+  rootEntityVersionId: { type: 'string', operators: STRING_OPERATORS },
+} as const satisfies Partial<Record<Extract<keyof ScoreRecord, string>, FieldRule>>;
 
 type PredicateContext = 'trace' | 'spans' | 'scores';
 
@@ -722,9 +746,8 @@ function normalizePath(path: string): string {
 function normalizeLiteral(value: TraceQueryLiteral, rule: FieldRule): string | number | undefined {
   if (rule.type === 'number') return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   if (rule.type === 'timestamp') {
-    if (typeof value !== 'string') return undefined;
-    const timestamp = new Date(value);
-    return Number.isNaN(timestamp.getTime()) ? undefined : timestamp.toISOString();
+    const timestamp = timestampLiteralSchema.safeParse(value);
+    return timestamp.success ? new Date(timestamp.data).toISOString() : undefined;
   }
   if (rule.type === 'string') return typeof value === 'string' ? value : undefined;
   return undefined;

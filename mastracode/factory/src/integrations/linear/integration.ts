@@ -1038,9 +1038,10 @@ function getLinearAccessToken(connection: IntegrationConnection): string {
   return connection.accessToken;
 }
 
-function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'>): IntakeIssue {
+function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { projectId?: string | null }): IntakeIssue {
   return {
     id: issue.id,
+    sourceId: issue.projectId ?? null,
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,

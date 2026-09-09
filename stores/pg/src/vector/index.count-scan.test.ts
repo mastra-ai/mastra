@@ -48,6 +48,7 @@ vi.mock('@mastra/core/vector/filter', () => ({
 }));
 
 import type { PgVectorConfig } from '../shared/config';
+import { namespaceSchemaReadyResult } from './namespace-test-utils';
 import { PgVector } from '.';
 
 const mockClient = {
@@ -96,6 +97,9 @@ describe('PgVector row counts', () => {
       const sql = typeof text === 'string' ? text : text?.text || '';
       statements.push(sql);
 
+      if (sql.includes('AS composite_index')) {
+        return namespaceSchemaReadyResult();
+      }
       if (sql.includes('pg_attribute') && sql.includes('udt_name')) {
         return { rows: [{ udt_name: 'vector' }] };
       }

@@ -24,6 +24,7 @@ import {
 } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
+  assertFactoryDecisionTarget,
   validateFactoryRuleDecision,
   validateFactoryRuleDecisions,
 } from './validation.js';
@@ -391,6 +392,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            assertFactoryDecisionTarget(decision, this.#boards, itemBoard);
             if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }

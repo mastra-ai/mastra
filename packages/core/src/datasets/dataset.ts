@@ -309,6 +309,15 @@ export class Dataset {
   }
 
   /**
+   * Permanently scrub user-supplied content from every version of an item and
+   * from experiment results that reference it.
+   */
+  async purgeItem(args: { itemId: string }): Promise<void> {
+    const store = await this.#getDatasetsStore();
+    return store.purgeItem({ id: args.itemId, datasetId: this.id, filters: this.#scope });
+  }
+
+  /**
    * Delete multiple items from the dataset in bulk.
    */
   async deleteItems(args: { itemIds: string[] }): Promise<void> {
@@ -557,6 +566,7 @@ export class Dataset {
    * @param args.experimentId The experiment whose results to list.
    * @param args.traceId      Restrict to results linked to a specific trace.
    * @param args.status       Restrict to a specific per-result review status.
+   * @param args.tags         Restrict to results that have *all* of these tags.
    * @param args.filters      Multi-tenant scoping filters (organization/project).
    * @param args.page         Page number. Defaults to `0`.
    * @param args.perPage      Page size. Defaults to `20`.
@@ -565,6 +575,7 @@ export class Dataset {
     experimentId: string;
     traceId?: string;
     status?: ExperimentResultStatus;
+    tags?: string[];
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
@@ -575,6 +586,7 @@ export class Dataset {
       experimentId: args.experimentId,
       ...(args.traceId !== undefined ? { traceId: args.traceId } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.tags !== undefined ? { tags: args.tags } : {}),
       ...(args.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
@@ -885,10 +897,10 @@ export class Dataset {
         datasetVersion: item.datasetVersion,
         input: item.input,
         groundTruth: item.groundTruth,
-        expectedTrajectory: item.expectedTrajectory as TrajectoryExpectation | undefined,
-        requestContext: item.requestContext,
-        metadata: item.metadata,
-        scorerIds: item.scorerIds,
+        expectedTrajectory: (item.expectedTrajectory ?? undefined) as TrajectoryExpectation | undefined,
+        requestContext: item.requestContext ?? undefined,
+        metadata: item.metadata ?? undefined,
+        scorerIds: item.scorerIds ?? undefined,
       },
       datasetScorerIds: dataset?.scorerIds ?? null,
       attempt: args.attempt ?? 0,

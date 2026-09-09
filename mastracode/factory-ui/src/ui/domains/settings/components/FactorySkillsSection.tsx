@@ -6,18 +6,40 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight, Code, FileText } from 'lucide-react';
 import { useState } from 'react';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
-import type { FactorySkillInfo } from '../../../../api/types';
+import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
+import { orderedBoards } from '../../factory/boardCatalog';
 import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
-/** The built-in skills shown on the Skills page, in display order. */
-const DISPLAYED_SKILLS: { name: string; title: string }[] = [
-  { name: 'factory-triage', title: 'Triage' },
-  { name: 'factory-plan', title: 'Planning' },
-  { name: 'factory-review', title: 'Review' },
-  { name: 'factory-rereview', title: 'Re-review' },
-];
+interface DisplayedSkill {
+  name: string;
+  title: string;
+}
+
+/**
+ * The built-in skills shown on the Skills page, grouped by the built-in board
+ * whose lifecycle invokes them. This is an explicit association: the board
+ * code names these skills directly, so the UI does not infer anything from
+ * role names or lifecycle functions.
+ */
+const BUILT_IN_BOARD_SKILLS: Record<'work' | 'review', DisplayedSkill[]> = {
+  work: [
+    { name: 'factory-triage', title: 'Triage' },
+    { name: 'factory-plan', title: 'Planning' },
+  ],
+  review: [
+    { name: 'factory-review', title: 'Review' },
+    { name: 'factory-rereview', title: 'Re-review' },
+  ],
+};
+
+const DISPLAYED_SKILLS: DisplayedSkill[] = [...BUILT_IN_BOARD_SKILLS.work, ...BUILT_IN_BOARD_SKILLS.review];
+
+function isBuiltInBoard(id: string): id is 'work' | 'review' {
+  return id === 'work' || id === 'review';
+}
 
 function SkillContent({ content }: { content: string }) {
   const [raw, setRaw] = useState(false);
@@ -72,13 +94,72 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   );
 }
 
+function SkillCards({ displayed, skills }: { displayed: DisplayedSkill[]; skills: FactorySkillInfo[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {displayed.flatMap(({ name, title }) => {
+        const skill = skills.find(s => s.name === name);
+        return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
+      })}
+    </div>
+  );
+}
+
+/** Working roles a code-defined board declares; its kickoff instructions live in code, not a skill. */
+function CustomBoardRoles({ board }: { board: InstalledBoardInfo }) {
+  const roles = [...new Set(board.phases.flatMap(phase => (phase.role ? [phase.role] : [])))];
+  return (
+    <SettingsCard>
+      <div className="flex flex-col gap-2 px-4 py-3">
+        {roles.length === 0 ? (
+          <Txt as="p" variant="ui-sm" className="text-icon3">
+            This board declares no working roles.
+          </Txt>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {roles.map(role => (
+              <li key={role}>
+                <Txt as="span" variant="ui-sm" className="text-icon4 font-mono">
+                  {role}
+                </Txt>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Kickoff instructions for this board are defined in code by its board definition; there is no skill to show
+          here.
+        </Txt>
+      </div>
+    </SettingsCard>
+  );
+}
+
+function BoardGroup({ board, skills }: { board: InstalledBoardInfo; skills: FactorySkillInfo[] }) {
+  return (
+    <section aria-label={`${board.title} board`} className="flex flex-col gap-2">
+      <Txt as="h4" variant="ui-md" className="text-icon5 m-0">
+        {board.title}
+      </Txt>
+      {isBuiltInBoard(board.id) ? (
+        <SkillCards displayed={BUILT_IN_BOARD_SKILLS[board.id]} skills={skills} />
+      ) : (
+        <CustomBoardRoles board={board} />
+      )}
+    </section>
+  );
+}
+
 /**
- * Read-only view of the built-in Factory skills — the playbooks automated
- * Factory runs follow at each stage (Settings › Agent › Skills).
+ * Read-only view of the Factory skills — the playbooks automated Factory runs
+ * follow at each stage (Settings › Agent › Skills), grouped by installed board
+ * when a factory is selected.
  */
-export function FactorySkillsSection() {
+export function FactorySkillsSection({ factoryId }: { factoryId?: string }) {
   const skillsQuery = useFactorySkillsQuery();
+  const catalog = useBoardCatalog(factoryId);
   const skills = skillsQuery.data ?? [];
+  const boards = catalog.data === undefined ? undefined : orderedBoards(catalog.data);
 
   return (
     <SettingsSubsection
@@ -96,12 +177,24 @@ export function FactorySkillsSection() {
           {skillsQuery.error instanceof Error ? skillsQuery.error.message : 'Failed to load skills'}
         </Txt>
       )}
-      <div className="flex flex-col gap-3">
-        {DISPLAYED_SKILLS.flatMap(({ name, title }) => {
-          const skill = skills.find(s => s.name === name);
-          return skill ? [<SkillCard key={name} title={title} skill={skill} />] : [];
-        })}
-      </div>
+      {catalog.error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          Installed boards could not be loaded; showing built-in skills ungrouped.
+        </Txt>
+      )}
+      {boards === undefined ? (
+        <SkillCards displayed={DISPLAYED_SKILLS} skills={skills} />
+      ) : boards.length === 0 ? (
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          No boards are installed, so no board skills apply.
+        </Txt>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {boards.map(board => (
+            <BoardGroup key={board.id} board={board} skills={skills} />
+          ))}
+        </div>
+      )}
     </SettingsSubsection>
   );
 }

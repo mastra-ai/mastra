@@ -1,0 +1,106 @@
+---
+extends: existence
+message: "AI arrival metaphor: '%s'. Say which step handles it, or where it is sent. Disable this rule for transit or physics prose."
+level: error
+nonword: true
+ignorecase: true
+# The bare arrival verb: an inanimate subject that "reaches" an object
+# ("only referenced records reach the store," "an orphan never reaches an
+# extractor," "the stage hasn't reached that record yet," "a fragment
+# reaches nothing there"). FigurativeReaches takes the selection sense
+# ("reaches for") and leaves arrival alone, which is where a
+# documentation-corpus audit (2026-09) found 180 occurrences with no rule
+# reading them. The plain sentence names the step that handles the record
+# or the place it is sent. Like BareHolds, this is a separate rule so the
+# selection tokens keep their zero corpus cost while this one carries its
+# own.
+#
+# The subject slot is open behind a determiner, with a bare plural, the
+# perfect-tense tokens, and the clause-final relative clause ("the items a
+# query reaches") as companions, and the exceptions name what literally
+# arrives: beings and limbs, vehicles, and the physics register where
+# light, sound, and a river reach somewhere. The object lookahead refuses
+# the numeric and terminal senses that are measurement rather than
+# metaphor ("reaches zero," "reaches EOF," "reaches the end," "reaches its
+# limit"), so a counter that reaches a threshold stays quiet, and it
+# refuses the copulas and prepositions that would make the noun "reach"
+# match ("its primary reach is"), which FigurativeNouns reads instead.
+#
+# What matches is the transport idiom of runtime prose, about fifty times
+# across the Go and Python standard libraries ("so that it reaches the
+# dist process," "the only backslashes that reach here," "if the forked
+# child reaches its exec call"), each the figure and each flagged on the
+# maintainer's call. Prose about network transit or physical travel
+# disables the rule.
+exceptions:
+  # Body parts that do the literal reaching
+  - "(?i)hands?"
+  - "(?i)arms?"
+  - "(?i)fingers?"
+  # People and creatures
+  - "(?i)people"
+  - "(?i)person"
+  - "(?i)m[ae]n"
+  - "(?i)wom[ae]n"
+  - "(?i)child(?:ren)?"
+  - "(?i)kids?"
+  - "(?i)bab(?:y|ies)"
+  - "(?i)toddlers?"
+  - "(?i)patients?"
+  - "(?i)players?"
+  - "(?i)climbers?"
+  - "(?i)swimmers?"
+  - "(?i)hikers?"
+  - "(?i)runners?"
+  - "(?i)travell?ers?"
+  - "(?i)passengers?"
+  - "(?i)teams?"
+  - "(?i)users?"
+  - "(?i)callers?"
+  - "(?i)readers?"
+  - "(?i)cats?"
+  - "(?i)dogs?"
+  - "(?i)birds?"
+  - "(?i)robots?"
+  # Vehicles and the physics register
+  - "(?i)ships?"
+  - "(?i)planes?"
+  - "(?i)aircraft"
+  - "(?i)trains?"
+  - "(?i)bus(?:es)?"
+  - "(?i)boats?"
+  - "(?i)rockets?"
+  - "(?i)probes?"
+  - "(?i)missiles?"
+  - "(?i)light"
+  - "(?i)sound"
+  - "(?i)waves?"
+  - "(?i)heat"
+  - "(?i)water"
+  - "(?i)rivers?"
+  - "(?i)roads?"
+  - "(?i)temperatures?"
+tokens:
+  # --- Determiner-gated arrival: any artifact reaching a determined or
+  # named object ("the catalog reached the store," "an orphan never
+  # reaches an extractor," "the stage hasn't reached that record," "one
+  # flag reaches INFO"), with an optional modifier, an optional auxiliary,
+  # and an optional adverb inside the span. "Reaches for" and "reaches
+  # out" stay with FigurativeReaches and ClosingPleasantries.
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no|only|most|two|three) (?:[a-z'-]+ )?[a-z]+ (?:never |ever |still |also |only |already |eventually |finally |actually |then |first |last |hasn't |haven't |hadn't |has |have |had |can't |cannot |won't |will |would |could |should |may |might |must |to |can |does |doesn't |did |didn't )?(?:actually |ever |never |still |also |only |yet )?reach(?:es|ed|ing)? (?!(?:for|out|zero|0|EOF|its end|the end|an end|end|capacity|its limit|a limit|the limit|steady|a fixed|its maximum|the maximum|its minimum|the minimum|a size|a length|a value|a certain|a threshold|the threshold|a point|the point|a state|a level|the level|a depth|the depth|a count|a total|the total|the top|the bottom|the root|the same|a leaf|the leaf|a node|the node|a null|nil|null|the target|its target|a target|a maximum|a minimum|the goal|its goal|the age|age|maturity|is|are|was|were|has|have|had|be|been|by|from|of|in|on|at|to|with|and|or|but|as|than|into|onto|via|through|over|under|after|before|when|if|unless|until|while|because|so|that|which|who|not|only|also|then|there|here|out|up|down|off|for|about|across|along|around|beyond|inside|outside|within|without|toward|towards|against|between|among|during|per|like|its|itself|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|fifty|hundred|thousand|million|several|many|more|fewer|less|enough|too|\\d+)\\b)(?:it|them|that|this|nothing|a|an|the|its|their|every|each|any|no|one|[a-z][a-z_]+)\\b"
+
+  # --- The bare plural subject ("only referenced records reach the
+  # store," "orphans reach nothing").
+  - "\\b[a-z]+s (?:never |ever |still |also |only |already |eventually |finally |actually )?reach (?!(?:for|out|zero|0|EOF|its end|the end|an end|end|capacity|its limit|a limit|the limit|steady|a fixed|its maximum|the maximum|its minimum|the minimum|a size|a length|a value|a certain|a threshold|the threshold|a point|the point|a state|a level|the level|a depth|the depth|a count|a total|the total|the top|the bottom|the root|the same|a leaf|the leaf|a node|the node|a null|nil|null|the target|its target|a target|a maximum|a minimum|is|are|was|were|has|have|had|be|been|by|from|of|in|on|at|to|with|and|or|but|as|than|into|onto|via|through|over|under|after|before|when|if|unless|until|while|because|so|that|which|who|not|only|also|then|there|here|out|up|down|off|for|about|across|along|around|beyond|inside|outside|within|without|toward|towards|against|between|among|during|per|like|its|itself|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|fifty|hundred|thousand|million|several|many|more|fewer|less|enough|too|\\d+)\\b)(?:it|them|that|this|nothing|a|an|the|its|their|every|each|any|no|one|[a-z][a-z_]+)\\b"
+
+  # --- The perfect and adverbial tokens with the subject out of view
+  # ("has reached the store," "never reached it," "already reached that
+  # record").
+  - "\\b(?:has|have|hasn't|haven't|had|hadn't|never|ever|already|only|eventually|finally|actually) (?:not |never |already |yet |ever )?reached (?!(?:for|out|zero|0|EOF|its end|the end|an end|end|capacity|its limit|a limit|the limit|steady|a fixed|its maximum|the maximum|its minimum|the minimum|a size|a length|a value|a certain|a threshold|the threshold|a point|the point|a state|a level|the level|a depth|the depth|a count|a total|the total|the top|the bottom|the root|the same|a leaf|the leaf|a node|the node|a null|nil|null|the target|its target|a target|a maximum|a minimum|the goal|its goal|the age|age|maturity|is|are|was|were|has|have|had|be|been|by|from|of|in|on|at|to|with|and|or|but|as|than|into|onto|via|through|over|under|after|before|when|if|unless|until|while|because|so|that|which|who|not|only|also|then|there|here|out|up|down|off|for|about|across|along|around|beyond|inside|outside|within|without|toward|towards|against|between|among|during|per|like|its|itself|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|fifty|hundred|thousand|million|several|many|more|fewer|less|enough|too|\\d+)\\b)(?:it|them|that|this|nothing|a|an|the|its|their|every|each|any|no|one|[a-z][a-z_]+)\\b"
+
+  # --- The object fronted: a relative clause that ends on the verb ("the
+  # items a query reaches," "a record no extractor reaches"). The
+  # lookbehind refuses the passive ("the timeout is reached"), which is
+  # a measurement; three corpus hits remain ("statements that execution
+  # can never reach").
+  - "\\b(?:a|an|the|each|every|its|their|this|that|one|no) (?:[a-z'-]+ )?(?!(?:is|are|was|were|be|been|being|get|gets|got|getting)\\b)[a-z]+ (?:never |ever |still |also |only |already |actually |can |could |will |would |may |might |must |can't |cannot |won't )?reach(?:es|ed)?(?=[.,;:)]|$| (?:and|or|but|then|now|first|last|too|either)\\b)"

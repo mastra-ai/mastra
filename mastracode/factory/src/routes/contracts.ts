@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
@@ -126,8 +128,8 @@ export const updateWorkItemBodySchema = z
 
 export const transitionBodySchema = z
   .object({
-    board: z.enum(['work', 'review']),
-    stage: z.enum(['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled']),
+    board: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
+    stage: z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE),
     expectedRevision: z.number().int().min(1),
     requestId: trimmedUuidSchema,
     cause: nonEmptyTrimmed(256),
@@ -355,6 +357,30 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Get queue-health thresholds',
     pathSchema: projectPathSchema,
     responseSchema: z.object({ thresholds: z.array(z.number().finite()) }),
+  },
+  boardCatalog: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards',
+    description: 'List installed Factory boards',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      boards: z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          initialPhase: z.string(),
+          phases: z.array(
+            z.object({
+              id: z.string(),
+              title: z.string(),
+              kind: z.enum(['resting', 'working', 'terminal']),
+              role: z.string().optional(),
+              transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
+            }),
+          ),
+        }),
+      ),
+    }),
   },
   workItemList: {
     method: 'GET',

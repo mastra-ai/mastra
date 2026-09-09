@@ -2,14 +2,14 @@ import { expect } from './expect.js';
 
 import type { McE2eScenario } from './types.js';
 
-const MODEL_ATTRIBUTION = 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>';
-const FALLBACK_ATTRIBUTION = 'Co-Authored-By: Mastra Code <noreply@mastra.ai>';
+const PLATFORM_BOT_ATTRIBUTION =
+  'Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>';
 
 export const commitAttributionPromptScenario: McE2eScenario = {
   name: 'commit-attribution-prompt',
   description:
-    'Verify real TUI prompts include model-specific commit attribution guidance and the model-authored commit records it.',
-  testName: 'includes selected model ID in commit attribution prompt guidance and committed history',
+    'Verify real TUI prompts include platform bot commit attribution guidance and the authored commit records it.',
+  testName: 'includes platform bot commit attribution prompt guidance and committed history',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'commit-attribution-prompt.json',
@@ -25,7 +25,7 @@ export const commitAttributionPromptScenario: McE2eScenario = {
     terminal.submit('!git log -1 --format=%B');
     await runtime.waitForScreenText(/test: commit attribution e2e/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /Co-Authored-By: Mastra Code \(openai\/gpt-5\.4-mini\) <noreply@mastra\.ai>/i,
+      /Co-Authored-By: mastra-platform\[bot\] <284800079\+mastra-platform\[bot\]@users\.noreply\.github\.com>/i,
       terminal,
       10_000,
     );
@@ -37,8 +37,7 @@ export const commitAttributionPromptScenario: McE2eScenario = {
       throw new Error(`Expected commit attribution scenario to make 2 AIMock requests, received ${requests.length}`);
     }
     const body = JSON.stringify(requests);
-    expect(body).toContain(MODEL_ATTRIBUTION);
+    expect(body).toContain(PLATFORM_BOT_ATTRIBUTION);
     expect(body).toContain('git commit');
-    expect(body).not.toContain(FALLBACK_ATTRIBUTION);
   },
 };

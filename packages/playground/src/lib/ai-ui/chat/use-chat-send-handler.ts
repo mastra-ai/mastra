@@ -201,10 +201,11 @@ export const useChatSendHandler = ({
           // Refetch the panel again once buffering completes, so any records that
           // only landed after awaitBufferStatus resolved are reflected immediately.
           refreshTimelinePanel(currentThreadId);
+          void refreshWorkingMemory?.();
         })
         .catch(() => {});
     },
-    [agentId, baseClient, queryClient, refreshTimelinePanel, setMessages],
+    [agentId, baseClient, queryClient, refreshTimelinePanel, refreshWorkingMemory, setMessages],
   );
 
   const handleHandledChunk = useCallback(
@@ -225,11 +226,21 @@ export const useChatSendHandler = ({
       ) {
         refreshObservationalMemory(handled.data?.operationType);
       }
+      if (handled?.type === 'data-om-observation-end') {
+        void refreshWorkingMemory?.();
+      }
       if (handled?.type === 'data-om-activation') {
         handleActivation(handled.data);
       }
     },
-    [handleActivation, handleObservationStart, handleProgressUpdate, refreshObservationalMemory, setStreamErrors],
+    [
+      handleActivation,
+      handleObservationStart,
+      handleProgressUpdate,
+      refreshObservationalMemory,
+      refreshWorkingMemory,
+      setStreamErrors,
+    ],
   );
 
   const send = useCallback(
@@ -295,6 +306,8 @@ export const useChatSendHandler = ({
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
                 }
                 await refreshThreadList?.();
+                refreshTimelinePanel(deps.threadId);
+                completeObservationalMemoryBuffering(deps.threadId);
               }
               if (didUpdateWorkingMemory(chunk)) {
                 void refreshWorkingMemory?.();
@@ -304,8 +317,6 @@ export const useChatSendHandler = ({
             signal: controller.signal,
           });
 
-          refreshTimelinePanel(deps.threadId);
-          completeObservationalMemoryBuffering(deps.threadId);
           return;
         }
 

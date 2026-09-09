@@ -12,9 +12,16 @@ import { Link, Outlet, useNavigate, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
+import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
+import { ExperimentSideRail } from '@/domains/experiments/components/experiment-side-rail';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
+import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+
+// Stable fallback so the selection hook's memoised filters don't churn while results load.
+const EMPTY_RESULTS: never[] = [];
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -53,6 +60,14 @@ function ExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
+  const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
+
+  const selection = useExperimentResultsSelection({
+    datasetId,
+    experimentId: experimentId ?? '',
+    results: results ?? EMPTY_RESULTS,
+  });
+
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
@@ -72,30 +87,23 @@ function ExperimentPage() {
     );
   }
 
-  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
-  // experimentId isn't present in the full experiments listing (so we can't
-  // resolve a datasetId for it).
-  if (
-    (experimentError && is404NotFoundError(experimentError)) ||
-    (!experimentsListLoading && !datasetId) ||
-    (!experimentLoading && !experimentError && !experiment)
-  ) {
-    return (
-      <ExperimentPageShell>
-        <EmptyState
-          iconSlot={<PlayCircle />}
-          titleSlot="Experiment not found"
-          descriptionSlot={`No experiment with id "${experimentId}".`}
-          actionSlot={
-            <Button as={Link} to="/experiments">
-              <ArrowLeft />
-              Back to Experiments
-            </Button>
-          }
-        />
-      </ExperimentPageShell>
-    );
-  }
+  const notFound = (
+    <ExperimentPageShell>
+      <EmptyState
+        iconSlot={<PlayCircle />}
+        titleSlot="Experiment not found"
+        descriptionSlot={`No experiment with id "${experimentId}".`}
+        actionSlot={
+          <Button as={Link} to="/experiments">
+            <ArrowLeft />
+            Back to Experiments
+          </Button>
+        }
+      />
+    </ExperimentPageShell>
+  );
+
+  if (experimentError && is404NotFoundError(experimentError)) return notFound;
 
   if (experimentError) {
     return (
@@ -112,30 +120,39 @@ function ExperimentPage() {
     );
   }
 
+  // Not found: the experimentId isn't present in the full experiments listing
+  // (so we can't resolve a datasetId for it), or the fetch resolved empty.
+  if (!datasetId || !experiment) return notFound;
+
   return (
     <ExperimentItemPanelProvider
       experimentId={experimentId}
       datasetId={datasetId}
-      experimentStatus={experiment!.status}
+      experimentStatus={experiment.status}
       results={results ?? []}
       isLoadingResults={resultsLoading}
       hasNextPage={hasNextPage}
     >
       <div className="h-full">
         <PageLayout height="full">
-          <ExperimentTopArea experiment={experiment!} onDeleteClick={() => setDeleteDialogOpen(true)} />
+          <ExperimentTopArea experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)}>
+            <ExperimentResultsBulkActions selection={selection} />
+          </ExperimentTopArea>
 
-          <PageLayout.MainArea className="overflow-visible">
+          {/* Results take the remaining width; the rail keeps the pipeline and run metadata beside them. */}
+          <PageLayout.MainArea className="grid grid-cols-[1fr_auto] gap-6 overflow-visible">
             <ExperimentResultsSection
               experimentId={experimentId}
-              datasetId={datasetId}
-              experimentStatus={experiment!.status}
+              experimentStatus={experiment.status}
               results={results ?? []}
               isLoading={resultsLoading}
               setEndOfListElement={setEndOfListElement}
               isFetchingNextPage={isFetchingNextPage}
               hasNextPage={hasNextPage}
+              selectedIds={selection.selectedIds}
+              onToggleSelect={selection.toggleSelect}
             />
+            <ExperimentSideRail experiment={experiment} metrics={experimentMetrics} className="w-80 overflow-y-auto" />
           </PageLayout.MainArea>
         </PageLayout>
 
@@ -146,7 +163,7 @@ function ExperimentPage() {
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           experimentId={experimentId}
-          experimentName={experiment!.name ?? undefined}
+          experimentName={experiment.name ?? undefined}
           onSuccess={() => navigate('/experiments')}
         />
       </div>

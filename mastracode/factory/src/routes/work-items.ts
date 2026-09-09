@@ -361,6 +361,28 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   routes(): ApiRoute[] {
     const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
     return [
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          return c.json({
+            boards: [...this.#boards].map(([id, board]) => ({
+              id,
+              title: board.title,
+              initialPhase: board.initialPhase,
+              phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
+                id: phaseId,
+                title: phase.title,
+                kind: phase.kind,
+                ...(phase.kind === 'working' ? { role: phase.role } : {}),
+                transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
+              })),
+            })),
+          });
+        },
+      }),
       // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
