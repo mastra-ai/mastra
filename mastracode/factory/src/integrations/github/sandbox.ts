@@ -212,21 +212,53 @@ export class MaterializeError extends Error {
 }
 
 /**
+ * How a provider addresses a repository over HTTPS.
+ *
+ * Git itself is provider-neutral; only the host and the username half of token
+ * auth differ. GitHub wants `x-access-token`, GitLab wants `oauth2`, and each
+ * has its own host — so a deployment whose codebase lives on GitLab needs this
+ * to be data rather than a literal baked into the URL builders.
+ */
+export interface RepoRemote {
+  /** Origin with no trailing slash: `https://github.com`, `https://gitlab.example.com`. */
+  origin: string;
+  /** Username half of HTTPS token auth. */
+  tokenUser: string;
+}
+
+export const GITHUB_REMOTE: RepoRemote = { origin: 'https://github.com', tokenUser: 'x-access-token' };
+
+/**
+ * `owner/repo`, or a GitLab nested group path (`group/subgroup/project`).
+ * Each segment is restricted to git-and-shell-safe characters, so the name can
+ * be interpolated into a remote URL without opening an injection.
+ */
+function isRepoFullName(value: string): boolean {
+  return /^[\w.-]+(?:\/[\w.-]+)+$/.test(value) && !value.includes('..');
+}
+
+/**
  * Build the token-auth clone/pull URL for a repo. The token lives only inside
  * this URL and is scrubbed from the remote after the operation.
  */
-function tokenUrl(repoFullName: string, token: string): string {
-  return `https://x-access-token:${token}@github.com/${repoFullName}.git`;
+function tokenUrl(repoFullName: string, token: string, remote: RepoRemote = GITHUB_REMOTE): string {
+  const { protocol, host } = new URL(remote.origin);
+  // Percent-encoded: a GitLab PAT may contain characters (`-`, `_` are safe,
+  // but `+` or `/` in other providers' tokens are not) that would otherwise
+  // terminate the userinfo section early and corrupt the URL.
+  return `${protocol}//${remote.tokenUser}:${encodeURIComponent(token)}@${host}/${repoFullName}.git`;
 }
 
-function cleanUrl(repoFullName: string): string {
-  return `https://github.com/${repoFullName}.git`;
+function cleanUrl(repoFullName: string, remote: RepoRemote = GITHUB_REMOTE): string {
+  return `${remote.origin}/${repoFullName}.git`;
 }
 
 /** Repo metadata needed to materialize, read from the org-owned project row. */
 export interface RepoMaterializeInfo {
   repoFullName: string;
   defaultBranch: string;
+  /** Defaults to GitHub, so an existing caller keeps its behavior unchanged. */
+  remote?: RepoRemote;
 }
 
 /** Options for {@link materializeRepo}. */
@@ -260,7 +292,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // 0. Defense in depth: never build a git command from values that aren't
   // strictly shaped, even if a malformed row reached the DB. Inputs are also
   // validated at the route boundary before storage.
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+  if (!isRepoFullName(repo)) {
     throw new MaterializeError(`Refusing to materialize: invalid repo full name '${repo}'.`, 'clone-failed');
   }
   if (!/^[A-Za-z0-9_./-]+$/.test(repoInfo.defaultBranch)) {
@@ -290,12 +322,13 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
   // image sits detached at its pinned commit, a resumed session on its
   // branch. Syncing with the remote is the session's business; the branch
   // checkout that follows fetches the base branch it needs.
-  const existing = await existingCheckoutRemote(sandbox, workdir, repo);
+  const remote = repoInfo.remote ?? GITHUB_REMOTE;
+  const existing = await existingCheckoutRemote(sandbox, workdir, repo, remote);
   if (existing !== null) {
     // A token an earlier start failed to scrub must not outlive it; the
     // remote already carries the plain URL otherwise, so this costs nothing
     // on the common path.
-    if (/\/\/[^/]*@/.test(existing)) await scrubRemote(sandbox, workdir, repo, true);
+    if (/\/\/[^/]*@/.test(existing)) await scrubRemote(sandbox, workdir, repo, true, remote);
   } else {
     // 2. First open: shallow-clone the default branch into the workdir, the
     // same clone a repo template bakes into its image. The workdir holds no
@@ -315,7 +348,11 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     try {
       const clone = await gitTransfer(
         sandbox,
-        repoCloneCommand({ cloneUrl: tokenUrl(repo, token), destination: workdir, branch: repoInfo.defaultBranch }),
+        repoCloneCommand({
+          cloneUrl: tokenUrl(repo, token, remote),
+          destination: workdir,
+          branch: repoInfo.defaultBranch,
+        }),
         {
           phase: 'repository clone',
           beforeRetry: async () => {
@@ -342,12 +379,12 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
       // The scrub must never hide the actionable failure, but once the token
       // reached the remote its own failure can't stay silent either: report
       // both, primary cause and classification first.
-      throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'clone-failed');
+      throw await scrubbedFailure(sandbox, workdir, repo, tokenInRemote, primary, 'clone-failed', remote);
     }
 
     // 3b. Success: the token is in the remote and the workdir has a `.git`, so
     // a failed scrub means the token may still be persisted: surface it.
-    await scrubRemote(sandbox, workdir, repo, tokenInRemote);
+    await scrubRemote(sandbox, workdir, repo, tokenInRemote, remote);
   }
 
   // 4. Mark materialized.
@@ -514,23 +551,30 @@ async function existingCheckoutRemote(
   sandbox: ExecutableSandbox,
   workdir: string,
   repoFullName: string,
+  remote: RepoRemote = GITHUB_REMOTE,
 ): Promise<string | null> {
   const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
   if (result.exitCode !== 0) return null;
   const url = result.stdout.trim();
-  return isRemoteForRepo(url, repoFullName) ? url : null;
+  return isRemoteForRepo(url, repoFullName, remote) ? url : null;
 }
 
-/** True only for `https://github.com/<repo>[.git]`, with or without embedded credentials. */
-function isRemoteForRepo(url: string, repoFullName: string): boolean {
+/** True only for `<remote origin>/<repo>[.git]`, with or without embedded credentials. */
+function isRemoteForRepo(url: string, repoFullName: string, remote: RepoRemote = GITHUB_REMOTE): boolean {
   let parsed: URL;
+  let expected: URL;
   try {
     parsed = new URL(url);
+    expected = new URL(remote.origin);
   } catch {
     return false;
   }
-  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return false;
-  if (parsed.port !== '' || parsed.search !== '' || parsed.hash !== '') return false;
+  if (parsed.protocol !== expected.protocol || parsed.hostname.toLowerCase() !== expected.hostname.toLowerCase()) {
+    return false;
+  }
+  // A self-hosted instance may legitimately run on a non-default port, so the
+  // comparison is against the configured origin rather than "no port".
+  if (parsed.port !== expected.port || parsed.search !== '' || parsed.hash !== '') return false;
   return parsed.pathname.replace(/\.git$/, '').toLowerCase() === `/${repoFullName.toLowerCase()}`;
 }
 
@@ -554,8 +598,9 @@ async function scrubRemote(
   workdir: string,
   repoFullName: string,
   tokenInRemote: boolean,
+  remote: RepoRemote = GITHUB_REMOTE,
 ): Promise<void> {
-  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`;
+  const scrub = `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName, remote))}`;
   if (!tokenInRemote) {
     await sh(sandbox, scrub).catch(() => undefined);
     return;
@@ -584,9 +629,10 @@ async function scrubbedFailure(
   tokenInRemote: boolean,
   primary: unknown,
   fallback: MaterializeError['code'],
+  remote: RepoRemote = GITHUB_REMOTE,
 ): Promise<unknown> {
   try {
-    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote);
+    await scrubRemote(sandbox, workdir, repoFullName, tokenInRemote, remote);
     return primary;
   } catch (scrubError) {
     const scrubMessage = scrubError instanceof Error ? scrubError.message : String(scrubError);
@@ -703,18 +749,19 @@ export async function withInstallToken<T>(
   repoFullName: string,
   token: string,
   fn: () => Promise<T>,
+  remote: RepoRemote = GITHUB_REMOTE,
 ): Promise<T> {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
+  if (!isRepoFullName(repoFullName)) {
     throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
   }
 
   const setUrl = await sh(
     sandbox,
-    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token))}`,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token, remote))}`,
   );
   if (setUrl.exitCode !== 0) {
     // Best-effort scrub even though set-url failed, then surface the failure.
-    await scrubRemote(sandbox, workdir, repoFullName, false);
+    await scrubRemote(sandbox, workdir, repoFullName, false, remote);
     throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
   }
 
@@ -722,11 +769,11 @@ export async function withInstallToken<T>(
   try {
     result = await fn();
   } catch (primary) {
-    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed');
+    throw await scrubbedFailure(sandbox, workdir, repoFullName, true, primary, 'push-failed', remote);
   }
   // Restore the tokenless remote. The workdir has a `.git` (we just rewrote
   // its remote) so a scrub failure means the token may still persist — surface it.
-  await scrubRemote(sandbox, workdir, repoFullName, true);
+  await scrubRemote(sandbox, workdir, repoFullName, true, remote);
   return result;
 }
 
@@ -742,17 +789,25 @@ export async function pushBranch(
   branch: string,
   token: string,
   repoFullName: string,
+  remote: RepoRemote = GITHUB_REMOTE,
 ): Promise<void> {
   if (!isValidGitRef(branch)) {
     throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
   }
 
-  await withInstallToken(sandbox, workdir, repoFullName, token, async () => {
-    const push = await sh(sandbox, `git -C ${shellQuote(workdir)} push -u origin ${shellQuote(branch)}`);
-    if (push.exitCode !== 0) {
-      throw classifyGitFailure(push, 'push-failed');
-    }
-  });
+  await withInstallToken(
+    sandbox,
+    workdir,
+    repoFullName,
+    token,
+    async () => {
+      const push = await sh(sandbox, `git -C ${shellQuote(workdir)} push -u origin ${shellQuote(branch)}`);
+      if (push.exitCode !== 0) {
+        throw classifyGitFailure(push, 'push-failed');
+      }
+    },
+    remote,
+  );
 }
 
 export interface CommitResult {

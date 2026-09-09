@@ -1117,3 +1117,124 @@ describe('requireExec', () => {
     expect(() => requireExec(filesystemOnly)).toThrow(/'read-only-fs' does not support executeCommand/);
   });
 });
+
+describe('provider-neutral remotes', () => {
+  const GITLAB = { origin: 'https://gitlab.com', tokenUser: 'oauth2' };
+
+  it('clones a GitLab repo with the oauth2 token user and scrubs it after', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({ repoFullName: 'acme/widgets', remote: GITLAB }),
+      sandbox,
+      'gl-token',
+    );
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain('https://oauth2:gl-token@gitlab.com/acme/widgets.git');
+    // Never GitHub's user or host for a GitLab remote.
+    expect(joined).not.toContain('x-access-token');
+    expect(joined).not.toContain('github.com');
+    // The tokenless URL is restored, so no credential persists in the remote.
+    expect(joined).toContain("remote set-url origin 'https://gitlab.com/acme/widgets.git'");
+  });
+
+  it('clones from a self-hosted instance on a non-default port', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({
+        repoFullName: 'acme/widgets',
+        remote: { origin: 'https://git.internal:8443', tokenUser: 'oauth2' },
+      }),
+      sandbox,
+      'gl-token',
+    );
+
+    expect(sandbox.calls.join('\n')).toContain('https://oauth2:gl-token@git.internal:8443/acme/widgets.git');
+  });
+
+  it('supports a GitLab nested group path', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({ repoFullName: 'acme/platform/widgets', remote: GITLAB }),
+      sandbox,
+      'gl-token',
+    );
+
+    expect(sandbox.calls.join('\n')).toContain('https://oauth2:gl-token@gitlab.com/acme/platform/widgets.git');
+  });
+
+  it('percent-encodes a token so its characters cannot corrupt the url', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({ repoFullName: 'acme/widgets', remote: GITLAB }),
+      sandbox,
+      'tok/with+chars',
+    );
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain('https://oauth2:tok%2Fwith%2Bchars@gitlab.com/acme/widgets.git');
+    // The raw form would end the userinfo section early and clone the wrong host.
+    expect(joined).not.toContain('oauth2:tok/with+chars@');
+  });
+
+  it('recognizes an existing GitLab checkout instead of re-cloning over it', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://gitlab.com/acme/widgets.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo({ repoFullName: 'acme/widgets', remote: GITLAB }),
+      sandbox,
+      'gl-token',
+    );
+
+    expect(sandbox.calls.join('\n')).not.toContain('git clone');
+  });
+
+  it('re-clones when the existing checkout points at a different provider', async () => {
+    // A workdir holding the same path on GitHub is not this GitLab repo;
+    // treating it as a match would run the session against the wrong codebase.
+    const sandbox = new FakeSandbox(script =>
+      script.includes('remote get-url origin')
+        ? { exitCode: 0, stdout: 'https://github.com/acme/widgets.git\n', stderr: '' }
+        : OK,
+    );
+    await materializeRepo(
+      makeRow({ materializedAt: null }),
+      makeRepoInfo({ repoFullName: 'acme/widgets', remote: GITLAB }),
+      sandbox,
+      'gl-token',
+    );
+
+    expect(sandbox.calls.join('\n')).toContain('git clone');
+  });
+
+  it('pushes to a GitLab remote and leaves no token behind', async () => {
+    const sandbox = new FakeSandbox();
+    await pushBranch(sandbox, '/workspace/widgets', 'factory/gitlab-7', 'gl-token', 'acme/widgets', GITLAB);
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain('https://oauth2:gl-token@gitlab.com/acme/widgets.git');
+    expect(sandbox.calls.at(-1)).toContain("remote set-url origin 'https://gitlab.com/acme/widgets.git'");
+  });
+
+  it('refuses a repo path that could escape into the url', async () => {
+    const sandbox = new FakeSandbox();
+    await expect(
+      pushBranch(sandbox, '/workspace/widgets', 'factory/x', 'gl-token', 'acme/../../evil', GITLAB),
+    ).rejects.toThrow(/invalid repo full name/);
+  });
+
+  it('still defaults to GitHub when no remote is given', async () => {
+    const sandbox = new FakeSandbox();
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    expect(sandbox.calls.join('\n')).toContain('https://x-access-token:tok-123@github.com/octocat/hello.git');
+  });
+});
