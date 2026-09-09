@@ -345,7 +345,7 @@ export class GitLabIntegration implements FactoryIntegration {
         console.warn(`[gitlab] token refresh failed for org ${orgId} — reconnect required.`, error);
         return null;
       } finally {
-        this.refreshInFlight.delete(orgId);
+        // MUTANT: cleanup removed
       }
     })();
 
@@ -838,7 +838,11 @@ export class GitLabIntegration implements FactoryIntegration {
             return c.json({ error: 'invalid_signature' }, 401);
           }
           // TODO: map `object_kind: 'issue' | 'note'` onto work-item rules via
-          // `ctx.rules` and signal live sessions through `ctx.controller`.
+          // `ctx.rules` and signal live sessions through `ctx.controller`. The
+          // secret check above is optional only because this handler does
+          // nothing yet — the moment payloads drive rules, `webhookSecret` must
+          // become mandatory (reject the delivery when it is unset) so an
+          // unauthenticated caller cannot move cards.
           return c.json({ ok: true, ignored: true });
         },
       }),

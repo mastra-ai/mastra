@@ -6,7 +6,7 @@ import type { BoardPhaseDefinition } from './define-board.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
-function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
+function providerIdentifier(item: FactoryRuleItemContext): string | undefined {
   const identifier = item.metadata?.identifier;
   return typeof identifier === 'string' ? identifier : undefined;
 }
@@ -14,13 +14,13 @@ function linearIdentifier(item: FactoryRuleItemContext): string | undefined {
 function sourceRef(item: FactoryRuleItemContext): string {
   const link = item.url ? ` (${item.url})` : '';
   if (item.source === 'linear-issue') {
-    const identifier = linearIdentifier(item);
+    const identifier = providerIdentifier(item);
     return identifier ? `Linear issue ${identifier}${link}` : `Linear issue ${item.title}${link}`;
   }
   if (item.source === 'gitlab-issue') {
     // Same shape as Linear: the provider's own identifier reads better than a
     // number, and GitLab's is `group/project#7`.
-    const identifier = linearIdentifier(item);
+    const identifier = providerIdentifier(item);
     return identifier ? `GitLab issue ${identifier}${link}` : `GitLab issue ${item.title}${link}`;
   }
   if (item.source === 'manual') return item.url ? `Work item${link}` : item.title;

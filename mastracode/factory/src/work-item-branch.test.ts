@@ -8,6 +8,7 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'github', type: 'issue', externalId: '1' })).toBe('github-issue');
     expect(workItemBranchSource({ integrationId: 'github', type: 'pull-request', externalId: '2' })).toBe('github-pr');
     expect(workItemBranchSource({ integrationId: 'linear', type: 'issue', externalId: '3' })).toBe('linear-issue');
+    expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '42!7' })).toBe('gitlab-issue');
     expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '4' })).toBe('manual');
   });
 });
@@ -47,6 +48,20 @@ describe('workItemBranch', () => {
     expect(workItemBranch({ id, source: 'linear-issue', metadata: { identifier: ' ENG-42 ' } })).toBe(
       'factory/linear-eng-42',
     );
+  });
+
+  it('names a gitlab branch from the per-project iid, not the path identifier', () => {
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { iid: 7, identifier: 'group/project#7' } })).toBe(
+      'factory/gitlab-7',
+    );
+  });
+
+  it('falls back when the gitlab iid is missing or not a positive integer', () => {
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { identifier: 'group/project#7' } })).toBe(
+      `factory/item-${id}`,
+    );
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { iid: 0 } })).toBe(`factory/item-${id}`);
+    expect(workItemBranch({ id, source: 'gitlab-issue', metadata: { iid: '7' } })).toBe(`factory/item-${id}`);
   });
 
   it('falls back to an id-derived branch when no provider identity applies', () => {
