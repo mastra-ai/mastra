@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
+import { useKnowledgeActivity, useKnowledgeGraph } from '../../hooks/useKnowledgeGraph';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { KnowledgeGraph } from '../domains/factory/components/knowledge/KnowledgeGraph';
@@ -24,7 +24,13 @@ import { useInteractionIdle } from '../domains/factory/components/knowledge/useI
  * the `?thread=` search param so the view is linkable and back-button safe.
  */
 export function KnowledgePage() {
-  return <FactoryPageShell>{project => <KnowledgeContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const [searchParams] = useSearchParams();
+  const knowledgeKey = searchParams.get('knowledgeKey') ?? 'default';
+  return (
+    <FactoryPageShell>
+      {project => <KnowledgeContent key={JSON.stringify([project.id, knowledgeKey])} factoryProjectId={project.id} />}
+    </FactoryPageShell>
+  );
 }
 
 /** One hop in the node trail (A7): the nodes visited via clicks/wikilinks. */
@@ -85,9 +91,61 @@ function Breadcrumb({
   );
 }
 
+function ScopeTree({ threadId, onProjectClick }: { threadId?: string; onProjectClick: () => void }) {
+  return (
+    <aside aria-label="Knowledge scopes" className="border-surface5 bg-surface2 w-48 shrink-0 rounded-lg border p-3">
+      <Txt as="h2" variant="ui-sm" className="text-icon5 mb-2 font-semibold">
+        Scopes
+      </Txt>
+      <div className="text-icon4 flex flex-col gap-1 text-xs">
+        <button type="button" className="hover:text-icon6 text-left" onClick={onProjectClick}>
+          Organization scope
+        </button>
+        <button type="button" className="hover:text-icon6 pl-3 text-left" onClick={onProjectClick}>
+          Project scope
+        </button>
+        {threadId ? <span className="truncate pl-6 text-purple-300">session {threadId.slice(0, 8)}</span> : null}
+      </div>
+    </aside>
+  );
+}
+
+function ActivityPanel({ factoryProjectId, threadId }: { factoryProjectId?: string; threadId?: string }) {
+  const activity = useKnowledgeActivity(factoryProjectId, threadId);
+  if (activity.isPending) return <SkeletonRows label="Loading knowledge activity" rows={6} />;
+  if (activity.isError) {
+    const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
+    return <Notice variant="destructive">{message}</Notice>;
+  }
+  if (activity.data.events.length === 0) {
+    return (
+      <Txt as="p" variant="ui-md" className="text-icon3">
+        No knowledge activity yet.
+      </Txt>
+    );
+  }
+  return (
+    <ol aria-label="Knowledge activity" className="divide-surface5 divide-y">
+      {activity.data.events.map(event => (
+        <li key={event.id} className="flex items-start justify-between gap-4 py-3 text-sm">
+          <div>
+            <span className="text-icon5 font-medium">{event.action}</span>
+            <span className="text-icon3 ml-2">{event.recordType}</span>
+            <div className="text-icon3 mt-1 text-xs">{event.scope.join(' → ')}</div>
+          </div>
+          <time className="text-icon3 shrink-0 text-xs" dateTime={event.createdAt}>
+            {new Date(event.createdAt).toLocaleString()}
+          </time>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
+  const activeView = searchParams.get('view') === 'activity' ? 'activity' : 'explore';
   // The node trail (A7): the flyout shows the LAST entry; earlier entries
   // are clickable breadcrumbs back through the hops.
   const [trail, setTrail] = useState<TrailEntry[]>([]);
@@ -224,15 +282,40 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     );
   }
 
+  const setView = (view: 'explore' | 'activity') => {
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      if (view === 'activity') copy.set('view', 'activity');
+      else copy.delete('view');
+      return copy;
+    });
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4 pt-2" aria-label="Knowledge graph">
       <header className="shrink-0">
         <Txt as="h1" variant="header-md" className="text-icon6 font-semibold">
-          Knowledge Graph
+          Knowledge
         </Txt>
         <Txt as="p" variant="ui-md" className="text-icon3 mt-1">
-          Explore nodes and the relationships captured by the agent over time.
+          Explore captured knowledge and review how it changes over time.
         </Txt>
+        <div className="mt-3 flex gap-1" role="tablist" aria-label="Knowledge views">
+          {(['explore', 'activity'] as const).map(view => (
+            <button
+              key={view}
+              type="button"
+              role="tab"
+              aria-selected={activeView === view}
+              className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                activeView === view ? 'bg-surface4 text-icon6' : 'text-icon3 hover:text-icon5'
+              }`}
+              onClick={() => setView(view)}
+            >
+              {view}
+            </button>
+          ))}
+        </div>
         <Breadcrumb
           threadId={threadId}
           trail={trail}
@@ -240,7 +323,12 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
         />
       </header>
-      {body}
+      <div className="flex min-h-0 flex-1 gap-4">
+        <ScopeTree threadId={threadId} onProjectClick={backToProject} />
+        <div className="min-w-0 flex-1">
+          {activeView === 'activity' ? <ActivityPanel factoryProjectId={factoryProjectId} threadId={threadId} /> : body}
+        </div>
+      </div>
     </section>
   );
 }

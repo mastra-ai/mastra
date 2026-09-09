@@ -77,9 +77,9 @@ const userSession = {
   title: 'Fix login bug',
   branch: 'factory/issue-1',
   baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
-  materializedAt: null,
+  sandboxId: 'sandbox-1',
+  sandboxWorkdir: '/repo',
+  materializedAt: '2026-08-10T00:00:00.000Z',
   createdAt: '2026-08-10T00:00:00.000Z',
   updatedAt: '2026-08-10T00:00:00.000Z',
 };
@@ -215,6 +215,19 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues/1`, () =>
+      HttpResponse.json({
+        number: 1,
+        title: workItem.title,
+        url: workItem.externalSource.url,
+        author: 'octocat',
+        labels: [],
+        comments: 0,
+        createdAt: workItem.createdAt,
+        updatedAt: workItem.updatedAt,
+        description: 'Fix the login failure.',
+      }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
@@ -337,6 +350,20 @@ describe('Board card with a proposed run', () => {
 
     await waitFor(() => expect(settled).toEqual(['approve']));
     expect(transitions).toEqual([]);
+  });
+
+  it('keeps initialization ahead of a parked run until the session materializes', async () => {
+    stubBoardEndpoints({ withLiveSession: true });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [{ ...userSession, materializedAt: null }] }),
+      ),
+    );
+    const { client } = renderBoard();
+    const card = await screen.findByRole('article', { name: 'Fix login bug' });
+    await waitForMutationsIdle(client);
+    expect(await within(card).findByRole('status', { name: 'Initializing' })).toBeVisible();
+    expect(within(card).queryByText('Suggested: Build')).not.toBeInTheDocument();
   });
 
   it('says a run is waiting on a card that would otherwise look idle', async () => {

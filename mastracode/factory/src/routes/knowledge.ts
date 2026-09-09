@@ -59,7 +59,7 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
   /** Factory projects domain — validates the `:id` project belongs to the caller's org. */
   projects: FactoryProjectsStorage;
   /** Lazy handle to the knowledge storage domain; endpoints 503 when absent. */
-  knowledge: () => Promise<KnowledgeStorage | undefined>;
+  knowledge: (key: string) => Promise<KnowledgeStorage | undefined>;
   limits?: Partial<KnowledgeRouteLimits>;
 }
 
@@ -328,11 +328,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
 
-    const store = await this.deps.knowledge();
+    let store: KnowledgeStorage | undefined;
+    try {
+      const key = c.req.query('knowledgeKey') ?? 'default';
+      store = key.trim() ? await this.deps.knowledge(key) : undefined;
+    } catch {
+      store = undefined;
+    }
     if (!store) {
       return {
         response: c.json(
-          { error: 'knowledge_unavailable', message: 'The knowledge storage domain is not configured.' },
+          { error: 'knowledge_unavailable', message: 'The configured Knowledge runtime is unavailable.' },
           503,
         ),
       };
@@ -611,15 +617,29 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in view) return view.response;
           const events = await view.store.listActivity({ scope: view.scope, limit: 100 });
           return c.json({
-            events: events.map(event => ({
-              id: event.id,
-              action: event.action,
-              recordType: event.recordType,
-              recordId: event.recordId,
-              scope: event.scope,
-              ...(event.sourceThreadId ? { sourceThreadId: event.sourceThreadId } : {}),
-              createdAt: event.createdAt.toISOString(),
-            })),
+            events: await Promise.all(
+              events.map(async event => {
+                const recordVisible =
+                  event.recordType === 'node'
+                    ? Boolean(
+                        await view.store
+                          .getNode(event.recordId)
+                          .then(node => node && isKnowledgeScopeVisible(node.scope, view.scope)),
+                      )
+                    : Boolean(
+                        await view.store
+                          .getKnowledge({ id: event.recordId })
+                          .then(record => record && isKnowledgeScopeVisible(record.scope, view.scope)),
+                      );
+                return {
+                  id: event.id,
+                  action: event.action,
+                  recordType: event.recordType,
+                  scope: recordVisible ? event.scope : [],
+                  createdAt: event.createdAt.toISOString(),
+                };
+              }),
+            ),
           });
         },
       }),
