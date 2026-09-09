@@ -36,7 +36,8 @@ export function CandidateCard({
   const detailsTitleId = useId();
   const morph = useCardMorph();
 
-  const [defaultMove] = cardMoves(candidate, candidate.column);
+  const moves = cardMoves(candidate, candidate.column);
+  const [defaultMove] = moves;
   const status = boardCardStatus({});
 
   const fileFromDetails = () => {
@@ -45,7 +46,7 @@ export function CandidateCard({
   };
 
   const menuItems: ReactElement[] = [
-    ...cardMoves(candidate, candidate.column).map(move => (
+    ...moves.map(move => (
       <DropdownMenu.Item
         key={move.label}
         onClick={() => {
@@ -87,20 +88,24 @@ export function CandidateCard({
           })
         }
         // Offscreen cards skip layout and paint; an Intake column can hold hundreds.
-        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 relative flex min-h-36 cursor-grab flex-col gap-3 rounded-3xl border p-2.5 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 rounded-card relative flex min-h-36 cursor-grab flex-col gap-3 border p-2 transition-colors outline-none [contain-intrinsic-size:auto_9rem] [content-visibility:auto] active:cursor-grabbing"
       >
         <button
           type="button"
           draggable={false}
           aria-label={`Details for ${candidate.title}`}
           aria-expanded={morph.open}
-          className="focus-visible:outline-accent1 absolute inset-0 cursor-pointer rounded-3xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="focus-visible:outline-accent1 rounded-card absolute inset-0 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           onClick={morph.openDetails}
         />
         <CandidateCardRows
           candidate={candidate}
           status={status}
-          actions={<CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />}
+          actions={
+            defaultMove === undefined ? undefined : (
+              <CardActions actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]} />
+            )
+          }
           controls={
             <>
               <CardDetailsHint />

@@ -104,12 +104,59 @@ describe('getDynamicInstructionSections', () => {
     };
   }
 
+  it.each([true, false])('matches delegation guidance to registration (%s)', async hasSubagents => {
+    const args = { requestContext: makeRequestContext({}), hasSubagents };
+    const prompt = await getDynamicInstructions(args);
+    expect(prompt.includes('**subagent**')).toBe(hasSubagents);
+    expect(prompt.includes('# Subagent Rules')).toBe(hasSubagents);
+    expect(joinPromptSections(await getDynamicInstructionSections(args))).toBe(prompt);
+  });
+
+  it('omits delegation guidance when permission denies the registered tool', async () => {
+    const prompt = await getDynamicInstructions({
+      requestContext: makeRequestContext({ permissionRules: { tools: { subagent: 'deny' } } }),
+      hasSubagents: true,
+    });
+    expect(prompt).not.toContain('**subagent**');
+    expect(prompt).not.toContain('# Subagent Rules');
+  });
+
   it('rejoins into exactly getDynamicInstructions output without plugins', async () => {
     const requestContext = makeRequestContext({});
 
     const sections = await getDynamicInstructionSections({ requestContext });
 
     expect(joinPromptSections(sections)).toBe(await getDynamicInstructions({ requestContext }));
+  });
+
+  it('advertises subconscious tools only when the caller says they are registered, not from the env flag', async () => {
+    const requestContext = makeRequestContext({});
+    const previous = process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    try {
+      const withoutFlag = await getDynamicInstructions({ requestContext });
+      expect(withoutFlag).not.toContain('# Subconscious Memory');
+
+      const withFlag = await getDynamicInstructions({ requestContext, hasSubconscious: true });
+      expect(withFlag).toContain('# Subconscious Memory');
+      expect(withFlag).toContain('**ask_memory**');
+
+      // A resolver is evaluated against the session state, so Factory sessions
+      // can be refused per request.
+      const seen: unknown[] = [];
+      const resolved = await getDynamicInstructions({
+        requestContext: makeRequestContext({ factoryProjectId: 'proj-1' }),
+        hasSubconscious: s => {
+          seen.push(s?.factoryProjectId);
+          return false;
+        },
+      });
+      expect(seen).toEqual(['proj-1']);
+      expect(resolved).not.toContain('# Subconscious Memory');
+    } finally {
+      if (previous === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+      else process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = previous;
+    }
   });
 
   it('rejoins into exactly getDynamicInstructions output with plugin instructions', async () => {

@@ -1,0 +1,18 @@
+---
+extends: existence
+# An intensified comparative with no second term: "significantly lower risk,"
+# "substantially faster," "dramatically better results." AI prose asserts the
+# comparison and omits the baseline, leaving the reader to guess what it is
+# measured against. The lookbehind and lookahead clear a baseline on either
+# side of the comparative in the same sentence ("than," "compared with,"
+# "versus," "relative to"), so both "faster than the old one" and "Compared
+# with the old one, faster" stay clean.
+# The "significantly" and "notably" spans overlap OverusedVocabulary and
+# FormalTransitions; the overlap stands because each rule reads on its own
+# in a consumer's config.
+message: "AI incomplete comparison: '%s'. Complete it with 'than' and the baseline."
+level: error
+ignorecase: true
+nonword: true
+tokens:
+  - "(?<!\\b(?:than|compared|versus|vs\\.|relative)\\b[^.!?\\n]*)\\b(?:significantly|substantially|considerably|markedly|dramatically|vastly|notably)\\s+(?:higher|lower|better|worse|faster|slower|greater|smaller|larger|stronger|weaker|easier|harder|safer|cheaper|simpler|cleaner|more|less|fewer|improved|reduced|increased|decreased)\\b(?![^.!?\\n]*\\b(?:than|compared|versus|vs\\.|relative to)\\b)"

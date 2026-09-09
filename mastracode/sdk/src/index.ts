@@ -48,7 +48,7 @@ import { PostgresStore } from '@mastra/pg';
 
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory } from './agents/memory.js';
+import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -58,9 +58,9 @@ import {
   createGitRefReminderReader,
   getStaticallyLoadedInstructionPaths,
 } from './agents/prompts/agent-instructions.js';
-// import { executeSubagent } from './agents/subagents/execute.js';
-// import { exploreSubagent } from './agents/subagents/explore.js';
-// import { planSubagent } from './agents/subagents/plan.js';
+import { executeSubagent } from './agents/subagents/execute.js';
+import { exploreSubagent } from './agents/subagents/explore.js';
+import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
@@ -243,7 +243,7 @@ export interface MastraCodeConfig {
   homeDir?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
   modes?: AgentControllerMode[];
-  /** Override or extend subagent definitions. Default: explore/plan/execute */
+  /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
@@ -639,6 +639,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
+  // Only the default memory wiring registers the subconscious tools; a
+  // caller-supplied memory is opaque here, so its prompt must not advertise them.
+  const hasSubconscious =
+    config?.memory === undefined ? (state: MastraCodeState | undefined) => hasSubconsciousTools(vector, state) : false;
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -843,7 +847,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     instructions: async ({ requestContext }) => {
       const configured = config?.hostInstructions;
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
-      return getDynamicInstructions({ requestContext, hostInstructions });
+      return getDynamicInstructions({
+        requestContext,
+        hostInstructions,
+        hasSubconscious,
+        hasSubagents: subagents.length > 0,
+      });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
@@ -1068,11 +1077,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     throw new Error('MastraCode requires at least one mode');
   }
 
-  // Map subagent types to mode models: explore→fast, plan→plan, execute→build
-  // const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  // Subagents inherit workspace tools from the parent agent's workspace automatically.
-  // Apply disabledTools filter to both default and custom subagents.
-  // const subagents = [];
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const disabledTools = new Set(config?.disabledTools);
+  const subagents = (config?.subagents ?? [exploreSubagent, planSubagent, executeSubagent]).map(definition => ({
+    ...definition,
+    ...(config?.subagents == null && {
+      defaultModelId:
+        modes.find(mode => mode.id === subagentModeMap[definition.id])?.defaultModelId ??
+        modes.find(mode => mode.id === defaultModeId)?.defaultModelId,
+    }),
+    allowedControllerTools: definition.allowedControllerTools?.filter(name => !disabledTools.has(name)),
+    allowedWorkspaceTools: definition.allowedWorkspaceTools?.filter(name => !disabledTools.has(name)),
+    ...(definition.tools && {
+      tools: Object.fromEntries(Object.entries(definition.tools).filter(([name]) => !disabledTools.has(name))),
+    }),
+  }));
 
   // Build initial state with global preferences. OM knobs are skipped when the
   // host persists memory settings elsewhere (`disableSettingsOmSeed`) so the
@@ -1127,7 +1146,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
     agent: codeAgent,
-    subagents: config?.subagents ?? [],
+    subagents,
     gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,

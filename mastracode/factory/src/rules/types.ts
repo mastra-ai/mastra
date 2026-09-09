@@ -52,7 +52,7 @@ export function externallyAuthoredWorkItem(item: {
 }
 
 export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
-export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number];
+export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the
 // seat pipeline order — Resume depth derives from it.
@@ -93,7 +93,7 @@ export function isFactoryRuleStage(value: unknown): value is FactoryRuleStage {
 
 export function factoryRuleStage(stages: readonly string[]): FactoryRuleStage | undefined {
   const stage = stages.length === 1 ? stages[0] : undefined;
-  return isFactoryRuleStage(stage) ? stage : undefined;
+  return typeof stage === 'string' && stage.length > 0 ? stage : undefined;
 }
 
 export function isTerminalFactoryRuleStage(stages: readonly string[]): boolean {
@@ -113,7 +113,7 @@ export function factoryLaneForRole(role: string): FactoryRuleStage | undefined {
 }
 
 export const FACTORY_RULE_BOARDS = ['work', 'review'] as const;
-export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number];
+export type FactoryRuleBoard = (typeof FACTORY_RULE_BOARDS)[number] | (string & {});
 
 export const FACTORY_RULE_SOURCES = ['issue', 'pullRequest', 'linearIssue', 'manual'] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -181,7 +181,7 @@ export interface FactoryRuleContextBase {
   ingress: FactoryRuleIngressIdentity;
   cause: string;
   causalChain: readonly FactoryRuleCausalEntry[];
-  ruleSetVersion: string;
+  configVersion: string;
 }
 
 export interface FactoryBoundRuleContext extends FactoryRuleContextBase {
@@ -212,6 +212,11 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /**
+   * Board an issue's labels route it to, when the project has a matching label route and that board
+   * is installed. Absent for pull requests and for issues whose labels select nothing.
+   */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
@@ -262,10 +267,21 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   review?: { id: number; state: string; url: string };
 }
 
+/**
+ * Where an intake source binding says new items from this source should land.
+ * Absent when the source is unbound or bound without a board (built-in routing).
+ */
+export interface FactoryRuleIntakeTarget {
+  board: string;
+  initialPhase: string;
+}
+
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Bound board for the source this issue came from, when one is configured and installed. */
+  intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
   issue: {
     id: string;
@@ -291,39 +307,6 @@ export type FactoryRuleHandler<TContext> = (
 export interface FactoryBoardRuleLeaf {
   onEnter?: FactoryRuleHandler<FactoryStageRuleContext>;
   onExit?: FactoryRuleHandler<FactoryStageRuleContext>;
-}
-
-export interface FactoryToolRuleLeaf {
-  onResult?: FactoryRuleHandler<FactoryToolResultRuleContext>;
-}
-
-export interface FactoryGithubRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryGithubRuleContext>;
-}
-
-export interface FactoryLinearRuleLeaf {
-  onEvent?: FactoryRuleHandler<FactoryLinearRuleContext>;
-}
-
-export type FactoryBoardRules = Partial<
-  Record<FactoryRuleStage, Partial<Record<FactoryRuleSource, FactoryBoardRuleLeaf>>>
->;
-
-export interface FactoryRules {
-  version: string;
-  work: FactoryBoardRules;
-  review: FactoryBoardRules;
-  tools: Record<string, FactoryToolRuleLeaf>;
-  github: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
-}
-
-export interface FactoryRulesOverrides {
-  work?: FactoryBoardRules;
-  review?: FactoryBoardRules;
-  tools?: Record<string, FactoryToolRuleLeaf>;
-  github?: Partial<Record<FactoryGithubEventName, FactoryGithubRuleLeaf>>;
-  linear?: Partial<Record<FactoryLinearEventName, FactoryLinearRuleLeaf>>;
 }
 
 export type FactoryRuleRejectionCode =

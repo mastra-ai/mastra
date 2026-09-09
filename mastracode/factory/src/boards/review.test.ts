@@ -20,7 +20,7 @@ function reviewContext(headBranch: string): FactoryStageRuleContext {
     ingress: { type: 'rule', id: 'ingress-1' },
     cause: 'test',
     causalChain: [],
-    ruleSetVersion: 'test',
+    configVersion: 'test',
     item,
     board: 'review',
     itemRevision: 1,
@@ -50,6 +50,15 @@ describe('reviewBoard', () => {
     const argumentsText = await reviewArguments(hostileBranch);
 
     expect(argumentsText).not.toContain(hostileBranch);
-    expect(argumentsText).toContain('gh pr checkout 23029');
+    expect(argumentsText).toContain('gh pr diff 23029');
+  });
+
+  it('tells the reviewer the head is checked out and how to refresh a session the PR outran', async () => {
+    const argumentsText = await reviewArguments('feat/review-board');
+
+    expect(argumentsText).toContain('checked out on branch `factory/pr-23029`');
+    expect(argumentsText).toContain(
+      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
+    );
   });
 });

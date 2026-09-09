@@ -1,3 +1,4 @@
+import type { DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -8,6 +9,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface ReviewItem {
   id: string;
@@ -23,6 +25,10 @@ export interface ReviewItem {
   clusterId?: string;
   experimentId?: string;
   traceId?: string;
+  createdAt?: DatasetExperimentResult['createdAt'];
+  status?: DatasetExperimentResult['status'];
+  groundTruth?: unknown;
+  toolMockReport?: DatasetExperimentResult['toolMockReport'];
 }
 
 function formatUnknown(value: unknown): string {
@@ -150,7 +156,7 @@ export function ReviewItemCard({
             {isCompleted ? (
               <div className="flex flex-wrap gap-1">
                 {item.tags.map(tag => (
-                  <Badge key={tag}>{tag}</Badge>
+                  <ComputedTag key={tag} value={tag} size="sm" />
                 ))}
               </div>
             ) : (

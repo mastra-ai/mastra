@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
@@ -17,6 +18,7 @@ import { askUserTool } from '../../tools/builtin/ask-user';
 import { AgentController } from '../agent-controller';
 import { SessionApproval } from '../session';
 import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerEvent } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -60,7 +62,8 @@ function createTextStream() {
   });
 }
 
-async function buildController(id: string, input: string) {
+async function buildController(id: string, input: string, withMemory = false) {
+  const storage = new InMemoryStore();
   const agent = new Agent({
     id: `agent-${id}`,
     name: `Agent ${id}`,
@@ -75,9 +78,9 @@ async function buildController(id: string, input: string) {
       })(),
     }),
     tools: { ask_user: askUserTool },
+    memory: withMemory ? new MockMemory({ storage }) : undefined,
   });
 
-  const storage = new InMemoryStore();
   const mastra = new Mastra({ agents: { [`agent-${id}`]: agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
@@ -146,6 +149,36 @@ describe('AgentController: ask_user native suspension', () => {
 
     expect(events.some(e => e.type === 'error')).toBe(false);
     expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+  });
+
+  it('emits the resumed reply with its persisted message ID (#23150)', async () => {
+    const { session } = await buildController('resume-identity', JSON.stringify({ question: 'Your name?' }), true);
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(structuredClone(event)));
+
+    await session.sendMessage({ content: 'Ask my name' });
+    expect(events.some(event => event.type === 'tool_suspended')).toBe(true);
+    events.length = 0;
+    await session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'Ada' });
+    await vi.waitFor(() => {
+      expect(events.find(event => event.type === 'agent_end')?.reason).toBe('complete');
+    });
+
+    const replies = events
+      .filter(event => event.type === 'message_end')
+      .filter(event => event.message.content.parts.some(part => part.type === 'text' && part.text === 'Thanks!'));
+    const persisted = await session.thread.listMessages({ threadId: session.thread.requireId() });
+    const savedReplies = persisted.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.some(part => part.type === 'text' && part.text === 'Thanks!'),
+    );
+    expect(replies).toHaveLength(1);
+    expect(savedReplies).toHaveLength(1);
+    expect(replies[0]!.message.id).toBe(savedReplies[0]!.id);
+    expect(events.some(event => event.type === 'tool_end' && event.toolCallId === 'call-1')).toBe(true);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
+    expect(events.some(event => event.type === 'error')).toBe(false);
   });
 
   it('emits multi_select in the suspend payload when requested', async () => {

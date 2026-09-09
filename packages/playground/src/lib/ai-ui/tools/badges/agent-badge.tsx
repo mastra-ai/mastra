@@ -99,6 +99,7 @@ export const AgentBadge = ({
   return (
     <BadgeWrapper
       data-testid="agent-badge"
+      toolCallId={toolCallId}
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
       initialCollapsed={shouldCollapseContent}

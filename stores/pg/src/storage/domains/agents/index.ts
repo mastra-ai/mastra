@@ -25,7 +25,7 @@ import type {
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 export class AgentsPG extends AgentsStorage {
@@ -39,8 +39,8 @@ export class AgentsPG extends AgentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -371,10 +371,18 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async getById(id: string): Promise<StorageAgentType | null> {
+    return this.#getById(this.#db.readClient, id);
+  }
+
+  /**
+   * Same lookup against an explicit client. Mutation paths pass the writer so a
+   * lagging read replica cannot yield stale or missing rows mid-update.
+   */
+  async #getById(client: DbClient, id: string): Promise<StorageAgentType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -484,7 +492,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // First, get the existing agent
-      const existingAgent = await this.getById(id);
+      const existingAgent = await this.#getById(this.#db.client, id);
       if (!existingAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND'),
@@ -543,7 +551,7 @@ export class AgentsPG extends AgentsStorage {
       await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       // Return the updated agent
-      const updatedAgent = await this.getById(id);
+      const updatedAgent = await this.#getById(this.#db.client, id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -694,7 +702,7 @@ export class AgentsPG extends AgentsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Total count (mirrors join + where, no ORDER BY / LIMIT).
-      const countResult = await this.#db.client.one(
+      const countResult = await this.#db.readClient.one(
         `SELECT COUNT(*) as count FROM ${tableName} a ${joinClause} ${whereClause}`,
         [...joinParams, ...queryParams],
       );
@@ -722,7 +730,7 @@ export class AgentsPG extends AgentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const limitIdx = paramIdx++;
       const offsetIdx = paramIdx++;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT a.* FROM ${tableName} a ${joinClause} ${whereClause} ${orderByClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
         [...joinParams, ...queryParams, limitValue, offset],
       );
@@ -830,7 +838,7 @@ export class AgentsPG extends AgentsStorage {
   async getVersion(id: string): Promise<AgentVersion | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+      const result = await this.#db.readClient.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
 
       if (!result) {
         return null;
@@ -858,7 +866,10 @@ export class AgentsPG extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
-      const rows = await this.#db.client.manyOrNone(`SELECT * FROM ${tableName} WHERE id IN (${placeholders})`, ids);
+      const rows = await this.#db.readClient.manyOrNone(
+        `SELECT * FROM ${tableName} WHERE id IN (${placeholders})`,
+        ids,
+      );
       return rows.map(row => this.parseVersionRow(row));
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -877,7 +888,7 @@ export class AgentsPG extends AgentsStorage {
   async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "agentId" = $1 AND "versionNumber" = $2`,
         [agentId, versionNumber],
       );
@@ -904,7 +915,7 @@ export class AgentsPG extends AgentsStorage {
   async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
         [agentId],
       );
@@ -951,9 +962,10 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
 
       // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`, [
-        agentId,
-      ]);
+      const countResult = await this.#db.readClient.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
+        [agentId],
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -968,7 +980,7 @@ export class AgentsPG extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.#db.client.manyOrNone(
+      const dataResult = await this.#db.readClient.manyOrNone(
         `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`,
         [agentId, limitValue, offset],
       );
@@ -1042,7 +1054,7 @@ export class AgentsPG extends AgentsStorage {
   async countVersions(agentId: string): Promise<number> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`, [
+      const result = await this.#db.readClient.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`, [
         agentId,
       ]);
       return parseInt(result.count, 10);

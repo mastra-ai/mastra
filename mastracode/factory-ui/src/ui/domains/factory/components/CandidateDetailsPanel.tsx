@@ -34,13 +34,14 @@ export function CandidateDetailsPanel({
   projectRepositoryId: string;
   factoryProjectId: string;
   menu: ReactNode;
-  defaultMove: CardMove;
+  defaultMove?: CardMove;
   /** File the candidate and move it into the lane; `prompt` undefined = no typed guidance. */
   onRun: (move: CardMove, prompt?: string) => void;
 }) {
   const promptAnchorRef = useRef<HTMLButtonElement>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const move = defaultMove;
 
   const closePrompt = () => {
     setPromptOpen(false);
@@ -49,10 +50,10 @@ export function CandidateDetailsPanel({
 
   const runPrompt = () => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed || move === undefined) return;
     closePrompt();
     morph.closeDetails();
-    onRun(defaultMove, trimmed);
+    onRun(move, trimmed);
   };
 
   return (
@@ -95,22 +96,21 @@ export function CandidateDetailsPanel({
             </>
           }
           actions={
-            <CardActions
-              actions={[{ label: defaultMove.label, start: () => onRun(defaultMove) }]}
-              beforeStart={morph.closeDetails}
-            >
-              <Button
-                ref={promptAnchorRef}
-                type="button"
-                variant="outline"
-                size="sm"
-                data-card-morph="reveal"
-                onClick={() => setPromptOpen(true)}
-              >
-                <PencilLine size={13} aria-hidden />
-                Custom prompt…
-              </Button>
-            </CardActions>
+            move === undefined ? undefined : (
+              <CardActions actions={[{ label: move.label, start: () => onRun(move) }]} beforeStart={morph.closeDetails}>
+                <Button
+                  ref={promptAnchorRef}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-card-morph="reveal"
+                  onClick={() => setPromptOpen(true)}
+                >
+                  <PencilLine size={13} aria-hidden />
+                  Custom prompt…
+                </Button>
+              </CardActions>
+            )
           }
         />
       }

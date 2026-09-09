@@ -33,7 +33,6 @@ import type {
   GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
-  ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
   UpdateFeedbackReviewStatusArgs,
@@ -104,6 +103,7 @@ import type {
   LegacyGetTracesResponse,
 } from './resources/observability';
 import type {
+  ListFeedbackResponse,
   ClientOptions,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
@@ -2018,6 +2018,20 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Permanently scrubs a dataset item's data from all versions and linked experiment results
+   */
+  public purgeDatasetItem(
+    datasetId: string,
+    itemId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/purge${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Batch inserts items to a dataset
    */
   public batchInsertDatasetItems(
@@ -2175,6 +2189,48 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Deletes a dataset experiment and its results. Tenancy fields, when provided,
+   * scope the dataset lookup on the server side.
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteDatasetExperiment(
+    datasetId: string,
+    experimentId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}${qs}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Deletes an experiment and its results regardless of dataset association
+   * (including experiments orphaned by dataset deletion). When tenancy fields
+   * are supplied, the server only deletes the experiment if it belongs to the
+   * given tenant (silent no-op otherwise).
+   *
+   * The server also attempts to delete the experiment's observability traces,
+   * cascading to their spans and trace-linked signals. Stores without
+   * observability or trace deletion support leave the traces in place.
+   */
+  public deleteExperiment(
+    experimentId: string,
+    options?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Updates a dataset experiment's name, description or metadata
    */
   public updateDatasetExperiment(params: UpdateDatasetExperimentParams): Promise<DatasetExperiment> {
@@ -2186,16 +2242,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists results for a dataset experiment
+   * Lists results for a dataset experiment.
+   * `tags` restricts the list to results that have all of the given tags.
    */
   public listDatasetExperimentResults(
     datasetId: string,
     experimentId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; tags?: string[] },
   ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) searchParams.set('page', String(options.page));
+    if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
+    for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,

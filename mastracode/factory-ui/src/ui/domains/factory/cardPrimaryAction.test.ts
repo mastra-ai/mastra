@@ -37,6 +37,13 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
 }
 
 describe('cardMoves', () => {
+  it.each(['github-issue', 'github-pr', 'linear-issue'] as const)(
+    'does not infer built-in automation for a custom-board %s',
+    source => {
+      expect(cardMoves({ source, board: 'release', metadata: {} }, 'intake')).toEqual([]);
+    },
+  );
+
   it('offers an issue its two lanes, and a needs-approval issue only the decision', () => {
     const issue = { source: 'github-issue' as const, metadata: {} };
     expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
@@ -56,6 +63,11 @@ describe('cardMoves', () => {
     const pullRequest = { source: 'github-pr' as const, metadata: { state: 'open' }, stages: ['done'] };
     expect(cardMoves(pullRequest, 'done')).toEqual([{ label: 'Re-review', role: 'review', stage: 'review' }]);
     expect(cardMoves(pullRequest, 'review')).toEqual([review]);
+  });
+
+  it('offers a Work card in Review no lane, so its session is the action', () => {
+    expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
+    expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review')).toEqual([]);
   });
 
   it('offers a finished card no lane, so its session is the action', () => {
@@ -102,6 +114,21 @@ describe('cardPrimaryAction', () => {
     expect(action?.label).toBe('Resume');
     action?.start();
     expect(onMove).toHaveBeenCalledWith('planning');
+  });
+
+  it('advances a custom-board card to its next declared phase instead of starting a session', () => {
+    const onMove = vi.fn();
+    const action = cardPrimaryAction({
+      ...handlers,
+      item: { ...item({}), board: 'release', stages: ['queued'] },
+      nextPhase: { id: 'preparing', label: 'Preparing' },
+      hasSession: false,
+      onMove,
+    });
+
+    expect(action?.label).toBe('Move to Preparing');
+    action?.start();
+    expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
   it('asks for the maintainer decision on a held non-bug card instead of offering its lane', () => {
@@ -200,10 +227,9 @@ describe('cardActions', () => {
     expect(labels(cardActions({ ...idle, session, run }))).toEqual(['Investigate', 'Open session']);
     expect(labels(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry', 'Open session', 'Investigate']);
     expect(labels(cardActions({ ...idle, running: true, session, run }))).toEqual(['Open session']);
-    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([
-      'Investigate',
-      'Open session',
-    ]);
+    expect(labels(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, session, retry, run }))).toEqual(['Open session']);
+    expect(labels(cardActions({ ...idle, running: true, retry }))).toEqual([]);
     expect(cardActions(idle)).toEqual([]);
   });
 
@@ -212,6 +238,7 @@ describe('cardActions', () => {
     const lit = (actions: CardAction[]) => actions.filter(action => action.urgent).map(action => action.label);
     expect(lit(cardActions({ ...idle, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
-    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual(['Investigate']);
+    expect(lit(cardActions({ ...idle, running: true, waiting: true, session, run }))).toEqual([]);
+    expect(lit(cardActions({ ...idle, running: true, session, retry, run }))).toEqual([]);
   });
 });

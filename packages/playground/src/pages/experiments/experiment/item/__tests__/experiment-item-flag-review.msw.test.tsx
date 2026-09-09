@@ -90,10 +90,15 @@ describe('experiment item page — flag for review', () => {
     expect(patchCalls[0].body).toMatchObject({ status: 'needs-review' });
   });
 
-  it('offers Review instead of Flag when the result already needs review', async () => {
+  it('offers Complete instead of Flag when the result already needs review', async () => {
     renderItemPage([buildResult('needs-review')]);
 
-    expect(await screen.findByRole('button', { name: /^review$/i })).toBeDefined();
+    const completeButton = await screen.findByRole('button', { name: /mark as reviewed/i });
     expect(screen.queryByRole('button', { name: /flag for review/i })).toBeNull();
+    fireEvent.click(completeButton);
+
+    await waitFor(() => expect(patchCalls).toHaveLength(1));
+    expect(patchCalls[0].url).toBe('/api/datasets/ds-1/experiments/exp-1/results/result-1');
+    expect(patchCalls[0].body).toMatchObject({ status: 'complete' });
   });
 });

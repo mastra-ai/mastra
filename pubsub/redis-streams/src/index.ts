@@ -380,7 +380,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         );
         const messages = (reply?.messages ?? []) as Array<{ id: string; message: Record<string, string> } | null>;
         for (const entry of messages) {
-          if (sub.stopped || this.#closed) return;
+          // A successful claim already transferred ownership; drain its full batch.
           if (!entry) continue;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
@@ -392,10 +392,15 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         });
       }
       if (sub.stopped || this.#closed) return;
-      sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+      sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
     };
 
-    sub.reclaimTimer = setTimeout(tick, this.#reclaimIntervalMs);
+    const runTick = () => {
+      sub.reclaimLoop = tick().finally(() => {
+        sub.reclaimLoop = undefined;
+      });
+    };
+    sub.reclaimTimer = setTimeout(runTick, this.#reclaimIntervalMs);
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -408,13 +413,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const key = this.#subKey(topic, cb);
     const sub = this.#subscriptions.get(key);
     if (!sub) return;
-    this.#subscriptions.delete(key);
+    if (sub.teardown) return sub.teardown;
     sub.stopped = true;
     if (sub.reclaimTimer) {
       clearTimeout(sub.reclaimTimer);
       sub.reclaimTimer = undefined;
     }
 
+    sub.teardown = this.#stopSubscription(sub).finally(() => {
+      this.#subscriptions.delete(key);
+    });
+    return sub.teardown;
+  }
+
+  async #stopSubscription(sub: Subscription): Promise<void> {
     // Cancel the in-flight blocking XREADGROUP by closing the reader.
     try {
       await sub.readClient.quit();
@@ -436,6 +448,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         });
       }
     }
+
+    // Clearing the timer prevents future claims, but an issued claim still owns work.
+    await sub.reclaimLoop;
 
     // For fan-out, drop the private group entirely so the stream can be reclaimed.
     if (!sub.isGrouped) {
@@ -703,7 +718,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
 
       for (const stream of result) {
         for (const entry of stream.messages) {
-          if (sub.stopped) return;
+          // Entries returned by an issued read belong to us even after stop.
           sub.lastId = entry.id;
           await this.#deliverMessage(sub, entry.id, entry.message);
         }
@@ -892,4 +907,6 @@ interface Subscription {
   stopped: boolean;
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;
+  reclaimLoop?: Promise<void>;
+  teardown?: Promise<void>;
 }

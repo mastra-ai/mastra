@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { GetAgentResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -19,6 +20,10 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'agent-1';
+
+const missingAgent: GetAgentResponse | null = null;
+const notFoundError = { error: `Agent with id ${AGENT_ID} not found` };
+const detailsFailure = { error: 'No model available: this run started without a controller session context' };
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -74,7 +79,7 @@ const renderAt = (initialEntry: string) => {
     </MastraReactProvider>,
   );
 
-  return router;
+  return { router, queryClient };
 };
 
 function installHandlers() {
@@ -117,6 +122,53 @@ describe('Agent overview page', () => {
       renderAt(`/agents/${AGENT_ID}/overview`);
 
       expect(await screen.findByTestId('agent-settings-view')).not.toBeNull();
+    });
+
+    it('shows "Agent not found" when the agent details response is empty', async () => {
+      installHandlers();
+      server.use(http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(missingAgent)));
+      renderAt(`/agents/${AGENT_ID}/overview`);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+    });
+
+    it('shows "Agent not found" when the agent does not exist (404)', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(notFoundError, { status: 404 })),
+      );
+      renderAt(`/agents/${AGENT_ID}/overview`);
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.queryByText('Failed to load agent')).toBeNull();
+    });
+
+    it('renders the request error instead of "Agent not found" when loading agent details fails', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(detailsFailure, { status: 500 })),
+      );
+      renderAt(`/agents/${AGENT_ID}/overview`);
+
+      expect(await screen.findByText('Failed to load agent')).not.toBeNull();
+      expect(screen.getByText(/No model available/)).not.toBeNull();
+      expect(screen.queryByText('Agent not found')).toBeNull();
+    });
+
+    it('shows "Agent not found" when a refetch returns 404 after the agent was previously loaded', async () => {
+      installHandlers();
+      const { queryClient } = renderAt(`/agents/${AGENT_ID}/overview`);
+
+      await screen.findAllByRole('tab');
+      expect(screen.queryByText('Agent not found')).toBeNull();
+
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(notFoundError, { status: 404 })),
+      );
+      await queryClient.invalidateQueries({ queryKey: ['agent', AGENT_ID] });
+
+      expect(await screen.findByText('Agent not found')).not.toBeNull();
+      expect(screen.queryByText('Failed to load agent')).toBeNull();
     });
 
     it('shows the Overview tab first and active', async () => {

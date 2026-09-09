@@ -1,5 +1,221 @@
 # mastra
 
+## 1.28.1-alpha.0
+
+### Patch Changes
+
+- Added Tokens and Latency cells to the Studio experiment page. The meta bar now shows the total tokens used and estimated cost of the run, plus the average agent run duration across items, scoped to that experiment only. While an experiment is running the numbers update live. These cells only appear when the configured observability storage supports metrics. ([#23405](https://github.com/mastra-ai/mastra/pull/23405))
+
+- Removed the "Remove from review" button from the review queue detail panel in Studio. To take an item out of the review queue from the panel, use "Mark as reviewed" instead. ([#23428](https://github.com/mastra-ai/mastra/pull/23428))
+
+- Refresh Studio working memory after observational-memory completion and background buffering, and prevent an older refresh response from overwriting newer working memory. ([#23391](https://github.com/mastra-ai/mastra/pull/23391))
+
+- Updated dependencies [[`7eda39b`](https://github.com/mastra-ai/mastra/commit/7eda39bd17356b9985ae44e663ccde30ff0fedea), [`f3d9aae`](https://github.com/mastra-ai/mastra/commit/f3d9aae7bb5324c9dc7abc7caa166595f7582190), [`2693231`](https://github.com/mastra-ai/mastra/commit/2693231988aab35f057969dff0abd914f84df2b1), [`ecada83`](https://github.com/mastra-ai/mastra/commit/ecada83c1960b02720dcff6323ce5cd3fc39cbe7), [`e7df80e`](https://github.com/mastra-ai/mastra/commit/e7df80e4e043c1c63ad81fbb4b6e0716f43c43bd), [`1fa24d1`](https://github.com/mastra-ai/mastra/commit/1fa24d1d23bfac997af49fa5a9684b67c8249612), [`9c43765`](https://github.com/mastra-ai/mastra/commit/9c437659d97fe45775ecf3a35e121db15c6405fa), [`8fb01c3`](https://github.com/mastra-ai/mastra/commit/8fb01c3ef5a4b2e2d2ac5099f19f663c7e7a382c)]:
+  - @mastra/core@1.66.0-alpha.0
+  - @mastra/deployer@1.66.0-alpha.0
+
+## 1.28.0
+
+### Minor Changes
+
+- Added a **Review Queue** page to Studio under Evaluation → Experiments. Pick an experiment from the combobox (or deep-link with `/experiments/review-queue?experiment=<id>&review=<resultId>`) to review its flagged results. ([#22958](https://github.com/mastra-ai/mastra/pull/22958))
+
+  The experiment detail page now shows only Results, with a **View items to review** button that opens the queue for that experiment. Review links from the Inbox and from an experiment item panel now open the new page.
+
+- Added an advanced thread view in Studio: open an agent thread with `?variant=advanced` to read the conversation side by side with each turn's trace, and click any span to inspect its details. ([#23006](https://github.com/mastra-ai/mastra/pull/23006))
+
+  ```text
+  http://localhost:4111/agents/<agentId>/threads/<threadId>?variant=advanced
+  ```
+
+  The same view is reachable from the "Advanced view" switch in the thread header, and from the "Voir le thread complet" link in a trace's Messages panel.
+
+- Added `mastra api factory` commands for projects, work items, decisions, attention, queue health, metrics, and supervisors, including organization selection for hosted Factory requests. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```bash
+  mastra api factory project list
+  mastra api factory work-item transition --schema
+  ```
+
+### Patch Changes
+
+- Reject failed CLI environment updates with the original read, validation, or write error after logging it, so callers can detect when configuration was not persisted. ([#23215](https://github.com/mastra-ai/mastra/pull/23215))
+
+- Improved the trace view of a thread in Studio. The thread page now exposes a single **Show traces** toggle (the slide-in traces panel is gone), long traces are clamped to the height of their message with a **Show more** / **Show less** control, the row currently in view is emphasised as you scroll, opening a tool call highlights the spans behind it (the **Highlight spans** button remains for text-only messages), and **View full thread** from a trace lands you on that trace's row. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- Studio list pages (Workflows, Tools, MCP Servers, Scorers, Processors, Datasets, Experiments, Prompts) now scroll the list itself instead of the whole page, matching the Agents page: the header and filters stay fixed while the list scrolls. `DataList` no longer stretches to fill its container, so short lists and loading skeletons stay compact instead of rendering a full-height empty panel. `PageLayout height="full"` now bounds its main row to the remaining page height so nested lists can scroll internally. ([#22975](https://github.com/mastra-ai/mastra/pull/22975))
+
+- Updated the bundled Factory web app to report visible page views and throttled interactions when the server enables telemetry. Older servers and telemetry opt-out remain supported. ([#23348](https://github.com/mastra-ai/mastra/pull/23348))
+
+- Fixed file replacements so values containing `$&`, `$$`, `` $` `` or `$'` are written to generated files exactly as provided instead of being expanded. ([#23091](https://github.com/mastra-ai/mastra/pull/23091))
+
+- Include optional Mastra dependencies in build, dev, and lint package inventories, giving optional declarations precedence when dependency sections overlap. ([#23211](https://github.com/mastra-ai/mastra/pull/23211))
+
+- Use the nearest ancestor lockfile when suggesting peer dependency repair commands so nested workspace applications receive guidance for the correct package manager. ([#23208](https://github.com/mastra-ai/mastra/pull/23208))
+
+- Factory session tool rows now show the local time each step began, with the full date on hover, so long or collapsed sessions can be scanned as a timeline. ([#23165](https://github.com/mastra-ai/mastra/pull/23165))
+
+- Fixed Studio's Metrics page showing "Metrics are not available with your current storage" for projects deployed on the Mastra platform. When Studio runs on the platform, observability reads are served by the hosted observability service, so metrics now work regardless of the project's configured storage. This also restores token and cost usage columns on the Traces page for platform deployments. ([#23385](https://github.com/mastra-ai/mastra/pull/23385))
+
+- Added a hover-only "Highlight spans" action under each message in the trace panel's Messages column. Clicking it fades every span in the timeline that did not contribute to that message and opens the first contributing span. The highlighted spans are stored in the URL (`highlightSpanIds`) so the view can be shared or reloaded. ([#23045](https://github.com/mastra-ai/mastra/pull/23045))
+
+- Skip directories and invalid paths during CLI entry discovery so a later valid source file can be selected, while preserving file symlink support and existing missing-entry behavior. ([#23212](https://github.com/mastra-ai/mastra/pull/23212))
+
+- Fixed Factory API transition validation to accept custom board and phase identifiers while retaining installed-board policy checks. ([#23357](https://github.com/mastra-ai/mastra/pull/23357))
+
+- Fixed command-line polling retries for transient network errors with codes on the error or its cause. ([#22622](https://github.com/mastra-ai/mastra/pull/22622))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Fixed Studio thread history downloading every historical trace on focus. Only selected trace details refresh automatically, while history rows share the updated data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
+- Improved Studio chat performance on long threads. While the agent streams a reply, only the message being written is redrawn; every settled message keeps its rendered output instead of re-rendering on each token. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat shows a workspace edit as a diff of removed and added lines, and a written file as its code, instead of the raw tool arguments. The live reply now reserves room below the message that started it only while the run is going, and never for the first turn of a thread. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat now uses the shared chat shell. The composer docks inside the single scroll container, the transcript fades under it as it scrolls past, attachment previews sit in flow above the input, and the jump-to-latest button floats centred above the composer. On narrow screens the thread page fits the window without a stray scroll, the transcript starts right under the header, and a menu button in the header opens the thread list. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat folds three or more consecutive plain tool calls into one group row that names the running step and counts progress, instead of stacking a badge per call. Calls that wait on the reader (approvals, questions, plans, app results) stay as their own rows. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Fixed the CLI so pressing Ctrl-C or otherwise cancelling a running command stops it right away. Previously, cancellation was mistaken for a temporary network glitch, so the CLI would wait and retry the cancelled operation up to three times over several seconds before giving up. ([#23352](https://github.com/mastra-ai/mastra/pull/23352))
+
+- Improved experiment naming in Studio. The "Run experiment" dialog now asks for a required name (and optional description) so runs are easy to tell apart, the experiment page shows that name as its title, and a new "Rename" action lets you change the name or description after the run was created. Rerunning an experiment prefills the original name. ([#22924](https://github.com/mastra-ai/mastra/pull/22924))
+
+- Updated dependencies [[`b72c747`](https://github.com/mastra-ai/mastra/commit/b72c747a1a698c829c7c1d42e75f72c6d1808dde), [`89f2486`](https://github.com/mastra-ai/mastra/commit/89f2486028ce25c5db19d1f361d5f65cd3ff93e5), [`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`ae375e6`](https://github.com/mastra-ai/mastra/commit/ae375e6799af20820d90e30f63a084ba1507b771), [`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`1778103`](https://github.com/mastra-ai/mastra/commit/17781034204a151a1ff910e9d11d21effe22a9e0), [`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`eef3409`](https://github.com/mastra-ai/mastra/commit/eef3409c125dcd9765e4a85d17f10c53892f6f2c), [`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`f649ea0`](https://github.com/mastra-ai/mastra/commit/f649ea0f006436e7268c3b0fa45f9865a02130cc), [`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2), [`2801d26`](https://github.com/mastra-ai/mastra/commit/2801d26b69bbe8929d302abd09619a68b4cc0d98), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`18d99e7`](https://github.com/mastra-ai/mastra/commit/18d99e7b5687ea6a1cdb601fa5c4209a03b97c02), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48), [`ffc6440`](https://github.com/mastra-ai/mastra/commit/ffc6440d13b9392b3cf1ff309d3b9cde4a791038), [`a0ad935`](https://github.com/mastra-ai/mastra/commit/a0ad9351eaf8527d1515051ddf3998ee258b9acd), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3), [`f31c3fa`](https://github.com/mastra-ai/mastra/commit/f31c3fae16a0710f9e52dba9bccc0018f9da2ac1), [`9d647e2`](https://github.com/mastra-ai/mastra/commit/9d647e25b51cd246ef974d9cad6b05dfdd37126e)]:
+  - @mastra/core@1.65.0
+  - @mastra/deployer@1.65.0
+
+## 1.28.0-alpha.14
+
+### Patch Changes
+
+- Fixed Studio's Metrics page showing "Metrics are not available with your current storage" for projects deployed on the Mastra platform. When Studio runs on the platform, observability reads are served by the hosted observability service, so metrics now work regardless of the project's configured storage. This also restores token and cost usage columns on the Traces page for platform deployments. ([#23385](https://github.com/mastra-ai/mastra/pull/23385))
+
+## 1.28.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+  - @mastra/deployer@1.65.0-alpha.12
+
+## 1.28.0-alpha.12
+
+### Patch Changes
+
+- Updated the bundled Factory web app to report visible page views and throttled interactions when the server enables telemetry. Older servers and telemetry opt-out remain supported. ([#23348](https://github.com/mastra-ai/mastra/pull/23348))
+
+- Fixed Factory API transition validation to accept custom board and phase identifiers while retaining installed-board policy checks. ([#23357](https://github.com/mastra-ai/mastra/pull/23357))
+
+- Added `dataset.purgeItem()` to redact item content from existing dataset history and linked experiment results while preserving version history and review status. Purged items reject later dataset updates, later experiment-result writes remain redacted, and MongoDB purges require transaction support. Dataset item writes must not run concurrently with purge. ([#22559](https://github.com/mastra-ai/mastra/pull/22559))
+
+  ```typescript
+  await dataset.purgeItem({ itemId: 'item-123' });
+  ```
+
+- Fixed the CLI so pressing Ctrl-C or otherwise cancelling a running command stops it right away. Previously, cancellation was mistaken for a temporary network glitch, so the CLI would wait and retry the cancelled operation up to three times over several seconds before giving up. ([#23352](https://github.com/mastra-ai/mastra/pull/23352))
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/deployer@1.65.0-alpha.11
+
+## 1.28.0-alpha.11
+
+### Patch Changes
+
+- Fixed Studio thread history downloading every historical trace on focus. Only selected trace details refresh automatically, while history rows share the updated data. ([#23333](https://github.com/mastra-ai/mastra/pull/23333))
+
+## 1.28.0-alpha.10
+
+### Minor Changes
+
+- Added `mastra api factory` commands for projects, work items, decisions, attention, queue health, metrics, and supervisors, including organization selection for hosted Factory requests. ([#23226](https://github.com/mastra-ai/mastra/pull/23226))
+
+  ```bash
+  mastra api factory project list
+  mastra api factory work-item transition --schema
+  ```
+
+### Patch Changes
+
+- Improved Studio chat performance on long threads. While the agent streams a reply, only the message being written is redrawn; every settled message keeps its rendered output instead of re-rendering on each token. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat shows a workspace edit as a diff of removed and added lines, and a written file as its code, instead of the raw tool arguments. The live reply now reserves room below the message that started it only while the run is going, and never for the first turn of a thread. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat now uses the shared chat shell. The composer docks inside the single scroll container, the transcript fades under it as it scrolls past, attachment previews sit in flow above the input, and the jump-to-latest button floats centred above the composer. On narrow screens the thread page fits the window without a stray scroll, the transcript starts right under the header, and a menu button in the header opens the thread list. ([#23258](https://github.com/mastra-ai/mastra/pull/23258))
+
+- Studio chat folds three or more consecutive plain tool calls into one group row that names the running step and counts progress, instead of stacking a badge per call. Calls that wait on the reader (approvals, questions, plans, app results) stay as their own rows. ([#23313](https://github.com/mastra-ai/mastra/pull/23313))
+
+- Updated dependencies [[`d7bd6f7`](https://github.com/mastra-ai/mastra/commit/d7bd6f7a91daf528f34d628faede4a916421b0dd), [`4337eb6`](https://github.com/mastra-ai/mastra/commit/4337eb6230681b791ec1ad56e58af9fb8329a5ce)]:
+  - @mastra/core@1.65.0-alpha.10
+  - @mastra/deployer@1.65.0-alpha.10
+
+## 1.28.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+  - @mastra/deployer@1.65.0-alpha.9
+
+## 1.28.0-alpha.8
+
+### Patch Changes
+
+- Reject failed CLI environment updates with the original read, validation, or write error after logging it, so callers can detect when configuration was not persisted. ([#23215](https://github.com/mastra-ai/mastra/pull/23215))
+
+- Improved the trace view of a thread in Studio. The thread page now exposes a single **Show traces** toggle (the slide-in traces panel is gone), long traces are clamped to the height of their message with a **Show more** / **Show less** control, the row currently in view is emphasised as you scroll, opening a tool call highlights the spans behind it (the **Highlight spans** button remains for text-only messages), and **View full thread** from a trace lands you on that trace's row. ([#23223](https://github.com/mastra-ai/mastra/pull/23223))
+
+- Include optional Mastra dependencies in build, dev, and lint package inventories, giving optional declarations precedence when dependency sections overlap. ([#23211](https://github.com/mastra-ai/mastra/pull/23211))
+
+- Use the nearest ancestor lockfile when suggesting peer dependency repair commands so nested workspace applications receive guidance for the correct package manager. ([#23208](https://github.com/mastra-ai/mastra/pull/23208))
+
+- Skip directories and invalid paths during CLI entry discovery so a later valid source file can be selected, while preserving file symlink support and existing missing-entry behavior. ([#23212](https://github.com/mastra-ai/mastra/pull/23212))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/deployer@1.65.0-alpha.8
+
+## 1.28.0-alpha.7
+
+### Patch Changes
+
+- Factory session tool rows now show the local time each step began, with the full date on hover, so long or collapsed sessions can be scanned as a timeline. ([#23165](https://github.com/mastra-ai/mastra/pull/23165))
+
+- Updated dependencies [[`51b2b5e`](https://github.com/mastra-ai/mastra/commit/51b2b5e0ca9ba4a23fc6544246ad9822c4dbd92e), [`6a05d36`](https://github.com/mastra-ai/mastra/commit/6a05d36a0bb28390539cfc5a4f12c847474d28d2)]:
+  - @mastra/core@1.65.0-alpha.7
+  - @mastra/deployer@1.65.0-alpha.7
+
+## 1.28.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+  - @mastra/deployer@1.65.0-alpha.6
+
+## 1.28.0-alpha.5
+
+### Patch Changes
+
+- Fixed file replacements so values containing `$&`, `$$`, `` $` `` or `$'` are written to generated files exactly as provided instead of being expanded. ([#23091](https://github.com/mastra-ai/mastra/pull/23091))
+
+- Updated dependencies [[`917da71`](https://github.com/mastra-ai/mastra/commit/917da711580cdc9e8f7ca474b301f3611a5c46ed), [`a5f22f4`](https://github.com/mastra-ai/mastra/commit/a5f22f4ff1763ab9679391a6a9118358c8059e11)]:
+  - @mastra/core@1.65.0-alpha.5
+  - @mastra/deployer@1.65.0-alpha.5
+
+## 1.28.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+  - @mastra/deployer@1.65.0-alpha.4
+
 ## 1.28.0-alpha.3
 
 ### Minor Changes

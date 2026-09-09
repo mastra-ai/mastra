@@ -5158,6 +5158,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /datasets/:datasetId/items/:itemId/purge": {
+    "method": "DELETE",
+    "path": "/datasets/:datasetId/items/:itemId/purge",
+    "pathParams": [
+      "datasetId",
+      "itemId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /datasets/:datasetId/items/:itemId": {
     "method": "DELETE",
     "path": "/datasets/:datasetId/items/:itemId",
@@ -5256,6 +5274,23 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "counts"
+    }
+  },
+  "DELETE /experiments/:experimentId": {
+    "method": "DELETE",
+    "path": "/experiments/:experimentId",
+    "pathParams": [
+      "experimentId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /datasets/:datasetId/experiments": {
@@ -5387,6 +5422,24 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /datasets/:datasetId/experiments/:experimentId": {
+    "method": "DELETE",
+    "path": "/datasets/:datasetId/experiments/:experimentId",
+    "pathParams": [
+      "datasetId",
+      "experimentId"
+    ],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "PATCH /datasets/:datasetId/experiments/:experimentId": {
     "method": "PATCH",
     "path": "/datasets/:datasetId/experiments/:experimentId",
@@ -5415,7 +5468,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "page",
-      "perPage"
+      "perPage",
+      "tags"
     ],
     "bodyParams": [],
     "hasQuery": true,

@@ -322,18 +322,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.32
   },
   {
-    "model": "crossmodel/moonshot/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 262000,
-    "inputCost": 0.62,
-    "outputCost": 3.3
-  },
-  {
     "model": "crossmodel/moonshot/kimi-k2.6",
     "imageInput": true,
     "audioInput": false,
@@ -462,8 +450,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 128000,
-    "inputCost": 5,
-    "outputCost": 30
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "crossmodel/openai/gpt-5.6-terra",
@@ -476,6 +464,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 12
+  },
+  {
+    "model": "crossmodel/openai/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
   },
   {
     "model": "crossmodel/qwen/qwen3.6-flash",
@@ -779,5 +779,4 @@ const agent = new Agent({
   }
 });
 ```
-
 

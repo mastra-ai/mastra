@@ -2,19 +2,21 @@ import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
+import { isSystemReminderSignalType } from '../../../memory/system-reminders';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type {
   AnySpan,
@@ -1316,7 +1318,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const initialSignalEchoes =
           readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
         for (const initialSignal of initialSignalEchoes) {
-          safeEnqueue(controller, initialSignal.toDataPart());
+          if (!isSystemReminderSignalType(initialSignal.type)) {
+            safeEnqueue(controller, initialSignal.toDataPart());
+          }
         }
 
         const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
@@ -1332,7 +1336,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
           for (const preRunSignal of preRunSignals) {
             const signalForTranscript = messageList.addSignal(preRunSignal);
-            safeEnqueue(controller, signalForTranscript.toDataPart());
+            if (!isSystemReminderSignalType(signalForTranscript.type)) {
+              safeEnqueue(controller, signalForTranscript.toDataPart());
+            }
           }
         }
 
@@ -1343,7 +1349,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           toolChoice?: ToolChoice<TOOLS> | undefined;
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
-          modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
+          modelSettings?: MastraModelSettings | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
           workspace?: Workspace;
         } = {
@@ -1683,9 +1689,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           modelResult = new ReadableStream({
             start(controller) {
               for (const chunk of replayChunks) {
-                // Reattach per-run metadata that was stripped at cache time.
+                // Reattach per-run metadata that was stripped at cache time. A cached
+                // step-start timestamp belongs to the original provider call, so omit it
+                // rather than reporting stale inference timing for the replay.
+                let replayChunk = chunk;
+                if (chunk.type === 'step-start' && chunk.payload && typeof chunk.payload === 'object') {
+                  const { startedAt: _startedAt, ...payload } = chunk.payload as Record<string, unknown>;
+                  replayChunk = { ...chunk, payload };
+                }
                 controller.enqueue({
-                  ...chunk,
+                  ...replayChunk,
                   runId,
                   from: ChunkFrom.AGENT,
                 });
@@ -1703,6 +1716,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             parameters: {
               ...currentStep.modelSettings,
               ...modelConfig.modelSettings,
+              timeout:
+                currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                  ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                  : undefined,
             } as Record<string, unknown> | undefined,
             providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
             availableTools: getStepAvailableToolNames(
@@ -1713,6 +1730,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
           modelSpanTracker?.startInference?.();
+          const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
             span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1731,6 +1749,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: {
                   ...currentStep.modelSettings,
                   ...modelConfig.modelSettings,
+                  timeout:
+                    currentStep.modelSettings?.timeout || modelConfig.modelSettings?.timeout
+                      ? { ...currentStep.modelSettings?.timeout, ...modelConfig.modelSettings?.timeout }
+                      : undefined,
                   maxRetries: modelConfig.maxRetriesConfigured
                     ? modelConfig.maxRetries
                     : (currentStep.modelSettings?.maxRetries ?? modelConfig.maxRetries),
@@ -1771,6 +1793,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       request: request || {},
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
+                      startedAt: inferenceStartedAt,
                     },
                   };
                 },

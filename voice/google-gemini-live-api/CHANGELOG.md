@@ -1,5 +1,29 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.9
+
+### Patch Changes
+
+- Deduplicate tool calls by provider call id: the same function call delivered through both `serverContent.modelTurn.parts[].functionCall` and a top-level `toolCall` message now executes once and emits a single `toolResponse` instead of running the tool twice. ([#22985](https://github.com/mastra-ai/mastra/pull/22985))
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9
+
+## 0.14.9-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4)]:
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 0.14.9-alpha.1
+
+### Patch Changes
+
+- Send a functionResponse when Gemini Live calls an unregistered tool name. Previously the provider emitted a tool_not_found error and returned without answering the call, leaving the turn unanswered so the model went silent until the user hung up. ([#23131](https://github.com/mastra-ai/mastra/pull/23131))
+
 ## 0.14.9-alpha.0
 
 ### Patch Changes

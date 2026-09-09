@@ -1,3 +1,4 @@
+import type { GetMetricAggregateArgs, GetMetricAggregateResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -23,6 +24,7 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
+import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ExperimentItemPage from '@/pages/experiments/experiment/item';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
@@ -73,8 +75,23 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
   return { router, queryClient };
 };
 
+let metricRequests: GetMetricAggregateArgs[] = [];
+
+const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> = {
+  sum: { value: 12400, estimatedCost: 0.0123, costUnit: 'USD' },
+  avg: { value: 1850 },
+  count: { value: 42 },
+};
+
 beforeEach(() => {
+  metricRequests = [];
   server.use(
+    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
+      const body = (await request.json()) as GetMetricAggregateArgs;
+      metricRequests.push(body);
+      return HttpResponse.json(metricAggregateByAggregation[body.aggregation] ?? { value: null });
+    }),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
@@ -114,6 +131,22 @@ describe('experiment item sub-route', () => {
 
       await screen.findByText('item-2');
       expect(screen.queryByRole('tab')).toBeNull();
+    });
+  });
+
+  describe('given the experiment route on a metrics-capable store', () => {
+    it('when the page loads, then it requests metric aggregates filtered by the route experimentId and renders Tokens/Latency in the meta bar', async () => {
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Tokens')).toBeDefined();
+      expect(await screen.findByText('12.4K')).toBeDefined();
+      expect(screen.getByText('Latency (avg)')).toBeDefined();
+      expect(await screen.findByText('1.9s')).toBeDefined();
+
+      expect(metricRequests.length).toBeGreaterThanOrEqual(3);
+      for (const body of metricRequests) {
+        expect(body.filters).toEqual({ experimentId: EXPERIMENT_ID });
+      }
     });
   });
 
@@ -173,6 +206,121 @@ describe('experiment item sub-route', () => {
     });
   });
 
+  describe('when the user selects results to tag', () => {
+    const patches: Array<{ resultId: string; body: unknown }> = [];
+
+    beforeEach(() => {
+      patches.length = 0;
+      server.use(
+        http.patch(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          async ({ params, request }) => {
+            const body = await request.json();
+            patches.push({ resultId: String(params.resultId), body });
+            const original = resultsResponse.results.find(r => r.id === params.resultId)!;
+            return HttpResponse.json({ ...original, ...(body as object) });
+          },
+        ),
+      );
+    });
+
+    async function openTagPicker() {
+      const trigger = await screen.findByRole('combobox');
+      expect(trigger.textContent).toContain('Add tag');
+      fireEvent.click(trigger);
+      return screen.findByPlaceholderText('Search or create tag...');
+    }
+
+    function selectOption(option: HTMLElement) {
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+    }
+
+    it('only shows the "Add tag" picker once something is selected', async () => {
+      renderExperimentRoute();
+
+      await screen.findByRole('checkbox', { name: 'Select result item-1' });
+      expect(screen.queryByRole('combobox')).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect((await screen.findByRole('combobox')).textContent).toContain('Add tag');
+    });
+
+    it('lists tags already present on results as existing options', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      await openTagPicker();
+
+      expect(await screen.findByRole('option', { name: 'alpha' })).toBeDefined();
+    });
+
+    it('creates a new tag on every selected result and keeps the selection', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-2' }));
+
+      const search = await openTagPicker();
+      fireEvent.input(search, { target: { value: 'smoke' }, inputType: 'insertText' });
+      selectOption(await screen.findByRole('option', { name: 'Create "smoke"' }));
+
+      await waitFor(() => {
+        expect(patches).toEqual([
+          { resultId: 'res-1', body: { tags: ['smoke'] } },
+          { resultId: 'res-2', body: { tags: ['alpha', 'smoke'] } },
+        ]);
+      });
+      expect(screen.getByRole('checkbox', { name: 'Select result item-1' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('checkbox', { name: 'Select result item-2' }).getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
+  describe('when the user edits tags from the open result panel', () => {
+    const patches: Array<{ resultId: string; body: unknown }> = [];
+
+    beforeEach(() => {
+      patches.length = 0;
+      server.use(
+        http.patch(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          async ({ params, request }) => {
+            const body = await request.json();
+            patches.push({ resultId: String(params.resultId), body });
+            const original = resultsResponse.results.find(r => r.id === params.resultId)!;
+            return HttpResponse.json({ ...original, ...(body as object) });
+          },
+        ),
+      );
+    });
+
+    it('removes a tag from the metadata row', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-2`);
+      const dialog = await screen.findByRole('dialog');
+
+      fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove tag alpha' }));
+
+      await waitFor(() => {
+        expect(patches).toEqual([{ resultId: 'res-2', body: { tags: [] } }]);
+      });
+    });
+
+    it('adds a known tag from the metadata row picker', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+      const dialog = await screen.findByRole('dialog');
+
+      fireEvent.click(await within(dialog).findByRole('combobox'));
+      const option = await screen.findByRole('option', { name: 'alpha' });
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+
+      await waitFor(() => {
+        expect(patches).toEqual([{ resultId: 'res-1', body: { tags: ['alpha'] } }]);
+      });
+    });
+  });
+
   describe('when visiting the item URL directly', () => {
     it('renders the results list with the panel open', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
@@ -193,15 +341,44 @@ describe('experiment item sub-route', () => {
     });
   });
 
+  describe('result panel Feedback tab', () => {
+    it('shows a needs-review dot as soon as the panel opens when a trace feedback needs review', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+
+      const dialog = await screen.findByRole('dialog');
+      const feedbackTab = await within(dialog).findByRole('tab', { name: /^feedback/i });
+      await waitFor(() => expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined());
+    });
+
+    it('shows no dot when every trace feedback is already reviewed', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
+          HttpResponse.json({
+            ...experimentTraceFeedback,
+            feedback: experimentTraceFeedback.feedback.map(item => ({ ...item, reviewStatus: 'reviewed' })),
+          }),
+        ),
+      );
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+
+      const dialog = await screen.findByRole('dialog');
+      const feedbackTab = await within(dialog).findByRole('tab', { name: /^feedback/i });
+      fireEvent.click(feedbackTab);
+      expect(await screen.findByText('Trace feedback for the experiment run')).toBeDefined();
+      expect(within(feedbackTab).queryByTestId('needs-review-dot')).toBeNull();
+    });
+  });
+
   describe('when the user opens a result trace and selects a span', () => {
-    it('shows trace feedback and anchor-span scores with badge counts', async () => {
+    it('shows trace feedback (with a needs-review dot) and anchor-span scores with a badge count', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
 
       const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
-      const feedbackTab = screen.getByRole('tab', { name: /feedback \(1\)/i });
+      const feedbackTab = screen.getAllByRole('tab', { name: /^feedback/i }).at(-1)!;
+      expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined();
 
       fireEvent.click(scoresTab);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
@@ -248,7 +425,7 @@ describe('experiment item sub-route', () => {
       expect(dialog.parentElement?.className).toContain('grid-cols-[1fr_1fr]');
 
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      const spanHeading = await screen.findByText(/# experiment-span-child/);
+      const spanHeading = await screen.findByText(/# span-child/);
       const spanSection = spanHeading.closest('section');
       if (!spanSection) throw new Error('Expected span detail section');
 
@@ -257,7 +434,9 @@ describe('experiment item sub-route', () => {
       expect(spanSection.className).toContain('border-0');
       expect(spanSection.className).toContain('bg-transparent');
 
-      fireEvent.click(await within(spanSection).findByRole('tab', { name: /feedback \(1\)/i }));
+      const spanFeedbackTab = await within(spanSection).findByRole('tab', { name: /^feedback/i });
+      expect(within(spanFeedbackTab).getByTestId('needs-review-dot')).toBeDefined();
+      fireEvent.click(spanFeedbackTab);
       expect(await screen.findByText('Child span feedback for the tool call')).toBeDefined();
 
       fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
@@ -272,7 +451,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
 
-      expect(await screen.findByText(/# experiment-span-child/)).toBeDefined();
+      expect(await screen.findByText(/# span-child/)).toBeDefined();
       const traceSection = screen.getByText('Experiment agent run').closest('section');
       const panelGrid = traceSection?.parentElement;
       const topLevelPanels = Array.from(panelGrid?.children ?? []).filter(child => child.tagName === 'SECTION');
@@ -287,13 +466,13 @@ describe('experiment item sub-route', () => {
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByText(/# experiment-span-child/)).toBeDefined();
+      expect(await screen.findByText(/# span-child/)).toBeDefined();
 
       fireEvent.click(screen.getByLabelText('Previous span'));
-      expect(await screen.findByText(/# experiment-span-root/)).toBeDefined();
+      expect(await screen.findByText(/# span-root/)).toBeDefined();
 
       fireEvent.click(screen.getByLabelText('Next span'));
-      expect(await screen.findByText(/# experiment-span-child/)).toBeDefined();
+      expect(await screen.findByText(/# span-child/)).toBeDefined();
     });
 
     it('closes span details without closing the trace card', async () => {
@@ -302,13 +481,13 @@ describe('experiment item sub-route', () => {
       const dialog = await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
       fireEvent.click(await screen.findByText('Experiment tool call'));
-      expect(await screen.findByText(/# experiment-span-child/)).toBeDefined();
+      expect(await screen.findByText(/# span-child/)).toBeDefined();
 
-      const spanSection = screen.getByText(/# experiment-span-child/).closest('section');
+      const spanSection = screen.getByText(/# span-child/).closest('section');
       if (!spanSection) throw new Error('Expected span detail section');
       fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
 
-      await waitFor(() => expect(screen.queryByText(/# experiment-span-child/)).toBeNull());
+      await waitFor(() => expect(screen.queryByText(/# span-child/)).toBeNull());
       expect(screen.getByText('Experiment agent run')).toBeDefined();
       expect(dialog.isConnected).toBe(true);
     });
@@ -385,21 +564,15 @@ describe('experiment item sub-route', () => {
     });
   });
 
-  describe('when the user opens a needs-review result in review', () => {
-    it('closes the panel and lands on the Review Queue page with the result featured via the URL', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
+  describe('when the user completes a needs-review result', () => {
+    it('marks the result complete from the panel header', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
 
       const dialog = await screen.findByRole('dialog');
       await waitFor(() => expect(dialog.textContent).toContain('third question'));
 
-      fireEvent.click(await screen.findByRole('button', { name: /review/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/experiments/review-queue');
-        expect(router.state.location.search).toBe(`?experiment=${EXPERIMENT_ID}&review=res-3`);
-      });
-      const reviewDialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
-      expect(reviewDialog.textContent).toContain('third question');
+      expect(within(dialog).queryByRole('button', { name: /^review$/i })).toBeNull();
+      expect(within(dialog).getByRole('button', { name: /mark as reviewed/i })).toBeDefined();
     });
   });
 });

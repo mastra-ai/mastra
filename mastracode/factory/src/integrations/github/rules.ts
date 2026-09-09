@@ -1,13 +1,15 @@
-import { resolveFactoryGithubRule } from '../../rules/resolve.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import type { BoardRegistry } from '../../boards/index.js';
+import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
-  FactoryRules,
 } from '../../rules/types.js';
-import { isTerminalFactoryRuleStage } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -15,9 +17,13 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  WorkItemUpdateConflictError,
+} from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
+import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -62,6 +68,10 @@ function actorLogins(value: unknown): string[] {
     const login = string(object(actor)?.login);
     return login ? [login] : [];
   });
+}
+
+function sameLabels(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((label, index) => label === b[index]);
 }
 
 function labelNames(value: unknown): string[] {
@@ -184,7 +194,8 @@ function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository)
   if (tracked === undefined) return undefined;
   // A canonical key with no URL names no repository, and the pull request matcher takes it anyway.
   // Asking GitHub about the wrong repository of a multi-repository project would record a wrong answer.
-  const unattributed = !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
+  const unattributed =
+    !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
   if (unattributed && metadata.githubRepositoryId !== repository.id) return undefined;
   return metadata.author;
 }
@@ -237,6 +248,7 @@ function pullRequestProvenance(
 }
 
 export interface GithubRulesIntegration {
+  readonly rules: GithubEventRules;
   readonly slug?: string;
   /**
    * Factory's own GitHub login, used to ignore its own writes. Optional because
@@ -259,7 +271,18 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  configVersion: string;
+  boards: BoardRegistry;
+  /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
+  intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+}
+
+/** Identity under which label-driven relocations are recorded. */
+const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
+
+function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
+  const action = string(parsed.payload.action);
+  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
 export class GithubRules {
@@ -286,14 +309,92 @@ export class GithubRules {
     return slug ? `${slug.toLowerCase()}[bot]` : undefined;
   }
 
+  /**
+   * Board an issue's labels select under the project's label routes, when that board is installed.
+   * Undefined leaves built-in routing (Work) in charge.
+   */
+  async #labelRouteTarget(
+    orgId: string,
+    factoryProjectId: string,
+    labels: readonly string[],
+  ): Promise<{ board: string; initialPhase: string } | undefined> {
+    if (!this.options.intake || labels.length === 0) return undefined;
+    const routes = await this.options.intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
+    const route = resolveIntakeLabelRoute(routes, labels);
+    const board = route ? this.options.boards.get(route.board) : undefined;
+    return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
+  }
+
+  /**
+   * `labeled` / `unlabeled` are not rule events: the labels only decide which board the card belongs
+   * on, so the card is re-routed here and its label metadata refreshed. Cards a run owns, and
+   * finished cards, stay where they are.
+   */
+  async #relocateLabeledIssue(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const found = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!found || found.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const labels = labelNames(issue?.labels);
+    let item = found;
+    let changed = false;
+    if (!sameLabels(cardLabels(item), labels)) {
+      let updated;
+      try {
+        updated = await this.options.storage.update({
+          orgId: item.orgId,
+          id: item.id,
+          userId: LABEL_ROUTE_USER_ID,
+          patch: { metadata: { ...(item.metadata ?? {}), labels } },
+          expectedRevision: item.revision,
+        });
+      } catch (error) {
+        // The card changed under us (a run wrote it, or a concurrent delivery won). The next
+        // delivery or reconcile pass carries the same labels, so drop this one instead of 5xx-ing.
+        if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+        return { status: 'ignored' };
+      }
+      if (!updated) return { status: 'ignored' };
+      item = updated.item;
+      changed = true;
+    }
+    const target = await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labels);
+    const outcome = await moveCardToBoard({
+      workItems: this.options.storage,
+      boardRegistry: this.options.boards,
+      userId: LABEL_ROUTE_USER_ID,
+      item,
+      targetBoard: target?.board ?? 'work',
+    });
+    return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
+    const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
-    if (!event || !installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+      return { status: 'ignored' };
+    }
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -303,7 +404,9 @@ export class GithubRules {
     const results = [];
     for (const project of projects) {
       results.push(
-        await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project),
+        event
+          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
       );
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -386,6 +489,9 @@ export class GithubRules {
     // card as the PR's Review card. A missing Review card is materialized below.
     const relatedItem =
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
+    const intake = issueNumber
+      ? await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labelNames(issue?.labels))
+      : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -420,7 +526,7 @@ export class GithubRules {
         ingress: { type: 'github', id: ingressIdentity },
         cause: `github.${event}`,
         causalChain: [],
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         ...(item
           ? {
               item: {
@@ -434,10 +540,11 @@ export class GithubRules {
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
-              board: item.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
+              board: boardForWorkItem(item),
               itemRevision: item.revision,
             }
           : {}),
+        ...(intake ? { intake } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -519,7 +626,7 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = resolveFactoryGithubRule(this.options.rules, event);
+      const rule = this.options.github.rules[event];
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -528,7 +635,10 @@ export class GithubRules {
         if (decision?.type === 'reject') {
           outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
         } else if (decision) {
-          decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+          decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+            assertFactoryDecisionTarget(entry, this.options.boards, item ? boardForWorkItem(item) : undefined);
+            return { ...entry };
+          });
         }
       } catch (error) {
         const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -548,7 +658,7 @@ export class GithubRules {
         factoryProjectId: project.factoryProjectId,
         workItemId: item?.id ?? null,
         ingress: { identity: ingressIdentity, triggerType: `github.${event}` },
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         expectedRevision: item?.revision ?? null,
         actor: { ...actor },
         outcome,
@@ -998,7 +1108,6 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -1007,7 +1116,7 @@ export function createGithubPullRequestReconciler(
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             const reconciledOutcome = reconciledPullRequestOutcome(metadata);
             if (
-              (stage === 'done' || stage === 'canceled') &&
+              workItemPhaseSemantics(options.boards, item)?.kind === 'terminal' &&
               reconciledOutcome !== undefined &&
               reconciliation === reconciledOutcome
             ) {
@@ -1073,7 +1182,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -1082,7 +1193,7 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           const cleanupFailures = new Set<string>();
           for (const card of cards) {
-            if (!isTerminalFactoryRuleStage(card.stages)) continue;
+            if (workItemPhaseSemantics(options.boards, card)?.kind !== 'terminal') continue;
             try {
               await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,
@@ -1105,7 +1216,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -1126,14 +1239,16 @@ export function githubRulesOptions(
   github: GithubRulesIntegration,
   context: IntegrationContext,
 ): GithubRulesOptions | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   return {
     github,
     sourceControl: context.storage.sourceControl,
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
+    intake: context.storage.intake,
   };
 }
 

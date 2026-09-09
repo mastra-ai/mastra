@@ -18,6 +18,7 @@ const binding: IntakeSourceBinding = {
   integrationId: 'linear',
   sourceId: 'proj-1',
   factoryProjectId: 'factory-1',
+  board: null,
 };
 
 describe('useIntakeBindingsQuery', () => {

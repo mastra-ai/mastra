@@ -9,6 +9,7 @@ import { getObservableMessages, stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import type { ReflectorRunner } from '../reflector-runner';
+import { withRetry } from '../retry';
 import { stripSubconsciousSignals } from '../subconscious/origin';
 import { getMaxThreshold } from '../thresholds';
 import type { TokenCounter } from '../token-counter';
@@ -120,6 +121,7 @@ export abstract class ObservationStrategy {
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
           reflectionHooks,
+          trigger: this.opts.trigger,
           requestContext,
           observabilityContext: this.opts.observabilityContext,
         });
@@ -329,14 +331,18 @@ export abstract class ObservationStrategy {
 
     await Promise.all(
       groups.map(group =>
-        this.deps.onIndexObservations!({
-          text: group.content,
-          groupId: group.id,
-          range: group.range,
-          threadId,
-          resourceId,
-          observedAt,
-        }),
+        withRetry(
+          () =>
+            this.deps.onIndexObservations!({
+              text: group.content,
+              groupId: group.id,
+              range: group.range,
+              threadId,
+              resourceId,
+              observedAt,
+            }),
+          { label: 'index-observations', abortSignal: this.opts.abortSignal },
+        ),
       ),
     );
   }

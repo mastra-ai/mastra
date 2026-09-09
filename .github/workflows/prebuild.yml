@@ -225,6 +225,9 @@ jobs:
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
             file.startsWith('packages/playground/e2e/') ||
+            file.startsWith('packages/playground-ui/') ||
+            file.startsWith('server-adapters/hono/') ||
+            file.startsWith('packages/server/') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
