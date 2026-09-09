@@ -1,0 +1,90 @@
+---
+extends: existence
+message: "AI ownership metaphor: '%s'. Name the file that defines it or the tool that writes it. Disable this rule for concurrency or memory prose."
+level: error
+nonword: true
+ignorecase: true
+# "Owns" is an AI fingerprint for responsibility by possession: a tool
+# "owns" a directory, a rule "owns" a phrase, an installer "owns" a tree.
+# The plain statement names which file defines a thing or which tool writes
+# it. The object rides inside the span, so the exceptions can carry the one
+# register where ownership is established vocabulary: concurrency and
+# memory management, where a goroutine owns a lock and a caller owns a
+# buffer. With those objects excepted, the remaining cost across the Go and
+# Python standard libraries is four matches ("owns the result," "owns its
+# ability," "owns the annotations," and one single-letter object the
+# exceptions cannot name), all in that same systems register, so prose
+# about resource lifetimes disables the rule.
+#
+# A documentation-corpus audit (2026-09) found the dominant figurative use
+# in technical documentation escaping: a component that owns a data
+# structure it writes ("the table it owns," "it owns three tables," "the
+# columns each stage owns," "the pass owns one table," "the docs that own
+# the decision cut"). The possession token wants a determiner after the
+# verb, and every one of those puts the object before it, counts it, or
+# drops the "s." Three more tokens cover those frames. They add eleven
+# corpus hits, every one the runtime register the exceptions already name
+# ("the M that owns this P," "the P that owns this mcache," "an mspan which
+# owns npages"), whose objects are too short or too Go-specific to list;
+# runtime prose disables the rule as before.
+exceptions:
+  # Resource objects from the concurrency and memory-management register.
+  - "(?i)locks?"
+  - "(?i)mutex(?:es)?"
+  - "(?i)stacks?"
+  - "(?i)memory"
+  - "(?i)threads?"
+  - "(?i)workers?"
+  - "(?i)goroutines?"
+  - "(?i)process(?:es)?"
+  - "(?i)slots?"
+  - "(?i)slices?"
+  - "(?i)maps?"
+  - "(?i)buffers?"
+  - "(?i)handles?"
+  - "(?i)pointers?"
+  - "(?i)connections?"
+  - "(?i)sockets?"
+  - "(?i)descriptors?"
+  - "(?i)\\bfds?\\b"
+  - "(?i)resources?"
+  - "(?i)pages?"
+  - "(?i)arenas?"
+  - "(?i)semaphores?"
+  - "(?i)channels?"
+  # Legal ownership is literal, not the figure.
+  - "(?i)copyrights?"
+  - "(?i)trademarks?"
+  - "(?i)patents?"
+  - "(?i)licen[cs]es?"
+  - "(?i)\\brights\\b"
+tokens:
+  # --- Possession: a determiner-led object owned by a mechanism ("vendir
+  # owns that directory," "git owns the commit," "one rule owns the
+  # phrase"). An optional modifier word sits between the determiner and the
+  # object.
+  - "\\bown(?:s|ing) (?:a|an|the|this|that|its|their|each|every) (?:[a-z]+ )?[a-z]+"
+
+  # --- The object fronted: a relative clause with the owner after its
+  # table ("the table it owns," "the columns each stage owns," "the
+  # directory that vendir owns"). The lookahead refuses a following object,
+  # which the possession token above reads instead.
+  - "\\b(?:the|a|an|each|every|its|their|this|that|these|those|which|what|whatever) (?:[a-z]+ )?[a-z]+ (?:it|they|each [a-z]+|every [a-z]+|this [a-z]+|that [a-z]+|the [a-z]+|a [a-z]+|an [a-z]+|no [a-z]+|which|who) (?:(?!(?:its|their|our|your|my|his|her)\\b)[a-z]+ )?owns?\\b(?! (?:a|an|the|its|their|this|that|no|one|two|three|several|many|some|all|every|each|zero|[a-z]+s)\\b)"
+
+  # --- The counted or bare-plural object, and the owned question ("it
+  # owns three tables," "the pass owns one table," "the grading pass owns
+  # where the signal applies"). One token takes a pronoun or relative
+  # subject and the other a determiner-fronted one.
+  - "\\b(?:it|they|which|that|this|who|each|every|one|both) (?:[a-z]+ )?owns? (?:one|two|three|four|five|several|many|multiple|some|both|all|every|each|zero|just|only|where|what|which|how|whether|[a-z]+s)\\b"
+  - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ owns (?:one|two|three|four|five|several|many|multiple|some|both|all|every|each|zero|just|only|where|what|which|how|whether|[a-z]+s)\\b"
+
+  # --- The bare "own" after a relative pronoun or plural subject ("the
+  # docs that own the decision cut," "they own three tables"). No modifier
+  # slot, so a possessive can never sit in front of the verb. "Own no
+  # table" is NegatedObject's.
+  - "\\b(?:that|which|who|they|these|those|both|all) own (?:a|an|the|this|that|its|their|each|every|one|two|three|several|[a-z]+s)\\b"
+
+  # --- The owner as a title ("the owning rule," "one owning package," "no
+  # owning component"). "The owning goroutine" lands in the exceptions
+  # with its resource sibling nouns.
+  - "\\b(?:a|an|the|this|that|its|their|one|each|every|no) owning [a-z]+\\b"

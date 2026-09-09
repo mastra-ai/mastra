@@ -1,0 +1,69 @@
+---
+extends: existence
+message: "AI pseudo-cleft: '%s'. Put the claim first as its own sentence and delete the 'What ... is' frame."
+level: error
+nonword: true
+# The pseudo-cleft: a free relative as subject, a copula, then the claim
+# ("What changed is the direction," "What you get is one row per blob,"
+# "What remains is the offset," "All you need is the offset," "The only
+# thing that changes is the direction," "Where this pays off is the read
+# path"). The frame spends five or six words announcing that a claim is
+# coming, then delivers a claim short enough to have stood alone. It is
+# the sibling of the "Here's what" lead in ExplainerLeads with the
+# demonstrative dropped, and the model reaches for it once the
+# announcing spellings are suppressed (2026-09).
+#
+# The plain form puts the claim first: "The direction changes." "Each
+# blob gets one row." "The offset is all you need."
+#
+# ExplainerLeads takes the determiner-fronted spelling ("What the join
+# does is," "What this buys is," "Why this works is"), RestatementMarkers
+# "What this means is," ContrastiveFormulas "What matters is not," and
+# ColloquialAssessments "all that matters" and "the only thing that
+# matters," so the tokens here take the rest: the pronoun subject and the
+# bare verb after "What," the "All" and "The only" quantifier frames, and
+# "Where" with a verb of payoff. Every "What" token carries a lookahead
+# that refuses a sentence ending in a question mark, which keeps "What
+# value is the default?" out, and the word after the copula has to be a
+# determiner, a quantifier, "that," "to," or a wh-word, which keeps the
+# predicate adjective ("What remains is unclear") out. "What" and "Where"
+# stay sentence-initial; "all" and "the only" match mid-sentence too,
+# because "if all you want is a unique ID" is the same frame.
+#
+# Costs across the Go and Python standard libraries: the pronoun subject
+# two ("What we want to happen is that"), the bare verb four ("What
+# remains is the question of where to schedule the spill," "What makes the
+# arenas here safe is that"), the "all" frame twelve ("All we need is the
+# variable," "all you need to do is to derive a class"), its bare-verb
+# spelling three ("all it does is call fn"), the "the only"
+# frame seven ("The only thing that needs evaluating is the index"), and
+# "Where" zero. Every hit is the construction itself and fires by design.
+# The corpus lines break mid-sentence, so the longer tokens undercount.
+tokens:
+  # --- The pronoun subject ("What you get is one row per blob," "What we
+  # need is the offset," "What it comes down to is a lookup"). "What I mean
+  # is" stays in RestatementMarkers.
+  - "\\bWhat(?![^.!?\\n]*\\?) (?!I mean is\\b)(?:you|we|they|it|one|I) (?:[a-z'-]+ ){1,5}(?:is|are|was|were|comes down to) (?:the|a|an|this|that|these|those|its|their|your|our|my|one|two|three|four|five|six|seven|eight|nine|ten|\\d+|some|any|all|every|each|nothing|something|anything|everything|another|both|either|enough|just|simply|only|to|whether|how|why|what|where|when|which|who)\\b"
+
+  # --- The bare verb ("What changed is the direction," "What remains is
+  # the offset," "What follows is the reverse lookup," "What makes this
+  # work is the hash," "What matters here is the offset"). "What really
+  # matters" and "What matters most" stay in ColloquialAssessments.
+  - "\\bWhat(?![^.!?\\n]*\\?) (?!(?:really|truly|actually|genuinely) matters\\b)(?!matters most\\b)(?:actually |really |ultimately |finally |mostly |mainly |truly )?(?:changed|changes|remains|remained|follows|followed|matters|mattered|happens|happened|works|worked|differs|differed|varies|varied|counts|counted|stays|stayed|survives|survived|breaks|broke|fails|failed|holds|held|emerges|emerged|results|resulted|comes|came|goes|went|gets|got|helps|helped|hurts|hurt|drives|drove|limits|limited|blocks|blocked|ships|shipped|lands|landed|moved|shifted|grew|shrank|improved|stands out|stood out|sets [a-z]+ apart|set [a-z]+ apart|makes [a-z]+ [a-z]+|made [a-z]+ [a-z]+|distinguishes|distinguished|separates|separated|surprised [a-z]+|struck [a-z]+|bothers [a-z]+|bothered [a-z]+|scales|scaled|wins|won|pays off|paid off|ends up [a-z]+|ended up [a-z]+|turns out|turned out|took|takes|costs?|saves|saved) (?:[a-z'-]+ ){0,4}(?:is|are|was|were|comes down to) (?:the|a|an|this|that|these|those|its|their|your|our|my|one|two|three|four|five|six|seven|eight|nine|ten|\\d+|some|any|all|every|each|nothing|something|anything|everything|another|both|either|enough|just|simply|only|to|whether|how|why|what|where|when|which|who)\\b"
+
+  # --- The "all" frame ("All that changes is the direction," "All you
+  # need is the offset," "All that is required is a token," "all it does
+  # is call the hook"). "All that matters" stays in ColloquialAssessments.
+  - "\\b[Aa]ll (?!that (?:really |truly |actually )?matters\\b)(?:that|that's|you|we|they|it|this|one|I) (?:[a-z'-]+ ){1,4}(?:is|are|was|were) (?:the|a|an|this|that|these|those|its|their|your|our|my|one|two|three|four|five|six|seven|eight|nine|ten|\\d+|some|any|all|every|each|nothing|something|anything|everything|another|both|either|enough|just|simply|only|to|whether|how|why|what|where|when|which|who)\\b"
+  - "\\b[Aa]ll (?:you|we|they|it|one|I) (?:do|does|did|have to do|need to do|had to do) is [a-z]+\\b"
+
+  # --- The "the only" frame ("The only thing that changes is the
+  # direction," "The only file you touch is the config," "the only
+  # guarantee we have is that"). "The only thing that matters" stays in
+  # ColloquialAssessments.
+  - "\\b[Tt]he only (?:[a-z-]+ ){1,2}(?!that (?:really |truly |actually )?matters\\b)(?:that|which|you|we|they|it|I) (?:[a-z'-]+ ){1,4}(?:is|are|was|were) (?:the|a|an|this|that|these|those|its|their|your|our|my|one|two|three|four|five|six|seven|eight|nine|ten|\\d+|some|any|all|every|each|nothing|something|anything|everything|another|both|either|enough|just|simply|only|to|whether|how|why|what|where|when|which|who)\\b"
+
+  # --- "Where" with a verb of payoff ("Where this pays off is the read
+  # path," "Where it gets interesting is the cache"). The verb list keeps
+  # the conditional "Where the input is a list," out.
+  - "\\bWhere (?:this|that|it|things|the [a-z-]+) (?:really |actually )?(?:pays off|paid off|shines|shone|helps|helped|matters|counts|wins|won|breaks|broke|fails|failed|bites|hurts|differs|shows|showed|comes in|came in|gets [a-z]+|got [a-z]+|falls down|fell down|falls apart|goes wrong|went wrong|goes|went|ends up|ended up|lands|landed|starts|started|stops|stopped|lives|sits|hides|hid|happens|happened|changes|changed) (?:is|was) (?:the|a|an|this|that|these|those|its|their|your|our|my|one|two|three|four|five|six|seven|eight|nine|ten|\\d+|some|any|all|every|each|nothing|something|anything|everything|another|both|either|enough|just|simply|only|to|whether|how|why|what|where|when|which|who)\\b"

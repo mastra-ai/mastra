@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client } from './db/client';
 import { AgentsLibSQL } from './domains/agents';
@@ -214,16 +215,11 @@ export class LibSQLStore extends MastraCompositeStore {
     };
 
     if ('url' in config) {
-      // need to re-init every time for in memory dbs or the tables might not exist
-      if (config.url.includes(':memory:')) {
-        this.shouldCacheInit = false;
-      }
-
       // Embedded replicas (`file:` url + `syncUrl`) are managed by the libsql
       // sync engine, so local pragma tuning and busy_timeout don't apply.
       this.isLocalDb = (config.url.startsWith('file:') || config.url.includes(':memory:')) && !config.syncUrl;
 
-      this.client = createClient({
+      const client = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
         ...(config.syncUrl ? { syncUrl: config.syncUrl } : {}),
@@ -232,6 +228,7 @@ export class LibSQLStore extends MastraCompositeStore {
         // contention is handled server-side. See libsql-client-ts#288/#345.
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
+      this.client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;

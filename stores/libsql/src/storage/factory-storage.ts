@@ -14,6 +14,7 @@ import type {
   RetentionConfig,
 } from '@mastra/core/storage';
 
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './db/client';
 import { withClientWriteLock } from './db/write-lock';
@@ -437,11 +438,12 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     super();
     this.#config = config;
     const isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
-    this.#client = createClient({
+    const client = createClient({
       url: config.url,
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
+    this.#client = isSingleConnectionDatabase(config) ? gateSingleConnectionClient(client) : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 

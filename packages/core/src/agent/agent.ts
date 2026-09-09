@@ -4576,6 +4576,8 @@ export class Agent<
       // can detect the disabled state from config and return empty history.
       // When lastMessages is a number, pass it as perPage to limit results.
       ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
+      // The agent only consumes `messages` from recall; skip the COUNT(*) work.
+      includeTotal: false,
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,

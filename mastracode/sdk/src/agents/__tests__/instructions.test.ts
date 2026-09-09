@@ -54,7 +54,7 @@ describe('getDynamicInstructions', () => {
 
     expect(prompt).toContain('Git branch: feature/from-git');
     expect(prompt).toContain(
-      'Include `Co-Authored-By: Mastra Code (anthropic/claude-opus-4-6) <noreply@mastra.ai>` in the message body.',
+      'Include `Co-Authored-By: mastra-platform[bot] <284800079+mastra-platform[bot]@users.noreply.github.com>` in the message body.',
     );
   });
 

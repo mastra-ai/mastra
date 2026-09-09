@@ -30,7 +30,7 @@ Use the Agent Controller when your application needs:
 - Subagent orchestration to delegate focused subtasks with constrained tools
 - Persistent threads and selected thread settings across restarts, with isolated live state for each Session
 
-You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a request-response call. Reach for the AgentController when you want the collaborative-session model without building the runtime around it.
+You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController provides opinionated defaults for an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Use the Agent class directly for full control or request-response calls. Choose AgentController for ongoing sessions without building your own session runtime.
 
 ## Quickstart
 

@@ -88,7 +88,7 @@ export interface TraceDataPanelViewProps {
    * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   activeTab?: TraceDataPanelTab;
   onTabChange?: (tab: TraceDataPanelTab) => void;
@@ -368,9 +368,7 @@ export function TraceDataPanelView({
                   <DataPanel.Header className="min-h-16 py-2">
                     <TabList variant="pill-ghost" className="px-0">
                       <Tab value="details">Spans</Tab>
-                      {feedbackTabSlot && (
-                        <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
-                      )}
+                      {feedbackTabSlot && <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>}
                       {scoresTabSlot && (
                         <Tab value="scores">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</Tab>
                       )}
