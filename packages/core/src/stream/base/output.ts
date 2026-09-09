@@ -7,6 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 // Inlined to avoid importing structured-output.ts which pulls in the agent
@@ -401,6 +402,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         ProcessorState<OUTPUT>
       >;
 
+      // `options` never changes for the lifetime of this stream, so the
+      // resolved context is the same for every chunk. Deriving it eagerly
+      // per chunk clones the span metadata for logger + metrics contexts
+      // on every part, even when no stream processor consumes it.
+      let observabilityContext: ObservabilityContext | undefined;
+      const getObservabilityContext = () => (observabilityContext ??= resolveObservabilityContext(options));
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
@@ -473,7 +481,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,
@@ -506,7 +514,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // processing.
               const reprocessed = await processorRunner.drainReprocessParts(
                 processorStates,
-                resolveObservabilityContext(options),
+                getObservabilityContext(),
                 options.requestContext,
                 self.messageList,
                 0,

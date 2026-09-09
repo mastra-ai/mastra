@@ -8,6 +8,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authoredFeedbackResponse,
+  feedbackRecord,
+  listFeedbackResponse,
+  reviewedFeedbackResponse,
   SPAN_ID,
   spanFeedbackResponse,
   TRACE_ID,
@@ -89,5 +92,69 @@ describe('feedback tabs composer', () => {
     expect((await screen.findByText('Marvin Frachet')).getAttribute('data-slot')).toBe('comment-item-author');
     expect((screen.getByAltText('Marvin Frachet') as HTMLImageElement).src).toBe('https://example.com/marvin.png');
     expect(screen.getByText('Looks off to me')).toBeTruthy();
+  });
+});
+
+describe('feedback tabs review status', () => {
+  const REVIEW_STATUS_URL = `${FEEDBACK_URL}/:feedbackId/review-status`;
+
+  /** GET serves `needsReview` until the PATCH lands, then `reviewed` — mirroring the server. */
+  const reviewFlow = (needsReview: unknown, reviewed: unknown) => {
+    const onList = vi.fn();
+    const onPatch = vi.fn<(feedbackId: string, body: Record<string, unknown>) => void>();
+    let isReviewed = false;
+    server.use(
+      http.get(FEEDBACK_URL, () => {
+        onList();
+        return HttpResponse.json(isReviewed ? reviewed : needsReview);
+      }),
+      http.patch(REVIEW_STATUS_URL, async ({ params, request }) => {
+        onPatch(params.feedbackId as string, (await request.json()) as Record<string, unknown>);
+        isReviewed = true;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    return { onList, onPatch };
+  };
+
+  it('shows the review status of trace feedback', async () => {
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(authoredFeedbackResponse)));
+    const { unmount } = render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    expect(await screen.findByText('Needs review')).toBeTruthy();
+    unmount();
+
+    server.use(http.get(FEEDBACK_URL, () => HttpResponse.json(reviewedFeedbackResponse)));
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+  });
+
+  it('marks trace feedback reviewed and refetches the thread', async () => {
+    const { onList, onPatch } = reviewFlow(authoredFeedbackResponse, reviewedFeedbackResponse);
+
+    render(<TraceFeedbackTab traceId={TRACE_ID} />, { wrapper });
+    await screen.findByText('Needs review');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('authored', { reviewStatus: 'reviewed' }));
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+    expect(onList).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull();
+  });
+
+  it('marks span feedback reviewed and refetches the thread', async () => {
+    const reviewedSpanResponse = listFeedbackResponse([
+      feedbackRecord({ feedbackId: 'span-a-feedback', spanId: SPAN_ID, reviewStatus: 'reviewed' }),
+    ]);
+    const { onList, onPatch } = reviewFlow(spanFeedbackResponse, reviewedSpanResponse);
+
+    render(<SpanFeedbackTab traceId={TRACE_ID} spanId={SPAN_ID} />, { wrapper });
+    await screen.findByText('Needs review');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+    await waitFor(() => expect(onPatch).toHaveBeenCalledWith('span-a-feedback', { reviewStatus: 'reviewed' }));
+    expect(await screen.findByText('Reviewed')).toBeTruthy();
+    expect(onList).toHaveBeenCalledTimes(2);
   });
 });

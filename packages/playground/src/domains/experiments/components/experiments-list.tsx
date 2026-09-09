@@ -1,11 +1,15 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
   useDataListKeyboard,
 } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
-import { useMemo } from 'react';
+import { Trash2 } from 'lucide-react';
+import type { MouseEvent } from 'react';
+import { useMemo, useState } from 'react';
+import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
   EXPERIMENT_DESCRIPTION_COLUMN,
@@ -33,7 +37,10 @@ export interface ExperimentsListSelection {
   onToggleSelection: (experimentId: string) => void;
 }
 
-const COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
+
+// Trailing `auto` track hosts the row actions cell (delete), which only navigating rows render.
+const COLUMNS = `${BASE_COLUMNS} auto`;
 
 const columnHeaders = [
   { label: experimentColumnLabels.experiment },
@@ -93,11 +100,13 @@ export function ExperimentsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length });
 
+  const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
+
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
   }
 
-  const gridColumns = isSelectionActive ? `auto ${COLUMNS}` : COLUMNS;
+  const gridColumns = isSelectionActive ? `auto ${BASE_COLUMNS}` : COLUMNS;
   const headerCells = columnHeaders.map(col => (
     <EntityList.TopCell key={col.label} className={col.className}>
       {col.label}
@@ -113,7 +122,10 @@ export function ExperimentsList({
             <EntityList.TopCells colStart={2}>{headerCells}</EntityList.TopCells>
           </>
         ) : (
-          headerCells
+          <>
+            {headerCells}
+            <EntityList.TopCell aria-hidden>{null}</EntityList.TopCell>
+          </>
         )}
       </EntityList.Top>
 
@@ -127,14 +139,31 @@ export function ExperimentsList({
 
         if (!selection) {
           return (
-            <EntityList.RowLink
-              key={exp.id}
-              to={paths.experimentLink(exp.id)}
-              LinkComponent={Link}
-              {...getRowProps(index)}
-            >
-              {rowCells}
-            </EntityList.RowLink>
+            <EntityList.RowWrapper key={exp.id}>
+              <EntityList.RowLink
+                colEnd={-2}
+                to={paths.experimentLink(exp.id)}
+                LinkComponent={Link}
+                {...getRowProps(index)}
+              >
+                {rowCells}
+              </EntityList.RowLink>
+              <EntityList.ActionsCell className="pl-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  tooltip="Delete experiment"
+                  aria-label={`Delete experiment ${exp.name ?? exp.id}`}
+                  onClick={(e: MouseEvent) => {
+                    e.stopPropagation();
+                    setExperimentToDelete(exp);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </EntityList.ActionsCell>
+            </EntityList.RowWrapper>
           );
         }
 
@@ -150,6 +179,17 @@ export function ExperimentsList({
           </EntityList.RowWrapper>
         );
       })}
+
+      {experimentToDelete && (
+        <DeleteExperimentDialog
+          open
+          onOpenChange={open => {
+            if (!open) setExperimentToDelete(null);
+          }}
+          experimentId={experimentToDelete.id}
+          experimentName={experimentToDelete.name ?? undefined}
+        />
+      )}
     </EntityList>
   );
 }

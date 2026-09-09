@@ -1,5 +1,9 @@
 {
   "attachment": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "amazon/moonshotai.kimi-k2.5",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
@@ -152,6 +156,14 @@
     "zai/glm-5v-turbo"
   ],
   "temperature": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
+    "amazon/mistral.pixtral-large-2502-v1:0",
+    "amazon/mistral.pixtral-large-2502-v1:0@us",
     "amazon/moonshot.kimi-k2-thinking",
     "amazon/zai.glm-4.7-flash",
     "amazon/zai.glm-4.7-flash@us",
@@ -363,6 +375,12 @@
     "zai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "amazon/amazon.nova-lite-v1:0",
+    "amazon/amazon.nova-lite-v1:0@us",
+    "amazon/amazon.nova-micro-v1:0",
+    "amazon/amazon.nova-micro-v1:0@us",
+    "amazon/amazon.nova-pro-v1:0",
+    "amazon/amazon.nova-pro-v1:0@us",
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",

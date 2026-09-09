@@ -7,7 +7,7 @@ import { useMemo, useState } from 'react';
 const CREATE_TAG_VALUE = '__create_tag__';
 
 export interface ExperimentResultsTagPickerProps {
-  selectedResults: DatasetExperimentResult[];
+  selectedResults: Array<Pick<DatasetExperimentResult, 'tags'>>;
   vocabulary: string[];
   onAddTag: (tag: string) => void;
   disabled?: boolean;

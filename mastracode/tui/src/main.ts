@@ -22,6 +22,7 @@ import {
   createShutdownCoordinator,
   startTuiProcessMemoryDiagnostics,
 } from './process-memory-diagnostics-lifecycle.js';
+import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -82,6 +83,7 @@ async function tuiMain(pipedInput?: string | null) {
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    subagents: resolveTuiSubagents(settings.preferences.subagentsEnabled),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });

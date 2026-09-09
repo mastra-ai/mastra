@@ -56,7 +56,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
   };
 
   return (
-    <div data-testid="dataset-tags-editor" className="flex flex-wrap items-center gap-2 px-4 py-2">
+    <div data-testid="dataset-tags-editor" className="flex flex-wrap items-center gap-2">
       {currentTags.map(tag => (
         <ComputedTag key={tag} value={tag} size="md" className="gap-1 pr-1">
           {tag}

@@ -62,7 +62,6 @@ import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemPage from './pages/datasets/dataset/item';
-import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import CreateDatasetPage from './pages/datasets/new';
@@ -664,24 +663,6 @@ export const routes: RouteObject[] = [
                   } satisfies RouteHeaderHandle,
                 },
               ],
-            },
-            {
-              path: '/datasets/:datasetId/items/:itemId/compare/:secondItemId',
-              element: <DatasetItemsComparePage />,
-              handle: {
-                crumbs: ({ params }) => [
-                  navCrumb('/datasets'),
-                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
-                  { id: 'dataset-items', label: 'Items' },
-                  {
-                    id: 'dataset-item',
-                    label: truncateItemIdCrumb(params.itemId),
-                    to: `/datasets/${params.datasetId}/items/${params.itemId}`,
-                  },
-                  { id: 'dataset-item-compare', label: 'Compare' },
-                  { id: 'dataset-item-compare-second', label: truncateItemIdCrumb(params.secondItemId) },
-                ],
-              } satisfies RouteHeaderHandle,
             },
             {
               path: '/datasets/:datasetId/versions',

@@ -12,6 +12,7 @@ import {
   experiment,
   results,
 } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -97,9 +98,21 @@ beforeEach(() => {
 
 const renderPage = (search = '') => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter([{ path: '/experiments/review-queue', element: <ReviewQueuePage /> }], {
-    initialEntries: [`/experiments/review-queue${search}`],
-  });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/experiments/review-queue',
+        element: (
+          <TestLinkProvider>
+            <ReviewQueuePage />
+          </TestLinkProvider>
+        ),
+      },
+    ],
+    {
+      initialEntries: [`/experiments/review-queue${search}`],
+    },
+  );
 
   render(
     <MastraReactProvider baseUrl={TEST_BASE_URL}>
@@ -137,6 +150,22 @@ describe('Review Queue page', () => {
       await screen.findByText(/third question/);
       expect(screen.queryByText(/other question/)).toBeNull();
       expect(requestedExperiments()).toEqual([EXPERIMENT_ID]);
+    });
+
+    it('links back to the experiment page', async () => {
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      const link = await screen.findByRole('link', { name: /See experiment/ });
+      expect(link.getAttribute('href')).toBe(`/experiments/${EXPERIMENT_ID}`);
+    });
+  });
+
+  describe('when no experiment is selected', () => {
+    it('does not show the "See experiment" link', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByRole('link', { name: /See experiment/ })).toBeNull();
     });
   });
 
