@@ -57,7 +57,7 @@ One row per `(org, project, catalog kind)` — every catalog kind present after 
 |---|---|---|
 | `id` | uuid pk | |
 | `org_id`, `factory_project_id` | text | |
-| `kind` | text | one of the 15 `FactoryDocKind` values |
+| `kind` | text | one of the 14 `FactoryDocKind` values |
 | `path` | text | resolved path (manifest override or catalog default) |
 | `title`, `summary` | text, nullable | derived at sync time |
 | `content` | text, nullable | full body; null when missing/oversize |
@@ -92,6 +92,6 @@ Append-only trail; no update/delete API. From `storage/domains/audit/base.ts`. O
 factory_projects 1───* work_items
 work_items 1───* audit_events (via target)
 work_items 0..1───1 parent work_items (parentWorkItemId, e.g. PR → source issue)
-factory_projects 1───15 factory_documents (one row per catalog kind, always present after first sync)
+factory_projects 1───14 factory_documents (one row per catalog kind, always present after first sync)
 work_items 1───* rule_ingress / rule_evaluation records (via causal chain + ingress identity)
 ```

@@ -54,6 +54,6 @@ Format: lightweight ADRs reconstructed from the codebase's committed design (REA
 
 ## ADR-8: Factory documents are synced snapshots, repo is source of truth
 
-**Decision.** The 15-kind document catalog (`FACTORY_DOC_KINDS`) is hardcoded; only the mapped path per kind is configurable via `docs/factory/manifest.yaml`. The `factory_documents` table holds the last synced snapshot (title/summary/hash/body) so the UI and agent kickoff never need a live checkout to read a document, and a document the repo lacks is stored as `status: 'missing'` rather than omitted, so the gap is visible everywhere.
+**Decision.** The 14-kind document catalog (`FACTORY_DOC_KINDS`) is hardcoded; only the mapped path per kind is configurable via `docs/factory/manifest.yaml`. The `factory_documents` table holds the last synced snapshot (title/summary/hash/body) so the UI and agent kickoff never need a live checkout to read a document, and a document the repo lacks is stored as `status: 'missing'` rather than omitted, so the gap is visible everywhere.
 
 **Why.** Keeping the catalog fixed avoids per-deployment schema drift in what "the project's essential documents" means, while the manifest gives each repo flexibility in *where* those documents live. Storing missing docs explicitly (not as an absent row) makes "nothing written yet" a first-class, visible state instead of silence.

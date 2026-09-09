@@ -15,7 +15,7 @@ Software teams already track work in GitHub Issues/PRs and Linear, and they alre
 - **Traceable decisions.** Every transition, rule evaluation, and rejection is committed with a causal chain and an operator-maintained `configVersion` label, so any row can be traced back to the code that produced it.
 - **Board-owned lifecycle.** Work and Review are the built-in boards; any deployment can define its own board (`defineBoard`) with its own phases, transition policy, and tool-result rules — there is no global rules object, every rule has exactly one owner.
 - **One storage boundary.** A single `FactoryStorage` backend (Postgres or LibSQL) backs both the agent runtime (threads/messages/memory) and the Factory application tables (projects, work items, audit, intake, documents), so a deployment configures one connection and gets every feature.
-- **Essential project documentation, kept current.** A fixed catalog of 15 business/technical documents (`docs/factory/*.md`) is synced from the repository on session materialization so agents kick off with the same context a human reviewer would have.
+- **Essential project documentation, kept current.** A fixed catalog of 14 business/technical documents (`docs/factory/*.md`) is synced from the repository on session materialization so agents kick off with the same context a human reviewer would have.
 
 ## Non-goals (v1)
 

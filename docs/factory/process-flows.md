@@ -107,7 +107,7 @@ Session sandbox materializes on the project's repository
 Read docs/factory/manifest.yaml (git show) ──missing/invalid──▶ fall back to catalog default paths + warning
       │ ok
       ▼
-For each of the 15 catalog kinds: git show <resolved path> at the checkout's ref
+For each of the 14 catalog kinds: git show <resolved path> at the checkout's ref
       │
       ▼
 Upsert factory_documents: title, summary, contentHash, sizeBytes, body, sourceRef, sourceSha, syncedAt

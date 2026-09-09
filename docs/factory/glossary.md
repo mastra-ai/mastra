@@ -30,6 +30,6 @@
 
 **Skill invocation** — A rule's `invokeSkill` effect (e.g. `factory-triage`, `factory-plan`, `factory-review`) that starts or resumes an agent run seated in a given role with a prompt or named skill and an idempotency key.
 
-**Factory documents** — The fixed 15-kind catalog of markdown files under `docs/factory/`, synced from the repository via `manifest.yaml` on session materialization, surfaced to agents at kickoff and to humans via the Documents page.
+**Factory documents** — The fixed 14-kind catalog of markdown files under `docs/factory/`, synced from the repository via `manifest.yaml` on session materialization, surfaced to agents at kickoff and to humans via the Documents page.
 
 **`FactoryStorage`**, **`MastraFactory`**, **`FactoryIntegration`** — see `architecture.md`.
