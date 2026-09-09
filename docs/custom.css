@@ -1201,6 +1201,15 @@ html.plugin-id-integrations.docs-doc-id-index {
     gap: 2rem;
   }
 
+  .theme-layout-footer {
+    max-width: 62.25rem;
+    margin: 0 auto;
+  }
+
+  .footer > .container {
+    max-width: 62.25rem;
+  }
+
   .menu__caret {
     &::before {
       background: var(--ifm-menu-link-sublist-icon) center;
@@ -1375,11 +1384,7 @@ html.plugin-id-integrations.docs-doc-id-index {
   background: transparent;
   color: var(--mastra-text-secondary);
   padding: 2.5rem 1rem;
-}
-
-.footer > .container {
-  max-width: none;
-  padding: 0;
+  max-width: var(--ifm-container-width);
 }
 
 .footer__links {
@@ -1428,7 +1433,7 @@ html.plugin-id-integrations.docs-doc-id-index {
 
 @media (min-width: 996px) {
   .footer {
-    padding: 5rem 2.5rem 3rem;
+    padding: 5rem 1rem 3rem;
   }
 }
 
@@ -1571,11 +1576,6 @@ html.plugin-id-integrations.docs-doc-id-index {
   }
 
   /* ==================== DOC MAIN CONTAINER ==================== */
-  .container {
-    padding-top: 2rem !important;
-    padding-bottom: 5rem !important;
-  }
-
   header h1 {
     text-wrap: balance;
   }

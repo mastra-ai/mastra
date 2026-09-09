@@ -231,7 +231,6 @@ const config: Config = {
             { label: 'Studio', to: '/studio' },
             { label: 'Factory', to: '/factory' },
             { label: 'Agent Builder', to: '/agent-builder' },
-            { label: 'Server', to: '/ai-agent-deployment' },
           ],
         },
         {
@@ -250,6 +249,7 @@ const config: Config = {
             { label: 'Changelog', href: 'https://github.com/mastra-ai/mastra/releases' },
             { label: 'Research', to: '/research' },
             { label: 'Podcast · Agent Hour', to: '/podcasts' },
+            { label: 'License', to: '/docs/license' },
           ],
         },
         {
