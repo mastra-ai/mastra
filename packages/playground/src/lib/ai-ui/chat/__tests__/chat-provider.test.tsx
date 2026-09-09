@@ -5,7 +5,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -145,7 +145,7 @@ const baseHandlers = (_captured: Captured[]) => [
 ];
 
 const Wrapper = ({ children }: { children: ReactNode }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -736,18 +736,33 @@ describe('ChatProvider', () => {
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => sseResponse()),
     );
 
+    const tree = (withSend: boolean) => (
+      <Wrapper>
+        <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+          <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
+          {withSend ? <SendOnMount text="just finish" /> : null}
+        </ChatProvider>
+      </Wrapper>
+    );
+
+    let rerender: ReturnType<typeof render>['rerender'] | undefined;
     await act(async () => {
-      render(
-        <Wrapper>
-          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
-            <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
-            <SendOnMount text="just finish" />
-          </ChatProvider>
-        </Wrapper>,
-      );
+      ({ rerender } = render(tree(false)));
     });
 
-    // Wait for mount fetches and the stream to finish + the finish-path refetch.
+    // Let the mount fetches settle first. A plain finish stream completes almost
+    // immediately, and a refetch issued while the initial fetch is still in flight
+    // is deduped into it — which would hide the finish-path refetch we assert on.
+    await waitFor(() => {
+      expect(omRequests.length).toBe(1);
+      expect(messageRequests.length).toBe(1);
+    });
+
+    await act(async () => {
+      rerender?.(tree(true));
+    });
+
+    // Wait for the stream to finish + the finish-path refetch.
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 250));
     });
