@@ -24,7 +24,7 @@ describe('SettingsLayout', () => {
     expect(output).toContain('flex min-w-0 items-center gap-2');
     expect(output).toContain('min-w-0 truncate');
     expect(output).toContain(
-      '<p class="text-ui-md m-0 leading-tight wrap-break-word text-neutral4">Manage your project configuration.</p>',
+      '<p class="text-ui-md text-neutral4 m-0 leading-tight wrap-break-word">Manage your project configuration.</p>',
     );
     expect(output).toContain('font-sans font-medium tracking-normal text-neutral4');
     expect(output).toContain('<button type="button">Save</button>');
@@ -40,7 +40,7 @@ describe('SettingsLayout', () => {
     );
 
     expect(output).toContain('<div class="shrink-0">0</div>');
-    expect(output).toContain('<p class="text-ui-md m-0 leading-tight wrap-break-word text-neutral4">0</p>');
+    expect(output).toContain('<p class="text-ui-md text-neutral4 m-0 leading-tight wrap-break-word">0</p>');
   });
 
   it.each([undefined, null])('omits a title accessory when it is %s', titleAccessory => {
