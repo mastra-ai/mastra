@@ -204,7 +204,7 @@ const memory = new Memory({
 })
 ```
 
-Idle observation is deferred while any unobserved message contains an incomplete tool call, including a client-executed call. Raw messages are still saved. Once the tool results arrive, a later completed turn can buffer those messages.
+If an unobserved message contains an incomplete tool call, including a client-executed call, idle buffering can still observe the completed messages before it. It retains the incomplete message and everything after it. The buffer boundary also keeps related tool messages together and avoids advancing the observation cursor past retained messages with equal or adjacent timestamps. If no safe prefix exists, buffering is deferred. Raw messages are still saved. Once the tool results arrive, a later completed turn can buffer the retained messages.
 
 `bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 

@@ -31,7 +31,7 @@ export async function clientToolLifecycle(connectionString: string, bufferOnIdle
       };
     },
   });
-  const makeMemory = (idle: boolean) =>
+  const makeMemory = (idle: boolean, messageTokens: number, bufferActivation?: number) =>
     new Memory({
       storage,
       options: {
@@ -40,7 +40,7 @@ export async function clientToolLifecycle(connectionString: string, bufferOnIdle
         observationalMemory: {
           enabled: true,
           scope: 'thread',
-          observation: { model: observer, messageTokens: 100000, bufferTokens: 0.5, bufferOnIdle: idle },
+          observation: { model: observer, messageTokens, bufferTokens: 0.5, bufferActivation, bufferOnIdle: idle },
         },
       },
     });
@@ -58,8 +58,8 @@ export async function clientToolLifecycle(connectionString: string, bufferOnIdle
       };
     },
   });
-  const makeAgent = (idle: boolean) => {
-    const memory = makeMemory(idle);
+  const makeAgent = (idle: boolean, messageTokens = 100000, bufferActivation?: number) => {
+    const memory = makeMemory(idle, messageTokens, bufferActivation);
     const agent = new Agent({
       id: '22573-agent',
       name: 'Client color agent',

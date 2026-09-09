@@ -239,7 +239,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'bufferOnIdle',
             type: 'boolean',
             description:
-              'Run background observation buffering when an agent turn ends and the agent becomes idle. This is separate from `bufferTokens`, which controls step-time async buffering. Set this to `true` to buffer short idle turns without waiting for the next turn or the `messageTokens` threshold. Idle observation is deferred while unobserved messages contain incomplete tool calls, including client-executed calls. Raw messages are still saved, and a later completed turn can buffer them once the tool results arrive.',
+              'Run background observation buffering when an agent turn ends and the agent becomes idle. This is separate from `bufferTokens`, which controls step-time async buffering. Set this to `true` to buffer short idle turns without waiting for the next turn or the `messageTokens` threshold. When an unobserved message contains an incomplete client or provider tool call, only the completed chronological prefix that can be safely observed is buffered. The incomplete message and its suffix are retained; the boundary keeps related tool messages together and protects retained messages with equal or adjacent timestamps. Buffering is deferred if no safe prefix exists. Raw messages are still saved, and a later completed turn can buffer the retained messages once tool results arrive.',
             isOptional: true,
             defaultValue: 'false',
           },

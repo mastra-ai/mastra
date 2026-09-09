@@ -380,6 +380,41 @@ describe('turn.end() idle buffering', () => {
 });
 
 describe('22573 idle', () => {
+  it.each([
+    { times: [100, 200, 300, 400], expected: 2 },
+    { times: [100, 300, 300, 400], expected: 1 },
+    { times: [100, 299, 300, 400], expected: 1 },
+    { times: [299, 299, 300, 400], expected: 0 },
+    { times: [100, 200, 300, 400], expected: 1, splitTool: true },
+  ])('buffers only the cursor-safe prefix: $times split=$splitTool', async ({ times, expected, splitTool }) => {
+    const messages = times.map((time, index) =>
+      createTestMessage(`Message ${index}`, 'assistant', `prefix-${index}`, new Date(time)),
+    );
+    messages[2]!.content.parts.push({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId: 'pending', toolName: 'pending', args: {} },
+    });
+    if (splitTool) {
+      for (const index of [1, 3]) {
+        messages[index]!.content.parts.push({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'split', toolName: 'split', args: {}, result: 'done' },
+        });
+      }
+    }
+    const list = new MessageList({ threadId: 'idle-buffer-thread' });
+    list.add(structuredClone(messages), 'input');
+    const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages: messages });
+    const turn = new ObservationTurn({ om: mockOM as any, threadId: 'idle-buffer-thread', messageList: list });
+    await turn.start();
+    await turn.end();
+    expect(mockOM.persistMessages).toHaveBeenCalledWith(list.get.all.db(), 'idle-buffer-thread', undefined);
+    if (expected) {
+      expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
+    } else {
+      expect(mockOM.buffer).not.toHaveBeenCalled();
+    }
+  });
   for (const source of ['input', 'response', 'memory'] as const) {
     for (const providerExecuted of [false, true]) {
       it(`defers pending ${source} calls with providerExecuted=${providerExecuted} and persists raw input/output`, async () => {

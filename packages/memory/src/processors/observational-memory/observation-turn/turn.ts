@@ -229,17 +229,49 @@ export class ObservationTurn {
       const allMessages = getObservableMessages(this.messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
-      // Keep the whole candidate turn unobserved until client or provider tool calls complete.
-      const hasIncompleteToolCalls = unobservedMessages.some(message =>
+      const chronological = [...unobservedMessages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      const firstPending = chronological.findIndex(message =>
         message.content.parts?.some(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call'),
       );
-      if (unobservedMessages.length > 0 && !hasIncompleteToolCalls) {
+      let prefixEnd = firstPending === -1 ? chronological.length : firstPending;
+      if (firstPending !== -1) {
+        // Buffer cursors advance to max(createdAt) + 1ms. Back up rather than
+        // letting activation consume retained messages with equal/adjacent timestamps.
+        // Also keep every occurrence of a tool call ID on the same side of the boundary.
+        const lastToolIndices = new Map<string, number>();
+        chronological.forEach((message, index) => {
+          for (const part of message.content.parts ?? []) {
+            if (part.type === 'tool-invocation') lastToolIndices.set(part.toolInvocation.toolCallId, index);
+          }
+        });
+        let retainedTime = Infinity;
+        for (let i = chronological.length - 1; i >= 0; i--) {
+          const message = chronological[i]!;
+          const time = new Date(message.createdAt).getTime();
+          const toolIds = (message.content.parts ?? []).flatMap(part =>
+            part.type === 'tool-invocation' ? [part.toolInvocation.toolCallId] : [],
+          );
+          if (
+            i < prefixEnd &&
+            (time + 1 >= retainedTime || toolIds.some(id => lastToolIndices.get(id)! >= prefixEnd))
+          ) {
+            prefixEnd = i;
+          }
+          if (i >= prefixEnd) {
+            retainedTime = Math.min(retainedTime, time);
+          }
+        }
+      }
+      const idleMessages = chronological.slice(0, prefixEnd);
+      if (idleMessages.length > 0) {
         void this.om.trackBackgroundWork(
           this.om
             .buffer({
               threadId: this.threadId,
               resourceId: this.resourceId,
-              messages: unobservedMessages,
+              messages: idleMessages,
               record,
               writer: this.writer,
               agent: this.agent,
