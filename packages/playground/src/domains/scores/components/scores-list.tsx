@@ -118,8 +118,34 @@ export function ScoresList({
     onScoreClick?.('');
   }, [onScoreClick]);
 
+  const columnsMenu = (
+    <div className="flex shrink-0 items-center justify-end pb-2">
+      <DropdownMenu>
+        <DropdownMenu.Trigger asChild>
+          <Button variant="outline" size="sm">
+            <Columns3Icon className="size-3.5" />
+            Columns
+          </Button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
+          {TOGGLEABLE_COLUMNS.map(col => (
+            <DropdownMenu.CheckboxItem key={col} checked={visibleColumns.has(col)} onClick={() => toggleColumn(col)}>
+              {COLUMN_LABELS[col]}
+            </DropdownMenu.CheckboxItem>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </div>
+  );
+
   if (isLoading) {
-    return <DataListSkeleton columns={columns} />;
+    return (
+      <div className="flex min-h-0 min-w-0 flex-col">
+        {columnsMenu}
+        <DataListSkeleton columns={columns} />
+      </div>
+    );
   }
 
   if (!scores) {
@@ -155,31 +181,10 @@ export function ScoresList({
     <div
       className={cn('grid h-full max-h-full min-h-0 gap-4', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
-      <div className="flex h-full min-h-0 min-w-0 flex-col gap-0">
-        <div className="flex shrink-0 items-center justify-end pb-2">
-          <DropdownMenu>
-            <DropdownMenu.Trigger asChild>
-              <Button variant="outline" size="sm">
-                <Columns3Icon className="size-3.5" />
-                Columns
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
-              {TOGGLEABLE_COLUMNS.map(col => (
-                <DropdownMenu.CheckboxItem
-                  key={col}
-                  checked={visibleColumns.has(col)}
-                  onClick={() => toggleColumn(col)}
-                >
-                  {COLUMN_LABELS[col]}
-                </DropdownMenu.CheckboxItem>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        {columnsMenu}
 
-        <ScoresDataList columns={columns} className="min-h-0 flex-1" scrollRef={containerRef}>
+        <ScoresDataList columns={columns} className="min-h-0" scrollRef={containerRef}>
           {header}
 
           {scores.map((score, index) => (
