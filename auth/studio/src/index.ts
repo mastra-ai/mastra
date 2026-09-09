@@ -31,7 +31,7 @@ export interface StudioUser extends EEUser {
 export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<StudioUser> {
   /** Base URL of the Mastra shared API (e.g., https://api.mastra.ai/v1) */
   sharedApiUrl?: string;
-  /** Organization ID that owns this deployed instance. Users not in this org are rejected. */
+  /** Organization ID that owns this deployed instance. Members are served in this org whatever org their session is on; non-members are rejected. */
   organizationId?: string;
   /**
    * Cookie domain for session cookies (e.g., '.example.com').
@@ -526,24 +526,34 @@ export class MastraAuthStudio
 
     try {
       const me = await this.fetchMe(sessionCookie);
-      if (me?.organizationId === organizationId) {
-        return isAdminRole(me.role);
-      }
-
-      // Not the active org — fall back to /auth/orgs for the per-org role.
-      const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
-        headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
-      });
-      if (!res.ok) return false;
-
-      const data = (await res.json()) as {
-        organizations?: Array<{ id: string; role?: string | null }>;
-      };
-      const membership = data.organizations?.find(o => o.id === organizationId);
-      return isAdminRole(membership?.role ?? undefined);
+      const role =
+        me?.organizationId === organizationId
+          ? me.role
+          : await this.fetchOrganizationRole(sessionCookie, organizationId);
+      return isAdminRole(role);
     } catch {
       return false;
     }
+  }
+
+  private async fetchOrganizationRole(sessionCookie: string, organizationId: string): Promise<string | undefined> {
+    const res = await fetch(`${this.sharedApiUrl}/auth/orgs`, {
+      headers: { Cookie: `${COOKIE_NAME}=${sessionCookie}` },
+      signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      organizations?: Array<{ id: string; role?: string | null }>;
+    };
+    return data.organizations?.find(o => o.id === organizationId)?.role ?? undefined;
+  }
+
+  // The cookie's role and permissions belong to the org the cookie is on, not to the pinned one.
+  private async asPinnedOrganizationMember(user: StudioUser, sessionCookie: string): Promise<StudioUser> {
+    const pinned = this.organizationId;
+    if (!pinned || user.organizationId === pinned || !user.memberOrgIds?.includes(pinned)) return user;
+    const role = await this.fetchOrganizationRole(sessionCookie, pinned);
+    return { ...user, organizationId: pinned, role, permissions: undefined };
   }
 
   // ---------------------------------------------------------------------------
@@ -665,16 +675,19 @@ export class MastraAuthStudio
       // methods (invoked with only a userId) can act on the user's behalf.
       this.rememberUserSession(data.user.id, sessionCookie);
 
-      const user: StudioUser = {
-        id: data.user.id,
-        email: data.user.email,
-        name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
-        avatarUrl: data.user.profilePictureUrl,
-        organizationId: data.organizationId,
-        role: data.role,
-        permissions: data.permissions,
-        memberOrgIds: data.memberOrgIds,
-      };
+      const user = await this.asPinnedOrganizationMember(
+        {
+          id: data.user.id,
+          email: data.user.email,
+          name: [data.user.firstName, data.user.lastName].filter(Boolean).join(' ') || undefined,
+          avatarUrl: data.user.profilePictureUrl,
+          organizationId: data.organizationId,
+          role: data.role,
+          permissions: data.permissions,
+          memberOrgIds: data.memberOrgIds,
+        },
+        sessionCookie,
+      );
       // Don't pin brand-new users in the no-org state: org bootstrap runs on
       // the next request, which must re-read /auth/me to see the new org.
       if (user.organizationId) this.cacheVerification(cacheKey, user);
@@ -701,6 +714,7 @@ export class MastraAuthStudio
       const res = await fetch(`${this.sharedApiUrl}/auth/verify`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          ...(this.organizationId ? { 'x-organization-id': this.organizationId } : {}),
         },
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });

@@ -1257,25 +1257,61 @@ describe('MastraAuthStudio org-scoping', () => {
     expect(user).toBeNull();
   });
 
-  it('should allow user when current org differs but memberOrgIds includes instance org (cross-org access)', async () => {
-    // This is the core fix: user's "current" org is org-1, but they're also a member of org-owner
-    // The deployed studio belongs to org-owner, so access should be allowed
+  it('serves a member whose session cookie sits on another org as a member of the pinned org', async () => {
     const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
 
-    const multiOrgResponse = {
+    const cookieOnOtherOrg = {
       ...mockMeResponse,
-      organizationId: 'org-1', // user's current org
-      memberOrgIds: ['org-1', 'org-owner'], // user is member of both orgs
+      organizationId: 'org-1',
+      role: 'admin',
+      memberOrgIds: ['org-1', 'org-owner'],
     };
-
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(multiOrgResponse), { status: 200 }));
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(cookieOnOtherOrg), { status: 200 }));
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          organizations: [
+            { id: 'org-1', role: 'admin', isCurrent: true },
+            { id: 'org-owner', role: 'member', isCurrent: false },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
 
     const req = mockRequest({ cookie: 'wos-session=sealed-token' });
     const user = await auth.authenticateToken('', req);
 
-    expect(user).not.toBeNull();
-    expect(user!.organizationId).toBe('org-1'); // current org unchanged
-    expect(user!.memberOrgIds).toContain('org-owner'); // but they're a member of instance org
+    expect(user).toMatchObject({ organizationId: 'org-owner', role: 'member', memberOrgIds: ['org-1', 'org-owner'] });
+    expect(user!.permissions).toBeUndefined();
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      `${SHARED_API}/auth/orgs`,
+      expect.objectContaining({ headers: expect.objectContaining({ Cookie: 'wos-session=sealed-token' }) }),
+    );
+
+    const again = await auth.authenticateToken('', req);
+    expect(again!.organizationId).toBe('org-owner');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks the shared API to verify a bearer token against the pinned org', async () => {
+    const auth = new MastraAuthStudio({ sharedApiUrl: SHARED_API, organizationId: 'org-owner' });
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ...mockVerifyResponse, organizationId: 'org-owner', memberOrgIds: ['org-2', 'org-owner'] }),
+        { status: 200 },
+      ),
+    );
+
+    const user = await auth.authenticateToken('cli-token', mockRequest());
+
+    expect(user!.organizationId).toBe('org-owner');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `${SHARED_API}/auth/verify`,
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer cli-token', 'x-organization-id': 'org-owner' }),
+      }),
+    );
   });
 });
 
