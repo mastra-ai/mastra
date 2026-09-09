@@ -140,7 +140,7 @@ import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
-import { createStep, isProcessor } from '../workflows/workflow';
+import { createStep, createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -1783,6 +1783,7 @@ export class Agent<
     workflow.__setLogger(this.logger);
 
     const stateSignalProcessors: Processor[] = [];
+    const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -1794,8 +1795,11 @@ export class Agent<
         // Set processorIndex on the processor for span attributes
         const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
-        // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        const processorStep = createStepFromProcessor(processor);
+        step = processorStep;
+        if (processor.processOutputStream) {
+          streamSteps.push(processorStep);
+        }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
@@ -1813,6 +1817,16 @@ export class Agent<
       committedWorkflow.__processOutputStream = validProcessors.some(
         processor => isProcessorWorkflow(processor) || !!processor.processOutputStream,
       );
+      if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
+        committedWorkflow.__executeOutputStream = async ({ inputData, ...context }) => {
+          let result = inputData;
+          for (const step of streamSteps) {
+            if (result.part == null) break;
+            result = await step.execute({ inputData: result, ...context });
+          }
+          return result;
+        };
+      }
     }
     // Register the parent Mastra instance on this internal processor workflow so that its
     // createRun() -> getWorkflowRunById() can read configured storage instead of logging
