@@ -72,7 +72,7 @@ export function ExperimentResultsTagPicker({
       searchPlaceholder="Search or create tag..."
       emptyText="Type to create a tag"
       variant={appearance === 'inline' ? 'ghost' : 'outline'}
-      size={appearance === 'inline' ? 'xs' : 'sm'}
+      size={appearance === 'inline' ? 'xs' : 'md'}
       className="w-auto min-w-0"
       disabled={disabled}
     />

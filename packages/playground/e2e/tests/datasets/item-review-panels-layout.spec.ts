@@ -21,6 +21,25 @@ async function expectFrameHeight(page: Page, panel: Locator) {
   }).toPass({ timeout: 3000 });
 }
 
+/**
+ * Wheel-scrolls inside the card's content area and returns how far the card's
+ * own scroll region moved, regardless of tabs or other wrappers around it.
+ */
+async function scrollCardContent(page: Page, card: Locator) {
+  const box = await card.boundingBox();
+  await card.hover({ position: { x: 8, y: box!.height - 8 } });
+  await page.mouse.wheel(0, 1000);
+  return () =>
+    card.evaluate(element =>
+      Math.max(
+        0,
+        ...Array.from(element.querySelectorAll<HTMLElement>('*'))
+          .filter(node => /auto|scroll/.test(getComputedStyle(node).overflowY))
+          .map(node => node.scrollTop),
+      ),
+    );
+}
+
 async function expectCardInset(panel: Locator) {
   await expect(async () => {
     const panelBox = await panel.boundingBox();
@@ -126,10 +145,8 @@ test.describe('Item and review panel layout', () => {
       const cardBox = await card.boundingBox();
       expect(cardBox!.y + cardBox!.height).toBeCloseTo(panelBox!.y + panelBox!.height - 12, 0);
       const closeBox = await close.boundingBox();
-      const content = card.locator(':scope > div').last();
-      await content.hover({ position: { x: 8, y: 8 } });
-      await page.mouse.wheel(0, 1000);
-      await expect.poll(() => content.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+      const contentScrollTop = await scrollCardContent(page, card);
+      await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
       expect((await close.boundingBox())!.y).toBeCloseTo(closeBox!.y, 0);
       await panel.getByRole('button', { name: 'Next item', exact: true }).click();
@@ -160,10 +177,8 @@ test.describe('Item and review panel layout', () => {
         await expect(close).toBeVisible();
         await expectCardInset(panel);
         const closeBox = await close.boundingBox();
-        const content = panel.locator('section').first().locator(':scope > div').last();
-        await content.hover({ position: { x: 8, y: 8 } });
-        await page.mouse.wheel(0, 1000);
-        await expect.poll(() => content.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+        const contentScrollTop = await scrollCardContent(page, panel.locator('section').first());
+        await expect.poll(contentScrollTop).toBeGreaterThan(0);
         expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
         expect((await close.boundingBox())!.y).toBeCloseTo(closeBox!.y, 0);
         await close.click();
