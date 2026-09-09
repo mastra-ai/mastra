@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   createChannelResourceIdResolver,
+  createChannelSessionResolver,
   createChannelSessionStartHook,
   resolveChannelThreadId,
   createHandlers,
@@ -526,6 +527,56 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
   });
 });
 
+describe('channel session creation context (resolveSession)', () => {
+  it('seeds Factory ownership before the controller session is created', async () => {
+    const sourceControl = {
+      sessions: {
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'user-1', projectRepositoryId: 'pr-1' }),
+      },
+      projectRepositories: { get: vi.fn().mockResolvedValue({ connectionId: 'conn-1' }) },
+      connections: { get: vi.fn().mockResolvedValue({ factoryProjectId: 'fp-1' }) },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({ identity: 'session' }) };
+    const requestContext = new RequestContext();
+
+    const session = await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'session-1', resourceId: 'session-1' },
+      requestContext,
+    } as any);
+
+    expect(session).toEqual({ identity: 'session' });
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'session-1',
+      ownerId: 'code',
+      resourceId: 'session-1',
+      requestContext,
+      tags: { factoryProjectId: 'fp-1' },
+    });
+  });
+
+  it('keeps chat-only sessions free of Factory ownership', async () => {
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn() },
+    };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'thread-1', resourceId: 'channel:slack:C-1:1700.42' },
+    } as any);
+
+    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(controller.createSession.mock.calls[0]?.[0].tags?.factoryProjectId).toBeUndefined();
+    expect(controller.createSession).toHaveBeenCalledWith({
+      id: 'channel:slack:C-1:1700.42',
+      ownerId: 'code',
+      resourceId: 'channel:slack:C-1:1700.42',
+      requestContext: undefined,
+    });
+  });
+});
+
 describe('repo-backed thread ids (resolveThreadId)', () => {
   it('a repo-backed thread takes the session id as its thread id (web convention: threadId = sessionId)', () => {
     expect(resolveChannelThreadId({ resourceId: 'us-new', defaultThreadId: 'uuid-1' } as any)).toBe('us-new');
@@ -694,6 +745,42 @@ describe('Slack thread work-item creation', () => {
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     expect(call.input.externalSource.url).toBe(actions.children[0].url);
+  });
+
+  it('titles the card with the emoji the sender typed', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: 'ship the :rocket: please' };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert.mock.calls[0][0].input.title).toBe('ship the 🚀 please');
+  });
+
+  it('cuts a long title between characters, never inside an emoji', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: '😀'.repeat(100) };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    const title = deps.upsert.mock.calls[0][0].input.title;
+    expect([...title]).toHaveLength(80);
+    expect(title.endsWith('😀…')).toBe(true);
+  });
+
+  it('never splits a skin-tone emoji from its base at the cut', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeWorkItemDeps();
+    const thread = makeWorkItemThread();
+    const message = { ...makeMessage('T-1'), text: '👍🏼'.repeat(100) };
+
+    await createHandlers(deps as any).onDirectMessage!(thread, message, vi.fn(), handlerCtx(deps.mastra));
+
+    const title = deps.upsert.mock.calls[0][0].input.title;
+    expect(title).toBe(`${'👍🏼'.repeat(79)}…`);
   });
 
   it('a routed @-mention also creates an execute-stage work item (no per-origin split)', async () => {
@@ -1041,6 +1128,19 @@ describe('Slack aside ingest', () => {
     await createHandlers(deps as any).onSubscribedMessage!(thread, makeAside('ship it'), defaultHandler, handlerCtx());
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(deps.feed.createComment).toHaveBeenCalledTimes(1);
+  });
+
+  it('lands the emoji the sender typed, and leaves a custom workspace emoji as written', async () => {
+    const { thread, deps } = makeAsideDeps();
+
+    await createHandlers(deps as any).onSubscribedMessage!(
+      thread,
+      makeAside('aside: nice :thumbsup::skin-tone-3: — ship it :party-parrot:'),
+      vi.fn(),
+      handlerCtx(),
+    );
+
+    expect(deps.feed.createComment.mock.calls[0][0].body).toBe('nice 👍🏼 — ship it :party-parrot:');
   });
 
   it('stores an unlinked sender aside under their Slack identity, silently (no Connect card)', async () => {

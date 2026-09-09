@@ -3,6 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExperimentResultsList } from '../experiment-results-list';
+import { expectComputedTag } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';
 
@@ -56,6 +57,55 @@ describe('ExperimentResultsList', () => {
       renderList([makeResult('r-1', { message: 'boom' } as DatasetExperimentResult['error'])]);
 
       expect(screen.getByRole('img', { name: 'Error' })).toBeDefined();
+    });
+  });
+
+  describe('tags column', () => {
+    const tagColumns = [...columns, { name: 'tags', label: 'Tags', size: '10rem' }];
+
+    it('renders each tag of the result in the tags cell', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[{ ...makeResult('r-1'), tags: ['alpha', 'beta'] }]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expect(screen.getByText('alpha')).toBeDefined();
+      expect(screen.getByText('beta')).toBeDefined();
+    });
+
+    it('renders each tag with colors computed from its value', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[{ ...makeResult('r-1'), tags: ['alpha', 'beta'] }]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expectComputedTag(screen.getByText('alpha'), 'alpha');
+      expectComputedTag(screen.getByText('beta'), 'beta');
+    });
+
+    it('renders an empty tags cell when the result has no tags', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[makeResult('r-1')]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={tagColumns}
+        />,
+      );
+
+      expect(screen.getByText('Tags')).toBeDefined();
+      expect(screen.getByTestId('result-tags-r-1').textContent).toBe('');
     });
   });
 

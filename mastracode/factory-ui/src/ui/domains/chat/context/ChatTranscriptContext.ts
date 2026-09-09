@@ -16,6 +16,8 @@ export interface LoadMoreHistory {
 
 export interface ChatTranscriptApi {
   transcript: TranscriptState;
+  /** The signed-in user, when web auth is on; a message from anyone else shows its sender. */
+  viewerId?: string;
   busy: boolean;
   /** `undefined` is a session with nothing to report — the default favicon. */
   phase: ChatSessionPhase | undefined;

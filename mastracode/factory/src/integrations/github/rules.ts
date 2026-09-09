@@ -1,13 +1,12 @@
-import { resolveFactoryGithubRule } from '../../rules/resolve.js';
+import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import type { BoardRegistry } from '../../boards/index.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
-  FactoryRules,
 } from '../../rules/types.js';
-import { isTerminalFactoryRuleStage } from '../../rules/types.js';
-import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -18,6 +17,7 @@ import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-i
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { GithubAppIdentity } from './app-identity.js';
+import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 import type { ParsedGithubWebhook } from './webhook.js';
@@ -184,7 +184,8 @@ function authorAwaitingTrust(item: WorkItemRow, repository: ReconcileRepository)
   if (tracked === undefined) return undefined;
   // A canonical key with no URL names no repository, and the pull request matcher takes it anyway.
   // Asking GitHub about the wrong repository of a multi-repository project would record a wrong answer.
-  const unattributed = !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
+  const unattributed =
+    !item.externalSource?.url && /^github-(?:pr|issue):\d+$/.test(item.externalSource?.externalId ?? '');
   if (unattributed && metadata.githubRepositoryId !== repository.id) return undefined;
   return metadata.author;
 }
@@ -237,6 +238,7 @@ function pullRequestProvenance(
 }
 
 export interface GithubRulesIntegration {
+  readonly rules: GithubEventRules;
   readonly slug?: string;
   /**
    * Factory's own GitHub login, used to ignore its own writes. Optional because
@@ -259,7 +261,8 @@ export interface GithubRulesOptions {
   integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
-  rules: FactoryRules;
+  configVersion: string;
+  boards: BoardRegistry;
 }
 
 export class GithubRules {
@@ -420,7 +423,7 @@ export class GithubRules {
         ingress: { type: 'github', id: ingressIdentity },
         cause: `github.${event}`,
         causalChain: [],
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         ...(item
           ? {
               item: {
@@ -434,7 +437,7 @@ export class GithubRules {
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
-              board: item.externalSource?.type === 'pull-request' ? ('review' as const) : ('work' as const),
+              board: boardForWorkItem(item),
               itemRevision: item.revision,
             }
           : {}),
@@ -519,7 +522,7 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = resolveFactoryGithubRule(this.options.rules, event);
+      const rule = this.options.github.rules[event];
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -528,7 +531,10 @@ export class GithubRules {
         if (decision?.type === 'reject') {
           outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
         } else if (decision) {
-          decisions = validateFactoryRuleDecisions([decision]).map(entry => ({ ...entry }));
+          decisions = validateFactoryRuleDecisions([decision]).map(entry => {
+            assertFactoryDecisionTarget(entry, this.options.boards, item ? boardForWorkItem(item) : undefined);
+            return { ...entry };
+          });
         }
       } catch (error) {
         const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
@@ -548,7 +554,7 @@ export class GithubRules {
         factoryProjectId: project.factoryProjectId,
         workItemId: item?.id ?? null,
         ingress: { identity: ingressIdentity, triggerType: `github.${event}` },
-        ruleSetVersion: this.options.rules.version,
+        configVersion: this.options.configVersion,
         expectedRevision: item?.revision ?? null,
         actor: { ...actor },
         outcome,
@@ -998,7 +1004,6 @@ export function createGithubPullRequestReconciler(
             factoryProjectId: project.factoryProjectId,
           });
           for (const item of items) {
-            const stage = item.stages[0];
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -1007,7 +1012,7 @@ export function createGithubPullRequestReconciler(
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             const reconciledOutcome = reconciledPullRequestOutcome(metadata);
             if (
-              (stage === 'done' || stage === 'canceled') &&
+              workItemPhaseSemantics(options.boards, item)?.kind === 'terminal' &&
               reconciledOutcome !== undefined &&
               reconciliation === reconciledOutcome
             ) {
@@ -1073,7 +1078,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -1082,7 +1089,7 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           const cleanupFailures = new Set<string>();
           for (const card of cards) {
-            if (!isTerminalFactoryRuleStage(card.stages)) continue;
+            if (workItemPhaseSemantics(options.boards, card)?.kind !== 'terminal') continue;
             try {
               await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,
@@ -1105,7 +1112,9 @@ export function createGithubPullRequestReconciler(
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined) },
+                patch: {
+                  metadata: reconciledPullRequestMetadata(state, 'settled', trustStale ? authorTrusted : undefined),
+                },
               });
             } catch (error) {
               recordFailure(repository, error, pullRequestNumber);
@@ -1126,14 +1135,15 @@ export function githubRulesOptions(
   github: GithubRulesIntegration,
   context: IntegrationContext,
 ): GithubRulesOptions | undefined {
-  if (!context.rules) return undefined;
+  if (!context.runtime) return undefined;
   return {
     github,
     sourceControl: context.storage.sourceControl,
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
-    storage: context.rules.workItems,
-    rules: context.rules.config,
+    storage: context.runtime.workItems,
+    configVersion: context.runtime.configVersion,
+    boards: context.runtime.boards,
   };
 }
 

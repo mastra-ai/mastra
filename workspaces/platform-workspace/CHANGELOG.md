@@ -1,5 +1,30 @@
 # @mastra/platform
 
+## 1.6.0-alpha.2
+
+### Patch Changes
+
+- Fixed workspace providers to support `MASTRA_PLATFORM_SECRET_KEY` for local development while preserving precedence for explicit `accessToken` options and `MASTRA_PLATFORM_ACCESS_TOKEN`. ([#23361](https://github.com/mastra-ai/mastra/pull/23361))
+
+- Updated dependencies [[`0ea8af0`](https://github.com/mastra-ai/mastra/commit/0ea8af012ba2fe1431c93697399d7643f09c073d)]:
+  - @mastra/core@1.65.0-alpha.12
+
+## 1.6.0-alpha.1
+
+### Minor Changes
+
+- Added `MASTRA_PLATFORM_REGION` support to `PlatformSandbox` and `PlatformFilesystem`. Set it to `us` or `eu` (case-insensitive) to route the workspace proxy to the regional replica at `https://workspaces.us.mastra.ai` or `https://workspaces.eu.mastra.ai`. When unset, calls continue to hit the global default `https://workspaces.mastra.ai`. An explicit `MASTRA_WORKSPACE_PROXY_URL` still overrides both. ([#20925](https://github.com/mastra-ai/mastra/pull/20925))
+
+  ```bash
+  # Route platform workspaces to the EU replica
+  export MASTRA_PLATFORM_REGION=eu
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
 ## 1.5.1-alpha.0
 
 ### Patch Changes

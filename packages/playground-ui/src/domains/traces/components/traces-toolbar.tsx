@@ -10,10 +10,6 @@ type TracesToolbarProps = {
   onClear?: () => void;
   /** Fully remove all filter pills. */
   onRemoveAll?: () => void;
-  onSave?: () => void;
-  /** When provided, an extra "Remove saved filters" option is shown —
-   *  wire it up only when there is actually a saved set to remove. */
-  onRemoveSaved?: () => void;
   isLoading?: boolean;
   filterFields: PropertyFilterField[];
   filterTokens: PropertyFilterToken[];
@@ -27,8 +23,6 @@ type TracesToolbarProps = {
 export function TracesToolbar({
   onClear,
   onRemoveAll,
-  onSave,
-  onRemoveSaved,
   isLoading,
   filterFields,
   filterTokens,
@@ -67,8 +61,6 @@ export function TracesToolbar({
           disabled={isLoading}
           onClear={hasNonDefaultFilter ? onClear : undefined}
           onRemoveAll={onRemoveAll}
-          onSave={onSave}
-          onRemoveSaved={onRemoveSaved}
         />
       )}
     </div>

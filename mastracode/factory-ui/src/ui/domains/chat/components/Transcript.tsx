@@ -1,8 +1,9 @@
 import type { PlanResume } from '@mastra/client-js';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { groupTurns, startsUserTurn } from '@mastra/playground-ui/components/ThreadRail';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { memo, useCallback, useMemo, useState } from 'react';
@@ -14,7 +15,7 @@ import {
   useRespondAgentControllerSuspensionMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { groupTurns, replySteps } from '../services/turns';
+import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { draws, messageText, renderableParts } from './transcript-parts';
@@ -26,7 +27,7 @@ import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from 
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, resolvePrompt, busy } = useChatTranscript();
+  const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -62,6 +63,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         onApprove={onApprove}
         onRespond={onRespond}
         running={busy}
+        viewerId={viewerId}
         tail={tail}
       />
     </ArrivalScope>
@@ -75,6 +77,7 @@ export function TranscriptEntries({
   onApprove,
   onRespond,
   running = false,
+  viewerId,
   tail,
 }: {
   entries: TimelineEntry[];
@@ -84,6 +87,8 @@ export function TranscriptEntries({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   /** Holds the room open under the live turn, and releases it when the agent stops. */
   running?: boolean;
+  /** The signed-in user; anyone else's message gets their avatar beside it. */
+  viewerId?: string;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -112,7 +117,7 @@ export function TranscriptEntries({
   // rail and history, but claims no room and no trip — the reader stays with the stream.
   const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
 
-  const turnGroups = groupTurns(entries, opensTurn, isTimeGap);
+  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTimeGap });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
@@ -120,12 +125,10 @@ export function TranscriptEntries({
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
         const runningTurn = isLiveTurn && running;
-        // Closing turns keep their room class so reserved space releases through its
-        // transition. The first turn opens at the top of the transcript already, so
-        // room under it would buy no travel — only empty scroll below a fresh thread.
+        // The first turn opens at the top of the transcript already, so room under it
+        // would buy no travel — only empty scroll below a fresh thread.
         const holdsRoom =
           runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
-        const openRoomClass = group.key === restoredTurnKey ? 'turn-room-restored-open' : 'turn-room-open';
 
         // One reply, however many messages the server split it into: the meta row lands
         // once, under the last of them, and copies the whole answer. While the run is
@@ -141,9 +144,11 @@ export function TranscriptEntries({
               .join('\n\n');
 
         return (
-          <div
+          <ChatShell.Turn
             key={group.key}
-            className={cn('flex flex-col', group.opensTurn && 'turn-room', holdsRoom && openRoomClass)}
+            opensTurn={group.opensTurn}
+            holdsRoom={holdsRoom}
+            restored={group.key === restoredTurnKey}
           >
             {group.entries.map(entry => (
               <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
@@ -157,13 +162,14 @@ export function TranscriptEntries({
                     canonicalToolCallIds.has(entry.toolCallId)
                   }
                   isSubmitting={isSubmitting}
+                  viewerId={viewerId}
                   onApprove={onApprove}
                   onRespond={onRespond}
                 />
               </TranscriptItem>
             ))}
             {isLiveTurn && tail}
-          </div>
+          </ChatShell.Turn>
         );
       })}
       {turnGroups.length === 0 && tail}
@@ -186,6 +192,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   reply,
   redundantSuspension,
   isSubmitting,
+  viewerId,
   onApprove,
   onRespond,
 }: {
@@ -194,6 +201,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   reply?: string;
   redundantSuspension: boolean;
   isSubmitting: boolean;
+  viewerId?: string;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -205,6 +213,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           suspensions={suspensions}
           reply={reply}
           isSubmitting={isSubmitting}
+          viewerId={viewerId}
           onRespond={onRespond}
         />
       );

@@ -3854,18 +3854,7 @@ describe('ProcessorRunner', () => {
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
       expect(signalMessage?.role).toBe('signal');
       expect(signalMessage?.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'remember this' }));
-      expect(chunks).toEqual([
-        expect.objectContaining({
-          type: 'data-signal',
-          data: expect.objectContaining({
-            type: 'reactive',
-            tagName: 'system-reminder',
-            contents: 'remember this',
-            metadata: { type: 'test-reminder' },
-          }),
-          transient: true,
-        }),
-      ]);
+      expect(chunks).toEqual([]);
     });
   });
 });

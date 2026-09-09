@@ -1,5 +1,23 @@
 # @mastra/rag
 
+## 2.6.2-alpha.1
+
+### Patch Changes
+
+- Fixed the reference docs for createVectorQueryTool and createGraphRAGTool to describe the actual return shape: relevantContext is an array (chunk metadata objects for vector query, chunk text strings for graph RAG), not a combined string, and sources[].document is only populated by vector stores that return document content (Chroma, Elasticsearch, LanceDB, MongoDB). For other stores such as PgVector, read the chunk text from sources[].metadata.text. Fixes #23252 ([#23277](https://github.com/mastra-ai/mastra/pull/23277))
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
+## 2.6.2-alpha.0
+
+### Patch Changes
+
+- Fixed `separatorPosition: 'start'` chunking silently dropping trailing and consecutive separators. The `character` and `recursive` strategies now keep every separator, so the joined chunks reproduce the original text. Fixes https://github.com/mastra-ai/mastra/issues/23122 ([#23158](https://github.com/mastra-ai/mastra/pull/23158))
+
+- Updated dependencies [[`2911c88`](https://github.com/mastra-ai/mastra/commit/2911c88c9226f5ab969abc3a90b161c1c1cbd19e), [`66029df`](https://github.com/mastra-ai/mastra/commit/66029dfccb8f5d69f26d8df920647b34a0a763d1), [`ce2f341`](https://github.com/mastra-ai/mastra/commit/ce2f34171a8e1eee428219670a0a7897083c91e3), [`5901b59`](https://github.com/mastra-ai/mastra/commit/5901b5920a08f1869092e5e4cccf8a0be17781e9), [`8c96b5c`](https://github.com/mastra-ai/mastra/commit/8c96b5c6a3c55d4665ee8dd4f9c55bb14e8e1dd3)]:
+  - @mastra/core@1.65.0-alpha.6
+
 ## 2.6.1
 
 ### Patch Changes

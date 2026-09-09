@@ -14,8 +14,10 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { MastraServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
+import { ResponseCache } from '../../processors/processors/response-cache';
 import { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import { createDurableAgent } from './create-durable-agent';
@@ -49,6 +51,54 @@ async function collectStreamChunks(stream: ReadableStream<any>) {
   return chunks;
 }
 
+class TestServerCache extends MastraServerCache {
+  readonly store = new Map<string, unknown>();
+
+  constructor() {
+    super({ name: 'TestServerCache' });
+  }
+
+  async get(key: string): Promise<unknown> {
+    return this.store.get(key);
+  }
+
+  async set(key: string, value: unknown): Promise<void> {
+    this.store.set(key, value);
+  }
+
+  async listLength(): Promise<number> {
+    return 0;
+  }
+
+  async listPush(): Promise<void> {}
+
+  async listFromTo(): Promise<unknown[]> {
+    return [];
+  }
+
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+
+  async clear(): Promise<void> {
+    this.store.clear();
+  }
+
+  async increment(): Promise<number> {
+    return 0;
+  }
+}
+
+async function waitForCacheWrite(cache: TestServerCache) {
+  const deadline = Date.now() + 1_000;
+  while (cache.store.size === 0) {
+    if (Date.now() > deadline) {
+      throw new Error('Timed out waiting for response cache write');
+    }
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+
 describe('durable step-start chunk shape', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -70,6 +120,7 @@ describe('durable step-start chunk shape', () => {
     await emitStepStartEvent(pubsub, runId, {
       stepId: 'llm-execution',
       messageId: 'msg-1',
+      startedAt: 0,
       request: { body: '{}' },
       warnings: [],
     });
@@ -84,6 +135,7 @@ describe('durable step-start chunk shape', () => {
       payload: {
         stepId: 'llm-execution',
         messageId: 'msg-1',
+        startedAt: 0,
         request: { body: '{}' },
         warnings: [],
       },
@@ -134,11 +186,40 @@ describe('durable step-start chunk shape', () => {
       expect(chunk.payload.request).toEqual({});
       expect(Array.isArray(chunk.payload.warnings)).toBe(true);
       expect(chunk.payload.messageId).toEqual(expect.any(String));
+      expect(chunk.payload.startedAt).toEqual(expect.any(Number));
 
       // The exact operation the @mastra/ai-sdk converter performs — throws on
       // the old flat shape because `chunk.payload` was undefined.
       const { messageId: _messageId, ...rest } = chunk.payload;
       expect(rest.request).toBeDefined();
     }
+  });
+
+  it('omits inference timing when a durable stream replays a cached response', async () => {
+    const cache = new TestServerCache();
+    const model = createTextStreamModel('Cached hello!');
+    const agent = new Agent({
+      id: 'step-start-cache',
+      name: 'Step Start Cache',
+      instructions: 'Respond briefly.',
+      model,
+      inputProcessors: [new ResponseCache({ cache, agentId: 'step-start-cache' })],
+    });
+    const durable = createDurableAgent({ agent, pubsub });
+
+    const first = await durable.stream('Say hello');
+    await collectStreamChunks(first.output.fullStream);
+    first.cleanup();
+    await waitForCacheWrite(cache);
+    expect(model.doStreamCalls).toHaveLength(1);
+
+    const second = await durable.stream('Say hello');
+    const replayedChunks = await collectStreamChunks(second.output.fullStream);
+    second.cleanup();
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    const replayedStepStart = replayedChunks.find(chunk => chunk.type === 'step-start');
+    expect(replayedStepStart).toBeDefined();
+    expect(replayedStepStart.payload.startedAt).toBeUndefined();
   });
 });

@@ -1,5 +1,24 @@
 # @mastra/langfuse
 
+## 1.5.5-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`c4a844e`](https://github.com/mastra-ai/mastra/commit/c4a844ef00ef99a5532cbd4d7e20a5f243703c2c), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/observability@1.17.6-alpha.2
+  - @mastra/otel-exporter@1.3.14-alpha.3
+
+## 1.5.5-alpha.2
+
+### Patch Changes
+
+- Fixed root span metadata missing from Langfuse trace metadata. Since the Langfuse v5 (OTLP) upgrade, only a fixed set of keys reached the trace, so `runId`, `resourceId`, and custom metadata set on the root span were nested under `metadata.attributes` in Langfuse and could not be used in trace filters or evaluator scopes. The exporter now forwards every remaining root span metadata key to `langfuse.trace.metadata.<key>`, matching the behavior before the upgrade. Explicit `metadata.langfuse.*` values and the agent/workflow identity keys keep precedence, and child spans never change trace metadata. Fixes [#23187](https://github.com/mastra-ai/mastra/issues/23187). ([#23206](https://github.com/mastra-ai/mastra/pull/23206))
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+  - @mastra/otel-exporter@1.3.14-alpha.2
+
 ## 1.5.5-alpha.1
 
 ### Patch Changes

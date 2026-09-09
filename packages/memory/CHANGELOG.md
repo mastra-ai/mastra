@@ -1,5 +1,45 @@
 # @mastra/memory
 
+## 1.28.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`b5a1a42`](https://github.com/mastra-ai/mastra/commit/b5a1a42763b891c54d7027b916622d45f95f86b9), [`40f3647`](https://github.com/mastra-ai/mastra/commit/40f36478291d6098f762fc639d545357732b77b4), [`8ff274c`](https://github.com/mastra-ai/mastra/commit/8ff274c2ffea84a910c5d6ce93dd6d3c048f8082), [`e243fec`](https://github.com/mastra-ai/mastra/commit/e243feca17207d1545ff9776e8fff635b0ff4189), [`cd71bd3`](https://github.com/mastra-ai/mastra/commit/cd71bd3beb8afe08a106d1e29efee387ffb74cd1)]:
+  - @mastra/core@1.65.0-alpha.11
+  - @mastra/schema-compat@1.3.9-alpha.0
+
+## 1.28.3-alpha.3
+
+### Patch Changes
+
+- Fixed observation indexing retries so temporary connection errors recover without duplicating stored observations. ([#23205](https://github.com/mastra-ai/mastra/pull/23205))
+
+- Fixed Observational Memory to forward only images and PDFs to the observer by default. ([#22153](https://github.com/mastra-ai/mastra/pull/22153))
+
+  **Before:** Omitting `observeAttachments` forwarded every attachment type.
+
+  **After:** Omitting `observeAttachments` forwards images and PDFs. To retain the previous behavior and forward every attachment type, explicitly set `observeAttachments: true`:
+
+  ```ts
+  new ObservationalMemory({
+    observation: {
+      observeAttachments: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`88abfbf`](https://github.com/mastra-ai/mastra/commit/88abfbf5fb256e0b5602aafa6e733192f9a4236a)]:
+  - @mastra/core@1.65.0-alpha.8
+
+## 1.28.3-alpha.2
+
+### Patch Changes
+
+- Fixed a memory tool reliability issue. ([#23042](https://github.com/mastra-ai/mastra/pull/23042))
+
+- Updated dependencies [[`e4852fc`](https://github.com/mastra-ai/mastra/commit/e4852fc42fc9e72559370dfa9b0e3f20ccf9012e), [`b1227c0`](https://github.com/mastra-ai/mastra/commit/b1227c0604be8c33dd02705fe6978df70c32f87d)]:
+  - @mastra/core@1.65.0-alpha.4
+
 ## 1.28.3-alpha.1
 
 ### Patch Changes

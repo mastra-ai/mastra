@@ -5,6 +5,8 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 
+import { boardForWorkItem } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { FactoryIntegration, IntegrationContext } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -13,8 +15,6 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryRules } from '../rules/types.js';
-import { factoryLaneForRole, factoryRuleStage } from '../rules/types.js';
 import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   ensureFactorySourceSession,
@@ -23,7 +23,7 @@ import {
   resolveFactoryProjectForSession,
 } from '../session/factory-session.js';
 import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
-import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSessions } from '../session/live-sessions.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -78,6 +78,8 @@ export interface IntegrationRegistration {
 export interface FactoryApiRoutesDeps {
   controllerId: string;
   controller: AgentController<MastraCodeState>;
+  /** Registry of the sessions this process holds, owned by the host so it can watch them too. */
+  liveSessions: LiveSessions;
   /** Request-auth seam threaded from the host (no service locator). */
   auth: RouteAuth;
   /** Optional user directory for resolving persisted owners to display profiles. */
@@ -112,7 +114,9 @@ export interface FactoryApiRoutesDeps {
   factoryReady: boolean;
   knowledgeEnabled: boolean;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
-  rules: FactoryRules;
+  configVersion: string;
+  /** Boards installed for this Factory instance. */
+  boardRegistry: BoardRegistry;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -214,15 +218,25 @@ export async function prepareFactoryRuleBinding(
   github: GithubIntegration,
   coordinator: Pick<FactoryStartCoordinator, 'prepare'>,
   projects: FactoryProjectsStorage,
+  boards: BoardRegistry,
   input: FactoryBindingPreparationInput,
 ): Promise<void> {
   try {
     const source = workItemBranchSource(input.item.externalSource);
     const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
-    // Only the Intake exit derives a lane from the role: roles don't own lanes,
+    // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
-    const currentStage = factoryRuleStage(input.item.stages);
-    const destinationStage = currentStage === 'intake' ? factoryLaneForRole(input.role) : currentStage;
+    // Both the current phase and the role's lane come from the installed board; an
+    // unknown board or phase yields no destination rather than a guessed one.
+    const board = boards.get(boardForWorkItem(input.item));
+    const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
+    const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
+    const destinationStage =
+      currentKind === undefined
+        ? undefined
+        : currentKind === 'resting'
+          ? board?.phaseForRole(input.role)
+          : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
         'unsupported_provider_item',
@@ -307,7 +321,8 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    rules: FactoryRules;
+    configVersion: string;
+    boardRegistry: BoardRegistry;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -344,7 +359,11 @@ export function buildIntegrationContext(
       memorySettings: deps.domains.memorySettings,
     },
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
-    ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
+    ...(deps.factoryReady
+      ? {
+          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+        }
+      : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
 }
@@ -463,7 +482,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
 
   const transitionService = deps.factoryReady
     ? (deps.factoryTransitionService ??
-      new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems }))
+      new FactoryTransitionService({
+        configVersion: deps.configVersion,
+        boards: deps.boardRegistry,
+        storage: deps.domains.workItems,
+      }))
     : undefined;
   const startCoordinator = transitionService
     ? new FactoryStartCoordinator(
@@ -480,7 +503,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       ...(githubIntegration
         ? {
             prepareBinding: (input: FactoryBindingPreparationInput) =>
-              prepareFactoryRuleBinding(githubIntegration, startCoordinator, deps.domains.projects, input),
+              prepareFactoryRuleBinding(
+                githubIntegration,
+                startCoordinator,
+                deps.domains.projects,
+                deps.boardRegistry,
+                input,
+              ),
           }
         : {}),
     });
@@ -550,11 +579,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          boardRegistry: deps.boardRegistry,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
-          liveSessions: new LiveSessions(deps.controller),
+          liveSessions: deps.liveSessions,
         }).routes()
       : []),
   ];

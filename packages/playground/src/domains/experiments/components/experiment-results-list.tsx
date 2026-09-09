@@ -3,6 +3,7 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { AlertCircleIcon } from 'lucide-react';
+import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentResultsListProps = {
@@ -41,6 +42,7 @@ export function ExperimentResultsList({
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
+  const hasTagsColumn = columns.some(col => col.name === 'tags');
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
 
@@ -101,6 +103,17 @@ export function ExperimentResultsList({
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
+
+                {hasTagsColumn && (
+                  <DataList.Cell
+                    className="flex items-center gap-1 overflow-hidden"
+                    data-testid={`result-tags-${result.id}`}
+                  >
+                    {result.tags?.map(tag => (
+                      <ComputedTag key={tag} value={tag} className="shrink-0" />
+                    ))}
+                  </DataList.Cell>
                 )}
 
                 {scorerIds?.map(scorerId => {

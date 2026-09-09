@@ -1,5 +1,14 @@
 # @mastra/redis-streams
 
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Drain already-issued read and reclaim batches before unsubscribe finishes, and keep concurrent shutdown from closing the writer before dispatch completes. Application callbacks remain non-blocking and retain responsibility for ACK/NACK. ([#23213](https://github.com/mastra-ai/mastra/pull/23213))
+
+- Updated dependencies [[`54adc91`](https://github.com/mastra-ai/mastra/commit/54adc9164beee68798adff0bfb0ebae4dada1af0), [`c9b21f3`](https://github.com/mastra-ai/mastra/commit/c9b21f39792f892c91e616a67f9cfb19ddaa8046), [`4362001`](https://github.com/mastra-ai/mastra/commit/436200145bf70d825918e60f6dbdd2389a749e48)]:
+  - @mastra/core@1.65.0-alpha.9
+
 ## 0.4.1
 
 ### Patch Changes

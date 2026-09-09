@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.9-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI tool schema conversion to avoid duplicating nested optional object and array definitions, preventing compatible MCP tools from being rejected. ([#22929](https://github.com/mastra-ai/mastra/pull/22929))
+
 ## 1.3.8
 
 ### Patch Changes

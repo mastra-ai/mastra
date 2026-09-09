@@ -102,7 +102,7 @@ import {
   getSchemaName as dbGetSchemaName,
   getTableName as dbGetTableName,
 } from '../../db';
-import type { PgDomainConfig } from '../../db';
+import type { DbClient, PgDomainConfig } from '../../db';
 import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
@@ -190,8 +190,8 @@ export class MemoryPG extends MemoryStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -481,6 +481,17 @@ export class MemoryPG extends MemoryStorage {
     threadId: string;
     resourceId?: string;
   }): Promise<StorageThreadType | null> {
+    return this.#getThreadById(this.#db.readClient, { threadId, resourceId });
+  }
+
+  /**
+   * Thread lookup against an explicit client. Mutation paths pass the writer so
+   * a lagging read replica cannot produce false not-found or stale metadata.
+   */
+  async #getThreadById(
+    client: DbClient,
+    { threadId, resourceId }: { threadId: string; resourceId?: string },
+  ): Promise<StorageThreadType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
@@ -492,10 +503,7 @@ export class MemoryPG extends MemoryStorage {
         params.push(resourceId);
       }
 
-      const thread = await this.#db.client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        query,
-        params,
-      );
+      const thread = await client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(query, params);
 
       if (!thread) {
         return null;
@@ -589,7 +597,7 @@ export class MemoryPG extends MemoryStorage {
       const baseQuery = `FROM ${tableName} ${whereClause}`;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.#db.client.one(countQuery, queryParams);
+      const countResult = await this.#db.readClient.one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -605,7 +613,7 @@ export class MemoryPG extends MemoryStorage {
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      const rows = await this.#db.readClient.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
       );
@@ -713,7 +721,7 @@ export class MemoryPG extends MemoryStorage {
     metadata?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-    const existingThread = await this.getThreadById({ threadId: id });
+    const existingThread = await this.#getThreadById(this.#db.client, { threadId: id });
     if (!existingThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
@@ -873,7 +881,7 @@ export class MemoryPG extends MemoryStorage {
 
     const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
     const targetResourceCondition = resourceId ? ` AND "resourceId" = $${targetIds.length + 1}` : '';
-    const targetRows = await this.#db.client.manyOrNone<{
+    const targetRows = await this.#db.readClient.manyOrNone<{
       id: string;
       thread_id: string;
       createdAt: Date | string;
@@ -954,7 +962,7 @@ export class MemoryPG extends MemoryStorage {
       // Multiple queries - UNION ALL and sort the result
       finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC, id ASC`;
     }
-    const includedRows = await this.#db.client.manyOrNone(finalQuery, params);
+    const includedRows = await this.#db.readClient.manyOrNone(finalQuery, params);
 
     // Deduplicate results (messages may appear in multiple context windows)
     const seen = new Set<string>();
@@ -996,7 +1004,7 @@ export class MemoryPG extends MemoryStorage {
         WHERE id IN (${inPlaceholders(messageIds.length)})
         ORDER BY "createdAt" DESC
       `;
-      const resultRows = await this.#db.client.manyOrNone(query, messageIds);
+      const resultRows = await this.#db.readClient.manyOrNone(query, messageIds);
 
       const list = new MessageList().add(
         resultRows.map(row => this.parseRow(row)) as (MastraMessageV1 | MastraDBMessage)[],
@@ -1024,12 +1032,13 @@ export class MemoryPG extends MemoryStorage {
   /**
    * Reads one page of messages together with the total row count.
    *
-   * `COUNT(*) OVER ()` reports the count over the whole WHERE result on the same
-   * statement as the page, so the page costs one database round-trip instead of
-   * two. The page and the count also come from one snapshot, so the count always
-   * describes the returned rows. A separate `COUNT(*)` runs only when the page is
-   * empty and the caller asked for a page after the last row, because a window
-   * function has no row to carry the count on.
+   * Every page query carries a skinny scalar `(SELECT COUNT(*) ...)` subquery that
+   * reports the total over the whole WHERE result on the same statement as the page,
+   * so the page costs one database round-trip instead of two. The page and the count
+   * also come from one snapshot, so the count always describes the returned rows. A
+   * separate `COUNT(*)` runs only as a fallback when the page is empty and the caller
+   * asked for a page after the last row, because there is then no row to carry the
+   * count on.
    */
   async #fetchMessagePage({
     selectStatement,
@@ -1054,9 +1063,14 @@ export class MemoryPG extends MemoryStorage {
     const limitClause =
       perPageInput === false ? '' : ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
     const dataParams = perPageInput === false ? queryParams : [...queryParams, perPage, offset];
+    // Use a skinny scalar COUNT(*) subquery rather than COUNT(*) OVER (). The window ran over
+    // the full SELECT list, forcing Postgres to materialize/heap-fetch `content` for every
+    // matching row before LIMIT. The uncorrelated subquery is evaluated once (InitPlan) and
+    // can use an index-only scan, while the outer SELECT is served by an index scan + LIMIT.
+    // Both WHERE clauses reference the same positional params, so `dataParams` is unchanged.
     const rows =
-      (await this.#db.client.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
-        `${selectStatement}, COUNT(*) OVER () AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+      (await this.#db.readClient.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
+        `${selectStatement}, (SELECT COUNT(*) FROM ${tableName} ${whereClause}) AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
         dataParams,
       )) || [];
 
@@ -1066,7 +1080,7 @@ export class MemoryPG extends MemoryStorage {
     if (offset === 0) {
       return { total: 0, messages: [] };
     }
-    const countResult = await this.#db.client.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+    const countResult = await this.#db.readClient.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
     return { total: parseInt(countResult.count, 10), messages: [] };
   }
 
@@ -1108,7 +1122,12 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Order by the raw timestamp column (not COALESCE("${field}Z", "${field}")) so the
+      // (thread_id, createdAt DESC) composite index can serve the LIMIT with an index scan
+      // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
+      // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
+      // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1174,7 +1193,7 @@ export class MemoryPG extends MemoryStorage {
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
-        const rows = await this.#db.client.manyOrNone(
+        const rows = await this.#db.readClient.manyOrNone(
           `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
           queryParams,
         );
@@ -1306,7 +1325,12 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
+      // Order by the raw timestamp column (not COALESCE("${field}Z", "${field}")) so the
+      // (thread_id, createdAt DESC) composite index can serve the LIMIT with an index scan
+      // instead of materializing/seq-scanning the whole thread. createdAt and createdAtZ
+      // always store the same instant (createdAtZ is a TIMESTAMPTZ copy), so row selection
+      // under LIMIT is identical. This mirrors the index-safe ordering in _getIncludedMessages.
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1382,7 +1406,7 @@ export class MemoryPG extends MemoryStorage {
       let total: number;
       let messages: MessageRowFromDB[];
       if (metadataFilter) {
-        const rows = await this.#db.client.manyOrNone(
+        const rows = await this.#db.readClient.manyOrNone(
           `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement}`,
           queryParams,
         );
@@ -1495,7 +1519,7 @@ export class MemoryPG extends MemoryStorage {
       }
 
       for (const threadIdToCheck of threadIds) {
-        const thread = await this.getThreadById({ threadId: threadIdToCheck });
+        const thread = await this.#getThreadById(this.#db.client, { threadId: threadIdToCheck });
         if (!thread) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
@@ -1760,8 +1784,12 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
+    return this.#getResourceById(this.#db.readClient, resourceId);
+  }
+
+  async #getResourceById(client: DbClient, resourceId: string): Promise<StorageResourceType | null> {
     const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.#schema) });
-    const result = await this.#db.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
+    const result = await client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
       `SELECT * FROM ${tableName} WHERE id = $1`,
       [resourceId],
     );
@@ -1804,7 +1832,7 @@ export class MemoryPG extends MemoryStorage {
     workingMemory?: string;
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
-    const existingResource = await this.getResourceById({ resourceId });
+    const existingResource = await this.#getResourceById(this.#db.client, resourceId);
 
     if (!existingResource) {
       const newResource: StorageResourceType = {
@@ -1862,7 +1890,7 @@ export class MemoryPG extends MemoryStorage {
     const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
 
     // Get the source thread
-    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    const sourceThread = await this.#getThreadById(this.#db.client, { threadId: sourceThreadId });
     if (!sourceThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'CLONE_THREAD', 'SOURCE_NOT_FOUND'),
@@ -1877,7 +1905,7 @@ export class MemoryPG extends MemoryStorage {
     const newThreadId = providedThreadId || crypto.randomUUID();
 
     // Check if the new thread ID already exists
-    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    const existingThread = await this.#getThreadById(this.#db.client, { threadId: newThreadId });
     if (existingThread) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'CLONE_THREAD', 'THREAD_EXISTS'),
@@ -2111,7 +2139,7 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.oneOrNone(
+      const result = await this.#db.readClient.oneOrNone(
         `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT 1`,
         [lookupKey],
       );
@@ -2167,7 +2195,7 @@ export class MemoryPG extends MemoryStorage {
         sql += ` OFFSET $${paramIndex}`;
       }
 
-      const result = await this.#db.client.manyOrNone(sql, params);
+      const result = await this.#db.readClient.manyOrNone(sql, params);
       if (!result) return [];
       return result.map(row => this.parseOMRow(row));
     } catch (error) {

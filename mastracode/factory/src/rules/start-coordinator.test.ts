@@ -2,10 +2,10 @@ import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createLifecycleTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -318,16 +318,12 @@ describe('FactoryStartCoordinator', () => {
     let bindingsDuringRule = 0;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: {
-            execute: {
-              issue: {
-                onEnter: async () => {
-                  bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
-                },
-              },
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        execute: {
+          issue: {
+            onEnter: async () => {
+              bindingsDuringRule = (await storage.listRunBindings('org-1', PROJECT_ID)).length;
             },
           },
         },
@@ -479,11 +475,9 @@ describe('FactoryStartCoordinator', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const transitionService = new FactoryTransitionService({
       storage,
-      rules: defaultFactoryRules({
-        version: 'rules-v1',
-        overrides: {
-          work: { execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } } },
-        },
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({
+        execute: { issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Blocked' }) } },
       }),
     });
     const { controller, sendMessage } = makeController();

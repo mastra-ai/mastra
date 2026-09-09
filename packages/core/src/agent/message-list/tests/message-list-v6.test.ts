@@ -7,6 +7,135 @@ import type { MastraDBMessage } from '../../index';
 import { MessageList } from '../../index';
 
 describe('MessageList AI SDK v6 support', () => {
+  // Regression: the v5 bridge omits reasoning parts with no text and no details, but the v6
+  // adapter asserted its first converted part existed. Streaming emits exactly that shape on
+  // `reasoning-start`, before the first delta, so conversion threw mid-stream.
+  describe('empty reasoning parts', () => {
+    const emptyReasoningMessage = (id: string, parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      createdAt: new Date(),
+      content: { format: 2, parts },
+    });
+
+    it('omits an opening empty reasoning part instead of throwing', () => {
+      const message = emptyReasoningMessage('opening-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]);
+
+      const result = new MessageList().add(message, 'memory').get.all.aiV6.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'opening-reasoning', role: 'assistant', parts: [] });
+      // the stored message must not be mutated by conversion
+      expect(message.content.parts).toEqual([{ type: 'reasoning', reasoning: '', details: [] }]);
+    });
+
+    it('omits an empty reasoning part at a non-opening index, keeping surrounding text in order', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('mid-reasoning', [
+            { type: 'text', text: 'Before' },
+            { type: 'reasoning', reasoning: '', details: [] },
+            { type: 'text', text: 'After' },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      expect(result[0]?.parts).toEqual([
+        { type: 'text', text: 'Before' },
+        { type: 'text', text: 'After' },
+      ]);
+    });
+
+    it('omits a reasoning part with no details key at all', () => {
+      const result = new MessageList()
+        .add(emptyReasoningMessage('no-details', [{ type: 'reasoning', reasoning: '' } as any]), 'memory')
+        .get.all.aiV6.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.parts).toEqual([]);
+    });
+
+    it('converts a whole thread when one message holds an empty reasoning part', () => {
+      const list = new MessageList().add(
+        [
+          {
+            id: 'user-1',
+            role: 'user',
+            createdAt: new Date(),
+            content: { format: 2, parts: [{ type: 'text', text: 'Question' }] },
+          },
+          emptyReasoningMessage('assistant-1', [{ type: 'text', text: 'First answer' }]),
+          emptyReasoningMessage('assistant-2', [{ type: 'reasoning', reasoning: '', details: [] }]),
+          emptyReasoningMessage('assistant-3', [{ type: 'text', text: 'Second answer' }]),
+        ] as MastraDBMessage[],
+        'memory',
+      );
+
+      // one bad part previously threw for the entire list, returning no messages at all
+      expect(list.get.all.aiV6.ui()).toHaveLength(list.get.all.aiV5.ui().length);
+      expect(list.get.all.aiV6.ui().map(m => m.id)).toEqual(['user-1', 'assistant-1', 'assistant-2', 'assistant-3']);
+    });
+
+    it('keeps reasoning metadata and tool approvals when an empty reasoning part is omitted', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('mixed-reasoning', [
+            { type: 'reasoning', reasoning: '', details: [] },
+            {
+              type: 'reasoning',
+              reasoning: 'Preparing the requested task.',
+              details: [{ type: 'text', text: 'Preparing the requested task.' }],
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'read-page',
+                toolName: 'readPage',
+                args: { url: 'https://example.com' },
+                state: 'approval-requested',
+                approval: { id: 'approve-page' },
+              },
+            } as any,
+            { type: 'text', text: 'After' },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      const parts = result[0]?.parts ?? [];
+      expect(parts).toContainEqual(
+        expect.objectContaining({ type: 'reasoning', text: 'Preparing the requested task.' }),
+      );
+      expect(parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'After' }));
+      expect(parts).toContainEqual(
+        expect.objectContaining({ approval: expect.objectContaining({ id: 'approve-page' }) }),
+      );
+    });
+
+    it('omits an empty reasoning part on the v7 projection too', () => {
+      const result = new MessageList()
+        .add(emptyReasoningMessage('v7-reasoning', [{ type: 'reasoning', reasoning: '', details: [] }]), 'memory')
+        .get.all.aiV7.ui();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.parts).toEqual([]);
+    });
+
+    it('still keeps a reasoning part whose details carry an empty text entry', () => {
+      const result = new MessageList()
+        .add(
+          emptyReasoningMessage('empty-text-detail', [
+            { type: 'reasoning', reasoning: '', details: [{ type: 'text', text: '' }] },
+          ]),
+          'memory',
+        )
+        .get.all.aiV6.ui();
+
+      expect(result[0]?.parts).toEqual([expect.objectContaining({ type: 'reasoning', text: '' })]);
+    });
+  });
+
   it('projects MastraDBMessage records to AI SDK v6 UI messages', () => {
     const messages: MastraDBMessage[] = [
       {
@@ -488,6 +617,74 @@ describe('MessageList AI SDK v6 support', () => {
       type: 'content',
       value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
     });
+  });
+
+  // Regression: the AI SDK stores a tool result's providerMetadata as the UI part's
+  // `resultProviderMetadata`, so that is what a browser sends back. Reading only
+  // `callProviderMetadata` dropped the `mastra.modelOutput` projection (issue #22012).
+  it('ingests toModelOutput metadata carried as resultProviderMetadata (issue #22012)', () => {
+    const uiMessage: UIMessageV6 = {
+      id: 'msg-result-metadata',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-screenshotTool',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: { url: 'https://example.com' },
+          output: { ok: true, _b64: 'base64imagedata' },
+          resultProviderMetadata: {
+            mastra: {
+              modelOutput: {
+                type: 'content',
+                value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const dbMessage = new MessageList().add([uiMessage], 'memory').get.all.db()[0]!;
+    const toolPart = dbMessage.content.parts.find(part => part.type === 'tool-invocation') as any;
+
+    expect(toolPart?.toolInvocation?.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    expect(toolPart?.providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+    });
+  });
+
+  it('merges call and result provider metadata, letting the result win on conflict (issue #22012)', () => {
+    const uiMessage: UIMessageV6 = {
+      id: 'msg-merged-metadata',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-screenshotTool',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: { url: 'https://example.com' },
+          output: { ok: true },
+          callProviderMetadata: {
+            anthropic: { cacheControl: 'ephemeral' },
+            mastra: { toolPayloadTransform: { display: {} }, modelOutput: 'from-call' },
+          },
+          resultProviderMetadata: {
+            mastra: { modelOutput: 'from-result' },
+          },
+        },
+      ],
+    };
+
+    const dbMessage = new MessageList().add([uiMessage], 'memory').get.all.db()[0]!;
+    const toolPart = dbMessage.content.parts.find(part => part.type === 'tool-invocation') as any;
+
+    // Result wins for the key both halves set.
+    expect(toolPart?.providerMetadata?.mastra?.modelOutput).toBe('from-result');
+    // Call-time keys under the same namespace survive, as do other namespaces.
+    expect(toolPart?.providerMetadata?.mastra?.toolPayloadTransform).toEqual({ display: {} });
+    expect(toolPart?.providerMetadata?.anthropic).toEqual({ cacheControl: 'ephemeral' });
   });
 
   it('rehydrates persisted pending tool approvals into v6 approval-requested tool parts on reload', () => {

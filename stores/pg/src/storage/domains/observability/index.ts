@@ -59,8 +59,8 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    const { client, readClient, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
@@ -343,7 +343,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const row = await this.#db.client.oneOrNone<SpanRecord>(
+      const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -390,7 +390,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const row = await this.#db.client.oneOrNone<SpanRecord>(
+      const row = await this.#db.readClient.oneOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -437,7 +437,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.#db.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -490,7 +490,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.#db.client.manyOrNone<LightSpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<LightSpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name",
           "entityType", "entityId", "entityName",
@@ -736,7 +736,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get total count
-      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
+      const countResult = await this.#db.readClient.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${tableName} r ${whereClause}`,
         params,
       );
@@ -755,7 +755,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.#db.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.readClient.manyOrNone<SpanRecord>(
         `SELECT
           r."traceId", r."spanId", r."parentSpanId", r."name",
           r."entityType", r."entityId", r."entityName",

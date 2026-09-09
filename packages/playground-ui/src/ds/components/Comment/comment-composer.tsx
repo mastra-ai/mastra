@@ -19,11 +19,13 @@ CommentComposer.displayName = 'CommentComposer';
 const composerSize: Record<CommentVariant, ControlSize> = {
   default: 'md',
   embed: 'sm',
+  thread: 'md',
 };
 
 const composerInputVariant: Record<CommentVariant, 'default' | 'outline'> = {
   default: 'outline',
   embed: 'default',
+  thread: 'outline',
 };
 
 export interface CommentComposerInputProps extends InputGroupInputProps {
