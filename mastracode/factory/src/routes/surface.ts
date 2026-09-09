@@ -561,6 +561,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
+          boardRegistry: deps.boardRegistry,
+          workItems: deps.domains.workItems,
           integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
             integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
           ),

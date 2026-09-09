@@ -1,5 +1,6 @@
 import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -7,6 +8,8 @@ import type {
   FactoryRuleDecision,
 } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
+import { resolveIntakeLabelRoute } from '../../storage/domains/intake/base.js';
+import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type {
@@ -62,6 +65,10 @@ function actorLogins(value: unknown): string[] {
     const login = string(object(actor)?.login);
     return login ? [login] : [];
   });
+}
+
+function sameLabels(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((label, index) => label === b[index]);
 }
 
 function labelNames(value: unknown): string[] {
@@ -263,6 +270,16 @@ export interface GithubRulesOptions {
   storage: WorkItemsStorage;
   configVersion: string;
   boards: BoardRegistry;
+  /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
+  intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+}
+
+/** Identity under which label-driven relocations are recorded. */
+const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
+
+function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
+  const action = string(parsed.payload.action);
+  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
 export class GithubRules {
@@ -289,14 +306,84 @@ export class GithubRules {
     return slug ? `${slug.toLowerCase()}[bot]` : undefined;
   }
 
+  /**
+   * Board an issue's labels select under the project's label routes, when that board is installed.
+   * Undefined leaves built-in routing (Work) in charge.
+   */
+  async #labelRouteTarget(
+    orgId: string,
+    factoryProjectId: string,
+    labels: readonly string[],
+  ): Promise<{ board: string; initialPhase: string } | undefined> {
+    if (!this.options.intake || labels.length === 0) return undefined;
+    const routes = await this.options.intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
+    const route = resolveIntakeLabelRoute(routes, labels);
+    const board = route ? this.options.boards.get(route.board) : undefined;
+    return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
+  }
+
+  /**
+   * `labeled` / `unlabeled` are not rule events: the labels only decide which board the card belongs
+   * on, so the card is re-routed here and its label metadata refreshed. Cards a run owns, and
+   * finished cards, stay where they are.
+   */
+  async #relocateLabeledIssue(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const found = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!found || found.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const labels = labelNames(issue?.labels);
+    let item = found;
+    let changed = false;
+    if (!sameLabels(cardLabels(item), labels)) {
+      const updated = await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: { metadata: { ...(item.metadata ?? {}), labels } },
+        expectedRevision: item.revision,
+      });
+      if (!updated) return { status: 'ignored' };
+      item = updated.item;
+      changed = true;
+    }
+    const target = await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labels);
+    const outcome = await moveCardToBoard({
+      workItems: this.options.storage,
+      boardRegistry: this.options.boards,
+      userId: LABEL_ROUTE_USER_ID,
+      item,
+      targetBoard: target?.board ?? 'work',
+    });
+    return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
+    const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
-    if (!event || !installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+      return { status: 'ignored' };
+    }
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -306,7 +393,9 @@ export class GithubRules {
     const results = [];
     for (const project of projects) {
       results.push(
-        await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project),
+        event
+          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
       );
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
@@ -389,6 +478,9 @@ export class GithubRules {
     // card as the PR's Review card. A missing Review card is materialized below.
     const relatedItem =
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
+    const intake = issueNumber
+      ? await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labelNames(issue?.labels))
+      : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
       repository: repositoryName,
@@ -441,6 +533,7 @@ export class GithubRules {
               itemRevision: item.revision,
             }
           : {}),
+        ...(intake ? { intake } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -1144,6 +1237,7 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    intake: context.storage.intake,
   };
 }
 

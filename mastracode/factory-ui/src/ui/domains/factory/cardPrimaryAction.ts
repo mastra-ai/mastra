@@ -23,7 +23,8 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> & Partial<Pick<WorkItem, 'stages' | 'acceptedAt'>>;
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
+  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
@@ -38,6 +39,7 @@ const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
+  if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
@@ -75,8 +77,12 @@ export function resumeStage(
  * it until a person moves it forward. The card then asks for that decision
  * instead of offering a run that would only advance it as a side effect.
  */
-export function awaitsTriageDecision(item: Pick<WorkItem, 'triageType' | 'acceptedAt'>, columnStage: BoardStageId) {
+export function awaitsTriageDecision(
+  item: Pick<WorkItem, 'triageType' | 'acceptedAt'> & Partial<Pick<WorkItem, 'board'>>,
+  columnStage: BoardStageId,
+) {
   return (
+    (item.board == null || item.board === 'work') &&
     (columnStage === 'intake' || columnStage === 'triage') &&
     item.triageType !== null &&
     item.triageType !== 'bug' &&
@@ -108,6 +114,7 @@ export function cardPrimaryAction({
   columnStage,
   move,
   resumeStage,
+  nextPhase,
   waiting,
   hasSession,
   onApproveProposal,
@@ -120,6 +127,8 @@ export function cardPrimaryAction({
   move?: CardMove;
   /** Lane a parked card goes back to, ahead of any move it also offers. */
   resumeStage?: FactoryRuleStage;
+  /** On a custom board, the first phase this one declares a transition to. */
+  nextPhase?: { id: string; label: string };
   /** The card's own parked run, read from its status so the button says what the badge says. */
   waiting?: { label: string; decisionId: string };
   hasSession: boolean;
@@ -141,6 +150,10 @@ export function cardPrimaryAction({
   if (move !== undefined) {
     return { label: move.label, start: () => onMove(move.stage) };
   }
+  // A custom board's phases carry their own runs, so the button advances the card rather than starting one.
+  if (nextPhase !== undefined) {
+    return { label: `Move to ${nextPhase.label}`, start: () => onMove(nextPhase.id) };
+  }
   // Every lane this card offers is already its own, so opening its session is the action.
   if (hasSession) return undefined;
   return {
@@ -150,8 +163,7 @@ export function cardPrimaryAction({
 }
 
 export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  | { href: string }
-  | { start: () => void }
+  { href: string } | { start: () => void }
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {

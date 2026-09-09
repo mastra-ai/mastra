@@ -52,7 +52,24 @@ const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
   execute: '/factory-stage-icons/in-progress.svg',
 };
 
-export function BoardStageIcon({ stage }: { stage: BoardStageId }) {
+export function BoardStageIcon({
+  stage,
+  kind,
+  decorative = false,
+}: {
+  stage: BoardStageId;
+  kind?: 'resting' | 'working' | 'terminal';
+  /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
+  decorative?: boolean;
+}) {
+  if (kind) {
+    const Icon = kind === 'terminal' ? CheckCircle2 : kind === 'working' ? Play : CircleDot;
+    return decorative ? (
+      <Icon size={16} className="text-icon3 shrink-0" aria-hidden />
+    ) : (
+      <Icon size={16} className="text-icon3 shrink-0" aria-label={`${kind} phase`} />
+    );
+  }
   if (stage === 'intake') return <IntakeIcon className="text-icon3 shrink-0" />;
   if (stage === 'review') return <GitPullRequest size={16} className="text-icon3 shrink-0" aria-hidden />;
   const source = STAGE_ICON_SOURCES[stage];

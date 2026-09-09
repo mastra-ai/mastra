@@ -26,7 +26,7 @@ export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {
 }
 
 export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
-  return kind === 'review' ? item.source === 'github-pr' : item.source !== 'github-pr';
+  return itemBoard(item) === kind;
 }
 
 export function itemAppearsInStage(
@@ -58,8 +58,8 @@ export function boardLoadingStages({
   return loading;
 }
 
-export function itemBoard(item: WorkItem): 'work' | 'review' {
-  return item.source === 'github-pr' ? 'review' : 'work';
+export function itemBoard(item: WorkItem): string {
+  return item.board ?? (item.source === 'github-pr' ? 'review' : 'work');
 }
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {

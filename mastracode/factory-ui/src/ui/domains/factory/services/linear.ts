@@ -8,11 +8,7 @@
  */
 
 export type LinearStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -35,6 +31,8 @@ export interface LinearIssue {
   assignee: string | null;
   creator?: string | null;
   team: string | null;
+  /** Linear project the issue was read from; matches an intake binding's `sourceId`. */
+  sourceId?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;

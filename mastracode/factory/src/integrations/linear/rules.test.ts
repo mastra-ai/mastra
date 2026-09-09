@@ -40,6 +40,32 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
 }
 
 describe('LinearRules', () => {
+  it.each([
+    { name: 'the bound custom board initial phase', sourceId: 'proj-release', board: 'release', stage: 'queued' },
+    { name: 'Work triage when the source is unbound', sourceId: 'proj-other', board: 'work', stage: 'triage' },
+    {
+      name: 'Work triage when the bound board is not installed',
+      sourceId: 'proj-gone',
+      board: 'work',
+      stage: 'triage',
+    },
+  ])('routes an observed issue to $name', async ({ sourceId, board, stage }) => {
+    const { project, service, workItems } = await setup(
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()] }),
+    );
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, sourceId }],
+      intakeBoards: { 'proj-release': 'release', 'proj-gone': 'hotfix' },
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', board, stage } },
+    ]);
+  });
+
   it('accepts installed custom linked targets and preserves committed ingress after uninstall', async () => {
     const decision = {
       type: 'upsertLinkedWorkItem' as const,

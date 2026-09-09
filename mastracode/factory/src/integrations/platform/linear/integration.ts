@@ -161,7 +161,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       requireLinearConnection(connection);
       const result = await this.#listIssues(sourceIds, cursor, labels);
       return {
-        issues: result.issues.map(({ issue }) => parseIssue(issue)),
+        issues: result.issues.map(({ issue, source }) => ({
+          ...parseIssue(issue),
+          sourceId: encodeSourceId(source.workspace.linearWorkspaceId, source.project.id),
+        })),
         nextCursor: result.nextCursor,
       };
     },

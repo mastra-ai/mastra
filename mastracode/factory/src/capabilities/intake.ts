@@ -51,6 +51,8 @@ export interface IntakeIssue {
   assignee: string | null;
   assignees?: string[];
   source: string | null;
+  /** Provider source id the issue was read from (Linear project id); lets callers map issues back to intake bindings. */
+  sourceId?: string | null;
   labels: string[];
   commentCount: number | null;
   createdAt: string;
@@ -108,8 +110,7 @@ export interface CreatedIntakeComment {
  * warn log.
  */
 export type IntakeIssueTargetState =
-  | { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' }
-  | { kind: 'byName'; name: string };
+  { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' } | { kind: 'byName'; name: string };
 
 export interface UpdateIntakeIssueInput extends GetIntakeIssueInput {
   state: IntakeIssueTargetState;

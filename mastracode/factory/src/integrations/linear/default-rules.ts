@@ -12,12 +12,14 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
   return {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:issue-triage`,
-    board: 'work',
+    // A source bound to a custom board lands on that board's initial phase;
+    // otherwise Work auto-triages the new issue.
+    board: context.intake?.board ?? 'work',
     source: 'linear-issue',
     sourceKey: `linear:${context.issue.identifier}`,
     title: `${context.issue.identifier}: ${context.issue.title}`,
     url: context.issue.url,
-    stage: 'triage',
+    stage: context.intake?.initialPhase ?? 'triage',
     metadata: {
       linearIssueId: context.issue.id,
       identifier: context.issue.identifier,

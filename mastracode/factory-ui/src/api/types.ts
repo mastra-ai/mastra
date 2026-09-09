@@ -9,6 +9,13 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { z } from 'zod';
+import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
+
+export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
+export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
+export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
+
 import type {
   CustomProviderInfo,
   ModelPackInfo,
@@ -170,13 +177,10 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export type ActivateModelPackResponse =
-  | { ok: true; target: 'default'; activePackId: string }
-  | { ok: true; target: 'session'; sessionPackId: string };
+  { ok: true; target: 'default'; activePackId: string } | { ok: true; target: 'session'; sessionPackId: string };
 
 export interface ClearDefaultModelPackResponse {
   ok: true;
