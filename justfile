@@ -10,10 +10,13 @@
 # through `link:` dependencies, so `@mastra/factory` must be built before the
 # API can see `src` changes.
 #
-# `~/justfile` carries the personal recipes. `allow-duplicate-recipes` gives
-# this file precedence, so a name defined in both is the repo's version
-# instead of a hard redefinition error that blocks every recipe.
+# `~/justfile` carries the personal recipes. These two give this file
+# precedence, so a recipe or variable name defined in both is the repo's
+# version instead of a hard redefinition error that blocks every recipe.
+# Variables need their own setting: a colliding `web` or `api_url` aborts the
+# whole invocation exactly like a colliding recipe name does.
 set allow-duplicate-recipes := true
+set allow-duplicate-variables := true
 
 import? '~/justfile'
 
