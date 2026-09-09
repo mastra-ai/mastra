@@ -120,7 +120,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 /** OM (observational memory) status. */
 export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
