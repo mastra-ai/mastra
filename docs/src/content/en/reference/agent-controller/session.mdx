@@ -832,6 +832,8 @@ When a session attaches to a stored thread, it reads saved approvals from the cu
 
 Recovery requires native run storage. Multiple saved approvals on the same thread are rejected rather than selecting one arbitrarily. Storage failures remain errors. After a failed decision, the session reads saved work again and can restore its prompt; it never retries the decision automatically. Auto-approval grants remain ephemeral.
 
+For a web client that displays one exact thread, pass that thread's ID to `AgentControllerSession.subscribe({ threadId, onEvent, reconnect: true })` in `@mastra/client-js`. Use a separate session scope for each open thread. The client calls the native session creation route with the exact thread before each stream connection, including reconnects. A session scope alone doesn't restore a thread binding after a server restart; without an explicit binding the server can select the resource's newest thread. Continue refreshing the native display and stored messages in `onReconnect`, because the stream doesn't replay missed events.
+
 With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
 
 ## Related

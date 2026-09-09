@@ -233,6 +233,12 @@ export interface AgentControllerRequestOptions {
 
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
+  /**
+   * Bind to this exact thread before opening each stream, including reconnects.
+   * Use a separate session scope for each independently open thread. Without an
+   * explicit binding, a restarted server can select the resource's newest thread.
+   */
+  threadId?: string;
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
   /**
@@ -378,6 +384,10 @@ export class AgentControllerSession extends BaseResource {
       });
 
     const requestStream = async (): Promise<Response> => {
+      if (options.threadId !== undefined) {
+        await this.create({ threadId: options.threadId });
+        if (cancelled) throw new Error('Agent controller session subscription cancelled');
+      }
       const response = (await this.request(this.url(`${this.base()}/stream`), { stream: true })) as Response;
       if (!response.body) {
         throw new Error('No response body for agent controller session stream');

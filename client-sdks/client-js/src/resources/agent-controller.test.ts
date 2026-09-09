@@ -589,6 +589,85 @@ describe('AgentController Resource', () => {
   // observe subscribe()'s connection policy directly.
   const noRetryClient = () => new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
 
+  it('binds the exact thread before the initial stream and every reconnect', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 'original-thread' });
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([]));
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 'original-thread' });
+    (global.fetch as any).mockResolvedValueOnce(openSseResponse([]));
+    const reconnected = vi.fn();
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1', 'original-scope')
+      .subscribe({
+        threadId: 'original-thread',
+        onEvent: () => {},
+        onReconnect: reconnected,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+    try {
+      await vi.waitFor(() => expect(reconnected).toHaveBeenCalledOnce());
+      const calls = (global.fetch as any).mock.calls as [string, RequestInit][];
+      expect(calls).toHaveLength(4);
+      for (const index of [0, 2]) {
+        expect(calls[index]![0]).toBe('http://localhost:4111/api/agent-controller/code/sessions');
+        expect(JSON.parse(calls[index]![1].body as string)).toEqual({
+          resourceId: 'user-1',
+          threadId: 'original-thread',
+          sessionScope: 'original-scope',
+        });
+        expect(calls[index + 1]![0]).toContain('/stream?sessionScope=original-scope');
+      }
+    } finally {
+      sub.unsubscribe();
+    }
+  });
+
+  it('does not open a stream when exact thread binding fails', async () => {
+    (global.fetch as any).mockRejectedValue(new Error('Thread not found'));
+    await expect(
+      noRetryClient()
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          threadId: 'foreign-thread',
+          onEvent: () => {},
+          reconnect: true,
+        }),
+    ).rejects.toThrow('Thread not found');
+    expect((global.fetch as any).mock.calls).toHaveLength(1);
+    expect(lastCall()[0]).not.toContain('/stream');
+  });
+
+  it('does not reopen the stream after cancelling during reconnect binding', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 'original-thread' });
+    (global.fetch as any).mockResolvedValueOnce(sseResponse([]));
+    let finishBinding!: (response: Response) => void;
+    (global.fetch as any).mockImplementationOnce(
+      () =>
+        new Promise<Response>(resolve => {
+          finishBinding = resolve;
+        }),
+    );
+    const sub = await noRetryClient()
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        threadId: 'original-thread',
+        onEvent: () => {},
+        reconnect: { maxRetries: 1, delayMs: 0 },
+      });
+    await vi.waitFor(() => expect(finishBinding).toBeDefined());
+    sub.unsubscribe();
+    finishBinding(
+      new Response(JSON.stringify({ controllerId: 'code', resourceId: 'user-1', threadId: 'original-thread' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
+  });
+
   it('rejects subscribe when the initial connection fails without reconnect', async () => {
     (global.fetch as any).mockRejectedValue(new Error('connect refused'));
 
