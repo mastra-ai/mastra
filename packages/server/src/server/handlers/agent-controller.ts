@@ -452,19 +452,14 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
-/**
- * `display_state_changed` Maps JSON-serialize to `{}`. Snapshot the display state
- * before converting its Maps so queued wire events retain point-in-time state.
- */
 function toWireDisplayState(displayState: AgentControllerDisplayState): WireDisplayState {
-  const snapshot = structuredClone(displayState);
   return {
-    ...snapshot,
-    activeTools: Object.fromEntries(snapshot.activeTools),
-    toolInputBuffers: Object.fromEntries(snapshot.toolInputBuffers),
-    pendingSuspensions: Object.fromEntries(snapshot.pendingSuspensions),
-    activeSubagents: Object.fromEntries(snapshot.activeSubagents),
-    modifiedFiles: Object.fromEntries(snapshot.modifiedFiles),
+    ...displayState,
+    activeTools: Object.fromEntries(displayState.activeTools),
+    toolInputBuffers: Object.fromEntries(displayState.toolInputBuffers),
+    pendingSuspensions: Object.fromEntries(displayState.pendingSuspensions),
+    activeSubagents: Object.fromEntries(displayState.activeSubagents),
+    modifiedFiles: Object.fromEntries(displayState.modifiedFiles),
   };
 }
 
@@ -480,7 +475,8 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
-    return { ...event, displayState: toWireDisplayState(event.displayState) };
+    const snapshot = structuredClone(event);
+    return { ...snapshot, displayState: toWireDisplayState(snapshot.displayState) };
   }
   if (carriesError(event)) {
     return { ...event, error: { name: event.error.name, message: event.error.message } };
@@ -497,7 +493,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   pathParamSchema: sessionPathParams,
   queryParamSchema: sessionScopeQuerySchema,
   summary: 'Stream controller session events',
-  description: 'Sends the current display state, then streams session events to the client over SSE.',
+  description: 'Sends the current session snapshot, then streams session events to the client over SSE.',
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
@@ -532,7 +528,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
       // through verbatim.
       return new ReadableStream<unknown>({
         start(controller) {
-          controller.enqueue(toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }));
+          controller.enqueue(toWireEvent(session.displayState.snapshot()));
           const scheduleHeartbeat = () => {
             if (cleanedUp) return;
             clearHeartbeat();

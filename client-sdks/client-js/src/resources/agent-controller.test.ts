@@ -305,6 +305,18 @@ describe('AgentController Resource', () => {
       { type: 'message_end', message },
       { type: 'display_state_changed', displayState: { isRunning: true, currentMessage: message } },
       { type: 'display_state_changed', displayState: { isRunning: false, currentMessage: null } },
+      {
+        type: 'session_snapshot',
+        displayState: { isRunning: true, currentMessage: message },
+        messages: [{ ...message, id: 'user-1', role: 'user' }, message],
+        streamingMessageId: message.id,
+      },
+      {
+        type: 'session_snapshot',
+        displayState: { isRunning: false, currentMessage: message },
+        messages: [message],
+        streamingMessageId: null,
+      },
     ];
     mockSse([
       `data: ${JSON.stringify(events[0])}\n\n`,
@@ -329,9 +341,18 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
     expect(received.map(e => e.type)).toEqual(events.map(event => event.type));
     for (const event of received.slice(1)) {
-      if (event.type === 'display_state_changed') {
+      if (event.type === 'session_snapshot') {
+        expect(event.messages.map(snapshotMessage => snapshotMessage.createdAt)).toEqual(
+          event.messages.map(() => new Date(createdAt)),
+        );
+        expect(event.messages.map(snapshotMessage => snapshotMessage.id)).toEqual(
+          event.displayState.isRunning ? ['user-1', 'm1'] : ['m1'],
+        );
+        expect(event.streamingMessageId).toBe(event.displayState.isRunning ? 'm1' : null);
+      }
+      if (event.type === 'display_state_changed' || event.type === 'session_snapshot') {
         expect(event.displayState.currentMessage?.createdAt).toEqual(
-          event.displayState.isRunning ? new Date(createdAt) : undefined,
+          event.displayState.currentMessage ? new Date(createdAt) : undefined,
         );
         continue;
       }
@@ -340,6 +361,7 @@ describe('AgentController Resource', () => {
       expect(event.message.createdAt.toISOString()).toBe(createdAt);
       expect(agentControllerMessageText(event.message)).toBe('hi');
     }
+    expect(message.createdAt).toBe(createdAt);
   });
 
   it('hydrates thread timestamps from SSE events', async () => {

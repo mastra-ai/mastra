@@ -592,7 +592,7 @@ describe('agent-controller routes', () => {
       } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
-      expect((await reader.read()).value).toMatchObject({ type: 'display_state_changed' });
+      expect((await reader.read()).value).toMatchObject({ type: 'session_snapshot' });
 
       const controller = mastra.getAgentController('code')!;
       await controller.init();

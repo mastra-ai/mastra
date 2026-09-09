@@ -1,11 +1,8 @@
-/**
- * Regression coverage for the ThreadPage loading shell: while an uncached
- * user-session thread resolves, the app frame (sidebar + header) must stay
- * mounted with a centered spinner in the main slot only — clicking around the
- * sidebar must never blank the whole shell (the old early-return behavior).
- */
 import type { AgentControllerEvent, AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
+import { defaultDisplayState } from '@mastra/core/agent-controller';
+import type { WireDisplayState } from '@mastra/core/agent-controller';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -20,6 +17,40 @@ const REPO_ID = 'ghp-1';
 const SESSION_ID = 'sess-1';
 const ROUTE_THREAD_ID = 'thread-2';
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
+const checkoutArgs = { command: 'gh pr checkout 123' };
+const initiatingPayload = {
+  id: 'review-request',
+  type: 'user',
+  tagName: 'user',
+  contents: 'Review pull request #123.',
+  createdAt: '2026-09-08T10:00:00.000Z',
+  providerOptions: { mastra: { author: { id: 'user-1', name: 'Damien' } } },
+};
+const initiatingMessage: MastraDBMessage = {
+  id: initiatingPayload.id,
+  role: 'signal',
+  createdAt: new Date(initiatingPayload.createdAt),
+  content: {
+    format: 2,
+    parts: [{ type: 'data-user-message', data: initiatingPayload }],
+    metadata: { signal: initiatingPayload },
+  },
+};
+const checkoutMessage: MastraDBMessage = {
+  id: 'live-1',
+  role: 'assistant',
+  createdAt: new Date('2026-09-08T10:00:01.000Z'),
+  content: {
+    format: 2,
+    parts: [
+      { type: 'text', text: 'Checking out the pull request.' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'execute_command', args: checkoutArgs },
+      },
+    ],
+  },
+};
 
 const userSession = {
   id: 'row-1',
@@ -44,24 +75,39 @@ function deferred() {
   return { promise, resolve };
 }
 
-/**
- * Stubs the whole network surface of the user-session thread route, gating
- * only `/web/user-sessions/:sessionId` (the fetch that used to unmount the
- * shell while pending).
- */
+function sessionSnapshot(
+  messages: MastraDBMessage[],
+  displayState: Partial<WireDisplayState> = {},
+  streamingMessageId: string | null = null,
+): AgentControllerEvent {
+  return {
+    type: 'session_snapshot',
+    messages,
+    streamingMessageId,
+    displayState: {
+      ...defaultDisplayState(),
+      activeTools: {},
+      toolInputBuffers: {},
+      pendingSuspensions: {},
+      activeSubagents: {},
+      modifiedFiles: {},
+      currentMessage: messages.at(-1) ?? null,
+      ...displayState,
+    },
+  };
+}
+
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
   messages = [],
   sessionState = {},
-  streamed = [],
+  streamed = [sessionSnapshot([])],
 }: {
   initialThreadId?: string;
   threads?: AgentControllerThreadInfo[];
   messages?: MastraDBMessage[];
-  /** What the session-state snapshot adds: a run in flight. */
   sessionState?: Record<string, unknown>;
-  /** What the session stream delivers on subscribe: the step a run in flight has streamed so far. */
   streamed?: AgentControllerEvent[];
 } = {}) {
   const sessionGate = deferred();
@@ -105,12 +151,10 @@ function stubThreadRoute({
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    // The gated fetch: the user-session lookup that resolves the workspace.
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
       return HttpResponse.json({ session: userSession });
     }),
-    // Agent-controller session surface mounted once the session resolves.
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId }),
     ),
@@ -154,7 +198,6 @@ function stubThreadRoute({
       return HttpResponse.json({ messages });
     }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
-    // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -187,16 +230,11 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     renderThreadRoute();
 
-    // Pending phase: the shell is up — sidebar navigation renders alongside
-    // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
-    // The thread chrome itself is not mounted yet.
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
 
-    // Resolved phase: spinner swaps for the thread main content; the sidebar
-    // never unmounted.
     sessionGate.resolve();
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
@@ -209,10 +247,6 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
 
     const header = await screen.findByRole('region', { name: 'Factory session' });
-    // The messages-loading window is now covered by the session-prepare step
-    // loader (with "Loading messages" as its active tail step) rather than
-    // the old skeleton bars — keeps the composer's spinning ring meaningful
-    // across the whole preparing window.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
@@ -241,27 +275,21 @@ describe('ThreadPage loading shell', () => {
     const { sessionGate, messagesGate } = stubThreadRoute({
       sessionState: { running: true },
       streamed: [
-        {
-          type: 'display_state_changed',
-          displayState: {
+        sessionSnapshot(
+          [initiatingMessage, checkoutMessage],
+          {
             isRunning: true,
-            currentMessage: {
-              id: 'live-1',
-              role: 'assistant',
-              createdAt: new Date('2026-09-08T10:00:00.000Z'),
-              content: {
-                format: 2,
-                parts: [
-                  { type: 'text', text: 'Checking out the pull request.' },
-                  {
-                    type: 'tool-invocation',
-                    toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'view', args: { path: '/repo' } },
-                  },
-                ],
+            activeTools: {
+              'call-1': {
+                name: 'execute_command',
+                args: checkoutArgs,
+                status: 'running',
+                shellOutput: 'Fetching origin\n',
               },
             },
           },
-        },
+          checkoutMessage.id,
+        ),
       ],
     });
     const { client } = renderThreadRoute();
@@ -269,17 +297,71 @@ describe('ThreadPage loading shell', () => {
     sessionGate.resolve();
     messagesGate.resolve();
 
-    expect(await screen.findByRole('group', { name: 'Tool: view' }, { timeout: 4000 })).toBeInTheDocument();
+    const checkout = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 4000 });
     await waitForMutationsIdle(client);
     emptyPrompt.disconnect();
 
+    expect(checkout).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText(initiatingPayload.contents)).toBeInTheDocument();
     expect(document.body).toHaveTextContent('Checking out the pull request.');
     expect(emptyPrompt.wasDrawn()).toBe(false);
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+
+    await userEvent.setup().click(within(checkout).getByRole('button', { expanded: false }));
+    expect(await within(checkout).findByText('Fetching origin')).toBeInTheDocument();
+  });
+
+  it('shows buffered tool arguments while the input is still streaming', async () => {
+    const bufferedInput = '{"command":"gh pr checkout';
+    const { sessionGate, messagesGate } = stubThreadRoute({
+      sessionState: { running: true },
+      streamed: [
+        sessionSnapshot([initiatingMessage], {
+          isRunning: true,
+          activeTools: { 'call-1': { name: 'execute_command', args: {}, status: 'streaming_input' } },
+          toolInputBuffers: { 'call-1': { toolName: 'execute_command', text: bufferedInput } },
+        }),
+      ],
+    });
+    renderThreadRoute();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    const checkout = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 4000 });
+    await userEvent.setup().click(within(checkout).getByRole('button', { expanded: false }));
+    expect(await within(checkout).findByText(bufferedInput)).toBeInTheDocument();
+  });
+
+  it('restores the approval required to continue a run opened mid-step', async () => {
+    const approval = { toolCallId: 'call-1', toolName: 'execute_command', args: checkoutArgs };
+    const { sessionGate, messagesGate } = stubThreadRoute({
+      sessionState: { running: true },
+      streamed: [sessionSnapshot([initiatingMessage, checkoutMessage], { isRunning: true, pendingApproval: approval })],
+    });
+    const onApprove = vi.fn();
+    server.use(
+      http.post(`${AC}/sessions/${SESSION_ID}/tool-approval`, async ({ request }) => {
+        onApprove(await request.json());
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const { client } = renderThreadRoute();
+    sessionGate.resolve();
+    messagesGate.resolve();
+
+    const approve = await screen.findByRole('button', { name: 'Approve execute_command' });
+    await userEvent.setup().click(approve);
+    await waitForMutationsIdle(client);
+
+    expect(onApprove).toHaveBeenCalledWith({ toolCallId: 'call-1', approved: true });
+    expect(screen.queryByRole('group', { name: 'Tool approval for execute_command' })).not.toBeInTheDocument();
   });
 
   it('shows the run thinking, never the empty prompt, while a joined run has streamed nothing yet', async () => {
-    const { sessionGate, messagesGate } = stubThreadRoute({ sessionState: { running: true } });
+    const { sessionGate, messagesGate } = stubThreadRoute({
+      sessionState: { running: true },
+      streamed: [sessionSnapshot([], { isRunning: true })],
+    });
     const { client } = renderThreadRoute();
     const emptyPrompt = observeEmptyPrompt();
     sessionGate.resolve();
@@ -313,8 +395,6 @@ describe('ThreadPage loading shell', () => {
     });
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
 
-    // Thread-switch is gated on `sandboxReady`, which is session metadata
-    // resolving — so hold the session query to hold the switch.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(onSwitchThread).not.toHaveBeenCalled();
 

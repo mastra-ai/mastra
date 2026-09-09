@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 import { STREAM_AGENT_CONTROLLER_SESSION_ROUTE } from './agent-controller';
 
-it('opens a browser stream during a real tool execution with the current message, then streams its completion', async () => {
+it('restores the prompt and running tool on attachment, then restores completed messages on reconnect', async () => {
   const checkout = Promise.withResolvers<void>();
   const toolStarted = Promise.withResolvers<void>();
   const storage = new InMemoryStore();
@@ -93,12 +93,42 @@ it('opens a browser stream during a real tool execution with the current message
     if (!(stream instanceof ReadableStream)) throw new Error('Expected session stream');
     reader = stream.getReader();
     const initial = await reader.read();
+    if (typeof initial.value !== 'object' || initial.value === null || !('streamingMessageId' in initial.value)) {
+      throw new Error('Expected initial session snapshot');
+    }
+    const streamingMessageId = initial.value.streamingMessageId;
+    expect(streamingMessageId).toEqual(expect.any(String));
     expect(initial.value).toMatchObject({
-      type: 'display_state_changed',
+      type: 'session_snapshot',
+      streamingMessageId,
+      messages: [
+        {
+          role: 'signal',
+          content: {
+            parts: [
+              { type: 'data-user-message', data: expect.objectContaining({ contents: 'Check out this pull request' }) },
+            ],
+          },
+        },
+        {
+          id: streamingMessageId,
+          role: 'assistant',
+          content: {
+            parts: expect.arrayContaining([
+              expect.objectContaining({ type: 'text', text: 'Checking out the pull request.' }),
+              {
+                type: 'tool-invocation',
+                toolInvocation: expect.objectContaining({ toolCallId: 'checkout-1', state: 'call' }),
+              },
+            ]),
+          },
+        },
+      ],
       displayState: {
         isRunning: true,
         activeTools: { 'checkout-1': { name: 'checkout', status: 'running' } },
         currentMessage: {
+          id: streamingMessageId,
           role: 'assistant',
           content: {
             parts: expect.arrayContaining([
@@ -111,6 +141,7 @@ it('opens a browser stream during a real tool execution with the current message
         },
       },
     });
+    const serializedInitial = JSON.stringify(initial.value);
     checkout.resolve();
     await run;
     const events: unknown[] = [];
@@ -122,9 +153,7 @@ it('opens a browser stream during a real tool execution with the current message
     }
     expect(events).toContainEqual(expect.objectContaining({ type: 'tool_end', toolCallId: 'checkout-1' }));
     expect(events).toContainEqual(expect.objectContaining({ type: 'message_end' }));
-    expect(initial.value).toMatchObject({
-      displayState: { isRunning: true, activeTools: { 'checkout-1': { status: 'running' } } },
-    });
+    expect(JSON.stringify(initial.value)).toBe(serializedInitial);
     await reader.cancel();
     const reconnected = await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
       mastra,
@@ -136,8 +165,28 @@ it('opens a browser stream during a real tool execution with the current message
     if (!(reconnected instanceof ReadableStream)) throw new Error('Expected session stream');
     reader = reconnected.getReader();
     expect((await reader.read()).value).toMatchObject({
-      type: 'display_state_changed',
+      type: 'session_snapshot',
       displayState: { isRunning: false },
+      streamingMessageId: null,
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'signal',
+          content: expect.objectContaining({
+            parts: [
+              expect.objectContaining({
+                type: 'data-user-message',
+                data: expect.objectContaining({ contents: 'Check out this pull request' }),
+              }),
+            ],
+          }),
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          content: expect.objectContaining({
+            parts: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Checkout complete.' })]),
+          }),
+        }),
+      ]),
     });
   } finally {
     checkout.resolve();

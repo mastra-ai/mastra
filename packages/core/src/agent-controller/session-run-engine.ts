@@ -741,6 +741,8 @@ export class SessionRunEngine {
 
         const approval = await approvalPromise;
         this.#session.approval.clearToolName();
+        this.#session.displayState.clearPendingApproval(toolCallId);
+        this.#session.emit({ type: 'display_state_changed', displayState: this.#session.displayState.get() });
 
         // `session.abort()` releases a parked gate as a decline and defers the
         // stream/signal teardown to us, so the decline can still be driven

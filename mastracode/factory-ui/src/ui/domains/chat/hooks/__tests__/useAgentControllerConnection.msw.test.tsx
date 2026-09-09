@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import type { AgentControllerEvent } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
+import { defaultDisplayState } from '@mastra/core/agent-controller';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
@@ -264,6 +265,9 @@ describe('useAgentControllerConnection', () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
     let emit: (event: AgentControllerEvent) => void = () => {};
+    const durableTasks: NonNullable<AgentControllerSessionState['tasks']> = [
+      { id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' },
+    ];
 
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
@@ -277,7 +281,7 @@ describe('useAgentControllerConnection', () => {
           modelId: 'openai/gpt-4o-mini',
           threadId: 'state-thread',
           running: false,
-          tasks: [{ id: 'fix', content: 'Fix the bug', status: 'in_progress', activeForm: 'Fixing the bug' }],
+          tasks: durableTasks,
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
@@ -297,6 +301,25 @@ describe('useAgentControllerConnection', () => {
 
     const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
     await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    const snapshot: Extract<KnownAgentControllerEvent, { type: 'session_snapshot' }> = {
+      type: 'session_snapshot',
+      displayState: {
+        ...defaultDisplayState(),
+        isRunning: true,
+        activeTools: {},
+        toolInputBuffers: {},
+        pendingSuspensions: {},
+        activeSubagents: {},
+        modifiedFiles: {},
+      },
+      messages: [],
+      streamingMessageId: null,
+    };
+    emit(snapshot);
+    await waitFor(() => expect(onEvent).toHaveBeenCalledWith(snapshot));
+    await waitFor(() => expect(result.current.state?.running).toBe(true));
+    expect(result.current.state?.tasks).toEqual(durableTasks);
 
     emit({ type: 'agent_start' });
 

@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerTaskSnapshot, KnownAgentControllerEvent } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart, TokenUsage } from '@mastra/core/agent-controller';
 import type { ToolCallStatus } from '@mastra/playground-ui/components/ai/tool-call';
@@ -6,6 +6,7 @@ import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
 
 import { sentByOther } from './message-author';
 import type { OMBudgets } from './runtime';
+import { displayPrompts, displaySubagents, displayTools } from './transcript-display';
 
 /**
  * Transcript model + reducer.
@@ -142,13 +143,7 @@ export interface GoalSnapshot {
 
 export interface TranscriptState {
   entries: TimelineEntry[];
-  /**
-   * Whether a turn the user just initiated is awaiting its first response.
-   * Set the instant the user sends/steers (synchronously, before any SSE
-   * events), and cleared once the agent finishes or streams its first token.
-   * This makes the "thinking" indicator and Stop button latch reliably even
-   * when the run's start/end events arrive in a single batched flush.
-   */
+  /** Local submission awaiting server execution. */
   pending: boolean;
   threadId?: string;
   /** Current task list from task_updated events. */
@@ -288,7 +283,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       // Reset the rate at the start of a new turn (not at the end) so the last
       // turn's tokens/sec stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
-      return { ...state, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, pending: false, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
       return finishStreamingMessages({ ...state, pending: false, _decodeStartedAt: 0 });
 
@@ -369,6 +364,11 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         args: event.args,
         suspendPayload: event.suspendPayload,
       });
+    case 'tool_suspension_cancelled':
+      return {
+        ...state,
+        entries: state.entries.filter(entry => entry.kind !== 'suspension' || entry.toolCallId !== event.toolCallId),
+      };
 
     case 'mode_changed':
     case 'model_changed':
@@ -487,23 +487,10 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       };
     }
 
-    case 'display_state_changed': {
-      const ds = event.displayState;
-      const currentEntry = state.entries.find(
-        entry => entry.kind === 'message' && entry.message.id === ds.currentMessage?.id,
-      );
-      const streaming = ds.isRunning && (currentEntry?.kind === 'message' ? currentEntry.streaming : true);
-      const withMessage = ds.currentMessage
-        ? upsertMessage(state, ds.currentMessage, Boolean(streaming), viewerId)
-        : state;
-      const next = ds.isRunning ? withMessage : finishStreamingMessages(withMessage);
-      return {
-        ...next,
-        pending: ds.isRunning ? next.pending : false,
-        omProgress: ds.omProgress ?? state.omProgress,
-        usage: ds.tokenUsage ?? state.usage,
-      };
-    }
+    case 'session_snapshot':
+      return restoreSessionSnapshot(state, event, viewerId);
+    case 'display_state_changed':
+      return restoreDisplayState(state, event.displayState);
 
     // Follow-up queue.
     case 'follow_up_queued':
@@ -543,6 +530,67 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     default:
       return state;
   }
+}
+
+function restoreSessionSnapshot(
+  state: TranscriptState,
+  snapshot: Extract<KnownAgentControllerEvent, { type: 'session_snapshot' }>,
+  viewerId?: string,
+): TranscriptState {
+  const anchors = claimOnScreenEntries(state.entries, snapshot.messages);
+  const pendingUserIndex = state.entries.findLastIndex(
+    entry => entry.kind === 'message' && entry.message.role === 'user' && entry.id.startsWith('local-'),
+  );
+  const acknowledgedIndex = snapshot.messages.findIndex(message => anchors.get(message) === pendingUserIndex);
+  const hasPendingResponse =
+    pendingUserIndex !== -1 &&
+    acknowledgedIndex !== -1 &&
+    snapshot.messages.slice(acknowledgedIndex + 1).some(message => message.role === 'assistant');
+  let next = mergeServerWindow(state, snapshot.messages);
+  for (const message of snapshot.messages) {
+    next = upsertMessage(next, message, message.id === snapshot.streamingMessageId, viewerId);
+  }
+  const observedToolCallIds = new Set(snapshot.messages.flatMap(message => toolCallIdsOf(message.content.parts)));
+  next = {
+    ...next,
+    entries: next.entries.filter(
+      entry =>
+        entry.kind !== 'suspension' ||
+        !observedToolCallIds.has(entry.toolCallId) ||
+        entry.toolCallId in snapshot.displayState.pendingSuspensions,
+    ),
+  };
+  return restoreDisplayState({ ...next, pending: state.pending && !hasPendingResponse }, snapshot.displayState);
+}
+
+function restoreDisplayState(
+  state: TranscriptState,
+  displayState: Extract<KnownAgentControllerEvent, { type: 'display_state_changed' }>['displayState'],
+): TranscriptState {
+  let next = state;
+  for (const tool of displayTools(displayState)) {
+    next = withTool(next, tool.toolCallId, current => ({ ...tool, createdAt: current.createdAt }));
+  }
+  next = { ...next, entries: next.entries.filter(entry => entry.kind !== 'approval') };
+  for (const prompt of displayPrompts(displayState)) next = pushPrompt(next, prompt);
+  const subagents = new Map(displaySubagents(displayState).map(subagent => [subagent.id, subagent]));
+  const entries = next.entries.map(entry => {
+    const subagent = subagents.get(entry.id);
+    if (subagent) {
+      subagents.delete(entry.id);
+      return subagent;
+    }
+    return entry.kind === 'subagent' && !displayState.isRunning ? { ...entry, done: true } : entry;
+  });
+  next = { ...next, entries: [...entries, ...subagents.values()] };
+  if (!displayState.isRunning) next = finishStreamingMessages(next);
+  return {
+    ...next,
+    tasks: displayState.tasks,
+    followUpCount: displayState.queuedFollowUps,
+    omProgress: displayState.omProgress,
+    usage: displayState.tokenUsage,
+  };
 }
 
 function finishStreamingMessages(state: TranscriptState): TranscriptState {
@@ -725,11 +773,15 @@ function isUnconfirmedSteer(entry: MessageEntry): boolean {
   return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
 }
 
+function isUnconfirmedUserMessage(entry: MessageEntry): boolean {
+  return isUnconfirmedSteer(entry) || (entry.message.role === 'user' && entry.message.id.startsWith('local-'));
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    if (current?.kind !== 'message' || !isUnconfirmedUserMessage(current)) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
@@ -905,31 +957,16 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   return changed ? { ...state, entries } : state;
 }
 
-/**
- * A user signal reaches us in two shapes. The persisted message carries ordinary
- * `text` parts, but the live `data-user-message` event carries the signal payload
- * as a single data part and keeps the text inside `data.contents`. Only the first
- * shape has a part the transcript knows how to draw, so a message that arrived
- * from a channel rendered as an empty row until the thread was refetched.
- *
- * Project the data part onto the persisted shape so both paths render the same
- * row — and so the live row does not visibly change when history catches up.
- *
- * Applied to signals the viewer did not type here (see `sentByOther`). A message
- * sent from the web composer is already on screen as an optimistic local echo
- * under a `local-…` id, while this event carries the signal's own id — two ids
- * mean `upsertMessage` cannot dedupe them, so drawing both yields a duplicate
- * bubble. Leaving composer-origin events unrenderable keeps the local echo the
- * single bubble until history replaces it.
- */
 function withRenderableSignalText(message: MastraDBMessage): MastraDBMessage {
   const parts = message.content.parts ?? [];
   const hasDrawableText = parts.some(part => part.type === 'text' && part.text.trim().length > 0);
   if (hasDrawableText) return message;
 
   const text = parts
-    .map(part => (part.type === 'data-user-message' ? signalContentsToText((part as { data?: unknown }).data) : ''))
-    .filter(Boolean)
+    .flatMap(part => {
+      const text = part.type === 'data-user-message' && 'data' in part ? signalContentsToText(part.data) : '';
+      return text ? [text] : [];
+    })
     .join('\n');
   if (!text) return message;
 
@@ -974,8 +1011,7 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const normalized =
-    isUserSignal && sentByOther(message, options.viewerId) ? withRenderableSignalText(message) : message;
+  const normalized = isUserSignal ? withRenderableSignalText(message) : message;
   const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
   const steer = options.steer ?? (isUserSignal ? attributes?.delivery === 'while-active' : undefined);
 
@@ -1019,7 +1055,7 @@ function upsertMessage(
   );
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
-    idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    idx = claimOnScreenEntries(entries, [message], isUnconfirmedUserMessage).get(message) ?? -1;
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -1189,8 +1225,11 @@ function withTool(
   runtimeTools[toolCallId] = tool;
 
   const partIndex = parts.findIndex(part => toolCallIdForPart(part) === toolCallId);
+  const previousPart = parts[partIndex];
   if (partIndex === -1) parts.push(toolPart(tool));
-  else parts[partIndex] = toolPart(tool);
+  else if (previousPart.type === 'tool-invocation' && !isTerminalInvocationState(previousPart.toolInvocation.state)) {
+    parts[partIndex] = toolPart(tool);
+  }
 
   entries[idx] = {
     ...entry,

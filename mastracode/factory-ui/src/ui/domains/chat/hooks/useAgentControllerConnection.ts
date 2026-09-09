@@ -22,6 +22,25 @@ function nextSseConnectionState(previous: SseConnectionState, connected: boolean
   return previous === 'connected' ? 'dropped' : previous;
 }
 
+function connectionStateUpdate(
+  event: AgentControllerEvent,
+): Partial<Pick<AgentControllerSessionState, 'running' | 'tasks'>> {
+  if (!isKnownAgentControllerEvent(event)) return {};
+  switch (event.type) {
+    case 'agent_start':
+      return { running: true };
+    case 'agent_end':
+      return { running: false };
+    case 'task_updated':
+      return { tasks: event.tasks };
+    case 'session_snapshot':
+    case 'display_state_changed':
+      return { running: event.displayState.isRunning };
+    default:
+      return {};
+  }
+}
+
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
@@ -100,12 +119,7 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
-    const displayStateRunning =
-      isKnownAgentControllerEvent(event) && event.type === 'display_state_changed'
-        ? event.displayState.isRunning
-        : undefined;
-    const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
-    const tasks = isKnownAgentControllerEvent(event) && event.type === 'task_updated' ? event.tasks : undefined;
+    const { running, tasks } = connectionStateUpdate(event);
     if (typeof running === 'boolean' || tasks) {
       const since = recordLiveEvent(liveEvents.current, {
         running,

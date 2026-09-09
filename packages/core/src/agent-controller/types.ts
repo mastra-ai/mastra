@@ -636,7 +636,7 @@ export interface AgentControllerDisplayState {
 
   // ── Current streaming message ────────────────────────────────────────
   /**
-   * The live message currently being streamed (null when idle). Its content
+   * The most recently emitted message, retained after completion. Its content
    * mutates as deltas arrive; copy it before retaining a point-in-time value.
    */
   currentMessage: MastraDBMessage | null;
@@ -961,7 +961,13 @@ export type AgentControllerEvent =
       type: 'goal_evaluation';
       payload: GoalEvaluationPayload;
     }
-  | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
+  | { type: 'display_state_changed'; displayState: AgentControllerDisplayState }
+  | {
+      type: 'session_snapshot';
+      displayState: AgentControllerDisplayState;
+      messages: MastraDBMessage[];
+      streamingMessageId: string | null;
+    };
 
 /**
  * Listener function for controller events.

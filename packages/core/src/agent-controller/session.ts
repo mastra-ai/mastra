@@ -2222,6 +2222,8 @@ class SessionState<TState = unknown> {
  */
 export class SessionDisplayState {
   #state: AgentControllerDisplayState = defaultDisplayState();
+  #runMessages = new Map<string, MastraDBMessage>();
+  #streamingMessageId: string | null = null;
 
   constructor(
     private readonly deps: {
@@ -2242,6 +2244,25 @@ export class SessionDisplayState {
    */
   get(): Readonly<AgentControllerDisplayState> {
     return this.#state;
+  }
+
+  snapshot(): Extract<AgentControllerEvent, { type: 'session_snapshot' }> {
+    const messages = new Map(this.#runMessages);
+    if (this.#state.currentMessage) {
+      messages.set(this.#state.currentMessage.id, this.#state.currentMessage);
+    }
+    return {
+      type: 'session_snapshot',
+      displayState: this.#state,
+      messages: [...messages.values()],
+      streamingMessageId: this.#streamingMessageId,
+    };
+  }
+
+  clearPendingApproval(toolCallId: string): void {
+    if (this.#state.pendingApproval?.toolCallId === toolCallId) {
+      this.#state.pendingApproval = null;
+    }
   }
 
   /**
@@ -2287,6 +2308,8 @@ export class SessionDisplayState {
    */
   resetThread(): void {
     const ds = this.#state;
+    this.#runMessages.clear();
+    this.#streamingMessageId = null;
     ds.activeTools = new Map();
     ds.toolInputBuffers = new Map();
     ds.pendingApproval = null;
@@ -2314,6 +2337,8 @@ export class SessionDisplayState {
     switch (event.type) {
       // ── Agent lifecycle ────────────────────────────────────────────────
       case 'agent_start':
+        this.#runMessages.clear();
+        this.#streamingMessageId = null;
         ds.isRunning = true;
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
@@ -2325,6 +2350,7 @@ export class SessionDisplayState {
         break;
 
       case 'agent_end':
+        this.#streamingMessageId = null;
         ds.isRunning = false;
         ds.pendingApproval = null;
         // A suspended run keeps its pending tool suspensions alive so the UI can
@@ -2345,15 +2371,24 @@ export class SessionDisplayState {
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
-        ds.currentMessage = event.message;
-        break;
-
       case 'message_update':
         ds.currentMessage = event.message;
+        if (ds.isRunning) {
+          this.#runMessages.set(event.message.id, event.message);
+          if (event.message.role === 'assistant') {
+            this.#streamingMessageId = event.message.id;
+          }
+        }
         break;
 
       case 'message_end':
         ds.currentMessage = event.message;
+        if (ds.isRunning) {
+          this.#runMessages.set(event.message.id, event.message);
+        }
+        if (this.#streamingMessageId === event.message.id) {
+          this.#streamingMessageId = null;
+        }
         break;
 
       // ── Tool lifecycle ─────────────────────────────────────────────────

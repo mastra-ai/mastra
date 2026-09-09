@@ -783,6 +783,16 @@ Return the current `AgentControllerDisplayState` snapshot for UI rendering.
 const displayState = session.displayState.get()
 ```
 
+### `session.displayState.snapshot()`
+
+Return a `session_snapshot` event containing the display state, the latest run's messages in emission order, and the ID of the assistant message currently streaming. `streamingMessageId` is `null` when no message is streaming. Messages remain available after completion until the next run starts or the session switches threads.
+
+```typescript
+const snapshot = structuredClone(session.displayState.snapshot())
+```
+
+The returned state and messages reference live objects. Copy them when retaining a snapshot. The HTTP event stream copies and sends this snapshot on each connection. In-process `session.subscribe()` continues to deliver live events without replaying previous messages.
+
 ### `session.displayState.restoreTasks(tasks)`
 
 Restore the task portion of the snapshot after a UI replays persisted task tool history. This is a pure update of the snapshot and doesn't emit an event, so re-render explicitly after calling it.
