@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { AGENT_THREAD_KEY_SEPARATOR, createHarness, setupRuntime } from './thread-stream-test-utils';
 
 const LEASE_TTL_MS = 15_000;
@@ -17,14 +18,18 @@ describe('thread stream remote-run liveness', () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-lost');
     const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
-    const second = await runtime.subscribeToThread(
+    const second = await new AgentThreadStreamRuntime().subscribeToThread(
       harness.agent,
       { threadId: harness.threadId, resourceId: harness.resourceId },
       pubsub,
     );
     const otherParts: any[] = [];
+    const resumeConsumption = Promise.withResolvers<void>();
     const otherConsumed = (async () => {
-      for await (const part of second.stream) otherParts.push(part);
+      for await (const part of second.stream) {
+        await resumeConsumption.promise;
+        otherParts.push(part);
+      }
     })();
     const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
     pubsub.owners.set(key, harness.runId);
@@ -54,11 +59,64 @@ describe('thread stream remote-run liveness', () => {
       new Error(`Thread run ${harness.runId} lost its lease before publishing a terminal event`),
     );
     expect(collected[2].occurrenceId).toEqual(expect.any(String));
-    expect(otherParts.find(part => part.type === 'error')?.occurrenceId).toBe(collected[2].occurrenceId);
+    const occurredAt = Date.now();
+    expect(collected[2].occurredAt).toBe(occurredAt);
+    await vi.advanceTimersByTimeAsync(500);
+    resumeConsumption.resolve();
+    await flush();
+    expect(otherParts.filter(part => part.type === 'error')).toEqual([collected[2]]);
+    // Another watchdog or redelivery must not re-publish the occurrence at a new time.
+    await emit({
+      type: 'run-failed',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      occurrenceId: collected[2].occurrenceId,
+      occurredAt: Date.now(),
+      error: 'Duplicate lease loss',
+    });
+    await flush();
+    expect(collected.filter(part => part.type === 'error')).toEqual([collected[2]]);
+    expect(otherParts.filter(part => part.type === 'error')).toEqual([collected[2]]);
 
     subscription.unsubscribe();
     second.unsubscribe();
     await Promise.all([consumed, otherConsumed]);
+  });
+
+  it('retries a failed watchdog publication without changing its occurrence time', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('liveness-publish-retry');
+    const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, harness.runId);
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const collected: any[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) collected.push(part);
+    })();
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await streamPart({ type: 'start', payload: {} });
+    await flush();
+    pubsub.owners.delete(key);
+    const publish = vi.spyOn(pubsub, 'publish').mockRejectedValueOnce(new Error('Transport unavailable'));
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    const occurredAt = Date.now();
+    expect(collected.map(part => part.type)).toEqual(['start']);
+    expect(publish).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    expect(publish).toHaveBeenCalledTimes(2);
+    expect(publish.mock.calls[1]![1]).toEqual(publish.mock.calls[0]![1]);
+    expect(collected.map(part => part.type)).toEqual(['start', 'error']);
+    expect(collected[1]).toMatchObject({ occurrenceId: `lease-lost:${harness.streamId}`, occurredAt });
+    expect(subscription.activeRunId()).toBeNull();
+    await vi.advanceTimersByTimeAsync(LEASE_TTL_MS);
+    expect(publish).toHaveBeenCalledTimes(2);
+    subscription.unsubscribe();
+    await consumed;
   });
 
   it('keeps a quiet remote stream open while its producer still owns the lease', async () => {

@@ -2098,6 +2098,7 @@ export class AgentThreadStreamRuntime {
     const key = this.#threadKey(options.resourceId, options.threadId);
     const topic = this.#threadTopic(key);
     const seenStreamIds = new Set<string>();
+    const failedStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
@@ -2269,6 +2270,7 @@ export class AgentThreadStreamRuntime {
 
     const startRemoteRunLeaseWatch = (runId: string, streamId: string) => {
       if (hasFallbackLeaseProvider || remoteRunLeaseTimers.has(streamId)) return;
+      let occurredAt: number | undefined;
 
       const checkLease = async () => {
         remoteRunLeaseTimers.delete(streamId);
@@ -2295,19 +2297,24 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
-        clearActiveIfCurrent(runId, streamId);
-        remoteRun.parts.push({
-          type: 'error',
-          occurrenceId: `lease-lost:${streamId}`,
-          payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
-        });
-        remoteRun.done = true;
-        while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
-        while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
-        remoteRuns.delete(streamId);
-        seenStreamIds.delete(streamId);
-        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
-        wake();
+        // Publish the watchdog failure so observers share its occurrence time as well as its identity.
+        occurredAt ??= Date.now();
+        try {
+          await this.#publishAndWait(resolvedPubSub, key, {
+            type: 'run-failed',
+            runId,
+            streamId,
+            occurrenceId: `lease-lost:${streamId}`,
+            occurredAt,
+            error: `Thread run ${runId} lost its lease before publishing a terminal event`,
+          });
+        } catch {
+          if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+          remoteRunLeaseTimers.set(
+            streamId,
+            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+          );
+        }
       };
 
       remoteRunLeaseTimers.set(
@@ -2414,6 +2421,8 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-failed') {
         const eventStreamId = data.streamId ?? data.runId;
+        if (failedStreamIds.has(eventStreamId)) return;
+        failedStreamIds.add(eventStreamId);
         stopRemoteRunLeaseWatch(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         if (deferredRunsByStreamId.has(eventStreamId)) {
