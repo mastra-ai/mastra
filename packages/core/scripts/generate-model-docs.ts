@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { mergeExtraModels } from '../src/llm/model/gateways/models-dev';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
 import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
 import type { ModelPageData } from './model-doc-metadata';
@@ -253,7 +254,9 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPag
 
     if (!provider?.models) return { models: [] };
 
-    const models = Object.entries(provider.models)
+    const mergedModels = mergeExtraModels(providerId, provider.models);
+
+    const models = Object.entries(mergedModels)
       // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
       .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
       .map(([modelId, model]: [string, any]) => ({

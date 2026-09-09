@@ -131,7 +131,7 @@ const EXTRA_PROVIDER_MODELS: Record<string, Record<string, Omit<ModelsDevModelIn
   },
 };
 
-function mergeExtraModels(
+export function mergeExtraModels(
   providerId: string,
   models: Record<string, ModelsDevModelInfo>,
 ): Record<string, ModelsDevModelInfo> {
