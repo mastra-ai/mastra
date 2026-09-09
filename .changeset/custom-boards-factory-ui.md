@@ -9,14 +9,23 @@ Installed custom boards are now first-class in the Factory UI, and intake routin
 - Intake bindings are explicit: a Linear project or GitHub repository feeds a board only once bound to one, and opening a board no longer materializes cards. `intake_source_bindings` gains a `board` column; rebinding a Linear project moves its non-terminal, idle cards to the new board's initial phase.
 - GitHub label routing: `GET`/`PUT /web/intake/label-routes` map a label to a board per Factory project (new `intake_label_routes` table). `issueOpened` picks the routed board, saving a route relocates matching cards, and `issues.labeled` / `issues.unlabeled` move cards between the routed board and Work while refreshing label metadata. Unrouted issues still go to Work.
 
+Install a board and it shows up in the UI; route intake to it from Settings › Intake:
+
 ```ts
-// Route GitHub issues labelled `release` on this Factory project to the installed `release` board.
-await fetch('/web/intake/label-routes', {
-  method: 'PUT',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ factoryProjectId, integrationId: 'github', label: 'release', board: 'release' }),
+import { MastraFactory, defineBoard } from '@mastra/factory';
+
+const release = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+    shipping: { title: 'Shipping', kind: 'working', role: 'release-publisher', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+  },
 });
 
-// Discover what the UI will render for that project.
-const { boards } = await fetch(`/web/factory/projects/${factoryProjectId}/boards`).then(res => res.json());
+new MastraFactory({ storage, boards: [release] });
 ```
+
+Then in Settings › Intake, bind a Linear project to **Release**, or add a GitHub label route such as `release → Release`. `mastra api factory boards <project-id>` lists what a project has installed.

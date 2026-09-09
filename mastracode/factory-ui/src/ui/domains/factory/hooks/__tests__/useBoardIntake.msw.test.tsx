@@ -247,4 +247,42 @@ describe('useBoardIntake GitHub label routes', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.available).toEqual([]);
   });
+
+  it('keeps a custom board pending until its label routes have loaded', async () => {
+    stubGithub([releaseRoute]);
+    let releaseRoutes: () => void = () => {};
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, async () => {
+        await new Promise<void>(resolve => (releaseRoutes = resolve));
+        return HttpResponse.json({ routes: [releaseRoute] });
+      }),
+    );
+
+    const { result } = renderIntake('factory-1', releaseBoard);
+
+    // Config resolved, routes still in flight: the board must not look empty.
+    await waitFor(() => expect(result.current.available).toEqual([]));
+    expect(result.current.isPending).toBe(true);
+
+    releaseRoutes();
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.isPending).toBe(false);
+  });
+
+  it('reports a failed label-route load instead of treating every issue as Work', async () => {
+    stubGithub([releaseRoute]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+    );
+
+    const work = renderIntake('factory-1');
+    await waitFor(() => expect(work.result.current.isPending).toBe(false));
+    expect(work.result.current.candidates).toEqual([]);
+    expect(work.result.current.feedByColumn.intake?.error).toBeInstanceOf(Error);
+
+    const release = renderIntake('factory-1', releaseBoard);
+    await waitFor(() => expect(release.result.current.isPending).toBe(false));
+    expect(release.result.current.candidates).toEqual([]);
+    expect(release.result.current.feedByColumn.queued?.error).toBeInstanceOf(Error);
+  });
 });

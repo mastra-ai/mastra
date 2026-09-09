@@ -76,14 +76,18 @@ export function useBoardIntake({
     [labelRoutesQuery.data],
   );
   const routedHere = labelRoutes.some(route => route.board === kind);
-  // Until routes resolve, Work cannot tell which issues belong elsewhere, so it
-  // holds its GitHub feed rather than flashing cards that another board owns.
-  const routesSettled = review || !labelRoutesQuery.isPending;
+  // Until routes load, no board can tell which issues it owns: Work would
+  // flash cards routed elsewhere and a custom board would look empty. A failed
+  // load is not "no routes" either, so the feed reports that error instead of
+  // classifying every issue as Work.
+  const routesPending = !review && githubEnabled && githubSelected && labelRoutesQuery.isPending;
+  const routesFailed = !review && labelRoutesQuery.isError;
+  const routesSettled = review || labelRoutesQuery.isSuccess;
 
   // Work intake owns issues; Review intake owns pull requests. Keeping the
   // feeds on separate routes prevents review-producing PR work from being
   // confused with the Work board's review-receiving lane.
-  const githubIntakeActive = (kind === 'work' || routedHere) && githubEnabled && githubSelected;
+  const githubIntakeActive = (kind === 'work' || routedHere || routesFailed) && githubEnabled && githubSelected;
   const available: IntakeSource[] = review
     ? ['github-prs']
     : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
@@ -161,7 +165,16 @@ export function useBoardIntake({
     initialPhase,
   ]);
 
-  const browsed = { github: issues, 'github-prs': pulls, linear: linearIssues };
+  const githubFeed = routesFailed
+    ? {
+        ...issues,
+        isPending: false,
+        error: labelRoutesQuery.error,
+        isFetchNextPageError: false,
+        refetch: () => labelRoutesQuery.refetch(),
+      }
+    : issues;
+  const browsed = { github: githubFeed, 'github-prs': pulls, linear: linearIssues };
   const feed = active ? browsed[active] : undefined;
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
@@ -180,7 +193,7 @@ export function useBoardIntake({
     feedByColumn,
     isPending:
       (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
-      (active === 'github' && !routesSettled) ||
+      routesPending ||
       Boolean(feed?.isPending),
     isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
   };
