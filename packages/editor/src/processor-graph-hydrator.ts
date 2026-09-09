@@ -20,6 +20,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core';
 
 import { evaluateRuleGroup } from './rule-evaluator';
+import { createProcessorFromStep } from './processor-provider-config';
 
 const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
 
@@ -39,7 +40,7 @@ function resolveStep(step: ProcessorGraphStep, ctx: HydrationContext): Processor
     return undefined;
   }
 
-  const processor = provider.createProcessor(step.config);
+  const processor = createProcessorFromStep(provider, step);
 
   // Wrap with phase filtering if only a subset of phases are enabled
   const allProviderPhases = provider.availablePhases;
