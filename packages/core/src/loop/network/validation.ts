@@ -219,11 +219,11 @@ async function runSingleScorer(
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       score: 0,
       passed: false,
-      reason: `Scorer threw an error: ${error.message}`,
+      reason: `Scorer threw an error: ${error instanceof Error ? error.message : String(error)}`,
       scorerId: scorer.id,
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,

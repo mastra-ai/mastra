@@ -127,8 +127,12 @@ describe('runCompletionScorers', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('handles a late rejection without changing the timeout result', async () => {
-      let rejectLate!: (reason: Error) => void;
+    it.each([
+      { label: 'Error', reason: new Error('Late read failure') },
+      { label: 'null', reason: null },
+      { label: 'undefined', reason: undefined },
+    ])('handles a late $label rejection without changing the timeout result', async ({ reason }) => {
+      let rejectLate!: (reason: unknown) => void;
       const scorer = {
         id: 'late-rejection',
         run: vi.fn(
@@ -143,7 +147,7 @@ describe('runCompletionScorers', () => {
       const result = await pending;
       const snapshot = structuredClone(result);
       expect(result).toMatchObject({ complete: false, timedOut: true });
-      rejectLate(new Error('Late read failure'));
+      rejectLate(reason);
       await vi.advanceTimersByTimeAsync(0);
       expect(result).toEqual(snapshot);
       expect(vi.getTimerCount()).toBe(0);
@@ -154,6 +158,19 @@ describe('runCompletionScorers', () => {
       const result = await runCompletionScorers([scorer], createMockContext());
       expect(result).toMatchObject({ complete: false, timedOut: false });
       expect(result.scorers[0].errored).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each([null, undefined, 'Read unavailable'])('reports a non-Error rejection: %s', async reason => {
+      const scorer = { id: 'non-error', run: vi.fn().mockRejectedValue(reason) };
+      const result = await runCompletionScorers([scorer], createMockContext());
+      expect(result).toMatchObject({ complete: false, timedOut: false });
+      expect(result.scorers[0]).toMatchObject({
+        score: 0,
+        passed: false,
+        errored: true,
+        reason: `Scorer threw an error: ${String(reason)}`,
+      });
       expect(vi.getTimerCount()).toBe(0);
     });
 
