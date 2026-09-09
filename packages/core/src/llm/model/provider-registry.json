@@ -4904,7 +4904,7 @@
       "apiKeyEnvVar": "INCEPTION_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Inception",
-      "models": ["mercury-2", "mercury-edit-2"],
+      "models": ["mercury-2", "mercury-2.5", "mercury-edit-2"],
       "docUrl": "https://platform.inceptionlabs.ai/docs",
       "gateway": "models.dev"
     },
@@ -13799,7 +13799,7 @@
       "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8",
       "swiss-ai/Apertus-v1.5-70B"
     ],
-    "inception": ["mercury-2", "mercury-edit-2"],
+    "inception": ["mercury-2", "mercury-2.5", "mercury-edit-2"],
     "lilac": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"],
     "fastrouter": [
       "anthropic/claude-opus-4.1",

@@ -408,6 +408,57 @@ describe('ModelsDevGateway', () => {
       expect(providers.anthropic.url).not.toMatch(/\/chat\/completions$/);
       expect(providers.openai.url).not.toMatch(/\/chat\/completions$/);
     });
+
+    it('includes Inception mercury-2.5 when models.dev omits it', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          inception: {
+            id: 'inception',
+            name: 'Inception',
+            models: {
+              'mercury-2': { name: 'Mercury 2', temperature: true, structured_output: true },
+              'mercury-edit-2': { name: 'Mercury Edit 2', temperature: true },
+            },
+            env: ['INCEPTION_API_KEY'],
+            api: 'https://api.inceptionlabs.ai/v1/',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.inception.models).toEqual(['mercury-2', 'mercury-2.5', 'mercury-edit-2']);
+      expect(gateway.getTemperatureCapabilities().inception).toEqual(['mercury-2', 'mercury-2.5', 'mercury-edit-2']);
+      expect(gateway.getStructuredOutputCapabilities().inception).toEqual(['mercury-2', 'mercury-2.5']);
+    });
+
+    it('does not duplicate mercury-2.5 or overwrite models.dev capabilities', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          inception: {
+            id: 'inception',
+            name: 'Inception',
+            models: {
+              'mercury-2': { name: 'Mercury 2' },
+              'mercury-2.5': { name: 'Mercury 2.5', temperature: false, structured_output: false },
+              'mercury-edit-2': { name: 'Mercury Edit 2' },
+            },
+            env: ['INCEPTION_API_KEY'],
+            api: 'https://api.inceptionlabs.ai/v1/',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.inception.models).toEqual(['mercury-2', 'mercury-2.5', 'mercury-edit-2']);
+      expect(gateway.getTemperatureCapabilities().inception).toBeUndefined();
+      expect(gateway.getStructuredOutputCapabilities().inception).toBeUndefined();
+    });
   });
 
   describe('buildUrl', () => {

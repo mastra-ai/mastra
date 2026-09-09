@@ -4044,7 +4044,7 @@ export type ProviderModelsMap = {
     'nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8',
     'swiss-ai/Apertus-v1.5-70B',
   ];
-  readonly inception: readonly ['mercury-2', 'mercury-edit-2'];
+  readonly inception: readonly ['mercury-2', 'mercury-2.5', 'mercury-edit-2'];
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',

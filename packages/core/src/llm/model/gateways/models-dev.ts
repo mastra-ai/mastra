@@ -116,6 +116,36 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
 };
 
+/**
+ * Models that Inception (and similar providers) already serve, but models.dev
+ * has not catalogued yet. Existing upstream entries win so this is a no-op
+ * once models.dev catches up.
+ */
+const EXTRA_PROVIDER_MODELS: Record<string, Record<string, Omit<ModelsDevModelInfo, 'id'>>> = {
+  inception: {
+    'mercury-2.5': {
+      name: 'Mercury 2.5',
+      temperature: true,
+      structured_output: true,
+    },
+  },
+};
+
+function mergeExtraModels(
+  providerId: string,
+  models: Record<string, ModelsDevModelInfo>,
+): Record<string, ModelsDevModelInfo> {
+  const extras = EXTRA_PROVIDER_MODELS[providerId];
+  if (!extras) return models;
+
+  const merged = { ...models };
+  for (const [modelId, info] of Object.entries(extras)) {
+    if (merged[modelId]) continue;
+    merged[modelId] = { id: modelId, ...info };
+  }
+  return merged;
+}
+
 export class ModelsDevGateway extends MastraModelGateway {
   readonly id = 'models.dev';
   readonly name = 'models.dev';
@@ -177,7 +207,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         // endpoint/shape overrides (i.e. it would route with provider defaults).
         // They are reported separately via `deprecatedModels` so surfaces that
         // offer models for *new* selection can hide or mark them.
-        const allModels = Object.entries(providerInfo.models);
+        const allModels = Object.entries(mergeExtraModels(normalizedId, providerInfo.models));
         const modelIds = allModels.map(([modelId]) => modelId).sort();
         const deprecatedModelIds = allModels
           .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
