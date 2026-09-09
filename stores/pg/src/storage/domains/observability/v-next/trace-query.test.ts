@@ -117,11 +117,23 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
     expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt")) * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
+    expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."provider" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."status" IS NOT DISTINCT FROM');
     expect(compiled.text).toContain('s."startedAt" IS NOT NULL AND s."startedAt" >=');
     expect(compiled.text).toContain('s."durationMs" IS NOT NULL AND s."durationMs" >');
     expect(compiled.text).toContain('s."entityVersionId" IS NOT NULL');
-    expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
-    expect(compiled.values).toContain(5000);
+    expect(compiled.values).toEqual(
+      expect.arrayContaining([
+        'medication_lookup',
+        'claude-sonnet-4-6',
+        'anthropic',
+        '2026-01-01T12:00:00.000Z',
+        5000,
+        'success',
+      ]),
+    );
   });
 
   it('emits only referenced relation scopes and reuses each current-record reconstruction', () => {
