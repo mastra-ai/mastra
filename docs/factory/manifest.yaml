@@ -1,0 +1,16 @@
+version: 1
+documents:
+  product-vision: docs/factory/product-vision.md
+  personas: docs/factory/personas.md
+  user-stories: docs/factory/user-stories.md
+  business-rules: docs/factory/business-rules.md
+  glossary: docs/factory/glossary.md
+  process-flows: docs/factory/process-flows.md
+  architecture: docs/factory/architecture.md
+  adrs: docs/factory/adrs.md
+  data-model: docs/factory/data-model.md
+  api-spec: docs/factory/api-spec.md
+  coding-standards: docs/factory/coding-standards.md
+  testing-strategy: docs/factory/testing-strategy.md
+  runbook: docs/factory/runbook.md
+  security-compliance: docs/factory/security-compliance.md
