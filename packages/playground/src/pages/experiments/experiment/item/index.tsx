@@ -3,7 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { PlayCircle } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { RouteItemOverlay } from '@/components/route-item-overlay';
@@ -11,6 +11,7 @@ import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-ex
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
+import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTagVocabulary } from '@/domains/experiments/hooks/use-experiment-tag-vocabulary';
 
 function ExperimentItemPage() {
@@ -77,16 +78,16 @@ function ExperimentItemPageContent({ itemId }: { itemId: string }) {
   );
 
   const resultScores = result ? scoresByItemId?.[result.itemId] : undefined;
-  const [wide, setWide] = useState(false);
+  const detailState = useExperimentResultDetailState(resultScores);
 
   return (
-    <RouteItemOverlay label={`Experiment item ${itemId}`} wide={wide}>
+    <RouteItemOverlay label={`Experiment item ${itemId}`} wide={detailState.wide}>
       {result ? (
         <ExperimentResultDetail
           className="p-3"
           result={result}
           scores={resultScores}
-          onWideChange={setWide}
+          state={detailState}
           onPrevious={goToPreviousItem}
           onNext={goToNextItem}
           onClose={close}

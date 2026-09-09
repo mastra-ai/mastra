@@ -1,9 +1,10 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { useCallback, useEffect, useState } from 'react';
 
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
+import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
+import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import { useExperimentTrace } from '@/domains/experiments/hooks/use-experiment-trace';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { NeedsReviewDot } from '@/domains/traces/components/needs-review-dot';
@@ -20,8 +21,11 @@ export type ExperimentResultDetailProps = Omit<
   'scores' | 'onShowTrace' | 'onScoreClick' | 'featuredScoreId' | 'collapsed' | 'scorePanelSlot' | 'feedbackTabSlot'
 > & {
   scores?: ClientScoreRowData[];
-  /** Fires when the detail needs a wider container (score or span detail is open). */
-  onWideChange?: (wide: boolean) => void;
+  /**
+   * Optional controlled state, for callers that need to read it (e.g. to
+   * widen the surrounding overlay). Create it with `useExperimentResultDetailState`.
+   */
+  state?: ExperimentResultDetailState;
 };
 
 /**
@@ -31,28 +35,30 @@ export type ExperimentResultDetailProps = Omit<
 export function ExperimentResultDetail({
   result,
   scores,
-  onWideChange,
+  state,
   className,
   ...panelProps
 }: ExperimentResultDetailProps) {
-  const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
-  const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
-  const [featuredScoreId, setFeaturedScoreId] = useState<string | null>(null);
-  const [resultCollapsed, setResultCollapsed] = useState(false);
-  const [traceCollapsed, setTraceCollapsed] = useState(false);
+  const internalState = useExperimentResultDetailState(scores);
+  const {
+    featuredTraceId,
+    setFeaturedTraceId,
+    featuredSpanId,
+    setFeaturedSpanId,
+    featuredScoreId,
+    setFeaturedScoreId,
+    resultCollapsed,
+    setResultCollapsed,
+    traceCollapsed,
+    setTraceCollapsed,
+    featuredScore,
+  } = state ?? internalState;
 
-  const featuredScore = scores?.find(s => s.id === featuredScoreId) ?? null;
-
-  const wide = !!featuredSpanId || (!!featuredScore && !resultCollapsed);
-  useEffect(() => {
-    onWideChange?.(wide);
-  }, [wide, onWideChange]);
-
-  const handleScoreClick = useCallback((scoreId: string) => {
+  const handleScoreClick = (scoreId: string) => {
     setFeaturedScoreId(prev => (scoreId === prev ? null : scoreId));
     setFeaturedTraceId(null);
     setFeaturedSpanId(undefined);
-  }, []);
+  };
 
   const showTrace = (traceId: string | null | undefined) => {
     if (!traceId) return;
