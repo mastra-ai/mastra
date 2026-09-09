@@ -173,42 +173,46 @@ describe('modelSettings.timeout.firstChunkMs', () => {
   it.each([
     { firstChunkMs: 800, contentDelayMs: 0 },
     { firstChunkMs: 1_500, contentDelayMs: 750 },
-  ])('gives each retry attempt a fresh $firstChunkMs ms first-content budget', async ({ firstChunkMs, contentDelayMs }) => {
-    let attempt = 0;
-    const doStream = vi.fn(async () => {
-      attempt++;
-      if (attempt === 1) {
-        throw new APICallError({
-          message: 'rate limited',
-          url: 'https://example.test',
-          requestBodyValues: {},
-          statusCode: 429,
-          isRetryable: true,
-        });
-      }
+  ])(
+    'gives each retry attempt a fresh $firstChunkMs ms first-content budget',
+    async ({ firstChunkMs, contentDelayMs }) => {
+      let attempt = 0;
+      const doStream = vi.fn(async () => {
+        attempt++;
+        if (attempt === 1) {
+          throw new APICallError({
+            message: 'rate limited',
+            url: 'https://example.test',
+            requestBodyValues: {},
+            statusCode: 429,
+            isRetryable: true,
+          });
+        }
 
-      return {
-        stream: new ReadableStream({
-          async start(controller) {
-            await new Promise(resolve => setTimeout(resolve, contentDelayMs));
-            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
-            controller.enqueue({
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            });
-            controller.close();
-          },
-        }),
-      };
-    });
-    const model = new MockLanguageModelV2({ doStream: doStream as any });
+        return {
+          stream: new ReadableStream({
+            async start(controller) {
+              await new Promise(resolve => setTimeout(resolve, contentDelayMs));
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'done' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      });
+      const model = new MockLanguageModelV2({ doStream: doStream as any });
 
-    const chunks = await runExecute({ model, firstChunkMs, maxRetries: 1 });
+      const chunks = await runExecute({ model, firstChunkMs, maxRetries: 1 });
 
-    expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
-    expect(doStream).toHaveBeenCalledTimes(2);
-  }, 5_000);
+      expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true);
+      expect(doStream).toHaveBeenCalledTimes(2);
+    },
+    5_000,
+  );
 
   it('does not retry the same model after a first-content timeout', async () => {
     const doStream = vi.fn(async () => ({ stream: new ReadableStream() }));
