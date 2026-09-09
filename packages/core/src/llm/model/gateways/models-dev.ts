@@ -24,6 +24,7 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { applyOpencodeSessionHeader } from './opencode-session-header.js';
 
 interface ModelsDevModelInfo {
   id: string;
@@ -341,7 +342,10 @@ export class ModelsDevGateway extends MastraModelGateway {
   }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
-    const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };
+    const mastraHeaders = applyOpencodeSessionHeader(providerId, {
+      'User-Agent': MASTRA_USER_AGENT,
+      ...headers,
+    }) ?? { 'User-Agent': MASTRA_USER_AGENT, ...headers };
 
     // Per-model override: a model may be served over a different request shape
     // than its provider default (e.g. the OpenAI Responses API while the provider

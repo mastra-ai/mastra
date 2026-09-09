@@ -19,6 +19,7 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { applyOpencodeSessionHeader } from './gateways/opencode-session-header.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -522,13 +523,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return cache.modelInstances.get(key)!;
     }
 
+    const requestHeaders = applyOpencodeSessionHeader(providerId, headers);
+
     // If custom URL is provided, use it directly with openai-compatible
     if (this.config.url) {
       const modelInstance = createOpenAICompatible({
         name: providerId,
         apiKey,
         baseURL: this.config.url,
-        headers,
+        headers: requestHeaders,
         supportsStructuredOutputs: true,
       }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
@@ -544,7 +547,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           modelId,
           apiKey,
           baseURL,
-          headers,
+          headers: requestHeaders,
           responsesWebSocket,
         });
         cache.modelInstances.set(key, modelInstance);
@@ -558,7 +561,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       modelId,
       providerId,
       apiKey,
-      headers,
+      headers: requestHeaders,
       transport: resolvedTransport,
       responsesWebSocket,
     });
