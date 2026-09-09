@@ -3,7 +3,14 @@
   "extends": ["//"],
   "tasks": {
     "dev:api": {
-      "dependsOn": ["^build"],
+      "dependsOn": [
+        "^build",
+        "mastra#build",
+        "@mastra/hono#build",
+        "@mastra/platform-workspace#build",
+        "@mastra/redis-streams#build",
+        "@mastra/e2b#build"
+      ],
       "cache": false,
       "persistent": true
     }
