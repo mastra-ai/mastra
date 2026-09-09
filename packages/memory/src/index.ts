@@ -1817,6 +1817,7 @@ ${workingMemory}`;
             resourceId,
             orderBy: { field: 'createdAt', direction: 'ASC' },
             perPage: false,
+            includeTotal: false,
             filter: dateFilter,
           });
           return result.messages;
@@ -1830,6 +1831,7 @@ ${workingMemory}`;
             threadId,
             orderBy: { field: 'createdAt', direction: 'ASC' },
             perPage: false,
+            includeTotal: false,
             filter: dateFilter,
           });
           return result.messages;
@@ -2439,6 +2441,7 @@ Notes:
         resourceId,
         perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
         page,
+        includeTotal: false,
       });
       if (batch.length === 0) break;
 
