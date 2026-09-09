@@ -63,6 +63,7 @@ const paths: Record<string, (...args: string[]) => string> = {
   // Only used by the base branch's `LinkComponentPaths` (see comment above).
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
+  experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
 };
 
 // eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.

@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -19,38 +18,27 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
-import {
-  CheckCircle,
-  ChevronDown,
-  CircleSlashIcon,
-  FilterIcon,
-  GaugeIcon,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  XIcon,
-} from 'lucide-react';
+import { CheckCircle, ChevronDown, CircleSlashIcon, FilterIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useReviewItems, useCompletedItems } from '../hooks/use-dataset-review-items';
 import { ProposalTag } from './proposal-tag';
 import type { ReviewItem } from './review-item-card';
-import { ReviewItemPanel } from './review-item-panel';
 import { RouteItemOverlay } from '@/components/route-item-overlay';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
+import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
+import { useLinkComponent } from '@/lib/framework';
 
-function truncateInput(value: unknown, max: number): string {
-  if (typeof value === 'string') return value.length > max ? value.slice(0, max) + '...' : value;
-  try {
-    const str = JSON.stringify(value);
-    return str.length > max ? str.slice(0, max) + '...' : str;
-  } catch {
-    return String(value);
-  }
-}
+const REVIEW_LIST_COLUMNS = [
+  { name: 'itemId', label: 'Item ID', size: 'auto' },
+  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'tags', label: 'Tags', size: 'auto' },
+  { name: 'scores', label: 'Scores', size: '6rem' },
+];
 
 export interface DatasetReviewProps {
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
@@ -74,6 +62,7 @@ export function DatasetReview({
   detailPanelVariant = 'inline',
 }: DatasetReviewProps) {
   const client = useMastraClient();
+  const { paths } = useLinkComponent();
   const { data: dataset } = useDataset(datasetId ?? '');
   // Keep `undefined` while loading: the hydration effect below treats a defined
   // value as "server data arrived", so coercing to [] here would lock in an empty queue.
@@ -108,13 +97,7 @@ export function DatasetReview({
   >([]);
   const [showProposalDialog, setShowProposalDialog] = useState(false);
 
-  // Ratings are only sent as feedback, never stored on the result, so they live here.
-  // Everything else comes straight from the query; mutations invalidate it.
-  const [ratings, setRatings] = useState<Record<string, ReviewItem['rating']>>({});
-  const items = useMemo(
-    () => (reviewItems ?? []).map(i => (i.id in ratings ? { ...i, rating: ratings[i.id] } : i)),
-    [reviewItems, ratings],
-  );
+  const items = useMemo(() => reviewItems ?? [], [reviewItems]);
 
   // Tag vocabulary from dataset + existing item tags
   const datasetTagVocabulary = useMemo(() => {
@@ -182,62 +165,6 @@ export function DatasetReview({
     [items, updateExperimentResult],
   );
 
-  const rateItem = useCallback(
-    (itemId: string, rating: 'positive' | 'negative' | undefined) => {
-      const item = items.find(i => i.id === itemId);
-      if (item?.traceId && rating !== undefined) {
-        client
-          .createFeedback({
-            feedback: {
-              traceId: item.traceId,
-              source: 'studio',
-              feedbackSource: 'studio',
-              feedbackType: 'rating',
-              value: rating === 'positive' ? 1 : -1,
-              reviewStatus: 'reviewed',
-              experimentId: item.experimentId ?? undefined,
-              sourceId: item.id,
-            },
-          })
-          .catch(() => {});
-      }
-      setRatings(prev => ({ ...prev, [itemId]: rating }));
-    },
-    [items, client],
-  );
-
-  const commentItem = useCallback(
-    (itemId: string, comment: string) => {
-      const item = items.find(i => i.id === itemId);
-      if (item?.experimentId && item?.datasetId) {
-        updateExperimentResult.mutate({
-          datasetId: item.datasetId,
-          experimentId: item.experimentId,
-          resultId: item.id,
-          comment,
-        });
-      }
-      if (item?.traceId) {
-        client
-          .createFeedback({
-            feedback: {
-              traceId: item.traceId,
-              source: 'studio',
-              feedbackSource: 'studio',
-              feedbackType: 'comment',
-              value: comment,
-              comment,
-              reviewStatus: 'reviewed',
-              experimentId: item.experimentId ?? undefined,
-              sourceId: item.id,
-            },
-          })
-          .catch(() => {});
-      }
-    },
-    [items, client, updateExperimentResult],
-  );
-
   const removeItem = useCallback(
     (itemId: string) => {
       const item = items.find(i => i.id === itemId);
@@ -294,7 +221,6 @@ export function DatasetReview({
     [selectedItemIds, visibleIds],
   );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
-  const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
 
   // Bulk selection
   const toggleSelect = useCallback((itemId: string) => {
@@ -422,6 +348,7 @@ export function DatasetReview({
     if (!featuredItemId) return null;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
+  const { data: featuredScoresByItemId } = useScoresByExperimentId(featuredItem?.experimentId ?? '');
 
   // Navigation — undefined at the edges so the prev/next buttons disable.
   const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
@@ -430,10 +357,6 @@ export function DatasetReview({
     featuredIndex >= 0 && featuredIndex < displayItems.length - 1
       ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
       : undefined;
-
-  const gridColumns = 'auto minmax(0,20rem) minmax(0,1fr) minmax(0,8rem) 6rem 6rem';
-
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
   if (isLoadingReview) {
     return (
@@ -444,22 +367,27 @@ export function DatasetReview({
   }
 
   const detailPanel = featuredItem ? (
-    <ReviewItemPanel
+    <ExperimentResultDetail
       className="h-full"
-      item={featuredItem}
-      isCompleted={showCompleted}
+      result={featuredItem}
+      scores={featuredScoresByItemId?.[featuredItem.itemId]}
+      experimentLink={
+        featuredItem.experimentId ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId) : undefined
+      }
       tagVocabulary={datasetTagVocabulary}
-      onRate={rating => rateItem(featuredItem.id, rating)}
-      onSetTags={tags => {
-        setItemTags(featuredItem.id, tags);
-        for (const tag of tags) {
-          if (!datasetTagVocabulary.includes(tag)) {
-            syncTagToDataset(tag);
-          }
-        }
-      }}
-      onComment={comment => commentItem(featuredItem.id, comment)}
-      onRemove={() => removeItem(featuredItem.id)}
+      onTagsChange={
+        showCompleted
+          ? undefined
+          : tags => {
+              setItemTags(featuredItem.id, tags);
+              for (const tag of tags) {
+                if (!datasetTagVocabulary.includes(tag)) {
+                  syncTagToDataset(tag);
+                }
+              }
+            }
+      }
+      onRemoveFromReview={showCompleted ? undefined : () => removeItem(featuredItem.id)}
       onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}
       onNext={toNextItem}
@@ -789,133 +717,16 @@ export function DatasetReview({
               />
             </div>
           ) : (
-            <DataList columns={gridColumns} fit="container" className="min-w-0" scrollRef={containerRef}>
-              <DataList.Top hasLeadingCell>
-                {!showCompleted ? (
-                  <DataList.TopSelectCell
-                    checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
-                    onToggle={() => toggleSelectAll()}
-                    aria-label="Select all"
-                  />
-                ) : (
-                  <DataList.TopCell>&nbsp;</DataList.TopCell>
-                )}
-                <DataList.TopCells colStart={2}>
-                  <DataList.TopCell>Input</DataList.TopCell>
-                  <DataList.TopCell>Comment</DataList.TopCell>
-                  <DataList.TopCell>Tags</DataList.TopCell>
-                  <DataList.TopCell>Rating</DataList.TopCell>
-                  <DataList.TopCell>Scores</DataList.TopCell>
-                </DataList.TopCells>
-              </DataList.Top>
-
-              {displayItems.map((item, index) => {
-                const scoreEntries = item.scores ? Object.entries(item.scores) : [];
-                const isFeatured = featuredItemId === item.id;
-
-                const rowCells = (
-                  <>
-                    {/* Input preview */}
-                    <DataList.Cell className="text-neutral4 min-w-0">
-                      <span className="block truncate">{truncateInput(item.input, 200)}</span>
-                    </DataList.Cell>
-
-                    {/* Comment preview */}
-                    <DataList.Cell className="min-w-0">
-                      {item.comment ? (
-                        <Txt variant="ui-xs" className="text-neutral3 truncate">
-                          {item.comment}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Tags */}
-                    <DataList.Cell className="min-w-0">
-                      {item.tags.length > 0 ? (
-                        <Txt variant="ui-xs" className="text-neutral4 truncate">
-                          {item.tags.join(', ')}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Rating */}
-                    <DataList.Cell>
-                      {item.rating === 'positive' && (
-                        <Icon size="sm" className="text-positive1">
-                          <ThumbsUp />
-                        </Icon>
-                      )}
-                      {item.rating === 'negative' && (
-                        <Icon size="sm" className="text-negative1">
-                          <ThumbsDown />
-                        </Icon>
-                      )}
-                      {!item.rating && (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Scores */}
-                    <DataList.Cell>
-                      {scoreEntries.length > 0 ? (
-                        <div className="flex items-center gap-1">
-                          <Icon size="sm" className="text-neutral3">
-                            <GaugeIcon />
-                          </Icon>
-                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
-                            {scoreEntries[0][1].toFixed(2)}
-                          </Txt>
-                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
-                        </div>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-                  </>
-                );
-
-                return (
-                  <DataList.RowWrapper key={item.id}>
-                    {!showCompleted ? (
-                      <DataList.SelectCell
-                        checked={selectedItemIds.has(item.id)}
-                        onToggle={() => toggleSelect(item.id)}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    ) : (
-                      <DataList.Cell className="justify-items-center px-4">
-                        <div
-                          role="img"
-                          aria-label={item.error ? 'Error' : 'Success'}
-                          title={item.error ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
-                        />
-                      </DataList.Cell>
-                    )}
-                    <DataList.RowButton
-                      colStart={2}
-                      featured={isFeatured}
-                      onClick={() => handleRowClick(item.id)}
-                      {...getRowProps(index)}
-                    >
-                      {rowCells}
-                    </DataList.RowButton>
-                  </DataList.RowWrapper>
-                );
-              })}
-            </DataList>
+            <ExperimentResultsList
+              results={displayItems}
+              isLoading={false}
+              featuredResultId={featuredItemId}
+              onResultClick={handleRowClick}
+              columns={REVIEW_LIST_COLUMNS}
+              selectedIds={showCompleted ? undefined : selectedItemIds}
+              onToggleSelect={showCompleted ? undefined : toggleSelect}
+              onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}
+            />
           )}
         </div>
 

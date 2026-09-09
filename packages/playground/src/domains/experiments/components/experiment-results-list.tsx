@@ -2,30 +2,58 @@ import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { AlertCircleIcon } from 'lucide-react';
+import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 import { useLinkComponent } from '@/lib/framework';
 
-export type ExperimentResultsListProps = {
-  results: DatasetExperimentResult[];
+/**
+ * Minimal shape shared by every surface that lists dataset items
+ * (experiment results, review queue, inbox). `DatasetExperimentResult`
+ * and the review `ReviewItem` both satisfy it.
+ */
+export type ExperimentResultsListItem = {
+  id: string;
+  itemId: string;
+  input?: unknown;
+  error?: unknown;
+  status?: DatasetExperimentResult['status'] | null;
+  tags?: string[] | null;
+  /** Inline scores, used by the summary `scores` column. */
+  scores?: Record<string, number> | ClientScoreRowData[] | null;
+};
+
+export type ExperimentResultsListColumn = {
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | a scorer id */
+  name: string;
+  label: string;
+  size: string;
+};
+
+export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
+  results: T[];
   isLoading: boolean;
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
-  columns: { name: string; label: string; size: string }[];
+  columns: ExperimentResultsListColumn[];
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  emptyMessage?: string;
   selectedIds?: Set<string>;
   onToggleSelect?: (resultId: string) => void;
+  /** When provided with selection, renders a select-all checkbox in the header. */
+  onToggleSelectAll?: () => void;
 };
 
 /**
  * List component for experiment results - controlled by parent for selection state.
  */
-export function ExperimentResultsList({
+export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   results,
   isLoading,
   featuredResultId,
@@ -36,15 +64,22 @@ export function ExperimentResultsList({
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
+  emptyMessage = 'No results yet',
   selectedIds,
   onToggleSelect,
-}: ExperimentResultsListProps) {
+  onToggleSelectAll,
+}: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
-  const hasStatusColumn = columns.some(col => col.name === 'status');
-  const hasInputColumn = columns.some(col => col.name === 'input');
-  const hasTagsColumn = columns.some(col => col.name === 'tags');
+  const hasColumn = (name: string) => columns.some(col => col.name === name);
+  const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
+  const hasStatusColumn = hasColumn('status');
+  const hasInputColumn = hasColumn('input');
+  const hasTagsColumn = hasColumn('tags');
+  const hasScoresColumn = hasColumn('scores');
+  const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
+  const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
 
@@ -73,7 +108,16 @@ export function ExperimentResultsList({
   return (
     <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={hasSelection}>
-        {hasSelection && <DataList.TopCell>&nbsp;</DataList.TopCell>}
+        {hasSelection &&
+          (onToggleSelectAll ? (
+            <DataList.TopSelectCell
+              checked={isAllSelected ? true : selectedVisibleCount > 0 ? 'indeterminate' : false}
+              onToggle={onToggleSelectAll}
+              aria-label="Select all"
+            />
+          ) : (
+            <DataList.TopCell>&nbsp;</DataList.TopCell>
+          ))}
         {hasSelection ? (
           <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
         ) : (
@@ -82,7 +126,7 @@ export function ExperimentResultsList({
       </DataList.Top>
 
       {results.length === 0 ? (
-        <DataList.NoMatch message="No results yet" />
+        <DataList.NoMatch message={emptyMessage} />
       ) : (
         <>
           {results.map((result, index) => {
@@ -91,17 +135,19 @@ export function ExperimentResultsList({
 
             const rowCells = (
               <>
-                <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
-                  <span>{result.itemId?.slice(0, 8) ?? ''}</span>
-                  {hasError && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
-                      />
-                      <TooltipContent>{result.error?.message || 'Error'}</TooltipContent>
-                    </Tooltip>
-                  )}
-                </DataList.Cell>
+                {hasItemIdColumn && (
+                  <DataList.Cell className="text-ui-smd text-neutral3 flex items-center gap-1.5 tracking-wide">
+                    <span>{result.itemId?.slice(0, 8) ?? ''}</span>
+                    {hasError && (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
+                        />
+                        <TooltipContent>{errorMessage(result.error)}</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </DataList.Cell>
+                )}
 
                 {hasStatusColumn && (
                   <DataList.Cell className="flex items-center" data-testid={`result-status-${result.id}`}>
@@ -127,6 +173,12 @@ export function ExperimentResultsList({
                     {result.tags?.map(tag => (
                       <ComputedTag key={tag} value={tag} className="shrink-0" />
                     ))}
+                  </DataList.Cell>
+                )}
+
+                {hasScoresColumn && (
+                  <DataList.Cell>
+                    <ScoresSummary scores={result.scores} />
                   </DataList.Cell>
                 )}
 
@@ -185,6 +237,37 @@ export function ExperimentResultsList({
       )}
     </DataList>
   );
+}
+
+function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores'] }) {
+  const values = Array.isArray(scores)
+    ? scores.map(s => s.score).filter((v): v is number => v != null)
+    : Object.values(scores ?? {});
+  if (values.length === 0) {
+    return (
+      <Txt variant="ui-xs" className="text-neutral2">
+        —
+      </Txt>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Icon size="sm" className="text-neutral3">
+        <GaugeIcon />
+      </Icon>
+      <Txt variant="ui-xs" className="text-neutral4 font-mono">
+        {values[0].toFixed(2)}
+      </Txt>
+      {values.length > 1 && <Badge>+{values.length - 1}</Badge>}
+    </div>
+  );
+}
+
+function errorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message || 'Error';
+  }
+  return typeof error === 'string' && error ? error : 'Error';
 }
 
 function statusBadgeVariant(status: NonNullable<DatasetExperimentResult['status']>) {

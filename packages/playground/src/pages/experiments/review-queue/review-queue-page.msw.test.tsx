@@ -138,6 +138,22 @@ describe('Review Queue page', () => {
       expect(screen.queryByText(/other question/)).toBeNull();
       expect(requestedExperiments()).toEqual([EXPERIMENT_ID]);
     });
+
+    it('links back to the experiment page', async () => {
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      const link = await screen.findByRole('link', { name: /See experiment/ });
+      expect(link.getAttribute('href')).toBe(`/experiments/${EXPERIMENT_ID}`);
+    });
+  });
+
+  describe('when no experiment is selected', () => {
+    it('does not show the "See experiment" link', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByRole('link', { name: /See experiment/ })).toBeNull();
+    });
   });
 
   describe('when ?experiment does not match any experiment', () => {

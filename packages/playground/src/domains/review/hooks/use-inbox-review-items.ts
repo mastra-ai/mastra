@@ -10,6 +10,9 @@ export type InboxDatasetReviewItem = {
   traceId?: string;
   input: unknown;
   output: unknown;
+  error?: unknown;
+  status?: 'needs-review' | 'complete' | null;
+  tags?: string[] | null;
 };
 
 const PER_PAGE = 100;
@@ -63,6 +66,9 @@ export function useInboxDatasetReviewItems() {
               traceId: result.traceId ?? undefined,
               input: result.input,
               output: result.output,
+              error: result.error,
+              status: result.status,
+              tags: result.tags,
             }));
         }),
       );

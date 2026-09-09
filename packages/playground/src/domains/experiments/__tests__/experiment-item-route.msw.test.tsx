@@ -341,15 +341,44 @@ describe('experiment item sub-route', () => {
     });
   });
 
+  describe('result panel Feedback tab', () => {
+    it('shows a needs-review dot as soon as the panel opens when a trace feedback needs review', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+
+      const dialog = await screen.findByRole('dialog');
+      const feedbackTab = await within(dialog).findByRole('tab', { name: /^feedback/i });
+      await waitFor(() => expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined());
+    });
+
+    it('shows no dot when every trace feedback is already reviewed', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
+          HttpResponse.json({
+            ...experimentTraceFeedback,
+            feedback: experimentTraceFeedback.feedback.map(item => ({ ...item, reviewStatus: 'reviewed' })),
+          }),
+        ),
+      );
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+
+      const dialog = await screen.findByRole('dialog');
+      const feedbackTab = await within(dialog).findByRole('tab', { name: /^feedback/i });
+      fireEvent.click(feedbackTab);
+      expect(await screen.findByText('Trace feedback for the experiment run')).toBeDefined();
+      expect(within(feedbackTab).queryByTestId('needs-review-dot')).toBeNull();
+    });
+  });
+
   describe('when the user opens a result trace and selects a span', () => {
-    it('shows trace feedback and anchor-span scores with badge counts', async () => {
+    it('shows trace feedback (with a needs-review dot) and anchor-span scores with a badge count', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await screen.findByRole('dialog');
       fireEvent.click(await screen.findByRole('button', { name: 'Trace' }));
 
       const scoresTab = await screen.findByRole('tab', { name: /scores \(1\)/i });
-      const feedbackTab = screen.getByRole('tab', { name: /feedback \(1\)/i });
+      const feedbackTab = screen.getAllByRole('tab', { name: /^feedback/i }).at(-1)!;
+      expect(within(feedbackTab).getByTestId('needs-review-dot')).toBeDefined();
 
       fireEvent.click(scoresTab);
       expect((await screen.findAllByText('Experiment relevance')).length).toBeGreaterThan(0);
@@ -405,7 +434,9 @@ describe('experiment item sub-route', () => {
       expect(spanSection.className).toContain('border-0');
       expect(spanSection.className).toContain('bg-transparent');
 
-      fireEvent.click(await within(spanSection).findByRole('tab', { name: /feedback \(1\)/i }));
+      const spanFeedbackTab = await within(spanSection).findByRole('tab', { name: /^feedback/i });
+      expect(within(spanFeedbackTab).getByTestId('needs-review-dot')).toBeDefined();
+      fireEvent.click(spanFeedbackTab);
       expect(await screen.findByText('Child span feedback for the tool call')).toBeDefined();
 
       fireEvent.click(within(spanSection).getByLabelText('Close Panel'));
@@ -533,21 +564,15 @@ describe('experiment item sub-route', () => {
     });
   });
 
-  describe('when the user opens a needs-review result in review', () => {
-    it('closes the panel and lands on the Review Queue page with the result featured via the URL', async () => {
-      const { router } = renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
+  describe('when the user completes a needs-review result', () => {
+    it('marks the result complete from the panel header', async () => {
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-3`);
 
       const dialog = await screen.findByRole('dialog');
       await waitFor(() => expect(dialog.textContent).toContain('third question'));
 
-      fireEvent.click(await within(dialog).findByRole('button', { name: /review/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe('/experiments/review-queue');
-        expect(router.state.location.search).toBe(`?experiment=${EXPERIMENT_ID}&review=res-3`);
-      });
-      const reviewDialog = await screen.findByRole('dialog', { name: 'Review item res-3' });
-      expect(reviewDialog.textContent).toContain('third question');
+      expect(within(dialog).queryByRole('button', { name: /^review$/i })).toBeNull();
+      expect(within(dialog).getByRole('button', { name: /mark as reviewed/i })).toBeDefined();
     });
   });
 });

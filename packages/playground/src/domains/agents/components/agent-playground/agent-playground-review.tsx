@@ -2,7 +2,6 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
-import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -20,38 +19,28 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
-import {
-  CheckCircle,
-  ChevronDown,
-  FilterIcon,
-  GaugeIcon,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  XIcon,
-} from 'lucide-react';
+import { CheckCircle, ChevronDown, FilterIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { usePlaygroundModel } from '../../context/playground-model-context';
 import { useReviewQueue } from '../../context/review-queue-context';
 
 import { useCompletedItems } from '../../hooks/use-completed-items';
 import { useReviewItems } from '../../hooks/use-review-items';
+import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
+import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
 import { LLMProviders, LLMModels, cleanProviderId } from '@/domains/llm';
 import { BulkTagPicker, ProposalTag } from '@/domains/review/components';
-import { ReviewItemPanel } from '@/domains/review/components/review-item-panel';
+import { useLinkComponent } from '@/lib/framework';
 
-function truncateInput(value: unknown, max: number): string {
-  if (typeof value === 'string') return value.length > max ? value.slice(0, max) + '...' : value;
-  try {
-    const str = JSON.stringify(value);
-    return str.length > max ? str.slice(0, max) + '...' : str;
-  } catch {
-    return String(value);
-  }
-}
+const REVIEW_LIST_COLUMNS = [
+  { name: 'itemId', label: 'Item ID', size: 'auto' },
+  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'tags', label: 'Tags', size: 'auto' },
+  { name: 'scores', label: 'Scores', size: '6rem' },
+];
 
 interface AgentPlaygroundReviewProps {
   agentId: string;
@@ -59,10 +48,11 @@ interface AgentPlaygroundReviewProps {
 }
 
 export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygroundReviewProps) {
-  const { items, setItemTags, rateItem, commentItem, removeItem, completeItem, loadPersistedItems } = useReviewQueue();
+  const { items, setItemTags, removeItem, completeItem, loadPersistedItems } = useReviewQueue();
   const { data: persistedItems } = useReviewItems(agentId);
   const { data: completedItems, refetch: refetchCompleted, isLoading: isLoadingCompleted } = useCompletedItems(agentId);
   const client = useMastraClient();
+  const { paths } = useLinkComponent();
   const { provider, model } = usePlaygroundModel();
   const { data: allDatasets } = useDatasets();
   const { updateDataset } = useDatasetMutations();
@@ -259,7 +249,6 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     [selectedItemIds, visibleIds],
   );
   const isAllSelected = displayItems.length > 0 && selectedVisibleCount === displayItems.length;
-  const isSomeSelected = selectedVisibleCount > 0 && !isAllSelected;
 
   // Bulk selection
   const toggleSelect = useCallback((id: string) => {
@@ -332,6 +321,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
     if (!featuredItemId) return null;
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
+  const { data: featuredScoresByItemId } = useScoresByExperimentId(featuredItem?.experimentId ?? '');
 
   // Navigation
   const toNextItem = useCallback(() => {
@@ -347,9 +337,6 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
   }, [featuredItemId, displayItems]);
 
   // Dynamic grid columns
-  const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
-
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: displayItems.length });
 
   return (
     <>
@@ -742,157 +729,52 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               </div>
             </div>
           ) : (
-            <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
-              <DataList.Top hasLeadingCell>
-                {!showCompleted ? (
-                  <DataList.TopSelectCell
-                    checked={isAllSelected ? true : isSomeSelected ? 'indeterminate' : false}
-                    onToggle={() => toggleSelectAll()}
-                    aria-label="Select all"
-                  />
-                ) : (
-                  <DataList.TopCell>&nbsp;</DataList.TopCell>
-                )}
-                <DataList.TopCells colStart={2}>
-                  <DataList.TopCell>Input</DataList.TopCell>
-                  <DataList.TopCell>Comment</DataList.TopCell>
-                  <DataList.TopCell>Tags</DataList.TopCell>
-                  <DataList.TopCell>Rating</DataList.TopCell>
-                  <DataList.TopCell>Scores</DataList.TopCell>
-                </DataList.TopCells>
-              </DataList.Top>
-
-              {displayItems.map((item, index) => {
-                const scoreEntries = item.scores ? Object.entries(item.scores) : [];
-                const isFeatured = featuredItemId === item.id;
-
-                const rowCells = (
-                  <>
-                    {/* Input preview */}
-                    <DataList.Cell className="text-neutral4 min-w-0">
-                      <span className="block truncate">{truncateInput(item.input, 80)}</span>
-                    </DataList.Cell>
-
-                    {/* Comment preview */}
-                    <DataList.Cell className="min-w-0">
-                      {item.comment ? (
-                        <Txt variant="ui-xs" className="text-neutral3 truncate">
-                          {item.comment}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Tags */}
-                    <DataList.Cell className="min-w-0">
-                      {item.tags.length > 0 ? (
-                        <Txt variant="ui-xs" className="text-neutral4 truncate">
-                          {item.tags.join(', ')}
-                        </Txt>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Rating */}
-                    <DataList.Cell>
-                      {item.rating === 'positive' && (
-                        <Icon size="sm" className="text-positive1">
-                          <ThumbsUp />
-                        </Icon>
-                      )}
-                      {item.rating === 'negative' && (
-                        <Icon size="sm" className="text-negative1">
-                          <ThumbsDown />
-                        </Icon>
-                      )}
-                      {!item.rating && (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-
-                    {/* Scores */}
-                    <DataList.Cell>
-                      {scoreEntries.length > 0 ? (
-                        <span className="flex items-center gap-1">
-                          <Icon size="sm" className="text-neutral3">
-                            <GaugeIcon />
-                          </Icon>
-                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
-                            {scoreEntries[0][1].toFixed(2)}
-                          </Txt>
-                          {scoreEntries.length > 1 && <Badge>+{scoreEntries.length - 1}</Badge>}
-                        </span>
-                      ) : (
-                        <Txt variant="ui-xs" className="text-neutral2">
-                          —
-                        </Txt>
-                      )}
-                    </DataList.Cell>
-                  </>
-                );
-
-                return (
-                  <DataList.RowWrapper key={item.id}>
-                    {!showCompleted ? (
-                      <DataList.SelectCell
-                        checked={selectedItemIds.has(item.id)}
-                        onToggle={() => toggleSelect(item.id)}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    ) : (
-                      <DataList.Cell className="justify-items-center px-4">
-                        <div
-                          role="img"
-                          aria-label={item.error ? 'Error' : 'Success'}
-                          title={item.error ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
-                        />
-                      </DataList.Cell>
-                    )}
-                    <DataList.RowButton
-                      colStart={2}
-                      featured={isFeatured}
-                      onClick={() => handleRowClick(item.id)}
-                      {...getRowProps(index)}
-                    >
-                      {rowCells}
-                    </DataList.RowButton>
-                  </DataList.RowWrapper>
-                );
-              })}
-            </DataList>
+            <ExperimentResultsList
+              results={displayItems}
+              isLoading={false}
+              featuredResultId={featuredItemId}
+              onResultClick={handleRowClick}
+              columns={REVIEW_LIST_COLUMNS}
+              selectedIds={showCompleted ? undefined : selectedItemIds}
+              onToggleSelect={showCompleted ? undefined : toggleSelect}
+              onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}
+            />
           )}
         </Column>
 
         {/* Detail panel */}
         {featuredItem && (
-          <ReviewItemPanel
-            item={featuredItem}
-            isCompleted={showCompleted}
+          <ExperimentResultDetail
+            className="h-full"
+            result={featuredItem}
+            scores={featuredScoresByItemId?.[featuredItem.itemId]}
+            experimentLink={
+              featuredItem.experimentId
+                ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
+                : undefined
+            }
             tagVocabulary={datasetTagVocabulary}
-            onRate={rating => rateItem(featuredItem.id, rating)}
-            onSetTags={tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const t of tags) {
-                if (!datasetTagVocabulary.includes(t)) {
-                  syncTagToDataset(t);
-                }
-              }
-            }}
-            onComment={comment => commentItem(featuredItem.id, comment)}
-            onRemove={() => removeItem(featuredItem.id)}
-            onComplete={async () => {
-              await completeItem(featuredItem.id);
-              void refetchCompleted();
-            }}
+            onTagsChange={
+              showCompleted
+                ? undefined
+                : tags => {
+                    setItemTags(featuredItem.id, tags);
+                    for (const tag of tags) {
+                      if (!datasetTagVocabulary.includes(tag)) {
+                        syncTagToDataset(tag);
+                      }
+                    }
+                  }
+            }
+            onRemoveFromReview={showCompleted ? undefined : () => removeItem(featuredItem.id)}
+            onComplete={
+              showCompleted
+                ? undefined
+                : async () => {
+                    await completeItem(featuredItem.id);
+                    void refetchCompleted();
+                  }
+            }
             onPrevious={toPreviousItem}
             onNext={toNextItem}
             onClose={() => setFeaturedItemId(null)}

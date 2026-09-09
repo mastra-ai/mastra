@@ -5,6 +5,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
 import { expectComputedTag, expectInheritsTagForeground } from '@/test/computed-tag';
+import { TestLinkProvider } from '@/test/link-provider';
+import { makeWrapper } from '@/test/render';
 
 const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetExperimentResult => ({
   id: 'res-1',
@@ -42,14 +44,19 @@ function renderPanel(
   props: Partial<Parameters<typeof ExperimentResultPanel>[0]> = {},
 ) {
   const onTagsChange = vi.fn();
+  const { wrapper: Wrapper } = makeWrapper();
   render(
-    <ExperimentResultPanel
-      result={result}
-      onClose={() => {}}
-      onTagsChange={onTagsChange}
-      tagVocabulary={['alpha', 'beta']}
-      {...props}
-    />,
+    <Wrapper>
+      <TestLinkProvider>
+        <ExperimentResultPanel
+          result={result}
+          onClose={() => {}}
+          onTagsChange={onTagsChange}
+          tagVocabulary={['alpha', 'beta']}
+          {...props}
+        />
+      </TestLinkProvider>
+    </Wrapper>,
   );
   return { onTagsChange };
 }
@@ -115,7 +122,7 @@ describe('ExperimentResultPanel metadata', () => {
 
   describe('given no onTagsChange handler', () => {
     it('renders tags read-only without picker or remove buttons', () => {
-      render(<ExperimentResultPanel result={makeResult({ tags: ['alpha'] })} onClose={() => {}} />);
+      renderPanel(makeResult({ tags: ['alpha'] }), { onTagsChange: undefined });
 
       expect(screen.getByText('alpha')).toBeDefined();
       expect(screen.queryByRole('combobox')).toBeNull();
@@ -123,9 +130,47 @@ describe('ExperimentResultPanel metadata', () => {
     });
 
     it('renders each tag with colors computed from its value', () => {
-      render(<ExperimentResultPanel result={makeResult({ tags: ['alpha'] })} onClose={() => {}} />);
+      renderPanel(makeResult({ tags: ['alpha'] }), { onTagsChange: undefined });
 
       expectComputedTag(screen.getByText('alpha'), 'alpha');
     });
+  });
+});
+
+describe('ExperimentResultPanel review controls', () => {
+  it('renders a "See experiment" link when experimentLink is provided', () => {
+    renderPanel(makeResult(), { experimentLink: '/experiments/exp-1' });
+
+    expect(screen.getByRole('link', { name: /See experiment/ }).getAttribute('href')).toBe('/experiments/exp-1');
+  });
+
+  it('splits into Details and Feedback tabs when feedbackTabSlot is provided and the result has a trace', () => {
+    const feedbackTabSlot = vi.fn(({ traceId }: { traceId: string }) => <div>feedback for {traceId}</div>);
+    renderPanel(makeResult({ traceId: 'trace-1' }), { feedbackTabSlot });
+
+    expect(screen.getByText('Item Id')).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: 'Feedback' }));
+    expect(screen.getByText('feedback for trace-1')).toBeDefined();
+  });
+
+  it('renders no tabs without a trace id even when feedbackTabSlot is provided', () => {
+    renderPanel(makeResult({ traceId: null }), { feedbackTabSlot: () => <div>feedback</div> });
+
+    expect(screen.queryByRole('tab', { name: 'Feedback' })).toBeNull();
+    expect(screen.getByText('Item Id')).toBeDefined();
+  });
+
+  it('renders the complete action for needs-review results when onComplete is provided', () => {
+    const onComplete = vi.fn();
+    renderPanel(makeResult({ status: 'needs-review' }), { onComplete });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as reviewed' }));
+    expect(onComplete).toHaveBeenCalled();
+  });
+
+  it('hides the complete action when the result does not need review', () => {
+    renderPanel(makeResult({ status: null }), { onComplete: vi.fn() });
+
+    expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
   });
 });
