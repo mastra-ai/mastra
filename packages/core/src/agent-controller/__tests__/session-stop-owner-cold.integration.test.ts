@@ -365,6 +365,9 @@ it.each([
             item => item.kind === (method === 'listSuspendedRuns' ? 'suspended' : 'active'),
           )!.spy;
           spy.mockImplementation(async (input: Parameters<typeof host.planAgent.listSuspendedRuns>[0]) => {
+            // Hold only Stop's time-bounded discovery. Thread attachment also
+            // reads saved approvals and must remain free to navigate.
+            if (!input?.toDate) return realReads[method](input);
             receipt.heldScope = input;
             enteredResolve();
             await held;

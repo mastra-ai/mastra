@@ -535,6 +535,9 @@ export class SessionThread {
   cleanupSubscription(): void {
     this.#owner.stream.cleanup();
     this.#owner.run.reset();
+    if (this.#owner.approval.clearRestored()) {
+      this.#owner.displayState.clearPendingApproval();
+    }
   }
 
   /**
@@ -552,6 +555,12 @@ export class SessionThread {
     const subscription = await session.machinery.subscribeToThread({ resourceId, threadId });
     session.stream.attach({ subscription, key });
     void session.processSubscribedThreadStream(subscription);
+    try {
+      await session.restorePendingApproval({ threadId, subscription });
+    } catch (error) {
+      if (session.stream.isCurrent({ subscription })) this.cleanupSubscription();
+      throw error;
+    }
   }
 
   /** Ensure a subscription for the session's active thread (no-op when unbound). */
@@ -1235,6 +1244,7 @@ export interface ApprovalResponse {
  * those touch config-derived tool categories.
  */
 export class SessionApproval {
+  #restored = false;
   /** Resolver for the parked approval promise, or null when nothing is gated. */
   #resolve: ((decision: ApprovalDecision) => void) | null = null;
   /** Name of the tool currently awaiting approval, or null when none. */
@@ -1248,11 +1258,38 @@ export class SessionApproval {
    * awaits this while the run is suspended on the gate.
    */
   arm({ toolName, toolCallId }: { toolName: string; toolCallId?: string }): Promise<ApprovalDecision> {
+    this.#restored = false;
     this.#toolName = toolName;
     this.#toolCallId = toolCallId ?? null;
     return new Promise<ApprovalDecision>(resolve => {
       this.#resolve = resolve;
     });
+  }
+
+  /** Bind a saved approval to the existing gate without starting its run. */
+  restore({
+    toolName,
+    toolCallId,
+    respond,
+  }: {
+    toolName: string;
+    toolCallId: string;
+    respond: (decision: ApprovalDecision) => void;
+  }): void {
+    this.#restored = true;
+    this.#toolName = toolName;
+    this.#toolCallId = toolCallId;
+    this.#resolve = respond;
+  }
+
+  /** Forget a restored gate on navigation or Stop without treating it as a decision. */
+  clearRestored(): boolean {
+    if (!this.#restored) return false;
+    this.#restored = false;
+    this.#resolve = null;
+    this.#toolName = null;
+    this.#toolCallId = null;
+    return true;
   }
 
   /** Id of the tool call currently awaiting approval, or null when none. */
@@ -1263,6 +1300,11 @@ export class SessionApproval {
   /** Whether an approval is currently parked awaiting a decision. */
   isArmed(): boolean {
     return this.#resolve !== null;
+  }
+
+  /** Whether recovered work is waiting for a decision or delivering one. */
+  isRestored(): boolean {
+    return this.#restored;
   }
 
   /**
@@ -3099,6 +3141,98 @@ export class Session<TState = unknown> {
     return this.stream.activeRunId() ?? this.run.getRunId();
   }
 
+  /** @internal Restore an approval from native run snapshots when attaching an idle thread. */
+  async restorePendingApproval({
+    threadId,
+    subscription,
+  }: {
+    threadId: string;
+    subscription: AgentThreadSubscription<any>;
+  }): Promise<void> {
+    if (this.run.isRunning() || this.stream.isActive() || this.approval.isArmed()) return;
+    const operationId = this.run.getOperationId();
+    const resourceId = this.identity.getResourceId();
+    const agent = this.machinery.getAgent();
+    const discover = async () => {
+      try {
+        const result = await agent.listSuspendedRuns({ threadId, resourceId });
+        return result.runs.flatMap(run =>
+          run.toolCalls.filter(call => call.requiresApproval).map(call => ({ agent, runId: run.runId, call })),
+        );
+      } catch (error) {
+        if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return [];
+        throw error;
+      }
+    };
+    const pending = await discover();
+    if (
+      !this.stream.isCurrent({ subscription }) ||
+      this.thread.getId() !== threadId ||
+      this.identity.getResourceId() !== resourceId ||
+      this.run.isRunning() ||
+      this.run.getOperationId() !== operationId ||
+      this.run.isAbortRequested() ||
+      this.approval.isArmed()
+    )
+      return;
+    if (pending.length > 1) throw new Error('Multiple saved approvals match this Session thread');
+    const approval = pending[0];
+    if (!approval) return;
+    const { runId, call } = approval;
+    const { toolName, toolCallId } = call;
+    if (!toolName || !toolCallId) throw new Error('Saved approval is missing its tool identity');
+    this.approval.restore({
+      toolName,
+      toolCallId,
+      respond: decision => {
+        const resume = async () => {
+          const requestContext = await this.machinery.buildRequestContext(decision.requestContext);
+          const toolsets = await this.machinery.buildToolsets(requestContext);
+          // A response racing navigation or Stop must not act on another binding.
+          if (
+            !this.stream.isCurrent({ subscription }) ||
+            this.thread.getId() !== threadId ||
+            this.identity.getResourceId() !== resourceId ||
+            this.run.isAbortRequested() ||
+            this.run.getOperationId() !== operationId
+          )
+            return;
+          await agent.sendToolApproval({
+            threadId,
+            resourceId,
+            runId,
+            toolCallId,
+            approved: decision.decision === 'approve',
+            declineContext: decision.declineContext,
+            requireToolApproval: (this.state.get() as Record<string, unknown>).yolo !== true,
+            memory: { thread: threadId, resource: resourceId },
+            requestContext,
+            toolsets,
+          });
+          if (this.stream.isCurrent({ subscription }) && !this.approval.isArmed()) this.approval.clearRestored();
+        };
+        void resume().catch(async error => {
+          if (
+            !this.stream.isCurrent({ subscription }) ||
+            this.thread.getId() !== threadId ||
+            this.identity.getResourceId() !== resourceId ||
+            this.run.getOperationId() !== operationId ||
+            this.run.isAbortRequested()
+          )
+            return;
+          this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+          // Re-read saved work after failure; never retry a decision automatically.
+          try {
+            if (this.stream.isCurrent({ subscription })) await this.restorePendingApproval({ threadId, subscription });
+          } catch (restoreError) {
+            this.emit({ type: 'error', error: getErrorFromUnknown(restoreError) });
+          }
+        });
+      },
+    });
+    this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: call.args });
+  }
+
   /**
    * Abort the session's active run: drop any parked tool suspensions, abort the
    * live subscription's in-flight run, and mark the run as aborting so the
@@ -3119,6 +3253,8 @@ export class Session<TState = unknown> {
     // cancelled), which is the exact failure the deferral exists to avoid. Two
     // `tool_approval_required` subscribers each calling abort() is enough.
     if (this.run.isAbortRequested()) return;
+
+    if (this.approval.clearRestored()) this.displayState.clearPendingApproval();
 
     const localRunId = this.getCurrentRunId();
     const operationId = this.run.getOperationId();
@@ -3510,6 +3646,10 @@ export class Session<TState = unknown> {
 
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId);
+
+      if (this.approval.isRestored()) {
+        throw new Error('Respond to the saved tool approval or stop its run before sending another message');
+      }
 
       // A deferred abort (parked approval gate) leaves the AbortController
       // armed until the decline lands, so `submittedIsRunning` stays true for a

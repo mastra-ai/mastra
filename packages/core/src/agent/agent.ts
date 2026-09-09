@@ -6849,11 +6849,12 @@ export class Agent<
     const toolCalls: AgentRunToolCall[] = [];
 
     const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
-      if (payload.requireToolApproval) {
+      if (payload.requireToolApproval || payload.type === 'approval') {
+        const approval = payload.requireToolApproval ?? payload;
         toolCalls.push({
-          toolCallId: payload.requireToolApproval.toolCallId,
-          toolName: payload.requireToolApproval.toolName,
-          args: payload.requireToolApproval.args,
+          toolCallId: approval.toolCallId,
+          toolName: approval.toolName,
+          args: approval.args,
           requiresApproval: true,
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {

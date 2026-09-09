@@ -826,7 +826,11 @@ const added = await session.state.update(current => ({
 
 ## Persistence boundaries
 
-A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, pending approvals, suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
+A `Session` is a live runtime object. Its event bus, arbitrary `session.state`, permission rules, permission grants, ordinary tool suspensions, follow-ups, run state, and stream state don't automatically survive controller or process recreation. The host must restore any of this state when recreating a session.
+
+When a session attaches to a stored thread, it reads saved approvals from the current mode's backing agent, scoped to the same thread and resource. A single saved approval restores `displayState.pendingApproval` and the existing approval gate. Reconnecting doesn't execute the tool or start a model call. Respond through `session.respondToToolApproval()` with the displayed `toolCallId` to approve or decline the original saved run. Respond to that approval or stop its run before sending another message.
+
+Recovery requires native run storage. Multiple saved approvals on the same thread are rejected rather than selecting one arbitrarily. Storage failures remain errors. After a failed decision, the session reads saved work again and can restore its prompt; it never retries the decision automatically. Auto-approval grants remain ephemeral.
 
 With configured storage, threads, messages, and token usage persist. Thread settings restore mode and model choices. They can also restore observational memory settings and subagent model selections, including per-agent-type overrides. A chat channel can map back to stored threads, but channel-to-session and auto-approval state held by `AgentControllerChannels` remains in memory.
 
