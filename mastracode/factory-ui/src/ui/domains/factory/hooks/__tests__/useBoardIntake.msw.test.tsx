@@ -84,6 +84,38 @@ describe('useBoardIntake Linear gating', () => {
     await waitFor(() => expect(result.current.available).toContain('linear'));
   });
 
+  it('keeps a Linear-eligible board pending until its bindings have loaded', async () => {
+    const binding: IntakeSourceBinding = {
+      integrationId: 'linear',
+      sourceId: 'proj-1',
+      factoryProjectId: 'factory-1',
+      board: 'work',
+    };
+    stubIntake([binding]);
+    let releaseBindings: () => void = () => {};
+    const bindingsRequested = new Promise<void>(resolve => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/intake/bindings`, async () => {
+          resolve();
+          await new Promise<void>(release => (releaseBindings = release));
+          return HttpResponse.json({ bindings: [binding] });
+        }),
+      );
+    });
+
+    const { result } = renderIntake('factory-1');
+
+    await bindingsRequested;
+    // Config may already be in; bindings are not. Either way the board must
+    // not present itself as a settled, feed-less board.
+    expect(result.current.available).not.toContain('linear');
+    expect(result.current.isPending).toBe(true);
+
+    releaseBindings();
+    await waitFor(() => expect(result.current.available).toContain('linear'));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+  });
+
   it('given the source is bound to another Factory, when the board loads, then the Linear feed is withheld', async () => {
     stubIntake([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' }]);
 
@@ -251,17 +283,22 @@ describe('useBoardIntake GitHub label routes', () => {
   it('keeps a custom board pending until its label routes have loaded', async () => {
     stubGithub([releaseRoute]);
     let releaseRoutes: () => void = () => {};
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, async () => {
-        await new Promise<void>(resolve => (releaseRoutes = resolve));
-        return HttpResponse.json({ routes: [releaseRoute] });
-      }),
-    );
+    const routesRequested = new Promise<void>(resolve => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/intake/label-routes`, async () => {
+          resolve();
+          await new Promise<void>(release => (releaseRoutes = release));
+          return HttpResponse.json({ routes: [releaseRoute] });
+        }),
+      );
+    });
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
-    // Config resolved, routes still in flight: the board must not look empty.
-    await waitFor(() => expect(result.current.available).toEqual([]));
+    // Routes are in flight (the handler is holding the request): the board
+    // must report pending rather than an empty feed.
+    await routesRequested;
+    expect(result.current.available).toEqual([]);
     expect(result.current.isPending).toBe(true);
 
     releaseRoutes();

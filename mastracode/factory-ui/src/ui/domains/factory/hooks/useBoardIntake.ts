@@ -60,12 +60,12 @@ export function useBoardIntake({
     binding =>
       binding.integrationId === 'linear' && binding.factoryProjectId === factoryProjectId && binding.board === kind,
   );
-  const linearReady =
-    !review &&
-    (config?.linear.enabled ?? false) &&
-    linearConnected &&
-    (config?.linear.sourceIds?.length ?? 0) > 0 &&
-    linearRouted;
+  const linearEligible =
+    !review && (config?.linear.enabled ?? false) && linearConnected && (config?.linear.sourceIds?.length ?? 0) > 0;
+  const linearReady = linearEligible && linearRouted;
+  // Bindings decide whether this board gets a Linear feed at all, so an
+  // eligible board stays pending until they load rather than looking empty.
+  const bindingsPending = linearEligible && bindingsQuery.isPending;
 
   // GitHub issues route by label: a label routed to a board sends its issues
   // there, and Work keeps every unrouted issue. A custom board only offers the
@@ -194,6 +194,7 @@ export function useBoardIntake({
     isPending:
       (!review && (configQuery.isPending || ((config?.linear.enabled ?? false) && linearStatusQuery.isPending))) ||
       routesPending ||
+      bindingsPending ||
       Boolean(feed?.isPending),
     isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
   };
