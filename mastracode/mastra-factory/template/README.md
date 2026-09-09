@@ -2,15 +2,13 @@
 
 Mastra Factory is an open source environment for building software with coding agents. Connect your repository to turn issues into plans, implementations, and reviewed pull requests.
 
-Created with [`npm create factory@latest`](https://www.npmjs.com/package/create-factory). This project contains the Factory Server and its configuration. Keep it separate from the repository you want agents to change.
+Created with [`npm create factory`](https://www.npmjs.com/package/create-factory). This project contains the Factory Server and its configuration. Keep it separate from the repository you want agents to change.
 
-[Read the documentation](https://factory.mastra.ai/) or [watch the Mastra Factory overview](https://youtu.be/iMA-Xkhj7fU).
+Read the [documentation](https://factory.mastra.ai/) or [watch the Mastra Factory overview](https://youtu.be/iMA-Xkhj7fU).
 
 ## Start the Factory Server
 
-The standard installer installs dependencies and provisions a Mastra platform project, credentials, and PostgreSQL database. It writes the configuration to `.env`. New projects use Mastra platform for authentication, storage, and sandboxes by default.
-
-Before connecting a model provider, check for `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. If it's missing, generate a key once for this project:
+New projects use Mastra platform for authentication, storage, and sandboxes by default. Before connecting a model provider, check for `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env`. If it's missing, generate a key once for this project:
 
 ```bash
 openssl rand -base64 32
@@ -24,17 +22,15 @@ From the Factory project directory, start the server:
 npm run dev
 ```
 
-Open the local URL printed by the server, then sign in through Mastra platform. One server serves both the Factory UI and API.
+Open the local URL printed by the server, then sign in through Mastra platform. One server serves both the Factory UI and API. After login you'll see an onboarding wizard, select the repository agents should change. Use **Manage GitHub connection** to grant the GitHub App access if the repository is missing. Optionally add Linear. Connect a model provider using an API key or a supported subscription, then choose the Factory model.
 
-After cloning an existing Factory repository, run `npm ci` and configure its environment before starting it. If you skipped platform setup during installation, follow [Get started](https://factory.mastra.ai/) to complete configuration.
+If you skipped platform setup during installation, follow [Get started](https://factory.mastra.ai/) to complete configuration.
 
 ## Run your first issue
 
-1. Create a Factory in the UI and select the repository agents should change. Use **Manage GitHub connection** to grant the GitHub App access if the repository is missing.
-2. Connect a model provider using an API key or a supported subscription, then choose the Factory model.
-3. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository. Each teammate chooses their own issue sources.
-4. Create a small GitHub issue, such as adding contribution guidance to the repository's README.
-5. Find the issue in **Work → Intake**, select **Investigate**, and open its session to follow the agent's work.
+1. Open **Settings → Work Intake → GitHub issues**. Enable **Sync GitHub issues** and select your repository. Each teammate chooses their own issue sources.
+1. Create a small GitHub issue, such as adding contribution guidance to the repository's README.
+1. Find the issue in **Work → Intake**, select **Investigate**, and open its session to follow the agent's work.
 
 Continue with the [issue-to-pull-request walkthrough](https://factory.mastra.ai/#create-your-first-pull-request) to review a plan and take the change through implementation and pull request review.
 
