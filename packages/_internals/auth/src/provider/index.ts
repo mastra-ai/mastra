@@ -262,7 +262,20 @@ export class CompositeAuth
 
   private mapAuthenticatedUserToResourceId(user: unknown): string | undefined | null {
     const provider = this.takeAuthenticatedProvider(user);
-    return provider?.mapUserToResourceId?.(user);
+    if (typeof provider?.mapUserToResourceId !== 'function') {
+      return undefined;
+    }
+
+    const resourceId = provider.mapUserToResourceId(user);
+    // A nested composite validates its selected provider and can return
+    // undefined when that provider has no mapper.
+    if (resourceId === undefined && provider instanceof CompositeAuth) {
+      return undefined;
+    }
+    if (typeof resourceId !== 'string' || !resourceId.trim()) {
+      throw new Error('mapUserToResourceId must return a non-empty string for the authenticated user');
+    }
+    return resourceId;
   }
 
   // ============================================================================

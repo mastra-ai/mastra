@@ -198,6 +198,21 @@ describe('InMemoryServerCache', () => {
       });
     });
 
+    describe('listPushIndexed', () => {
+      it('assigns sequential 0-based indices and stores them on the list entries', async () => {
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a' })).toBe(0);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBe(2);
+
+        expect(await cache.listFromTo('events', 0)).toEqual([
+          { type: 'a', index: 0 },
+          { type: 'b', index: 1 },
+          { type: 'c', index: 2 },
+        ]);
+        expect(await cache.increment('events:counter')).toBe(4);
+      });
+    });
+
     describe('increment', () => {
       it('should return 1 on first increment (key does not exist)', async () => {
         const result = await cache.increment('counter');

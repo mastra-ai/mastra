@@ -30,6 +30,7 @@ import type {
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
+import { deleteExperimentTraces } from './experiment-traces.js';
 
 /**
  * Public API for interacting with a single dataset.
@@ -305,6 +306,15 @@ export class Dataset {
   async deleteItem(args: { itemId: string }): Promise<void> {
     const store = await this.#getDatasetsStore();
     return store.deleteItem({ id: args.itemId, datasetId: this.id, filters: this.#scope });
+  }
+
+  /**
+   * Permanently scrub user-supplied content from every version of an item and
+   * from experiment results that reference it.
+   */
+  async purgeItem(args: { itemId: string }): Promise<void> {
+    const store = await this.#getDatasetsStore();
+    return store.purgeItem({ id: args.itemId, datasetId: this.id, filters: this.#scope });
   }
 
   /**
@@ -884,10 +894,10 @@ export class Dataset {
         datasetVersion: item.datasetVersion,
         input: item.input,
         groundTruth: item.groundTruth,
-        expectedTrajectory: item.expectedTrajectory as TrajectoryExpectation | undefined,
-        requestContext: item.requestContext,
-        metadata: item.metadata,
-        scorerIds: item.scorerIds,
+        expectedTrajectory: (item.expectedTrajectory ?? undefined) as TrajectoryExpectation | undefined,
+        requestContext: item.requestContext ?? undefined,
+        metadata: item.metadata ?? undefined,
+        scorerIds: item.scorerIds ?? undefined,
       },
       datasetScorerIds: dataset?.scorerIds ?? null,
       attempt: args.attempt ?? 0,
@@ -1096,10 +1106,31 @@ export class Dataset {
    * is defense-in-depth: a leaked handle or race that skipped the assertion
    * still cannot delete another tenant's experiment (storage silently no-ops
    * on tenancy mismatch).
+   *
+   * Also deletes the observability traces this experiment produced, cascading to
+   * their spans and trace-linked signals. An experiment's traces are excluded from
+   * normal trace reads, so leaving them behind would make them invisible but
+   * still-retained data. Stores without an observability domain (or without
+   * tenant-scoped trace deletion) log a warning and skip the trace cascade so the
+   * relational delete still succeeds.
    */
   async deleteExperiment(args: { experimentId: string }) {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
+
+    // Must run first: deleting the experiment cascades away the result rows
+    // that carry the trace ids.
+    const storage = this.#mastra.getStorage();
+    if (storage) {
+      await deleteExperimentTraces({
+        storage,
+        experimentsStore,
+        experimentId: args.experimentId,
+        ...(this.#scope !== undefined ? { filters: this.#scope } : {}),
+        logger: this.#mastra.getLogger(),
+      });
+    }
+
     return experimentsStore.deleteExperiment({ id: args.experimentId, filters: this.#scope });
   }
 }

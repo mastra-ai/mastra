@@ -165,6 +165,8 @@ await session.sendMessage({
 })
 ```
 
+When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the stored message names that sender under `content.providerMetadata.mastra.author`. See [Reserved keys](/docs/server/request-context#reserved-keys).
+
 #### `steer({ content, requestContext? })`
 
 Queue steering content into an active run.

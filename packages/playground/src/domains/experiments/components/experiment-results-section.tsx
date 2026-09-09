@@ -10,7 +10,10 @@ import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
+import { useAddTagToResults } from '../hooks/use-add-tag-to-results';
+import { useExperimentTagVocabulary } from '../hooks/use-experiment-tag-vocabulary';
 import { ExperimentResultsList } from './experiment-results-list';
+import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
 import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -47,6 +50,10 @@ export function ExperimentResultsSection({
   const [isFlagging, setIsFlagging] = useState(false);
 
   const { updateExperimentResult } = useDatasetMutations();
+  const { addTag, isPending: isTagging } = useAddTagToResults({ datasetId, experimentId });
+  const tagVocabulary = useExperimentTagVocabulary(datasetId, results);
+
+  const selectedResults = useMemo(() => results.filter(r => selectedIds.has(r.id)), [results, selectedIds]);
 
   const toggleSelect = useCallback((resultId: string) => {
     setSelectedIds(prev => {
@@ -134,9 +141,11 @@ export function ExperimentResultsSection({
 
   const resultsListColumns = useMemo(
     () => [
-      { name: 'itemId', label: 'Item ID', size: '7rem' },
-      { name: 'input', label: 'Input', size: 'minmax(10rem,1fr)' },
-      ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
+      { name: 'itemId', label: 'Item ID', size: 'auto' },
+      { name: 'status', label: 'Status', size: 'auto' },
+      { name: 'input', label: 'Input', size: '1fr' },
+      { name: 'tags', label: 'Tags', size: 'auto' },
+      ...scorerIds.map(id => ({ name: id, label: id, size: 'auto' })),
     ],
     [scorerIds],
   );
@@ -153,12 +162,23 @@ export function ExperimentResultsSection({
 
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={isFlagging} onClick={() => flagForReview([...selectedIds])}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isFlagging || isTagging}
+            onClick={() => flagForReview([...selectedIds])}
+          >
             <Icon size="sm">
               <ClipboardCheck />
             </Icon>
             Flag {selectedIds.size} to review
           </Button>
+          <ExperimentResultsTagPicker
+            selectedResults={selectedResults}
+            vocabulary={tagVocabulary}
+            onAddTag={tag => addTag(tag, selectedResults)}
+            disabled={isTagging || isFlagging}
+          />
           <Button variant="ghost" size="sm" onClick={clearSelection}>
             Clear
           </Button>

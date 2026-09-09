@@ -7,12 +7,15 @@ import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired'
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Link, Outlet, useParams } from 'react-router';
+import { useState } from 'react';
+import { Link, Outlet, useNavigate, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 
 function ExperimentPageShell({ children }: { children?: ReactNode }) {
   return (
@@ -25,6 +28,8 @@ function ExperimentPageShell({ children }: { children?: ReactNode }) {
 
 function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
+  const navigate = useNavigate();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
@@ -49,6 +54,8 @@ function ExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
+  const experimentMetrics = useExperimentMetrics({ experimentId, experimentStatus: experiment?.status });
+
   if (!experimentId) return null;
   if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
@@ -68,30 +75,23 @@ function ExperimentPage() {
     );
   }
 
-  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
-  // experimentId isn't present in the full experiments listing (so we can't
-  // resolve a datasetId for it).
-  if (
-    (experimentError && is404NotFoundError(experimentError)) ||
-    (!experimentsListLoading && !datasetId) ||
-    (!experimentLoading && !experimentError && !experiment)
-  ) {
-    return (
-      <ExperimentPageShell>
-        <EmptyState
-          iconSlot={<PlayCircle />}
-          titleSlot="Experiment not found"
-          descriptionSlot={`No experiment with id "${experimentId}".`}
-          actionSlot={
-            <Button as={Link} to="/experiments">
-              <ArrowLeft />
-              Back to Experiments
-            </Button>
-          }
-        />
-      </ExperimentPageShell>
-    );
-  }
+  const notFound = (
+    <ExperimentPageShell>
+      <EmptyState
+        iconSlot={<PlayCircle />}
+        titleSlot="Experiment not found"
+        descriptionSlot={`No experiment with id "${experimentId}".`}
+        actionSlot={
+          <Button as={Link} to="/experiments">
+            <ArrowLeft />
+            Back to Experiments
+          </Button>
+        }
+      />
+    </ExperimentPageShell>
+  );
+
+  if (experimentError && is404NotFoundError(experimentError)) return notFound;
 
   if (experimentError) {
     return (
@@ -108,24 +108,32 @@ function ExperimentPage() {
     );
   }
 
+  // Not found: the experimentId isn't present in the full experiments listing
+  // (so we can't resolve a datasetId for it), or the fetch resolved empty.
+  if (!datasetId || !experiment) return notFound;
+
   return (
     <ExperimentItemPanelProvider
       experimentId={experimentId}
       datasetId={datasetId}
-      experimentStatus={experiment!.status}
+      experimentStatus={experiment.status}
       results={results ?? []}
       isLoadingResults={resultsLoading}
       hasNextPage={hasNextPage}
     >
-      <div className="relative h-full overflow-hidden">
+      <div className="h-full">
         <PageLayout height="full">
-          <ExperimentTopArea experiment={experiment!} />
+          <ExperimentTopArea
+            experiment={experiment}
+            metrics={experimentMetrics}
+            onDeleteClick={() => setDeleteDialogOpen(true)}
+          />
 
           <PageLayout.MainArea className="overflow-visible">
             <ExperimentResultsSection
               experimentId={experimentId}
               datasetId={datasetId}
-              experimentStatus={experiment!.status}
+              experimentStatus={experiment.status}
               results={results ?? []}
               isLoading={resultsLoading}
               setEndOfListElement={setEndOfListElement}
@@ -137,6 +145,14 @@ function ExperimentPage() {
 
         {/* Item detail sub-route renders here as an absolute overlay panel */}
         <Outlet />
+
+        <DeleteExperimentDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          experimentId={experimentId}
+          experimentName={experiment.name ?? undefined}
+          onSuccess={() => navigate('/experiments')}
+        />
       </div>
     </ExperimentItemPanelProvider>
   );

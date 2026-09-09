@@ -1,12 +1,8 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import {
-  formatSpanDuration,
-  formatSpanPanelTimestamp,
-  getTokenLimitMessage,
-  isTokenLimitExceeded,
-} from '../utils/span-utils';
+import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -49,7 +45,7 @@ export interface SpanDataPanelViewProps {
    * whatever feedback UI the consumer wants.
    */
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional count shown in the "Feedback" tab label. */
+  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
   feedbackTabBadge?: ReactNode;
   /**
    * Whether this span is the displayed root of the current view (trace root or
@@ -78,12 +74,15 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel className={className}>
-      {/* 32px buttons + border would overflow min-h-14 by 1px; keep this header level with its neighbours. */}
-      <DataPanel.Header className="py-2">
-        <DataPanel.Heading className="whitespace-nowrap">
-          Span <b># {truncateString(spanId, 12)}</b>
-        </DataPanel.Heading>
-        <ButtonsGroup className="ml-auto shrink-0">
+      {/* Two-line header (heading + summary); neighbouring panel headers use min-h-16 to stay level. */}
+      <DataPanel.Header className="min-h-16 py-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <DataPanel.Heading className="whitespace-nowrap">
+            Span <b># {truncateString(spanId, 12)}</b>
+          </DataPanel.Heading>
+          {span && <SpanSummaryDescription span={span} />}
+        </div>
+        <ButtonsGroup className="ml-auto shrink-0 self-start">
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
@@ -133,9 +132,6 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  const duration = formatSpanDuration(span.startedAt, span.endedAt);
-  const startedAt = formatSpanPanelTimestamp(span.startedAt);
-  const endedAt = formatSpanPanelTimestamp(span.endedAt);
   const usage = span.attributes?.usage as TokenUsage | undefined;
 
   const detailsBody = (
@@ -155,34 +151,10 @@ function SpanDataPanelContent({
          *  lightweight payload, so they only have values once the full span is loaded. */}
         {(isAnchor ?? span.parentSpanId == null) && (
           <>
-            {span.traceId && (
-              <>
-                <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Trace Id to clipboard" copyValue={span.traceId}>
-                  {span.traceId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
             {span.tags && span.tags.length > 0 && (
               <>
                 <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-              </>
-            )}
-            {span.runId && (
-              <>
-                <DataKeysAndValues.Key>Run Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Run Id to clipboard" copyValue={span.runId}>
-                  {span.runId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.threadId && (
-              <>
-                <DataKeysAndValues.Key>Thread Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Thread Id to clipboard" copyValue={span.threadId}>
-                  {span.threadId}
-                </DataKeysAndValues.ValueWithCopyBtn>
               </>
             )}
             {span.sessionId && (
@@ -204,17 +176,6 @@ function SpanDataPanelContent({
                   copyValue={span.requestId}
                 >
                   {span.requestId}
-                </DataKeysAndValues.ValueWithCopyBtn>
-              </>
-            )}
-            {span.resourceId && (
-              <>
-                <DataKeysAndValues.Key>Resource Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueWithCopyBtn
-                  copyTooltip="Copy Resource Id to clipboard"
-                  copyValue={span.resourceId}
-                >
-                  {span.resourceId}
                 </DataKeysAndValues.ValueWithCopyBtn>
               </>
             )}
@@ -248,36 +209,6 @@ function SpanDataPanelContent({
                 </DataKeysAndValues.ValueWithCopyBtn>
               </>
             )}
-          </>
-        )}
-        {span.name && (
-          <>
-            <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.name}</DataKeysAndValues.Value>
-          </>
-        )}
-        {span.spanType && (
-          <>
-            <DataKeysAndValues.Key>Type</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{span.spanType}</DataKeysAndValues.Value>
-          </>
-        )}
-        {startedAt && (
-          <>
-            <DataKeysAndValues.Key>Started</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{startedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {endedAt && (
-          <>
-            <DataKeysAndValues.Key>Ended</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{endedAt}</DataKeysAndValues.Value>
-          </>
-        )}
-        {duration && (
-          <>
-            <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{duration}</DataKeysAndValues.Value>
           </>
         )}
       </DataKeysAndValues>
@@ -321,7 +252,7 @@ function SpanDataPanelContent({
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
         <TabList variant="pill-ghost" className="px-0">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
 
         <TabContent value="details">{detailsBody}</TabContent>

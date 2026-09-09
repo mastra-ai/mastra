@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { presentTool, stringifyToolValue } from './tool-presentation';
+import { isTaskTool, presentTool, stringifyToolValue, toolEdit } from './tool-presentation';
 
 describe('presentTool', () => {
   it('maps stable workspace aliases to humanized actions with their salient argument', () => {
@@ -60,5 +60,31 @@ describe('stringifyToolValue', () => {
     cyclic.self = cyclic;
     expect(stringifyToolValue(cyclic)).toBe('[object Object]');
     expect(stringifyToolValue(undefined)).toBe('undefined');
+  });
+});
+
+describe('toolEdit', () => {
+  it('reads a replacement as the two sides of a diff, an empty new side included', () => {
+    expect(toolEdit('mastra_workspace_edit_file', { path: 'a.ts', old_string: 'x', new_string: '' })).toEqual({
+      path: 'a.ts',
+      oldText: 'x',
+      newText: '',
+    });
+  });
+
+  it('reads a written file as its content', () => {
+    expect(toolEdit('write_file', { path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
+  });
+
+  it('leaves other calls to the raw arguments', () => {
+    expect(toolEdit('view', { path: 'a.ts' })).toBeUndefined();
+    expect(toolEdit('edit_file', { path: 'a.ts' })).toBeUndefined();
+  });
+});
+
+describe('isTaskTool', () => {
+  it('names the four task tools the docked task list draws, and nothing else', () => {
+    expect(['task_write', 'task_update', 'task_complete', 'task_check'].every(isTaskTool)).toBe(true);
+    expect(['view', 'task', 'ask_user'].some(isTaskTool)).toBe(false);
   });
 });

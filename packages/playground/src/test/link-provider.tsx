@@ -60,11 +60,10 @@ const paths: Record<string, (...args: string[]) => string> = {
   workflowRunLink: (workflowId, runId) => `/workflows/${workflowId}/runs/${runId}`,
   datasetLink: id => `/datasets/${id}`,
   datasetItemLink: (datasetId, itemId) => `/datasets/${datasetId}/items/${itemId}`,
-  datasetItemCompareLink: (datasetId, itemId, secondItemId) =>
-    `/datasets/${datasetId}/items/${itemId}/compare/${secondItemId}`,
   // Only used by the base branch's `LinkComponentPaths` (see comment above).
   datasetExperimentLink: (datasetId, experimentId) => `/datasets/${datasetId}/experiments/${experimentId}`,
   experimentLink: id => `/experiments/${id}`,
+  experimentItemLink: (id, itemId) => `/experiments/${id}/items/${itemId}`,
 };
 
 // eslint-disable-next-line react-refresh/only-export-components -- test helper co-located with the provider.

@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { createTestBoard } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
-import { builtInFactoryRules } from '../rules/defaults.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { resolveGithubRules } from './github/default-rules.js';
 import type { GithubRuleOverrides } from './github/default-rules.js';
 import { createGithubIssueReconciler } from './github/issue-reconciler.js';
 import type { GithubIssueFetcher, ReconcileIssueState } from './github/rules.js';
-import type { LinearIntegration } from './linear/integration.js';
+import { resolveLinearRules } from './linear/default-rules.js';
 import { attachLinearIssueReconciler } from './linear/issue-reconciler.js';
 
 function issue(overrides: Partial<IntakeIssueDetail> = {}): IntakeIssueDetail {
@@ -44,6 +46,8 @@ async function githubSetup(
     fetchIssue?: GithubIssueFetcher;
     permission?: string;
     rules?: GithubRuleOverrides;
+    board?: string;
+    boards?: BoardRegistry;
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -90,6 +94,7 @@ async function githubSetup(
           url: input.url ?? 'https://github.com/acme/repo/issues/42',
         },
         title: 'Issue 42',
+        ...(input.board ? { board: input.board } : {}),
         stages: input.stages ?? ['planning'],
         sessions: {},
         metadata: { githubRepositoryId: repository.id, githubIssueNumber: 42, ...(input.metadata ?? {}) },
@@ -104,7 +109,8 @@ async function githubSetup(
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
       storage: seeded.workItems,
-      rules: builtInFactoryRules(),
+      configVersion: 'factory-config-v1',
+      boards: input.boards ?? createBoardRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
   );
@@ -265,43 +271,74 @@ describe('issue reconcilers', () => {
     expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
   });
 
-  it('replays canceled Linear issues through rules ingress', async () => {
-    const seeded = await createFactoryStorageForTests();
-    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
-    await seeded.workItems.upsert({
-      orgId: project.orgId,
-      userId: project.createdBy,
-      factoryProjectId: project.id,
-      input: {
-        externalSource: {
-          integrationId: 'linear',
-          type: 'issue',
-          externalId: 'linear:ENG-42',
-          url: 'https://linear.app/acme/issue/ENG-42',
-        },
-        title: 'ENG-42: Issue',
-        stages: ['planning'],
-        sessions: {},
-        metadata: { linearIssueId: 'linear-uuid' },
-      },
-    });
-    const intake = {
-      resolveIntakeDispatch: vi
-        .fn()
-        .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
-      getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
-    } as unknown as Intake;
-    const reconcile = attachLinearIssueReconciler(
-      { intake } as Pick<LinearIntegration, 'intake'>,
-      {
-        storage: { projects: seeded.projects },
-        rules: { config: builtInFactoryRules(), workItems: seeded.workItems },
-      } as never,
-    );
+  it('reads terminal from the installed board, so a custom final phase is skipped and an undeclared one is not', async () => {
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const shippedFetch = vi.fn();
+    const shipped = await githubSetup({ board: 'release', stages: ['shipped'], fetchIssue: shippedFetch, boards });
+    await expect(shipped.reconciler([repository])).resolves.toMatchObject({ checked: 0 });
+    expect(shippedFetch).not.toHaveBeenCalled();
 
-    await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
-    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
-    expect(decisions).toHaveLength(1);
-    expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
+    // `done` means nothing on the release board: no guess, the card is still swept.
+    const doneFetch = vi.fn().mockResolvedValue(githubState({}));
+    const done = await githubSetup({ board: 'release', stages: ['done'], fetchIssue: doneFetch, boards });
+    await expect(done.reconciler([repository])).resolves.toMatchObject({ checked: 1 });
+    expect(doneFetch).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['default', 'replacement', 'disabled'] as const)(
+    'replays canceled Linear issues with %s instance rules',
+    async mode => {
+      const seeded = await createFactoryStorageForTests();
+      const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: project.createdBy,
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'linear',
+            type: 'issue',
+            externalId: 'linear:ENG-42',
+            url: 'https://linear.app/acme/issue/ENG-42',
+          },
+          title: 'ENG-42: Issue',
+          stages: ['planning'],
+          sessions: {},
+          metadata: { linearIssueId: 'linear-uuid' },
+        },
+      });
+      const intake = {
+        resolveIntakeDispatch: vi
+          .fn()
+          .mockResolvedValue({ connection: { type: 'oauth', accessToken: 'token' }, issueId: 'linear-uuid' }),
+        getIssue: vi.fn().mockResolvedValue(issue({ state: 'Canceled', stateType: 'canceled' })),
+      } as unknown as Intake;
+      const replacement = vi.fn(() => ({
+        type: 'notify' as const,
+        idempotencyKey: 'reconciled-linear',
+        title: 'Closed issue',
+      }));
+      const reconcile = attachLinearIssueReconciler(
+        {
+          intake,
+          rules: resolveLinearRules(
+            mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
+          ),
+        },
+        {
+          storage: { projects: seeded.projects },
+          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+        } as never,
+      );
+
+      await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, updated: 0 });
+      const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      expect(decisions).toHaveLength(mode === 'disabled' ? 0 : 1);
+      if (mode === 'default') expect(decisions[0]?.decision).toMatchObject({ type: 'transition', stage: 'canceled' });
+      if (mode === 'replacement') {
+        expect(replacement).toHaveBeenCalledOnce();
+        expect(decisions[0]?.decision).toMatchObject({ type: 'notify', title: 'Closed issue' });
+      }
+    },
+  );
 });

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { attentionKindSummaries } from '../../../../e2e/ui/attention';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type {
@@ -107,13 +108,7 @@ describe('AttentionPage', () => {
           if (view === 'unread') return !attentionItem.read && !attentionItem.archived;
           return !attentionItem.archived;
         });
-        return HttpResponse.json({
-          items: visible,
-          openCount: items.filter(attentionItem => !attentionItem.archived).length,
-          badgeCount: items.filter(attentionItem => !attentionItem.read && !attentionItem.archived).length,
-          unreadCount: items.filter(attentionItem => !attentionItem.read && !attentionItem.archived).length,
-          hasMore: false,
-        });
+        return HttpResponse.json({ items: visible, kinds: attentionKindSummaries(items), hasMore: false });
       }),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/read-all`, ({ request }) => {
         markAllRequests += 1;
@@ -171,16 +166,7 @@ describe('AttentionPage', () => {
     const settled: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items,
-          openCount: items.length,
-          badgeCount: items.length,
-          unreadCount: items.length,
-          hasMore: false,
-          latestOccurrenceKey: null,
-          latestOccurrenceAt: null,
-          latestOccurrenceUnread: false,
-        }),
+        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
         settled.push(`${params.action}:${params.decisionId}`);
@@ -195,7 +181,9 @@ describe('AttentionPage', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Fix the flaky auth test')).toBeVisible();
+    const queue = await screen.findByRole('region', { name: 'Waiting for approval' });
+    expect(within(queue).getByText('Fix the flaky auth test')).toBeVisible();
+    expect(within(queue).getByText('1')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Run Fix the flaky auth test' }));
     await waitForMutationsIdle(client);
 
@@ -208,16 +196,7 @@ describe('AttentionPage', () => {
     const settled: string[] = [];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items,
-          openCount: items.length,
-          badgeCount: items.length,
-          unreadCount: items.length,
-          hasMore: false,
-          latestOccurrenceKey: null,
-          latestOccurrenceAt: null,
-          latestOccurrenceUnread: false,
-        }),
+        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
       http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions/:decisionId/:action`, ({ params }) => {
         settled.push(`${params.action}:${params.decisionId}`);
@@ -252,9 +231,7 @@ describe('AttentionPage', () => {
         const secondPage = [item('decision-2', 'Repair auth', false)];
         return HttpResponse.json({
           items: before === KIND_CURSOR ? secondPage : firstPage,
-          openCount: 3,
-          badgeCount: 3,
-          unreadCount: 3,
+          kinds: attentionKindSummaries([...firstPage, ...secondPage]),
           hasMore: before !== KIND_CURSOR,
           ...(before !== KIND_CURSOR ? { nextCursor: KIND_CURSOR } : {}),
         });
@@ -302,9 +279,7 @@ describe('AttentionPage', () => {
           : allItems;
         return HttpResponse.json({
           items: matching.slice(0, 25),
-          openCount: allItems.length,
-          badgeCount: allItems.length,
-          unreadCount: allItems.length,
+          kinds: attentionKindSummaries(allItems),
           hasMore: matching.length > 25,
           ...(matching.length > 25 ? { nextCursor: 'page-2' } : {}),
         });
@@ -325,20 +300,14 @@ describe('AttentionPage', () => {
 
   it('files activity under its own section, below what needs an answer', async () => {
     const receiptCalls: string[] = [];
+    const items = [
+      activityItem('item-4', 'Loader retry landed'),
+      mentionItem('comment-1', 'Fix login bug'),
+      item('decision-1', 'Fix the loader', false),
+    ];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items: [
-            activityItem('item-4', 'Loader retry landed'),
-            mentionItem('comment-1', 'Fix login bug'),
-            item('decision-1', 'Fix the loader', false),
-          ],
-          openCount: 2,
-          badgeCount: 2,
-          unreadCount: 2,
-          activityUnreadCount: 1,
-          hasMore: false,
-        }),
+        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention/:kind/:sourceId/:occurrence/:action`,
@@ -374,14 +343,7 @@ describe('AttentionPage', () => {
     ];
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/attention`, () =>
-        HttpResponse.json({
-          items,
-          openCount: items.length,
-          badgeCount: items.length,
-          unreadCount: items.length,
-          activityUnreadCount: 0,
-          hasMore: false,
-        }),
+        HttpResponse.json({ items, kinds: attentionKindSummaries(items), hasMore: false }),
       ),
     );
     renderWithProviders(

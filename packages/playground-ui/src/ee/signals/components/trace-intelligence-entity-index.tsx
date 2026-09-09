@@ -1,5 +1,5 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List, Radar } from 'lucide-react';
+import { Columns2, List, CircleSlashIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
@@ -162,7 +162,7 @@ export function TraceIntelligenceEntityIndex({
   } else if (entitiesQuery.data.entities.length === 0 && !hasSearch) {
     body = (
       <EmptyState
-        iconSlot={<Radar aria-hidden="true" />}
+        iconSlot={<CircleSlashIcon aria-hidden="true" />}
         titleSlot="No Trace Intelligence entities yet"
         descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
       />

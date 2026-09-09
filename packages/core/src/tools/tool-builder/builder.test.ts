@@ -249,6 +249,7 @@ describe('MCP Tool Tracing', () => {
         attributes: {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
+          toolType: 'tool',
           toolDescription: 'List files in a directory',
           toolCallId: 'test-call-id',
         },
@@ -352,6 +353,7 @@ describe('MCP Tool Tracing', () => {
     expect(spanArgs.attributes).toEqual({
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
+      toolType: 'tool',
       toolDescription: 'Read a resource',
       toolCallId: 'test-call-id',
     });
