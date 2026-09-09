@@ -174,6 +174,39 @@ describe('runCompletionScorers', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
+    it.each([
+      {
+        label: 'message object',
+        value: { message: 'Read unavailable' },
+        expected: 'Scorer threw an error: Read unavailable',
+      },
+      {
+        label: 'numeric message',
+        value: { message: 503 },
+        expected: 'Scorer threw an error: 503',
+      },
+      {
+        label: 'null prototype',
+        value: Object.create(null),
+        expected: 'Scorer threw an error that could not be converted to text',
+      },
+      {
+        label: 'throwing message',
+        value: Object.defineProperty({}, 'message', {
+          get() {
+            throw new Error('Unreadable message');
+          },
+        }),
+        expected: 'Scorer threw an error that could not be converted to text',
+      },
+    ])('preserves a failure for a $label rejection', async ({ value, expected }) => {
+      const scorer = { id: 'object-error', run: vi.fn().mockRejectedValue(value) };
+      const result = await runCompletionScorers([scorer], createMockContext());
+      expect(result).toMatchObject({ complete: false, timedOut: false });
+      expect(result.scorers[0]).toMatchObject({ passed: false, errored: true, reason: expected });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('rejects a late result even when the deadline callback has not run yet', async () => {
       const scorer = {
         id: 'blocking',

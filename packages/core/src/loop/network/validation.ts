@@ -220,10 +220,21 @@ async function runSingleScorer(
       duration: Date.now() - start,
     };
   } catch (error: unknown) {
+    let reason = 'Scorer threw an error that could not be converted to text';
+    try {
+      const message =
+        error && (typeof error === 'object' || typeof error === 'function') && 'message' in error
+          ? error.message
+          : error;
+      reason = `Scorer threw an error: ${String(message)}`;
+    } catch {
+      // Rejection values can have throwing getters or no string conversion.
+      // Keep the failure visible even when its details cannot be read.
+    }
     return {
       score: 0,
       passed: false,
-      reason: `Scorer threw an error: ${error instanceof Error ? error.message : String(error)}`,
+      reason,
       scorerId: scorer.id,
       scorerName: scorer.name ?? scorer.id,
       duration: Date.now() - start,
