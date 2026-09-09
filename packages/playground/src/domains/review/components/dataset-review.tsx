@@ -386,7 +386,6 @@ export function DatasetReview({
               }
             }
       }
-      onRemoveFromReview={showCompleted ? undefined : () => removeItem(featuredItem.id)}
       onComplete={showCompleted ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}
       onNext={toNextItem}

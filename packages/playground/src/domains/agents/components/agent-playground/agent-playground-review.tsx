@@ -765,7 +765,6 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     }
                   }
             }
-            onRemoveFromReview={showCompleted ? undefined : () => removeItem(featuredItem.id)}
             onComplete={
               showCompleted
                 ? undefined
