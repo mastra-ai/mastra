@@ -324,7 +324,12 @@ describe('intake configuration', () => {
       vi.mocked(linear.listItems).mockResolvedValueOnce(sourcePage);
       await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: 'release' });
 
-      const back = await put({ integrationId: 'linear', sourceId: 'team-1', factoryProjectId: project.id, board: 'work' });
+      const back = await put({
+        integrationId: 'linear',
+        sourceId: 'team-1',
+        factoryProjectId: project.id,
+        board: 'work',
+      });
       expect(await back.json()).toMatchObject({ relocated: { moved: 0, skipped: 1 } });
       const after = await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id });
       expect(after.find(i => i.id === shipping.id)).toMatchObject({ board: 'release', stages: ['shipping'] });
