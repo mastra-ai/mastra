@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-The Factory board types a stage id as the open string it is, so the Factory UI typecheck passes again.
+Added a compile-time check that every built-in Factory stage has an explicit review-board visibility setting.
