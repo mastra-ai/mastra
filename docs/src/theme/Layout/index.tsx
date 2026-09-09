@@ -5,7 +5,6 @@ import { useLocation } from '@docusaurus/router'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import AnnouncementBar from '@theme/AnnouncementBar'
 import ErrorPageContent from '@theme/ErrorPageContent'
-import Footer from '@theme/Footer'
 import type { Props } from '@theme/Layout'
 import LayoutProvider from '@theme/Layout/Provider'
 import Navbar from '@theme/Navbar'
@@ -18,7 +17,6 @@ import { normalizeSiteSectionRoot } from '@site/src/utils/canonical-url'
 export default function Layout(props: Props): ReactNode {
   const {
     children,
-    noFooter,
     wrapperClassName,
     // Not really layout-related, but kept for convenience/retro-compatibility
     title,
@@ -56,8 +54,6 @@ export default function Layout(props: Props): ReactNode {
       >
         <ErrorBoundary fallback={params => <ErrorPageContent {...params} />}>{children}</ErrorBoundary>
       </div>
-
-      {!noFooter && <Footer />}
     </LayoutProvider>
   )
 }
